@@ -39,6 +39,7 @@ Note: The techstack is not set in stone. We might switch to a hand written parse
 ## Building
 ### Dependencies
 - `vola-parser`: [Treesitter](https://tree-sitter.github.io/tree-sitter/creating-parsers#dependencies) if you want to rebuild / change the parser:
+  - [Trees-Sitter CLI](https://crates.io/crates/tree-sitter-cli)
   - Node.js
   - A C Compiler
 - `volac`:

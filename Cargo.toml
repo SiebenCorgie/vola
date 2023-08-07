@@ -1,6 +1,6 @@
 [workspace]
 members = [
-
+"crates/tree-sitter-vola",
 "examples/dry-run",
 "examples/runtime-patch"
 ]

@@ -1,0 +1,16 @@
+==================
+Primitive definition
+==================
+
+prim sphere(radius){
+    | @ - radius |
+}
+
+---
+
+(source_file
+  (prim_definition
+    (identifier)
+    (parameter_list)
+    (block
+      ( length(sub(at, identifier)) ))))
