@@ -8,8 +8,8 @@ Examples of such functions are [Signed Distance Functions](https://en.wikipedia.
 The implementation will focus on SDFs at first.
 
 [![dependency status](https://deps.rs/repo/gitlab/tendsinmende/vola/status.svg)](https://deps.rs/repo/gitlab/tendsinmende/vola)
-[![License](https://img.shields.io/gitlab/license/tendsinmende/vola.svg)](https://gitlab.com/tendsinmende/vola/blob/main/LICENSE-MIT)
-[![License](https://img.shields.io/gitlab/license/tendsinmende/vola.svg)](https://gitlab.com/tendsinmende/vola/blob/main/LICENSE-APACHE)
+[![MIT](https://img.shields.io/badge/License-MIT-blue)](LICENSE-MIT)
+[![APACHE](https://img.shields.io/badge/License-Apache_2.0-blue)](LICENSE-APACHE)
 
 </div>
 
