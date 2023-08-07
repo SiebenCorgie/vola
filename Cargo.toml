@@ -1,0 +1,6 @@
+[workspace]
+members = [
+
+"examples/dry-run",
+"examples/runtime-patch"
+]
