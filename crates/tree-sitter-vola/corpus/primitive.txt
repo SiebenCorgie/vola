@@ -1,9 +1,28 @@
 ==================
+Simple primitive
+==================
+
+prim testprim(){
+    @
+}
+
+---
+
+(source_file
+  (prim_definition
+   (identifier)
+   (parameter_list)
+   (block
+     (unbound_statement
+       (keyword
+         (kw_at))))))
+
+==================
 Primitive definition
 ==================
 
 prim sphere(radius){
-    | @ - radius |
+    length(@ - radius)
 }
 
 ---
@@ -11,6 +30,102 @@ prim sphere(radius){
 (source_file
   (prim_definition
     (identifier)
-    (parameter_list)
+    (parameter_list
+      (typed_identifier
+        (identifier)))
     (block
-      ( length(sub(at, identifier)) ))))
+      (unbound_statement
+        (function_call_expr
+          (identifier)
+          (binary_expression
+            (keyword
+              (kw_at))
+            (identifier)))))))
+
+
+==================
+Primitive definition typed arg
+==================
+
+prim sphere(radius: vec2){
+    length(@ - radius)
+}
+
+---
+
+
+(source_file
+  (prim_definition
+    (identifier)
+    (parameter_list
+      (typed_identifier
+        (identifier)
+        (vecty
+          (number))))
+    (block
+      (unbound_statement
+        (function_call_expr
+          (identifier)
+          (binary_expression
+            (keyword
+              (kw_at))
+            (identifier)))))))
+
+
+
+==================
+let def
+==================
+
+prim sphere(radius){
+    let a = radius - @;
+    a
+}
+
+---
+
+(source_file
+  (prim_definition
+    (identifier)
+    (parameter_list
+      (typed_identifier
+        (identifier)))
+    (block
+      (let_statement
+        (typed_identifier
+          (identifier))
+        (binary_expression
+          (identifier)
+          (keyword
+           (kw_at))))
+      (unbound_statement
+        (identifier)))))
+
+==================
+let def typed
+==================
+
+prim sphere(radius){
+    let a: scalar = radius - @;
+    a
+}
+
+---
+
+(source_file
+  (prim_definition
+    (identifier)
+    (parameter_list
+      (typed_identifier
+        (identifier)))
+    (block
+      (let_statement
+        (typed_identifier
+          (identifier)
+          (scalarty))
+        (binary_expression
+          (identifier)
+          (keyword
+           (kw_at))))
+      (unbound_statement
+        (identifier)))))

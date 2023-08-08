@@ -1,0 +1,28 @@
+
+==================
+simple_op
+==================
+
+op translate<p>(offset){
+    @ = @ - offset;
+    p
+}
+
+---
+
+(source_file
+  (op_definition
+    (identifier)
+    (prim_list
+      (identifier))
+    (parameter_list
+      (typed_identifier
+        (identifier)))
+    (block
+      (at_rewrite_statement
+        (binary_expression
+          (keyword
+            (kw_at))
+          (identifier)))
+      (unbound_statement
+        (identifier)))))

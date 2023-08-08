@@ -1,0 +1,26 @@
+
+
+==================
+scoped let
+==================
+
+prim test(){
+    let a = { @ };
+    a
+}
+
+---
+
+(source_file
+  (prim_definition
+    (identifier)
+    (parameter_list)
+    (block
+      (let_statement
+        (typed_identifier
+          (identifier))
+        (scoped_expression
+          (keyword
+            (kw_at))))
+      (unbound_statement
+        (identifier)))))
