@@ -33,17 +33,20 @@ Note: The techstack is not set in stone. We might switch to a hand written parse
 
 ## Packages
 
-- `vola-parser`: Treesitter based parser. Also contains the language grammar
-- `volac`: The MLIR -> SPIR-V compiler.
+- `tree-sitter-vola`: Treesitter based parser. Also contains the language grammar
+- `vola-ast`: The Abstract-Syntax-Tree representation of any Vola program. Can either be build from a file (using `tree-sitter-vola`) or 
+by using this as a library. Servers as interface between the Vola frontend, and any middle- / backend.
+- `volac`: The VolaAst -> MLIR -> SPIR-V compiler.
 
 ## Building
 ### Dependencies
-- `vola-parser`: [Treesitter](https://tree-sitter.github.io/tree-sitter/creating-parsers#dependencies) if you want to rebuild / change the parser:
+- `tree-sitter-vola`: [Treesitter](https://tree-sitter.github.io/tree-sitter/creating-parsers#dependencies) if you want to rebuild / change the parser:
   - [Trees-Sitter CLI](https://crates.io/crates/tree-sitter-cli)
   - Node.js
   - A C Compiler
+- `vola-ast`: none
 - `volac`:
-  - LLVM / MLIR 16
+  - LLVM / MLIR 16 (must be in your `$PATH`)
   - Rust nightly (set by the `rust-toolchain.toml`)
 
 ## Getting started
@@ -57,10 +60,11 @@ cargo run --bin runtime-patch
 
 ### Dry Run
 **Currently not implemented!**
-Single shot dry run that takes a DF file and compiles it to a SPIR-V function.
+Single shot dry run that takes a vola file and compiles it to a SPIR-V function (if possible).
 
+If no file is provided, `examples/dry-run/default.vola` will be used.
 ``` shell
-cargo run --bin dry-run
+cargo run --bin dry-run -- path/to/vola/file
 ```
 
 ## Support

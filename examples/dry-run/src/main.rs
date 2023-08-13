@@ -1,3 +1,17 @@
-fn main() {
-    println!("Hello, world!");
+use volac::VolaErr;
+
+fn main() -> Result<(), VolaErr> {
+    let file = std::env::args().nth(1).unwrap_or({
+        println!("No file found, using default.vola!");
+        String::from("default.vola")
+    });
+
+    let mut parser = volac::parser()?;
+    let file_str = std::fs::read_to_string(&file).expect(&format!("Failed to read {}", file));
+
+    let tree = parser
+        .parse(&file_str, None)
+        .expect("Failed to parse file in time");
+
+    Ok(())
 }

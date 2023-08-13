@@ -5,21 +5,20 @@
 //"evaluation coordinate". Attributes are given as arguments to the primitive. Types are resolved
 // at inlining (if untyped), or, by definition.
 prim sphere(radius){
-    |@ - radius|
+    length(@ - radius)
 }
 
 //this sphere's radius must be a float.
 prim another_sphere(radius: f32){
-    |@ - radius|
+    length(@ - radius)
 }
 
 
 //this sphere's radius default radius is 5.0.
 //could also be written as `radius: f32 = 5.0`
 prim another_sphere(radius=5.0){
-    |@ - radius|
+    length(@ - radius)
 }
-
 
 
 //a OP is characterized by the primitives it applies on (in <>), and
@@ -30,6 +29,13 @@ op union<a,b>(){
 
 op translate<p>(offset){
     @ - offset
+    p
+}
+
+//an op adding a color attribute
+op color<p>(color: vec3){
+    p.color = color;
+    p
 }
 
 
