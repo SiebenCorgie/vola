@@ -7,3 +7,5 @@ edition = "2021"
 
 [dependencies]
 tree-sitter-vola = {path = "../tree-sitter-vola"}
+thiserror.workspace = true
+tree-sitter.workspace = true

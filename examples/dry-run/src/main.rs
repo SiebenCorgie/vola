@@ -1,12 +1,12 @@
-use volac::VolaErr;
+use vola_ast::AstError;
 
-fn main() -> Result<(), VolaErr> {
+fn main() -> Result<(), AstError> {
     let file = std::env::args().nth(1).unwrap_or({
         println!("No file found, using default.vola!");
         String::from("default.vola")
     });
 
-    let mut parser = volac::parser()?;
+    let mut parser = vola_ast::parser()?;
     let file_str = std::fs::read_to_string(&file).expect(&format!("Failed to read {}", file));
 
     let tree = parser

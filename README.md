@@ -36,7 +36,6 @@ Note: The techstack is not set in stone. We might switch to a hand written parse
 - `tree-sitter-vola`: Treesitter based parser. Also contains the language grammar
 - `vola-ast`: The Abstract-Syntax-Tree representation of any Vola program. Can either be build from a file (using `tree-sitter-vola`) or 
 by using this as a library. Servers as interface between the Vola frontend, and any middle- / backend.
-- `volac`: The VolaAst -> MLIR -> SPIR-V compiler.
 
 ## Building
 ### Dependencies
@@ -45,9 +44,6 @@ by using this as a library. Servers as interface between the Vola frontend, and 
   - Node.js
   - A C Compiler
 - `vola-ast`: none
-- `volac`:
-  - LLVM / MLIR 16 (must be in your `$PATH`)
-  - Rust nightly (set by the `rust-toolchain.toml`)
 
 ## Getting started
 
