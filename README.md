@@ -76,7 +76,7 @@ If you are interested in the runtime SPIR-V patching, have a look at [spv-patche
 
 **Milestone 0**: MVP
 
-- [ ] Simple grammar to get started
+- [x] Simple grammar to get started
 - [ ] Parser to MLIR (Melior) binding
 - [ ] Simple MLIR -> SPIR-V path (no optimisations, just transforming)
 - [ ] SPIR-V test app (`dry-run`) that tests the whole text-file -> SPIR-V chain

@@ -1,0 +1,70 @@
+
+==================
+complex field
+==================
+
+field my_field(){
+    def point = point();
+    def transphere = translate<sphere(5.0), point>([1.0, 0.0, 0.0]);
+    def mybox = box(1.0);
+
+
+    smooth_union<transphere, mybox>(1.0)
+}
+
+---
+
+(source_file
+  (field_definition
+    (identifier)
+    (parameter_list)
+    (block
+      (def_prim
+        (kw_prim)
+        (identifier)
+        (prim_expr
+          (call_expr
+            (identifier))))
+        (def_prim
+          (kw_prim)
+          (identifier)
+          (prim_expr
+            (optree
+              (identifier)
+              (prim_expr
+                (call_expr
+                  (identifier)
+                  (float
+                    (number)
+                    (number))))
+              (prim_expr
+                (identifier))
+              (list
+                (float
+                  (number)
+                  (number))
+                (float
+                  (number)
+                  (number))
+                (float
+                  (number)
+                  (number))))))
+          (def_prim
+            (kw_prim)
+            (identifier)
+            (prim_expr
+              (call_expr
+                (identifier)
+                (float
+                  (number)
+                  (number)))))
+      (prim_expr
+        (optree
+          (identifier)
+          (prim_expr
+            (identifier))
+          (prim_expr
+            (identifier))
+          (float
+            (number)
+            (number)))))))

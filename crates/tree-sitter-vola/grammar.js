@@ -93,6 +93,9 @@ module.exports = grammar({
     prim_expr: $ => choice(
       //name of a primitive
       $.identifier,
+      //adhoc creation
+      $.call_expr,
+      //Sub tree
       $.optree,
     ),
 
@@ -102,8 +105,9 @@ module.exports = grammar({
       //op's identifier
       $.identifier,
       '<',
-      //the primitives that are being modified, possibly nested
-      repeat($.prim_expr),
+      //the primitives that are being modified, possibly nested.
+      //Must be at least 1, since there are no ops on no primitives
+      $._prim_list,
       '>',
       '(',
       //list of arithmetic arguments
@@ -111,17 +115,26 @@ module.exports = grammar({
       ')',
     ),
 
+
+    _prim_list: $ => choice(
+      $.prim_expr,
+      seq(
+        $.prim_expr,
+        ',',
+        $._prim_list
+      ),
+    ),
+
+
     //Statement that defines a primitive
     def_prim: $ => seq(
       $.kw_prim,
       $.identifier,
       //possibly initialize
-      optional(seq(
+      optional(
+        seq(
         '=',
-        $.identifier,
-        '(',
-        $._art_list,
-        ')',
+          $.prim_expr,
       )),
       ';'
     ),
@@ -174,6 +187,7 @@ module.exports = grammar({
       $.identifier,
       $.float,
       $.kw_at,
+      $.list,
     ),
 
 
@@ -205,25 +219,44 @@ module.exports = grammar({
       ')'
     ),
 
-    _art_list: $ => choice(
 
-      //single expr
+    _art_list: $ => choice(
       $._art_expr,
-      // list of 1..n (ident,) + last without ,
       seq(
-        repeat(
-          seq(
-            $._art_expr,
-            ','
-          )
-        ),
         $._art_expr,
+        ',',
+        $._art_list
       )
     ),
 
-
 //Types and keywords
 //=================
+
+
+    //any list
+    list: $ => seq(
+      '[',
+      optional($._list_iter),
+      ']'
+    ),
+
+    _list_iter: $ => choice(
+      $._list_item,
+      seq(
+        $._list_item,
+        ',',
+        //rest of the list
+        $._list_iter
+      )
+    ),
+
+    _list_item: $ => choice(
+      $.list,
+      $.float,
+      $.identifier,
+      $.kw_at,
+    ),
+
 
     _type: $ => choice(
       $.scalar,
