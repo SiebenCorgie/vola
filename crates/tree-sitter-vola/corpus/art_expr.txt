@@ -1,0 +1,112 @@
+
+
+==================
+art let
+==================
+
+op test<p>(){
+    let a = x;
+    p
+}
+
+---
+
+(source_file
+  (op_definition
+    (identifier)
+    (prim_list
+      (identifier))
+    (parameter_list)
+    (block
+      (let_stmt
+        (typed_identifier
+          (identifier))
+        (identifier))
+      (prim_expr
+        (identifier)))))
+
+
+==================
+art calc
+==================
+
+op test<p>(){
+    let a = 5 + x;
+    p
+}
+
+---
+
+(source_file
+  (op_definition
+    (identifier)
+    (prim_list
+      (identifier))
+    (parameter_list)
+    (block
+      (let_stmt
+        (typed_identifier
+          (identifier))
+        (binary_expr
+          (float
+            (number))
+          (identifier)))
+      (prim_expr
+        (identifier)))))
+
+==================
+art call
+==================
+
+op test<p>(){
+    let a = some_function();
+    p
+}
+
+---
+
+(source_file
+  (op_definition
+    (identifier)
+    (prim_list
+      (identifier))
+    (parameter_list)
+    (block
+      (let_stmt
+        (typed_identifier
+          (identifier))
+        (call_expr
+         (identifier)))
+      (prim_expr
+        (identifier)))))
+
+==================
+nested_call
+==================
+
+op test<p>(){
+    let a = min(max(a, b), c);
+    p
+}
+
+---
+
+(source_file
+  (op_definition
+    (identifier)
+    (prim_list
+      (identifier))
+    (parameter_list)
+    (block
+      (let_stmt
+        (typed_identifier
+          (identifier))
+        (call_expr
+         (identifier)
+         (call_expr
+           (identifier)
+           (identifier)
+           (identifier))
+         (identifier)))
+      (prim_expr
+        (identifier)))))

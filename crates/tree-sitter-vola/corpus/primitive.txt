@@ -3,26 +3,36 @@ Simple primitive
 ==================
 
 prim testprim(){
-    @
+    def p;
+    p.@ = @;
+    p
 }
 
 ---
 
 (source_file
   (prim_definition
-   (identifier)
-   (parameter_list)
-   (block
-     (unbound_statement
-       (keyword
-         (kw_at))))))
+    (identifier)
+    (parameter_list)
+    (block
+      (def_prim
+        (kw_prim)
+        (identifier))
+      (set_prim
+        (identifier)
+        (kw_at)
+        (kw_at))
+      (prim_expr
+        (identifier)))))
 
 ==================
 Primitive definition
 ==================
 
 prim sphere(radius){
-    length(@ - radius)
+    def p;
+    p.@ = length(@ - radius);
+    p
 }
 
 ---
@@ -34,13 +44,19 @@ prim sphere(radius){
       (typed_identifier
         (identifier)))
     (block
-      (unbound_statement
-        (function_call_expr
+      (def_prim
+        (kw_prim)
+        (identifier))
+      (set_prim
+        (identifier)
+        (kw_at)
+        (call_expr
           (identifier)
-          (binary_expression
-            (keyword
-              (kw_at))
-            (identifier)))))))
+          (binary_expr
+            (kw_at)
+            (identifier))))
+      (prim_expr
+        (identifier)))))
 
 
 ==================
@@ -48,11 +64,12 @@ Primitive definition typed arg
 ==================
 
 prim sphere(radius: vec2){
-    length(@ - radius)
+    def testprim;
+    testprim.color = 4.0;
+    testprim
 }
 
 ---
-
 
 (source_file
   (prim_definition
@@ -60,17 +77,20 @@ prim sphere(radius: vec2){
     (parameter_list
       (typed_identifier
         (identifier)
-        (vecty
+        (vec
           (number))))
     (block
-      (unbound_statement
-        (function_call_expr
-          (identifier)
-          (binary_expression
-            (keyword
-              (kw_at))
-            (identifier)))))))
-
+      (def_prim
+        (kw_prim)
+        (identifier))
+      (set_prim
+        (identifier)
+        (identifier)
+        (float
+          (number)
+          (number)))
+      (prim_expr
+        (identifier)))))
 
 
 ==================
@@ -84,29 +104,29 @@ prim sphere(radius){
 
 ---
 
+
 (source_file
   (prim_definition
     (identifier)
     (parameter_list
-      (typed_identifier
-        (identifier)))
+     (typed_identifier
+      (identifier)))
     (block
-      (let_statement
+      (let_stmt
         (typed_identifier
           (identifier))
-        (binary_expression
+        (binary_expr
           (identifier)
-          (keyword
-           (kw_at))))
-      (unbound_statement
-        (identifier)))))
+          (kw_at)))
+      (prim_expr
+      (identifier)))))
 
 ==================
 let def typed
 ==================
 
 prim sphere(radius){
-    let a: scalar = radius - @;
+    let a: s = radius - @;
     a
 }
 
@@ -117,15 +137,14 @@ prim sphere(radius){
     (identifier)
     (parameter_list
       (typed_identifier
-        (identifier)))
+      (identifier)))
     (block
-      (let_statement
+      (let_stmt
         (typed_identifier
           (identifier)
-          (scalarty))
-        (binary_expression
+          (scalar))
+        (binary_expr
           (identifier)
-          (keyword
-           (kw_at))))
-      (unbound_statement
-        (identifier)))))
+          (kw_at)))
+      (prim_expr
+      (identifier)))))

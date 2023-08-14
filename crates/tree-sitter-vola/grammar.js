@@ -20,7 +20,7 @@ module.exports = grammar({
       'prim',
       $.identifier,
       $.parameter_list,
-      $.arit_block
+      $.block
     ),
 
     //op some_op<[prims]>([params]){[block]}
@@ -29,7 +29,7 @@ module.exports = grammar({
       $.identifier,
       $.prim_list,
       $.parameter_list,
-      $.comb_block
+      $.block
     ),
 
     //field some_field([params]){[block]}
@@ -37,14 +37,14 @@ module.exports = grammar({
       'field',
       $.identifier,
       $.parameter_list,
-      $.combi_block
+      $.block
     ),
 
 
     //Generic primitive list
     prim_list: $ => seq(
       '<',
-      $.identifier,
+      repeat1($.identifier),
       '>'
     ),
 
@@ -66,146 +66,169 @@ module.exports = grammar({
       )
     ),
 
-
-    combi_block: $ => seq(
+    //A block of some domain. Per definition we must always end with an primitive
+    //expression
+    block: $ => seq(
       '{',
-      repeat($._combi_stmt),
-      //By definition, a combinatorical block needs to end with a identifier of the primitive that is being returned.
-      $.identifier,
+      repeat($._stmt),
+      $.prim_expr,
       '}'
     ),
 
-    _combi_stmt: $ => choice(
-      //either defines a primitive,
-      $.define_prim,
-      //combines primitives
-      $.op_prim,
-      //calculate something
-      $.let_arit
+    //Single statement. Either transforms a primitive (for instance attribute change),
+    //defines a prim,
+    //or calculates something arithmetic.
+    _stmt: $ => choice(
+      $.let_stmt,
+      $.def_prim,
+      $.set_prim,
+      $.set_at,
     ),
 
+// Primitive expressions
+//=================
 
-    // looks like
-    //
-    // prim x = some_prim(a, b, c);
-    //
-    define_prim: $ => seq(
-      $.kw_prim,
+    //An expression that defines an prim somehow.
+    //this is either a op-tree on primitives, or a primitive itself
+    prim_expr: $ => choice(
+      //name of a primitive
       $.identifier,
-      '=',
-      $.call,
-      ';'
+      $.optree,
     ),
 
-    //looks like
-    //
-    // some_op<x, y>(a,b);
-    //
-
-
-    $call: $ => seq(
-      $identifier,
+    //expression that defines a tree of ops on leaf primitives.
+    //possible tree of primitive expressions
+    optree: $ => seq(
+      //op's identifier
+      $.identifier,
+      '<',
+      //the primitives that are being modified, possibly nested
+      repeat($.prim_expr),
+      '>',
       '(',
-      repeat(identifier),
+      //list of arithmetic arguments
+      $._art_list,
       ')',
     ),
 
-    arit_block: $ => seq(
-      '{',
-      repeat($.arit_stmt),
-
-      '}'
+    //Statement that defines a primitive
+    def_prim: $ => seq(
+      $.kw_prim,
+      $.identifier,
+      //possibly initialize
+      optional(seq(
+        '=',
+        $.identifier,
+        '(',
+        $._art_list,
+        ')',
+      )),
+      ';'
     ),
 
-    _arti_stmt: $ => choice(
-      $.let_arit_stmt,
-      $.unbound_arit_stmt,
+    //Statement that sets an attribute of some primitive
+    set_prim: $ => seq(
+      $.identifier,
+      '.',
+      optional(choice(
+        $.kw_at,
+        $.identifier
+      )),
+      '=',
+      //whatever is written on that attribute
+      $._art_expr,
+      ';'
     ),
 
+    set_at: $ => seq(
+      $.kw_at,
+      '=',
+      $._art_expr,
+      ';'
+    ),
 
-    //Artimetic statement that bind some expression to a identivier.
-    let_arit_stmt: $ => seq(
+// Arithmetic statements
+//=================
+
+
+    //Arithmetic let statement.
+    //something like
+    // let a = 4+5;
+    let_stmt: $ => seq(
       'let',
       $.typed_identifier,
       '=',
-      $._arit_expression,
+      $._art_expr,
       ';'
     ),
 
-
-    unbound_arit_stmt: $ => seq(
-      $._expression
-    ),
-
-    //Whenever we change from the combinatoric to the "lower" arithmetical level.
-    _arithmetic_stmt: $ => choice(
-
-    ),
-
-    _scoped_stmts: $ => seq(
-      '{',
-      repeat($_arithmetic_stmt),
-      '}',
-      ';'
-    )
-
-    let_statement: $ => seq(
-      'let',
-      $.typed_identifier,
-      '=',
-      $._expression,
-      ';'
-    ),
-
-    at_rewrite_statement: $ => seq(
-      '@',
-      '=',
-      $._expression,
-      ';'
-    ),
-
-
-    _expression: $ => choice(
+    //either a direct arithmetic statement, or a
+    //scoped one
+    _art_expr: $ => choice(
+      //Opens a new scope
+      $.unary_expr,
+      $.scoped_expr,
+      $.binary_expr,
+      $.call_expr,
+      //returns something from before,
       $.identifier,
-      $.number,
-      $.keyword,
-      $.scoped_expression,
-      $.function_call_expr,
-      $.unary_expression,
-      $.binary_expression
-      // TODO: other kinds of expressions
+      $.float,
+      $.kw_at,
     ),
 
-    function_call_expr: $ => seq(
-      $.identifier,
-      '(',
-      repeat(seq($._expression, ',')), //for >1 arguments
-      optional($._expression), // for 0-th and/or 1st
-      ')'
-    ),
 
-    scoped_expression: $ => seq(
+    scoped_expr: $ => seq(
       '{',
-      $._expression,
+      repeat($.let_stmt),
+      $._art_expr,
       '}'
     ),
 
-    unary_expression: $ => prec(3, choice(
-      seq('-', $._expression),
-      seq('!', $._expression),
+    unary_expr: $ => prec(3, choice(
+      seq('-', $._art_expr),
+      seq('!', $._art_expr),
       //TODO more?
     )),
 
-    binary_expression: $ => choice(
-      prec.left(2, seq($._expression, '/', $._expression)),
-      prec.left(2, seq($._expression, '*', $._expression)),
-      prec.left(1, seq($._expression, '+', $._expression)),
-      prec.left(1, seq($._expression, '-', $._expression)),
+    binary_expr: $ => choice(
+      prec.left(2, seq($._art_expr, '/', $._art_expr)),
+      prec.left(2, seq($._art_expr, '*', $._art_expr)),
+      prec.left(1, seq($._art_expr, '+', $._art_expr)),
+      prec.left(1, seq($._art_expr, '-', $._art_expr)),
       // ...
     ),
 
+    call_expr: $ => seq(
+      $.identifier,
+      '(',
+      optional($._art_list),
+      ')'
+    ),
+
+    _art_list: $ => choice(
+
+      //single expr
+      $._art_expr,
+      // list of 1..n (ident,) + last without ,
+      seq(
+        repeat(
+          seq(
+            $._art_expr,
+            ','
+          )
+        ),
+        $._art_expr,
+      )
+    ),
+
+
+//Types and keywords
+//=================
+
     _type: $ => choice(
-      $.scalar
+      $.scalar,
+      $.vec,
+      $.mat,
     ),
 
     scalar: $ => seq(
@@ -214,19 +237,25 @@ module.exports = grammar({
 
     vec: $ => seq(
       'vec',
-      option($.number)
-      'x',
       $.number,
     ),
 
     mat: $ => seq(
       'mat',
-      $.number
+      $.number,
       'x',
       $.number,
     ),
 
-    identifier: $ => /[a-z]+/,
+    identifier: $ => /[a-z_]+/,
+
+    float: $ => seq(
+      $.number,
+      optional(seq(
+        '.',
+        $.number
+      ))
+    ),
 
     number: $ => /\d+/,
 
@@ -237,6 +266,6 @@ module.exports = grammar({
     ),
 
     kw_at: $ => '@',
-    kw_prim: $ => 'prim'
+    kw_prim: $ => 'def'
   }
 });

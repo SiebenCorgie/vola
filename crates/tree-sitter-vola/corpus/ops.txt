@@ -19,14 +19,13 @@ op translate<p>(offset){
       (typed_identifier
         (identifier)))
     (block
-      (at_rewrite_statement
-        (binary_expression
-          (keyword
-            (kw_at))
+      (set_at
+        (kw_at)
+        (binary_expr
+          (kw_at)
           (identifier)))
-      (unbound_statement
+      (prim_expr
         (identifier)))))
-
 
 ==================
 assign_op
@@ -48,10 +47,9 @@ op color<p>(color){
       (typed_identifier
         (identifier)))
     (block
-      (at_rewrite_statement
-        (binary_expression
-          (keyword
-            (kw_at))
-          (identifier)))
-      (unbound_statement
+      (set_prim
+        (identifier)
+        (identifier)
+        (identifier))
+      (prim_expr
         (identifier)))))
