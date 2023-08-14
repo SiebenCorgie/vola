@@ -1,3 +1,11 @@
+//! # Vola-AST
+//!
+//! Vola's *A*bstract *S*yntax *T*ree.
+//!
+//!
+//! The AST is designed to be easily transformed into SSA 3-address code. This allows us to transform it into
+//! MLIR Code, or directly into SPIR-V, depending on the choosen back/middle end.
+
 use std::path::Path;
 
 use thiserror::Error;
@@ -16,7 +24,9 @@ pub enum AstError {
 }
 
 ///All node types
-pub enum Node {}
+pub enum Node {
+    EntryPoint,
+}
 
 pub struct Ast {}
 

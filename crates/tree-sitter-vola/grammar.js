@@ -20,7 +20,7 @@ module.exports = grammar({
       'prim',
       $.identifier,
       $.parameter_list,
-      $.block
+      $.arit_block
     ),
 
     //op some_op<[prims]>([params]){[block]}
@@ -29,7 +29,7 @@ module.exports = grammar({
       $.identifier,
       $.prim_list,
       $.parameter_list,
-      $.block
+      $.comb_block
     ),
 
     //field some_field([params]){[block]}
@@ -37,7 +37,7 @@ module.exports = grammar({
       'field',
       $.identifier,
       $.parameter_list,
-      $.block
+      $.combi_block
     ),
 
 
@@ -67,24 +67,87 @@ module.exports = grammar({
     ),
 
 
-    block: $ => seq(
+    combi_block: $ => seq(
       '{',
-      repeat($._statement),
-      //by definition we must end with an unbound statement
-      $.unbound_statement,
+      repeat($._combi_stmt),
+      //By definition, a combinatorical block needs to end with a identifier of the primitive that is being returned.
+      $.identifier,
       '}'
     ),
 
-    _statement: $ => choice(
-      $.let_statement,
-      $.unbound_statement,
-      $.at_rewrite_statement
-      // TODO: other kinds of statements
+    _combi_stmt: $ => choice(
+      //either defines a primitive,
+      $.define_prim,
+      //combines primitives
+      $.op_prim,
+      //calculate something
+      $.let_arit
     ),
 
-    unbound_statement: $ => seq(
+
+    // looks like
+    //
+    // prim x = some_prim(a, b, c);
+    //
+    define_prim: $ => seq(
+      $.kw_prim,
+      $.identifier,
+      '=',
+      $.call,
+      ';'
+    ),
+
+    //looks like
+    //
+    // some_op<x, y>(a,b);
+    //
+
+
+    $call: $ => seq(
+      $identifier,
+      '(',
+      repeat(identifier),
+      ')',
+    ),
+
+    arit_block: $ => seq(
+      '{',
+      repeat($.arit_stmt),
+
+      '}'
+    ),
+
+    _arti_stmt: $ => choice(
+      $.let_arit_stmt,
+      $.unbound_arit_stmt,
+    ),
+
+
+    //Artimetic statement that bind some expression to a identivier.
+    let_arit_stmt: $ => seq(
+      'let',
+      $.typed_identifier,
+      '=',
+      $._arit_expression,
+      ';'
+    ),
+
+
+    unbound_arit_stmt: $ => seq(
       $._expression
     ),
+
+    //Whenever we change from the combinatoric to the "lower" arithmetical level.
+    _arithmetic_stmt: $ => choice(
+
+    ),
+
+    _scoped_stmts: $ => seq(
+      '{',
+      repeat($_arithmetic_stmt),
+      '}',
+      ';'
+    )
 
     let_statement: $ => seq(
       'let',
@@ -142,14 +205,26 @@ module.exports = grammar({
     ),
 
     _type: $ => choice(
-      $.scalarty,
-      $.vecty,
-      $.matty
+      $.scalar
     ),
 
-    scalarty: $ => 'scalar',
-    vecty: $ => seq('vec', $.number),
-    matty: $ => seq('mat', $.number, 'x', $.number),
+    scalar: $ => seq(
+      's',
+    ),
+
+    vec: $ => seq(
+      'vec',
+      option($.number)
+      'x',
+      $.number,
+    ),
+
+    mat: $ => seq(
+      'mat',
+      $.number
+      'x',
+      $.number,
+    ),
 
     identifier: $ => /[a-z]+/,
 
@@ -157,9 +232,11 @@ module.exports = grammar({
 
     keyword: $ => choice(
       $.kw_at,
+      $.kw_prim,
       //TODO other keywords?
     ),
 
     kw_at: $ => '@',
+    kw_prim: $ => 'prim'
   }
 });
