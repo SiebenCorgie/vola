@@ -18,9 +18,10 @@ prim testprim(){
       (def_prim
         (kw_prim)
         (identifier))
-      (set_prim
-        (identifier)
-        (kw_at)
+      (assignment_stmt
+        (assignee
+          (identifier)
+          (kw_at))
         (kw_at))
       (prim_expr
         (identifier)))))
@@ -47,9 +48,10 @@ prim sphere(radius){
       (def_prim
         (kw_prim)
         (identifier))
-      (set_prim
-        (identifier)
-        (kw_at)
+      (assignment_stmt
+        (assignee
+          (identifier)
+          (kw_at))
         (call_expr
           (identifier)
           (binary_expr
@@ -83,12 +85,13 @@ prim sphere(radius: vec2){
       (def_prim
         (kw_prim)
         (identifier))
-      (set_prim
-        (identifier)
-        (identifier)
-        (float
-          (number)
-          (number)))
+      (assignment_stmt
+        (assignee
+          (identifier)
+          (identifier))
+          (float
+            (number)
+            (number)))
       (prim_expr
         (identifier)))))
 

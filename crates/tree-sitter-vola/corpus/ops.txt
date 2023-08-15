@@ -19,8 +19,9 @@ op translate<p>(offset){
       (typed_identifier
         (identifier)))
     (block
-      (set_at
-        (kw_at)
+      (assignment_stmt
+        (assignee
+          (kw_at))
         (binary_expr
           (kw_at)
           (identifier)))
@@ -47,9 +48,10 @@ op color<p>(color){
       (typed_identifier
         (identifier)))
     (block
-      (set_prim
-        (identifier)
-        (identifier)
+      (assignment_stmt
+            (assignee
+              (identifier)
+              (identifier))
         (identifier))
       (prim_expr
         (identifier)))))

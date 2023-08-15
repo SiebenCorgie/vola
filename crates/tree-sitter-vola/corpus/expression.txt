@@ -26,9 +26,10 @@ prim test(){
           (identifier))
         (scoped_expr
             (kw_at)))
-      (set_prim
-        (identifier)
-        (kw_at)
+      (assignment_stmt
+        (assignee
+          (identifier)
+          (kw_at))
         (identifier))
       (prim_expr
         (identifier)))))
@@ -90,9 +91,10 @@ prim test(){
       (def_prim
         (kw_prim)
         (identifier))
-      (set_prim
-        (identifier)
-        (kw_at)
+      (assignment_stmt
+        (assignee
+          (identifier)
+            (kw_at))
         (identifier))
       (prim_expr
         (identifier)))))

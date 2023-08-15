@@ -12,7 +12,8 @@ module.exports = grammar({
     _definition: $ => choice(
       $.prim_definition,
       $.op_definition,
-      $.field_definition
+      $.field_definition,
+      $.comment,
     ),
 
     // prim some_name([params...]){[block]}
@@ -44,15 +45,34 @@ module.exports = grammar({
     //Generic primitive list
     prim_list: $ => seq(
       '<',
-      repeat1($.identifier),
+      $._ident_iter,
       '>'
+    ),
+
+    _ident_iter: $ => choice(
+      $.identifier,
+      seq(
+        $.identifier,
+        ',',
+        $._ident_iter
+      )
     ),
 
     //Generic parameter list
     parameter_list: $ => seq(
       '(',
-      repeat($.typed_identifier),
+      optional($._param_iter),
       ')'
+    ),
+
+
+    _param_iter: $ => choice(
+      $.typed_identifier,
+      seq(
+        $.typed_identifier,
+        ',',
+        $._param_iter,
+      )
     ),
 
     //Any typed identifier with an optional type hint
@@ -81,8 +101,8 @@ module.exports = grammar({
     _stmt: $ => choice(
       $.let_stmt,
       $.def_prim,
-      $.set_prim,
-      $.set_at,
+      $.assignment_stmt,
+      $.comment,
     ),
 
 // Primitive expressions
@@ -139,30 +159,8 @@ module.exports = grammar({
       ';'
     ),
 
-    //Statement that sets an attribute of some primitive
-    set_prim: $ => seq(
-      $.identifier,
-      '.',
-      optional(choice(
-        $.kw_at,
-        $.identifier
-      )),
-      '=',
-      //whatever is written on that attribute
-      $._art_expr,
-      ';'
-    ),
-
-    set_at: $ => seq(
-      $.kw_at,
-      '=',
-      $._art_expr,
-      ';'
-    ),
-
 // Arithmetic statements
 //=================
-
 
     //Arithmetic let statement.
     //something like
@@ -183,13 +181,21 @@ module.exports = grammar({
       $.scoped_expr,
       $.binary_expr,
       $.call_expr,
+      $._sub_art_expr,
       //returns something from before,
       $.identifier,
+      $.arg_access,
       $.float,
       $.kw_at,
       $.list,
     ),
 
+    //Sub expression
+    _sub_art_expr: $ => seq(
+      '(',
+      $._art_expr,
+      ')'
+    ),
 
     scoped_expr: $ => seq(
       '{',
@@ -209,7 +215,23 @@ module.exports = grammar({
       prec.left(2, seq($._art_expr, '*', $._art_expr)),
       prec.left(1, seq($._art_expr, '+', $._art_expr)),
       prec.left(1, seq($._art_expr, '-', $._art_expr)),
+      prec.left(1, seq($._art_expr, '%', $._art_expr)),
       // ...
+    ),
+
+
+    assignment_stmt: $ => choice(
+      seq($.assignee, '=', $._art_expr, ';'),
+      seq($.assignee, '+=', $._art_expr, ';'),
+      seq($.assignee, '-=', $._art_expr, ';'),
+      seq($.assignee, '*=', $._art_expr, ';'),
+      seq($.assignee, '/=', $._art_expr, ';'),
+    ),
+
+    assignee: $ => choice(
+      seq($.identifier, '.', $.identifier),
+      seq($.kw_at),
+      seq($.identifier, '.', $.kw_at),
     ),
 
     call_expr: $ => seq(
@@ -226,6 +248,15 @@ module.exports = grammar({
         $._art_expr,
         ',',
         $._art_list
+      )
+    ),
+
+    arg_access: $ => seq(
+      $.identifier,
+      '.',
+      choice(
+        $.identifier,
+        $.kw_at
       )
     ),
 
@@ -299,6 +330,13 @@ module.exports = grammar({
     ),
 
     kw_at: $ => '@',
-    kw_prim: $ => 'def'
+    kw_prim: $ => 'def',
+
+//All about comments
+//=================
+
+    comment: $ => token(seq(
+      '//', /.*/
+    )),
   }
 });

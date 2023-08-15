@@ -25,39 +25,39 @@ field my_field(){
         (prim_expr
           (call_expr
             (identifier))))
-        (def_prim
-          (kw_prim)
-          (identifier)
-          (prim_expr
-            (optree
-              (identifier)
-              (prim_expr
-                (call_expr
-                  (identifier)
-                  (float
-                    (number)
-                    (number))))
-              (prim_expr
-                (identifier))
-              (list
-                (float
-                  (number)
-                  (number))
-                (float
-                  (number)
-                  (number))
-                (float
-                  (number)
-                  (number))))))
-          (def_prim
-            (kw_prim)
+      (def_prim
+        (kw_prim)
+        (identifier)
+        (prim_expr
+          (optree
             (identifier)
             (prim_expr
               (call_expr
                 (identifier)
                 (float
                   (number)
-                  (number)))))
+                  (number))))
+            (prim_expr
+              (identifier))
+            (list
+              (float
+                (number)
+                (number))
+              (float
+                (number)
+                (number))
+              (float
+                (number)
+                (number))))))
+      (def_prim
+        (kw_prim)
+        (identifier)
+        (prim_expr
+          (call_expr
+            (identifier)
+            (float
+              (number)
+              (number)))))
       (prim_expr
         (optree
           (identifier)
