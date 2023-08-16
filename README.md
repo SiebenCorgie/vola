@@ -22,6 +22,38 @@ The whole thing is highly experimental at the moment. Don't use it for anything 
 We try to create a language and intermediate distance function (DF) representation that makes it easy to write, and programmatically generate such distance fields. The final compiler should make 
 it possible to patch code that targets GPU execution at runtime in an efficient manor.
 
+An example field that describes a sphere translated by one unit on `X` might look like this:
+
+```
+prim sphere(radius){
+  def s;
+  s.@ = length(@ - radius);
+  s
+}
+
+op translate<p>(translation){
+  @ -= translation;
+  p
+}
+
+//Smallest version
+field my_sdf(){
+  translate<sphere(5.0)>([1.0, 0.0, 0.0])
+}
+
+//Or, more readable
+field my_sdf(){
+  //Define a sphere with radius 0;
+  def my_sphere = sphere(5.0);
+  //Use OP "translate" on sdf "my_sphere" with the argument vec3 = [1,0,0].
+  def translated_sphere = translate<my_sphere>([1.0, 0.0, 0.0]);
+  //Return the sphere.
+  translated_sphere
+}
+```
+
+For more examples either have a look at the syntax [test corpus](crates/tree-sitter-vola/corpus) or the [idea.md](https://gitlab.com/tendsinmende/vola/-/blob/main/docs/ideas.md?ref_type=heads#syntax-examples) file.
+
 
 ## Techstack / Packages
 
@@ -33,17 +65,17 @@ Note: The techstack is not set in stone. We might switch to a hand written parse
 
 ## Packages
 
-- `vola-parser`: Treesitter based parser. Also contains the language grammar
-- `volac`: The MLIR -> SPIR-V compiler.
+- `tree-sitter-vola`: Treesitter based parser. Also contains the language grammar
+- `vola-ast`: The Abstract-Syntax-Tree representation of any Vola program. Can either be build from a file (using `tree-sitter-vola`) or 
+by using this as a library. Servers as interface between the Vola frontend, and any middle- / backend.
 
 ## Building
 ### Dependencies
-- `vola-parser`: [Treesitter](https://tree-sitter.github.io/tree-sitter/creating-parsers#dependencies) if you want to rebuild / change the parser:
+- `tree-sitter-vola`: [Treesitter](https://tree-sitter.github.io/tree-sitter/creating-parsers#dependencies) if you want to rebuild / change the parser:
+  - [Trees-Sitter CLI](https://crates.io/crates/tree-sitter-cli)
   - Node.js
   - A C Compiler
-- `volac`:
-  - LLVM / MLIR 16
-  - Rust nightly (set by the `rust-toolchain.toml`)
+- `vola-ast`: none
 
 ## Getting started
 
@@ -56,10 +88,11 @@ cargo run --bin runtime-patch
 
 ### Dry Run
 **Currently not implemented!**
-Single shot dry run that takes a DF file and compiles it to a SPIR-V function.
+Single shot dry run that takes a vola file and compiles it to a SPIR-V function (if possible).
 
+If no file is provided, `examples/dry-run/default.vola` will be used.
 ``` shell
-cargo run --bin dry-run
+cargo run --bin dry-run -- path/to/vola/file
 ```
 
 ## Support
@@ -75,7 +108,7 @@ If you are interested in the runtime SPIR-V patching, have a look at [spv-patche
 
 **Milestone 0**: MVP
 
-- [ ] Simple grammar to get started
+- [x] Simple grammar to get started
 - [ ] Parser to MLIR (Melior) binding
 - [ ] Simple MLIR -> SPIR-V path (no optimisations, just transforming)
 - [ ] SPIR-V test app (`dry-run`) that tests the whole text-file -> SPIR-V chain

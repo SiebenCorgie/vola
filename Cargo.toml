@@ -1,6 +1,12 @@
 [workspace]
 members = [
-
+"crates/tree-sitter-vola",
+"crates/vola-ast",
 "examples/dry-run",
 "examples/runtime-patch"
 ]
+
+
+[workspace.dependencies]
+tree-sitter = "0.20.10"
+thiserror = "1.0.44"

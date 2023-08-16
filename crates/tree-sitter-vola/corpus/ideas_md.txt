@@ -1,0 +1,323 @@
+==================
+algebraic statement
+==================
+
+alge some_function(arg_one, arg_two: vec3){
+    let a = arg_one - 4;
+    arg_two - a
+}
+
+
+---
+
+(source_file
+  (alge_definition
+    (identifier)
+    (parameter_list
+      (typed_identifier
+        (identifier))
+      (typed_identifier
+        (identifier)
+        (vec
+          (number))))
+    (scoped_expr
+      (let_stmt
+        (typed_identifier
+          (identifier))
+        (binary_expr
+          (identifier)
+            (float
+              (number))))
+        (binary_expr
+          (identifier)
+          (identifier)))))
+
+==================
+idea prim sphere
+==================
+
+prim sphere(a: s, b: vec3){
+    // define a new primitive.
+    def a;
+    //set the primitives @ value
+    a.@ = ((@-a) + b);
+    // and return it
+    a
+}
+
+---
+
+(source_file
+  (prim_definition
+    (identifier)
+    (parameter_list
+      (typed_identifier
+        (identifier)
+        (scalar))
+      (typed_identifier
+        (identifier)
+          (vec
+            (number))))
+      (block
+        (comment)
+        (def_prim
+          (kw_prim)
+          (identifier))
+        (comment)
+        (assignment_stmt
+          (assignee
+            (identifier)
+            (kw_at))
+          (binary_expr
+            (binary_expr
+              (kw_at)
+              (identifier))
+            (identifier)))
+        (comment)
+        (prim_expr
+          (identifier)))))
+
+
+
+==================
+idea prim box
+==================
+
+//Shows a less riggid version. Only defines that it needs a 3-component vector.
+prim box(extend: vec3){
+    def box;
+    let q = abs(@ - extend);
+    box.@ = len(max(q, a)) + min(max_element(q), 0.0);
+    box
+}
+
+---
+
+(source_file
+  (comment)
+      (prim_definition
+        (identifier)
+        (parameter_list
+          (typed_identifier
+            (identifier)
+            (vec
+              (number))))
+        (block
+          (def_prim
+            (kw_prim)
+            (identifier))
+          (let_stmt
+            (typed_identifier
+              (identifier))
+            (call_expr
+              (identifier)
+              (binary_expr
+                (kw_at)
+                (identifier))))
+          (assignment_stmt
+            (assignee
+              (identifier)
+              (kw_at))
+            (binary_expr
+              (call_expr
+                (identifier)
+                (call_expr
+                  (identifier)
+                  (identifier)
+                  (identifier)))
+              (call_expr
+                (identifier)
+                (call_expr
+                  (identifier)
+                  (identifier))
+                (float
+                  (number)
+                  (number)))))
+          (prim_expr
+            (identifier)))))
+
+
+
+==================
+idea op translate
+==================
+
+//an operation that changes the @ domain before the primitive
+//is evaluated.
+op translate<p>(offset){
+    @ -= offset;
+    p
+}
+
+---
+
+(source_file
+  (comment)
+      (comment)
+      (op_definition
+        (identifier)
+        (prim_list
+          (identifier))
+        (parameter_list
+          (typed_identifier
+            (identifier)))
+        (block
+          (assignment_stmt
+            (assignee
+              (kw_at))
+            (identifier))
+          (prim_expr
+            (identifier)))))
+
+
+
+
+==================
+idea op smooth union
+==================
+
+//an operation on two primitives
+op smooth_union<a, b>(radius){
+    let h = clamp(0.5 + 0.5 * (a.@ - b.@) / radius, 0.0, 1.0);
+    //note how we use `mix` to "mix" all attributes
+    def new = mix(a, b, h);
+    //and post touch up the @ value according to IQ's https://iquilezles.org/articles/distfunctions/
+    new.@ -= k*h*(1.0 - h);
+    new
+}
+
+---
+
+(source_file
+  (comment)
+        (op_definition
+        (identifier)
+        (prim_list
+          (identifier)
+          (identifier))
+        (parameter_list
+          (typed_identifier
+            (identifier)))
+        (block
+          (let_stmt
+            (typed_identifier
+              (identifier))
+            (call_expr
+              (identifier)
+              (binary_expr
+                (float
+                  (number)
+                  (number))
+                (binary_expr
+                  (binary_expr
+                    (float
+                      (number)
+                      (number))
+                    (binary_expr
+                      (arg_access
+                        (identifier)
+                        (kw_at))
+                      (arg_access
+                        (identifier)
+                        (kw_at))))
+                  (identifier)))
+              (float
+                (number)
+                (number))
+              (float
+                (number)
+                (number))))
+          (comment)
+          (def_prim
+            (kw_prim)
+            (identifier)
+            (prim_expr
+              (call_expr
+                (identifier)
+                (identifier)
+                (identifier)
+                (identifier))))
+          (comment)
+          (assignment_stmt
+            (assignee
+              (identifier)
+              (kw_at))
+            (binary_expr
+              (binary_expr
+                (identifier)
+                (identifier))
+              (binary_expr
+                (float
+                  (number)
+                  (number))
+                (identifier))))
+          (prim_expr
+            (identifier)))))
+
+
+
+
+==================
+idea myfield
+==================
+
+
+field my_field(){
+    def transphere = translate<sphere(5.0), point>([1.0, 0.0, 0.0]);
+    def mybox = box(1.0);
+
+
+    smooth_union<transphere, mybox>(1.0)
+}
+
+---
+
+(source_file
+  (field_definition
+    (identifier)
+    (parameter_list)
+    (block
+      (def_prim
+        (kw_prim)
+        (identifier)
+        (prim_expr
+          (optree
+            (identifier)
+            (prim_expr
+              (call_expr
+                (identifier)
+                (float
+                  (number)
+                  (number))))
+            (prim_expr
+              (identifier))
+            (list
+              (float
+                (number)
+                (number))
+              (float
+                (number)
+                (number))
+              (float
+                (number)
+                (number))))))
+      (def_prim
+        (kw_prim)
+        (identifier)
+        (prim_expr
+          (call_expr
+            (identifier)
+            (float
+              (number)
+              (number)))))
+      (prim_expr
+        (optree
+          (identifier)
+          (prim_expr
+            (identifier))
+          (prim_expr
+            (identifier))
+          (float
+            (number)
+            (number)))))))
+

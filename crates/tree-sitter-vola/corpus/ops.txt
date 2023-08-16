@@ -1,0 +1,57 @@
+
+==================
+simple_op
+==================
+
+op translate<p>(offset){
+    @ = @ - offset;
+    p
+}
+
+---
+
+(source_file
+  (op_definition
+    (identifier)
+    (prim_list
+      (identifier))
+    (parameter_list
+      (typed_identifier
+        (identifier)))
+    (block
+      (assignment_stmt
+        (assignee
+          (kw_at))
+        (binary_expr
+          (kw_at)
+          (identifier)))
+      (prim_expr
+        (identifier)))))
+
+==================
+assign_op
+==================
+
+op color<p>(color){
+    p.color = color;
+    p
+}
+
+---
+
+(source_file
+  (op_definition
+    (identifier)
+    (prim_list
+      (identifier))
+    (parameter_list
+      (typed_identifier
+        (identifier)))
+    (block
+      (assignment_stmt
+            (assignee
+              (identifier)
+              (identifier))
+        (identifier))
+      (prim_expr
+        (identifier)))))

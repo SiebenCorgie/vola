@@ -1,0 +1,100 @@
+
+
+==================
+scoped let
+==================
+
+prim test(){
+    def p;
+    let a = { @ };
+    p.@ = a;
+    p
+}
+
+---
+
+(source_file
+  (prim_definition
+    (identifier)
+    (parameter_list)
+    (block
+      (def_prim
+        (kw_prim)
+        (identifier))
+      (let_stmt
+        (typed_identifier
+          (identifier))
+        (scoped_expr
+            (kw_at)))
+      (assignment_stmt
+        (assignee
+          (identifier)
+          (kw_at))
+        (identifier))
+      (prim_expr
+        (identifier)))))
+
+
+
+==================
+scoped algebra
+==================
+
+prim test(){
+    let a = {
+        let x = 5 + 5;
+        let b = x - 4;
+        let c = some_functio(x,b);
+        b + c
+    };
+    def p;
+    p.@ = a;
+    p
+}
+
+---
+
+(source_file
+  (prim_definition
+    (identifier)
+    (parameter_list)
+    (block
+      (let_stmt
+        (typed_identifier
+          (identifier))
+        (scoped_expr
+          (let_stmt
+            (typed_identifier
+              (identifier))
+            (binary_expr
+              (float
+                (number))
+              (float
+                (number))))
+          (let_stmt
+            (typed_identifier
+              (identifier))
+            (binary_expr
+              (identifier)
+                (float
+                  (number))))
+          (let_stmt
+            (typed_identifier
+              (identifier))
+            (call_expr
+              (identifier)
+              (identifier)
+              (identifier)))
+          (binary_expr
+            (identifier)
+            (identifier))))
+      (def_prim
+        (kw_prim)
+        (identifier))
+      (assignment_stmt
+        (assignee
+          (identifier)
+            (kw_at))
+        (identifier))
+      (prim_expr
+        (identifier)))))

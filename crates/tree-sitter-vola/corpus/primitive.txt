@@ -1,0 +1,153 @@
+==================
+Simple primitive
+==================
+
+prim testprim(){
+    def p;
+    p.@ = @;
+    p
+}
+
+---
+
+(source_file
+  (prim_definition
+    (identifier)
+    (parameter_list)
+    (block
+      (def_prim
+        (kw_prim)
+        (identifier))
+      (assignment_stmt
+        (assignee
+          (identifier)
+          (kw_at))
+        (kw_at))
+      (prim_expr
+        (identifier)))))
+
+==================
+Primitive definition
+==================
+
+prim sphere(radius){
+    def p;
+    p.@ = length(@ - radius);
+    p
+}
+
+---
+
+(source_file
+  (prim_definition
+    (identifier)
+    (parameter_list
+      (typed_identifier
+        (identifier)))
+    (block
+      (def_prim
+        (kw_prim)
+        (identifier))
+      (assignment_stmt
+        (assignee
+          (identifier)
+          (kw_at))
+        (call_expr
+          (identifier)
+          (binary_expr
+            (kw_at)
+            (identifier))))
+      (prim_expr
+        (identifier)))))
+
+
+==================
+Primitive definition typed arg
+==================
+
+prim sphere(radius: vec2){
+    def testprim;
+    testprim.color = 4.0;
+    testprim
+}
+
+---
+
+(source_file
+  (prim_definition
+    (identifier)
+    (parameter_list
+      (typed_identifier
+        (identifier)
+        (vec
+          (number))))
+    (block
+      (def_prim
+        (kw_prim)
+        (identifier))
+      (assignment_stmt
+        (assignee
+          (identifier)
+          (identifier))
+          (float
+            (number)
+            (number)))
+      (prim_expr
+        (identifier)))))
+
+
+==================
+let def
+==================
+
+prim sphere(radius){
+    let a = radius - @;
+    a
+}
+
+---
+
+
+(source_file
+  (prim_definition
+    (identifier)
+    (parameter_list
+     (typed_identifier
+      (identifier)))
+    (block
+      (let_stmt
+        (typed_identifier
+          (identifier))
+        (binary_expr
+          (identifier)
+          (kw_at)))
+      (prim_expr
+      (identifier)))))
+
+==================
+let def typed
+==================
+
+prim sphere(radius){
+    let a: s = radius - @;
+    a
+}
+
+---
+
+(source_file
+  (prim_definition
+    (identifier)
+    (parameter_list
+      (typed_identifier
+      (identifier)))
+    (block
+      (let_stmt
+        (typed_identifier
+          (identifier)
+          (scalar))
+        (binary_expr
+          (identifier)
+          (kw_at)))
+      (prim_expr
+      (identifier)))))

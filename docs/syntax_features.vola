@@ -1,0 +1,33 @@
+
+
+
+//Sum of values
+Vola:
+
+let a = sum i 0..10{
+  i + 10
+};
+
+Rust:
+
+let mut a = 0;
+for n in 0..10{
+    a += n+10
+}
+
+---
+
+//Similar, Mul as multiplication of entries
+
+Vola:
+
+let a = mul i 0..10{
+  i + 10
+};
+
+Rust:
+
+let mut a = 0;
+for n in 0..10{
+    a *= n+10
+}
