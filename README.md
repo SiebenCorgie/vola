@@ -22,6 +22,38 @@ The whole thing is highly experimental at the moment. Don't use it for anything 
 We try to create a language and intermediate distance function (DF) representation that makes it easy to write, and programmatically generate such distance fields. The final compiler should make 
 it possible to patch code that targets GPU execution at runtime in an efficient manor.
 
+An example field that describes a sphere translated by one unit on `X` might look like this:
+
+```
+prim sphere(radius){
+  def s;
+  s.@ = length(@ - radius);
+  s
+}
+
+op translate<p>(translation){
+  @ -= translation;
+  p
+}
+
+//Smallest version
+field my_sdf(){
+  translate<sphere(5.0)>([1.0, 0.0, 0.0])
+}
+
+//Or, more readable
+field my_sdf(){
+  //Define a sphere with radius 0;
+  def my_sphere = sphere(5.0);
+  //Use OP "translate" on sdf "my_sphere" with the argument vec3 = [1,0,0].
+  def translated_sphere = translate<my_sphere>([1.0, 0.0, 0.0]);
+  //Return the sphere.
+  translated_sphere
+}
+```
+
+For more examples either have a look at the syntax [test corpus](crates/tree-sitter-vola/corpus) or the [idea.md](https://gitlab.com/tendsinmende/vola/-/blob/main/docs/ideas.md?ref_type=heads#syntax-examples) file.
+
 
 ## Techstack / Packages
 
