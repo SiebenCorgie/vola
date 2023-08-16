@@ -37,7 +37,7 @@ prim test(){
 
 
 ==================
-scoped arithmetics
+scoped algebra
 ==================
 
 prim test(){

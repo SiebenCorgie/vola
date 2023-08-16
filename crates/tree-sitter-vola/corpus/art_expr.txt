@@ -1,4 +1,32 @@
+==================
+art def
+==================
 
+alge my_expr(){
+    let a = 5 + 4 * 10.0;
+    a
+}
+
+---
+
+(source_file
+  (alge_definition
+    (identifier)
+    (parameter_list)
+    (scoped_expr
+       (let_stmt
+         (typed_identifier
+           (identifier))
+      (binary_expr
+        (float
+          (number))
+      (binary_expr
+        (float
+          (number))
+        (float
+          (number)
+          (number)))))
+      (identifier))))
 
 ==================
 art let

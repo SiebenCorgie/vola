@@ -1,3 +1,36 @@
+==================
+algebraic statement
+==================
+
+alge some_function(arg_one, arg_two: vec3){
+    let a = arg_one - 4;
+    arg_two - a
+}
+
+
+---
+
+(source_file
+  (alge_definition
+    (identifier)
+    (parameter_list
+      (typed_identifier
+        (identifier))
+      (typed_identifier
+        (identifier)
+        (vec
+          (number))))
+    (scoped_expr
+      (let_stmt
+        (typed_identifier
+          (identifier))
+        (binary_expr
+          (identifier)
+            (float
+              (number))))
+        (binary_expr
+          (identifier)
+          (identifier)))))
 
 ==================
 idea prim sphere

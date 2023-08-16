@@ -19,13 +19,13 @@ We have three domains we can program.
 There if probably a scientific term for that, however, I don't know it yet. 
 
 The Domains described above are somewhat hierarchically. Top-down you assemble a `field` of `primitives` using `operations`.
-Each of those can possibly take a calculated (or constant) value as an argument. Those have to be calculated before hand in a `arithmetic` domain.
-We therefore (on AST level at least) make a distinction between `combinatorical` level and `arithmetic` level. This is reflected in the syntax, as 
-`combinatorical` arguments are supplied in `<>` braces, and `arithmetics` are supplied in normal `()` braces.
+Each of those can possibly take a calculated (or constant) value as an argument. Those have to be calculated before hand in a `algebra` domain.
+We therefore (on AST level at least) make a distinction between `combinatorical` level and `algebra` level. This is reflected in the syntax, as 
+`combinatorical` arguments are supplied in `<>` braces, and `algebra` are supplied in normal `()` braces.
 
 
 ### Random stuff
-- `prim`: is always: functional, pure and the block is `arithmetic`.
+- `prim`: is always: functional, pure and the block is `algebra`.
 - `op`: must be finite recursion (inlineable)
 - syntax sugar for iteration `sum`, `mul`.
 - `field` 
@@ -36,6 +36,15 @@ We therefore (on AST level at least) make a distinction between `combinatorical`
 ### Syntax examples:
 
 ```
+
+//Shows how an algebraic function is defined. This is basically the same 
+//as doing `let x = {...};` at any point in the program.
+alge some_function(arg0, arg1: vec3){
+    let a = arg0 - 4;
+    arg1 - a
+}
+
+
 //Shows defining that this needs a scalar and a 3-component vector.
 prim sphere(a: s, b: vec3){
     // define a new primitive.

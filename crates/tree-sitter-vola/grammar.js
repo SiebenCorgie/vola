@@ -10,11 +10,21 @@ module.exports = grammar({
 
     //This level will sort out the domain in which we are
     _definition: $ => choice(
+      $.alge_definition,
       $.prim_definition,
       $.op_definition,
       $.field_definition,
       $.comment,
     ),
+
+    // alge some_name([params...]){[block]}
+    alge_definition: $ => seq(
+      'alge',
+      $.identifier,
+      $.parameter_list,
+      $.scoped_expr
+    ),
+
 
     // prim some_name([params...]){[block]}
     prim_definition: $ => seq(
@@ -97,7 +107,7 @@ module.exports = grammar({
 
     //Single statement. Either transforms a primitive (for instance attribute change),
     //defines a prim,
-    //or calculates something arithmetic.
+    //or calculates something algebraic.
     _stmt: $ => choice(
       $.let_stmt,
       $.def_prim,
@@ -130,8 +140,8 @@ module.exports = grammar({
       $._prim_list,
       '>',
       '(',
-      //list of arithmetic arguments
-      $._art_list,
+      //list of algebraic arguments
+      $._alge_list,
       ')',
     ),
 
@@ -159,29 +169,29 @@ module.exports = grammar({
       ';'
     ),
 
-// Arithmetic statements
+// Algebraic statements
 //=================
 
-    //Arithmetic let statement.
+    //Algebraic let statement.
     //something like
     // let a = 4+5;
     let_stmt: $ => seq(
       'let',
       $.typed_identifier,
       '=',
-      $._art_expr,
+      $._alge_expr,
       ';'
     ),
 
-    //either a direct arithmetic statement, or a
+    //either a direct algebraic statement, or a
     //scoped one
-    _art_expr: $ => choice(
+    _alge_expr: $ => choice(
       //Opens a new scope
       $.unary_expr,
       $.scoped_expr,
       $.binary_expr,
       $.call_expr,
-      $._sub_art_expr,
+      $._sub_alge_expr,
       //returns something from before,
       $.identifier,
       $.arg_access,
@@ -191,41 +201,41 @@ module.exports = grammar({
     ),
 
     //Sub expression
-    _sub_art_expr: $ => seq(
+    _sub_alge_expr: $ => seq(
       '(',
-      $._art_expr,
+      $._alge_expr,
       ')'
     ),
 
     scoped_expr: $ => seq(
       '{',
       repeat($.let_stmt),
-      $._art_expr,
+      $._alge_expr,
       '}'
     ),
 
     unary_expr: $ => prec(3, choice(
-      seq('-', $._art_expr),
-      seq('!', $._art_expr),
+      seq('-', $._alge_expr),
+      seq('!', $._alge_expr),
       //TODO more?
     )),
 
     binary_expr: $ => choice(
-      prec.left(2, seq($._art_expr, '/', $._art_expr)),
-      prec.left(2, seq($._art_expr, '*', $._art_expr)),
-      prec.left(1, seq($._art_expr, '+', $._art_expr)),
-      prec.left(1, seq($._art_expr, '-', $._art_expr)),
-      prec.left(1, seq($._art_expr, '%', $._art_expr)),
+      prec.left(2, seq($._alge_expr, '/', $._alge_expr)),
+      prec.left(2, seq($._alge_expr, '*', $._alge_expr)),
+      prec.left(1, seq($._alge_expr, '+', $._alge_expr)),
+      prec.left(1, seq($._alge_expr, '-', $._alge_expr)),
+      prec.left(1, seq($._alge_expr, '%', $._alge_expr)),
       // ...
     ),
 
 
     assignment_stmt: $ => choice(
-      seq($.assignee, '=', $._art_expr, ';'),
-      seq($.assignee, '+=', $._art_expr, ';'),
-      seq($.assignee, '-=', $._art_expr, ';'),
-      seq($.assignee, '*=', $._art_expr, ';'),
-      seq($.assignee, '/=', $._art_expr, ';'),
+      seq($.assignee, '=', $._alge_expr, ';'),
+      seq($.assignee, '+=', $._alge_expr, ';'),
+      seq($.assignee, '-=', $._alge_expr, ';'),
+      seq($.assignee, '*=', $._alge_expr, ';'),
+      seq($.assignee, '/=', $._alge_expr, ';'),
     ),
 
     assignee: $ => choice(
@@ -237,17 +247,17 @@ module.exports = grammar({
     call_expr: $ => seq(
       $.identifier,
       '(',
-      optional($._art_list),
+      optional($._alge_list),
       ')'
     ),
 
 
-    _art_list: $ => choice(
-      $._art_expr,
+    _alge_list: $ => choice(
+      $._alge_expr,
       seq(
-        $._art_expr,
+        $._alge_expr,
         ',',
-        $._art_list
+        $._alge_list
       )
     ),
 
