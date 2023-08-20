@@ -3,7 +3,7 @@
 use ahash::AHashMap;
 
 use crate::{
-    common::{Identifier, ImmFloat, ImmVal, Keyword, TypedIdent},
+    common::{Identifier, ImmFloat, Keyword, TypedIdent},
     parser::FromSitter,
     AstError,
 };
@@ -17,7 +17,7 @@ pub enum UnOp {
 }
 
 impl FromSitter for UnOp {
-    fn parse_node(source: &[u8], node: &tree_sitter::Node) -> Result<Self, AstError>
+    fn parse_node(_source: &[u8], node: &tree_sitter::Node) -> Result<Self, AstError>
     where
         Self: Sized,
     {
@@ -43,7 +43,7 @@ pub enum BinOp {
 }
 
 impl FromSitter for BinOp {
-    fn parse_node(source: &[u8], node: &tree_sitter::Node) -> Result<Self, AstError>
+    fn parse_node(_source: &[u8], node: &tree_sitter::Node) -> Result<Self, AstError>
     where
         Self: Sized,
     {
@@ -192,7 +192,7 @@ impl FromSitter for AlgeExpr {
 impl AlgeExpr {
     pub fn resolve_identifier(&mut self, life_algebraic_expr: &AHashMap<Identifier, AlgeExpr>) {
         match self {
-            AlgeExpr::BinOp { op, left, right } => {
+            AlgeExpr::BinOp { op: _, left, right } => {
                 left.resolve_identifier(life_algebraic_expr);
                 right.resolve_identifier(life_algebraic_expr);
             }

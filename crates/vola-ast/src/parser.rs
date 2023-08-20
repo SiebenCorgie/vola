@@ -1,8 +1,8 @@
-use std::string::ParseError;
 
-use tree_sitter::{Language, Parser, TreeCursor};
 
-use crate::{Ast, AstError};
+use tree_sitter::{Parser};
+
+use crate::{AstError};
 
 pub trait FromSitter {
     ///Parses `Self` from some node

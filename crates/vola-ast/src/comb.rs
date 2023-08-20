@@ -1,10 +1,10 @@
 //! Combinatorical level AST.
 
-use ahash::{AHashMap, AHashSet};
+use ahash::{AHashMap};
 
 use crate::{
     alge::AlgeExpr,
-    common::{Identifier, TypedIdent},
+    common::{Identifier},
     parser::FromSitter,
     AstError,
 };
