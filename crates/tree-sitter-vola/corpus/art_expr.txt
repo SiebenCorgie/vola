@@ -17,15 +17,15 @@ alge my_expr(){
        (let_stmt
          (typed_identifier
            (identifier))
-      (binary_expr
-        (float
-          (number))
-      (binary_expr
-        (float
-          (number))
-        (float
-          (number)
-          (number)))))
+        (binary_expr
+          (float
+            (number))
+          (binary_expr
+            (float
+              (number))
+            (float
+              (number)
+              (number)))))
       (identifier))))
 
 ==================
@@ -138,3 +138,167 @@ op test<p>(){
          (identifier)))
       (prim_expr
         (identifier)))))
+
+
+==================
+simple list
+==================
+
+op test<p>(){
+    let a = [1.0, 2.0, 3.0];
+    p
+}
+
+---
+
+(source_file
+      (op_definition
+        (identifier)
+        (prim_list
+          (identifier))
+        (parameter_list)
+        (block
+          (let_stmt
+            (typed_identifier
+              (identifier))
+            (list
+              (float
+                (number)
+                (number))
+              (float
+                (number)
+                (number))
+              (float
+                (number)
+                (number))))
+          (prim_expr
+            (identifier)))))
+
+==================
+mixed list
+==================
+
+op test<p>(){
+    let a = [1.0, x, 3.0, y];
+    p
+}
+
+---
+
+(source_file
+      (op_definition
+        (identifier)
+        (prim_list
+          (identifier))
+        (parameter_list)
+        (block
+          (let_stmt
+            (typed_identifier
+              (identifier))
+            (list
+              (float
+                (number)
+                (number))
+              (identifier)
+              (float
+                (number)
+                (number))
+              (identifier)))
+          (prim_expr
+            (identifier)))))
+
+==================
+subexpr list
+==================
+
+op test<p>(){
+    let a = [1.0, x + z, 3.0, y];
+    p
+}
+
+---
+
+(source_file
+      (op_definition
+        (identifier)
+        (prim_list
+          (identifier))
+        (parameter_list)
+        (block
+          (let_stmt
+            (typed_identifier
+              (identifier))
+            (list
+              (float
+                (number)
+                (number))
+              (binary_expr
+                (identifier)
+                (identifier))
+              (float
+                (number)
+                (number))
+              (identifier)))
+          (prim_expr
+            (identifier)))))
+
+==================
+subexpr-subscoped list
+==================
+
+op test<p>(){
+    let a = [
+        1.0,
+        {
+            let thingy = x + z;
+            let other_thingy = 10.0;
+            thingy * other_thingy - 5.0
+        },
+        3.0,
+        y
+    ];
+    p
+}
+
+---
+
+(source_file
+      (op_definition
+        (identifier)
+        (prim_list
+          (identifier))
+        (parameter_list)
+        (block
+          (let_stmt
+            (typed_identifier
+              (identifier))
+            (list
+              (float
+                (number)
+                (number))
+              (scoped_expr
+                (let_stmt
+                  (typed_identifier
+                    (identifier))
+                  (binary_expr
+                    (identifier)
+                    (identifier)))
+                (let_stmt
+                  (typed_identifier
+                    (identifier))
+                  (float
+                    (number)
+                    (number)))
+                (binary_expr
+                  (binary_expr
+                    (identifier)
+                    (identifier))
+                  (float
+                    (number)
+                    (number))))
+              (float
+                (number)
+                (number))
+              (identifier)))
+          (prim_expr
+            (identifier)))))

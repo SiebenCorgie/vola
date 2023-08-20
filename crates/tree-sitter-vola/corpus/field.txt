@@ -4,10 +4,11 @@ complex field
 ==================
 
 field my_field(){
+    let a = 10;
+    let b = 4;
     def point = point();
-    def transphere = translate<sphere(5.0), point>([1.0, 0.0, 0.0]);
+    def transphere = translate<sphere(5.0), point>([1.0, 0.0, a + b]);
     def mybox = box(1.0);
-
 
     smooth_union<transphere, mybox>(1.0)
 }
@@ -19,6 +20,16 @@ field my_field(){
     (identifier)
     (parameter_list)
     (block
+      (let_stmt
+        (typed_identifier
+          (identifier))
+        (float
+          (number)))
+      (let_stmt
+        (typed_identifier
+          (identifier))
+        (float
+          (number)))
       (def_prim
         (kw_prim)
         (identifier)
@@ -46,9 +57,9 @@ field my_field(){
               (float
                 (number)
                 (number))
-              (float
-                (number)
-                (number))))))
+              (binary_expr
+                (identifier)
+                (identifier))))))
       (def_prim
         (kw_prim)
         (identifier)

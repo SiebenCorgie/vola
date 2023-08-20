@@ -9,3 +9,4 @@ edition = "2021"
 tree-sitter-vola = {path = "../tree-sitter-vola"}
 thiserror.workspace = true
 tree-sitter.workspace = true
+ahash.workspace = true

@@ -1,4 +1,4 @@
-use vola_ast::AstError;
+use vola_ast::{Ast, AstError};
 
 fn main() -> Result<(), AstError> {
     let file = std::env::args().nth(1).unwrap_or({
@@ -6,12 +6,9 @@ fn main() -> Result<(), AstError> {
         String::from("examples/dry-run/default.vola")
     });
 
-    let mut parser = vola_ast::parser()?;
-    let file_str = std::fs::read_to_string(&file).expect(&format!("Failed to read {}", file));
+    let ast = Ast::from_file(file)?;
 
-    let tree = parser
-        .parse(&file_str, None)
-        .expect("Failed to parse file in time");
+    println!("{:#?}", ast);
 
     Ok(())
 }

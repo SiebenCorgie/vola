@@ -21,12 +21,19 @@
 //!
 //! NOTE(tendsin): Lets see if this actually works out this way :D
 
-use std::path::Path;
+use std::{num::ParseIntError, path::Path};
 
+use ahash::AHashMap;
+
+use common::{Alge, Field, Identifier, Op, Prim};
+pub use parser::parser;
 use thiserror::Error;
 
-mod parser;
-pub use parser::parser;
+use crate::parser::FromSitter;
+pub mod alge;
+pub mod comb;
+pub mod common;
+pub mod parser;
 
 #[derive(Debug, Error)]
 pub enum AstError {
@@ -36,170 +43,126 @@ pub enum AstError {
     IoError(#[from] std::io::Error),
     #[error("Failed to parse from file")]
     ParseError,
+    #[error("Failed to parse utf8 string in source code: {0}")]
+    Utf8Err(#[from] core::str::Utf8Error),
+    #[error("{ty} with name {ident} already existed")]
+    IdentifierAlreadyExists { ty: String, ident: String },
+    #[error("Could not parse digit: {0}")]
+    ParseDigitError(#[from] ParseIntError),
+    #[error("{0}")]
+    AnyError(String),
 }
 
-///Type description
-pub enum Ty {
-    Scalar,
-    Vector { count: usize },
-    Mat { width: usize, height: usize },
+pub enum ReportType {
+    Note,
+    Warn,
+    Error,
 }
 
-//a string identifier
-pub struct Identifier(String);
-//A single digit
-pub struct ImmVal(usize);
-//a float immediate value
-pub struct ImmFloat(ImmVal, ImmVal);
-
-pub struct TypedIdent {
-    ident: Identifier,
-    ty: Option<Ty>,
+impl ReportType {
+    pub fn report(&self, node_string: &str, node: &tree_sitter::Node, reason: &str) {
+        let level_str = match self {
+            ReportType::Note => "NOTE",
+            ReportType::Warn => "WARN",
+            ReportType::Error => "ERROR",
+        };
+        println!(
+            "{}: {}\n --> {:?}\n{}",
+            level_str, reason, node, node_string
+        )
+    }
 }
 
-pub enum UnOp {
-    //The ! op
-    Not,
-    // The - op
-    Neg,
+pub trait ReportNode {
+    fn ty(&self) -> ReportType {
+        ReportType::Error
+    }
+
+    ///Reports this node error/warning/whatever.
+    fn report(self, source: &[u8], node: &tree_sitter::Node) -> Self;
 }
 
-pub enum BinOp {
-    Add,
-    Sub,
-    Mul,
-    Div,
-    Mod,
+impl<T> ReportNode for Result<T, AstError> {
+    fn report(self, source: &[u8], node: &tree_sitter::Node) -> Self {
+        if let Err(err) = &self {
+            let node_string = node.utf8_text(source).unwrap_or("NODE_ERROR");
+            self.ty().report(node_string, node, &format!("{}", err))
+        }
+
+        self
+    }
 }
 
-///Algebraic expression.
-pub struct AlgeExpr {}
-
-///Let statements are our entry point from the
-/// combinatorical level to the algebraic
-pub struct LetStmt {
-    identifier: TypedIdent,
-    stmt: AlgeExpr,
-}
-
-pub struct AlgeAst {
-    identifier: Identifier,
-    args: Vec<TypedIdent>,
-    stmts: Vec<LetStmt>,
-    ret: AlgeExpr,
-}
-
-pub enum PrimStmt {
-    PrimDef(Identifier),
-    LetStmt(LetStmt),
-    PrimAssignment {
-        prim: Identifier,
-        field: Identifier,
-        expr: AlgeExpr,
-    },
-}
-
-pub struct PrimAst {
-    identifier: Identifier,
-    args: Vec<TypedIdent>,
-    stmts: Vec<PrimStmt>,
-    //Always needs to return a identifier to a primitive
-    ret: Identifier,
-}
-
-pub enum Assignment {
-    FieldAssignment {
-        prim: Identifier,
-        field: Identifier,
-        ///Possible binary operation on former value
-        op: Option<BinOp>,
-        expr: AlgeExpr,
-    },
-    AtAssignment {
-        op: Option<BinOp>,
-        expr: AlgeExpr,
-    },
-}
-
-pub enum OpStmt {
-    PrimDef {
-        identifier: Identifier,
-        assignment: Option<OpTree>,
-    },
-    LetStmt(LetStmt),
-    Assignment(Assignment),
-}
-
-pub struct OpAst {
-    identifier: Identifier,
-    prims: Vec<Identifier>,
-    args: Vec<TypedIdent>,
-    stmts: Vec<OpStmt>,
-    ret: OpTree,
-}
-
-pub enum OpTree {
-    Ident(Identifier),
-    ///Calls into a primitive definition
-    PrimCall {
-        ident: Identifier,
-        args: Vec<AlgeExpr>,
-    },
-    Op {
-        op_ident: Identifier,
-        sub_trees: Vec<OpTree>,
-        args: Vec<AlgeExpr>,
-    },
-}
-
-pub enum FieldStmt {
-    PrimDef {
-        identifier: Identifier,
-        op_tree: OpTree,
-    },
-    LetStmt(LetStmt),
-}
-
-/// A field is defined as a set of statements, where each is either an arithmetic
-/// let expression, a primitive definition or a so called Op-Tree (tree of OPs)
-///
-/// In addition the field must return an op tree (which is used to build the final evaluation order).
-pub struct FieldAst {
-    identifier: Identifier,
-    args: Vec<TypedIdent>,
-    ///Order of statements
-    statments: Vec<FieldStmt>,
-    return_tree: OpTree,
-}
-
+#[derive(Debug, Clone)]
 pub struct Ast {
-    fields: Vec<FieldAst>,
-    ops: Vec<OpAst>,
-    prims: Vec<PrimAst>,
-    alges: Vec<AlgeAst>,
+    fields: AHashMap<Identifier, Field>,
+    ops: AHashMap<Identifier, Op>,
+    prims: AHashMap<Identifier, Prim>,
+    alges: AHashMap<Identifier, Alge>,
 }
 
 impl Ast {
     ///Creates an empty Ast with the given root node
-    fn empty() -> Self {
+    pub fn empty() -> Self {
         Ast {
-            fields: Vec::new(),
-            ops: Vec::new(),
-            prims: Vec::new(),
-            alges: Vec::new(),
+            fields: AHashMap::default(),
+            ops: AHashMap::default(),
+            prims: AHashMap::default(),
+            alges: AHashMap::default(),
         }
     }
 
     ///Tries to parse `file` using `tree-sitter-vola` into an [Ast].
-    fn from_file(file: impl AsRef<Path>) -> Result<Self, AstError> {
+    pub fn from_file(file: impl AsRef<Path>) -> Result<Self, AstError> {
         let mut parser = parser()?;
-        let text = std::fs::read_to_string(file)?;
-        let syn_tree = parser.parse(text, None).ok_or(AstError::ParseError)?;
+        let file = std::fs::read(file)?;
+        let syn_tree = {
+            let text = core::str::from_utf8(&file)?;
+            parser.parse(text, None).ok_or(AstError::ParseError)?
+        };
 
         //TODO transform to ast
 
         let mut ast = Ast::empty();
 
+        ast.try_parse_tree(&file, &syn_tree)?;
+
         Ok(ast)
+    }
+
+    ///Parses `tree` into `self`'s context.
+    pub fn try_parse_tree(
+        &mut self,
+        source: &[u8],
+        tree: &tree_sitter::Tree,
+    ) -> Result<(), AstError> {
+        let root_node = tree.root_node();
+        let mut cursor = tree.walk();
+        for top_level_node in root_node.children(&mut cursor) {
+            match top_level_node.kind() {
+                "alge_definition" => {}
+                "prim_definition" => {}
+                "op_definition" => {}
+                "field_definition" => match Field::parse_node(source, &top_level_node) {
+                    Ok(f) => {
+                        if let Some(old) = self.fields.insert(f.ident.clone(), f) {
+                            return Err(AstError::IdentifierAlreadyExists {
+                                ty: "Field".to_owned(),
+                                ident: old.ident.0,
+                            });
+                        }
+                    }
+                    Err(e) => println!("Failed to parse field: {e}"),
+                },
+                _ => {
+                    println!(
+                        "Unknown toplevel node {}. Skipping...",
+                        top_level_node.kind()
+                    );
+                }
+            }
+        }
+
+        Ok(())
     }
 }

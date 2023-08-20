@@ -1,0 +1,30 @@
+alge something(some_var){
+   some_var - 10
+}
+
+prim sphere(radius){
+    lenght(@) - radius
+}
+
+prim box(extend: vec3){
+    let q = abs(@) - extend;
+    length(max(q, 0.0)) + min(max_element(q), 0.0)
+}
+
+
+op translate<p>(offset: vec3){
+    @ -= offset;
+    p
+}
+
+op round<p>(radius){
+    p.@ -= rad;
+    p
+}
+
+field my_param(argzero: vec3, argone, any: mat16x4){
+    def mybox = box([1.0, 2.0, 3.0]);
+    def my_sphere = sphere(1.0);
+
+    union<translate<my_box>([1.0, 0.0, 0.0]), round<my_sphere>(0.3)>()
+}
