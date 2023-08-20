@@ -48,24 +48,16 @@ impl FromSitter for OpNode {
         match expr.kind() {
             "identifier" => Ok(OpNode::PrimIdent(Identifier::parse_node(source, &expr)?)),
             "call_expr" => {
-                let prim_call_ident =
-                    Identifier::parse_node(source, expr.child(0).as_ref().unwrap())?;
-
-                for i in 0.. {
-                    if let Some(child) = expr.child(i) {
-                        println!("    C: {}", child.kind());
-                    } else {
-                        break;
-                    }
-                }
+                let (prim_call_ident, args) = AlgeExpr::parse_call(source, &expr)?;
 
                 Ok(OpNode::Prim {
                     prim_call_ident,
-                    args: Vec::with_capacity(0),
+                    args,
                 })
             }
+            "optree" => Self::parse_optree(source, &expr),
             _ => Err(AstError::AnyError(format!(
-                "Unexpected token {} in prim_expr",
+                "Unexpected token {} in prim_expr while parsing OpNode",
                 expr.kind()
             ))),
         }
@@ -73,8 +65,45 @@ impl FromSitter for OpNode {
 }
 
 impl OpNode {
+    //Resolves a level of an `optree`
+    pub fn parse_optree(source: &[u8], node: &tree_sitter::Node) -> Result<OpNode, AstError> {
+        assert!(node.kind() == "optree");
+
+        let mut walker = node.walk();
+        let mut children = node.children(&mut walker);
+        //First must be the op ident
+        let op_ident = Identifier::parse_node(source, &children.next().unwrap())?;
+        assert!(children.next().unwrap().kind() == "<"); // take off the <
+                                                         //now parse the primitives, which could potentually be subtrees.
+        let mut prims = Vec::new();
+        for child in &mut children {
+            match child.kind() {
+                ">" => break,
+                "," => {}
+                _ => prims.push(OpNode::parse_node(source, &child)?),
+            }
+        }
+        assert!(children.next().unwrap().kind() == "(");
+
+        //now parse all args
+        let mut args = Vec::new();
+        for child in children {
+            match child.kind() {
+                ")" => break,
+                "," => {}
+                _ => args.push(AlgeExpr::parse_node(source, &child)?),
+            }
+        }
+
+        Ok(OpNode::Node {
+            op_ident,
+            args,
+            prims,
+        })
+    }
+
     ///Resolves all identifier that are referenced and life.
-    pub fn resolve_sub_expressions(
+    pub fn resolve_identifier(
         &mut self,
         life_algebraic: &AHashMap<Identifier, AlgeExpr>,
         life_prims: &AHashMap<Identifier, Option<OpNode>>,
@@ -89,16 +118,39 @@ impl OpNode {
 
         match self {
             Self::Node {
-                op_ident,
+                op_ident: _,
                 args,
                 prims,
             } => {
-                //in case of a node, resolve all args that are an identifier, ther recurse
+                //in case of a node, resolve all args that are an identifier,
+                for arg in args {
+                    arg.resolve_identifier(life_algebraic);
+                }
+                //Now recurse tree and resolve rest of the tree
+                for prim in prims {
+                    prim.resolve_identifier(life_algebraic, life_prims);
+                }
+            }
+            Self::Prim {
+                prim_call_ident: _,
+                args,
+            } => {
+                for arg in args {
+                    arg.resolve_identifier(life_algebraic);
+                }
+            }
+            Self::PrimIdent(ident) => {
+                //Try to resolve the primitive to a tree
+                if let Some(Some(resolved)) = life_prims.get(&ident) {
+                    *self = resolved.clone();
+                    //And restart
+                    self.resolve_identifier(life_algebraic, life_prims);
+                }
             }
         }
     }
 
-    ///Parses the `block` part of the tree sitter grammer.
+    ///Parses the `block` part of the tree sitter grammar.
     pub fn parse_block(source: &[u8], node: &tree_sitter::Node) -> Result<Self, AstError> {
         //NOTE: This is the **magical** part. Basically at this point we build the actual
         // op tree of some `op` or `field`.
@@ -127,7 +179,7 @@ impl OpNode {
                         let mut node =
                             OpNode::parse_node(source, &child.child(3).as_ref().unwrap())?;
                         //Immediatly resolve node's identifier
-                        node.resolve_sub_expressions(&life_algebraic, &life_prims);
+                        node.resolve_identifier(&life_algebraic, &life_prims);
                         Some(node)
                     } else {
                         None
@@ -135,10 +187,23 @@ impl OpNode {
 
                     let _old = life_prims.insert(ident, init);
                 }
-                "let_stmt" => {}
-                "assignment_stmt" => {}
+                "let_stmt" => {
+                    let (ident, expr) = AlgeExpr::parse_let_stmt(source, &child)?;
+                    //TODO: We lose the type here, but we
+                    if let Some(_old) = life_algebraic.insert(ident.ident, expr) {
+                        //TODO check types, or carry over
+                    }
+                }
+                "assignment_stmt" => {
+                    println!("Assignment not yet implemented!");
+                }
                 "prim_expr" => {
                     //this must be our last prim expression.
+
+                    let mut final_node = Self::parse_node(source, &child)?;
+                    //Resolve with the final context
+                    final_node.resolve_identifier(&life_algebraic, &life_prims);
+                    return Ok(final_node);
                 }
                 //Ignoring comments at this point.
                 "comment" => {}
@@ -153,6 +218,6 @@ impl OpNode {
             }
         }
 
-        Ok(OpNode::PrimIdent(Identifier(String::new())))
+        Err(AstError::BlockEndNoPrim)
     }
 }

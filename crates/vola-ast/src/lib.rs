@@ -51,6 +51,10 @@ pub enum AstError {
     ParseDigitError(#[from] ParseIntError),
     #[error("{0}")]
     AnyError(String),
+    #[error("Block did not end with a primitive statement")]
+    BlockEndNoPrim,
+    #[error("Scoped algebra expression ended with a none algebraic expression")]
+    ScopedEndNoAlge,
 }
 
 pub enum ReportType {

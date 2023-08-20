@@ -7,7 +7,27 @@ use crate::{alge::AlgeExpr, comb::OpNode, parser::FromSitter, AstError, ReportNo
 pub enum Keyword {
     ///the @ symbol
     KwAt,
+    KwPrim,
 }
+
+impl FromSitter for Keyword {
+    fn parse_node(source: &[u8], node: &tree_sitter::Node) -> Result<Self, AstError>
+    where
+        Self: Sized,
+    {
+        match node.kind() {
+            "kw_at" => Ok(Keyword::KwAt),
+            "kw_prim" => Ok(Keyword::KwPrim),
+            "keywoard" => Self::parse_node(source, &node.child(0).unwrap()),
+            _ => Err(AstError::AnyError(format!(
+                "Unexpected token {} at {:?} while parsing keyword",
+                node.kind(),
+                node
+            ))),
+        }
+    }
+}
+
 ///Type description
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub enum Ty {
@@ -61,14 +81,44 @@ impl FromSitter for Identifier {
 ///A single digit
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct ImmVal(usize);
+
+impl FromSitter for ImmVal {
+    fn parse_node(source: &[u8], node: &tree_sitter::Node) -> Result<Self, AstError>
+    where
+        Self: Sized,
+    {
+        assert!(node.kind() == "number");
+        Ok(ImmVal(node.utf8_text(source).unwrap().parse()?))
+    }
+}
+
 ///a float immediate value
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct ImmFloat(ImmVal, ImmVal);
 
+impl FromSitter for ImmFloat {
+    fn parse_node(source: &[u8], node: &tree_sitter::Node) -> Result<Self, AstError>
+    where
+        Self: Sized,
+    {
+        assert!(node.kind() == "float");
+        let first = ImmVal::parse_node(source, &node.child(0).unwrap())?;
+
+        //NOTE: 1 is the . symbol
+        let second = if node.child_count() >= 3 {
+            ImmVal::parse_node(source, &node.child(2).unwrap())?
+        } else {
+            ImmVal(0)
+        };
+
+        Ok(ImmFloat(first, second))
+    }
+}
+
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct TypedIdent {
-    ident: Identifier,
-    ty: Option<Ty>,
+    pub ident: Identifier,
+    pub ty: Option<Ty>,
 }
 
 impl FromSitter for TypedIdent {

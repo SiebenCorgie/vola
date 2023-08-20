@@ -23,8 +23,8 @@ op round<p>(radius){
 }
 
 field my_param(argzero: vec3, argone, any: mat16x4){
-    def mybox = box([1.0, 2.0, 3.0]);
+    def mybox = box([1, 2, 3]);
     def my_sphere = sphere(1.0);
 
-    union<translate<my_box>([1.0, 0.0, 0.0]), round<my_sphere>(0.3)>()
+    union<translate<mybox>([1.0, 0.0, 0.0]), round<my_sphere>(0.3)>()
 }

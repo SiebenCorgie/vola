@@ -3,7 +3,7 @@
 use ahash::AHashMap;
 
 use crate::{
-    common::{Identifier, ImmFloat, ImmVal, Keyword},
+    common::{Identifier, ImmFloat, ImmVal, Keyword, TypedIdent},
     parser::FromSitter,
     AstError,
 };
@@ -16,6 +16,23 @@ pub enum UnOp {
     Neg,
 }
 
+impl FromSitter for UnOp {
+    fn parse_node(source: &[u8], node: &tree_sitter::Node) -> Result<Self, AstError>
+    where
+        Self: Sized,
+    {
+        match node.kind() {
+            "!" => Ok(UnOp::Not),
+            "-" => Ok(UnOp::Neg),
+            _ => Err(AstError::AnyError(format!(
+                "Unexpected token {} at {:?} while parsing UnaryOp",
+                node.kind(),
+                node
+            ))),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum BinOp {
     Add,
@@ -25,34 +42,48 @@ pub enum BinOp {
     Mod,
 }
 
-#[derive(Debug, Clone)]
-pub enum ListItem {
-    List(Vec<ListItem>),
-    ImmFloat(ImmFloat),
-    ImmVal(ImmVal),
-    Ident(Identifier),
-    Keyword(Keyword),
+impl FromSitter for BinOp {
+    fn parse_node(source: &[u8], node: &tree_sitter::Node) -> Result<Self, AstError>
+    where
+        Self: Sized,
+    {
+        match node.kind() {
+            "+" => Ok(BinOp::Add),
+            "-" => Ok(BinOp::Sub),
+            "*" => Ok(BinOp::Mul),
+            "/" => Ok(BinOp::Div),
+            "%" => Ok(BinOp::Mod),
+            _ => Err(AstError::AnyError(format!(
+                "Unexpected token {} at {:?} while parsing BinaryOp",
+                node.kind(),
+                node
+            ))),
+        }
+    }
 }
 
 ///Algebraic expression.
 #[derive(Debug, Clone)]
 pub enum AlgeExpr {
     Identifier(Identifier),
-    List(Vec<ListItem>),
+    List(Vec<AlgeExpr>),
     BinOp {
         op: BinOp,
         left: Box<AlgeExpr>,
         right: Box<AlgeExpr>,
     },
     UnaryOp {
-        op: BinOp,
-        operand: Box<AlgeExpr>,
+        op: UnOp,
+        expr: Box<AlgeExpr>,
     },
     ///Call to some algebraic function
     Call {
         ident: Identifier,
         args: Vec<AlgeExpr>,
     },
+    //Some keyword
+    Kw(Keyword),
+    Float(ImmFloat),
 }
 
 impl FromSitter for AlgeExpr {
@@ -60,42 +91,76 @@ impl FromSitter for AlgeExpr {
     where
         Self: Sized,
     {
+        //let mut walker = node.walk();
+        //let mut children = node.children(&mut walker);
+
         match node.kind() {
             "unary_expr" => {
-                println!("Unary");
-                Ok(AlgeExpr::Identifier(Identifier(String::new())))
-            }
-            "scoped_expr" => {
-                println!("scoped");
-                Ok(AlgeExpr::Identifier(Identifier(String::new())))
+                assert!(node.child_count() == 2, "Unary op must have 2 children!");
+                let op = UnOp::parse_node(source, &node.child(0).unwrap())?;
+                let expr = AlgeExpr::parse_node(source, &node.child(1).unwrap())?;
+                Ok(AlgeExpr::UnaryOp {
+                    op,
+                    expr: Box::new(expr),
+                })
             }
             "binary_expr" => {
                 println!("binary");
                 Ok(AlgeExpr::Identifier(Identifier(String::new())))
             }
+            "scoped_expr" => {
+                let mut walker = node.walk();
+                let mut children = node.children(&mut walker);
+                assert!(children.next().unwrap().kind() == "}");
+
+                let mut life_idents = AHashMap::default();
+                for child in children {
+                    match child.kind() {
+                        "let_stmt" => {
+                            let (ident, expr) = Self::parse_let_stmt(source, &child)?;
+                            //TODO similar to the let statements in the
+                            // OpTree, we loose the type info here.
+                            life_idents.insert(ident.ident, expr);
+                        }
+                        "," => {}     //ignore
+                        "}" => break, //finish
+                        _ => {
+                            let mut expr = Self::parse_node(source, &child)?;
+                            expr.resolve_identifier(&life_idents);
+                            //now return the parsed scoped expression
+                            return Ok(expr);
+                        }
+                    }
+                }
+                Err(AstError::ScopedEndNoAlge)
+            }
             "call_expr" => {
-                println!("call");
-                Ok(AlgeExpr::Identifier(Identifier(String::new())))
+                let (ident, args) = Self::parse_call(source, node)?;
+                Ok(AlgeExpr::Call { ident, args })
             }
-            "identifier" => {
-                println!("ident");
-                Ok(AlgeExpr::Identifier(Identifier(String::new())))
-            }
+            "identifier" => Ok(AlgeExpr::Identifier(Identifier::parse_node(source, node)?)),
             "arg_access" => {
-                println!("access");
+                println!("access not implemented!");
                 Ok(AlgeExpr::Identifier(Identifier(String::new())))
             }
-            "float" => {
-                println!("immfloat");
-                Ok(AlgeExpr::Identifier(Identifier(String::new())))
-            }
-            "kw_at" => {
-                println!("kwat");
-                Ok(AlgeExpr::Identifier(Identifier(String::new())))
-            }
+            "float" => Ok(AlgeExpr::Float(ImmFloat::parse_node(source, node)?)),
+            "kw_at" => Ok(AlgeExpr::Kw(Keyword::parse_node(source, node)?)),
             "list" => {
-                println!("List");
-                Ok(AlgeExpr::Identifier(Identifier(String::new())))
+                let mut walker = node.walk();
+                let mut children = node.children(&mut walker);
+                assert!(children.next().unwrap().kind() == "[");
+                let mut list = Vec::with_capacity(node.child_count() - 2);
+                for child in children {
+                    match child.kind() {
+                        "]" => break,
+                        "," => {}
+                        _ => {
+                            let node = AlgeExpr::parse_node(source, &child)?;
+                            list.push(node);
+                        }
+                    }
+                }
+                Ok(AlgeExpr::List(list))
             }
             _ => Err(AstError::AnyError(format!(
                 "Unexpected token {} at {:?} in AlgeExpr",
@@ -129,8 +194,13 @@ impl AlgeExpr {
                     return;
                 }
             }
-            AlgeExpr::List(list) => for ele in list {},
-            AlgeExpr::UnaryOp { op: _, operand } => operand.resolve_identifier(life_algebraic_expr),
+            AlgeExpr::List(list) => {
+                for litm in list {
+                    litm.resolve_identifier(life_algebraic_expr);
+                }
+            }
+            AlgeExpr::UnaryOp { op: _, expr } => expr.resolve_identifier(life_algebraic_expr),
+            AlgeExpr::Float(_) | AlgeExpr::Kw(_) => {}
         }
     }
 
@@ -158,5 +228,17 @@ impl AlgeExpr {
         }
 
         Ok((ident, args))
+    }
+
+    pub fn parse_let_stmt(
+        source: &[u8],
+        let_stmt: &tree_sitter::Node,
+    ) -> Result<(TypedIdent, Self), AstError> {
+        assert!(let_stmt.kind() == "let_stmt");
+
+        let ident = TypedIdent::parse_node(source, &let_stmt.child(1).unwrap())?;
+        let expr = Self::parse_node(source, &let_stmt.child(3).unwrap())?;
+
+        Ok((ident, expr))
     }
 }
