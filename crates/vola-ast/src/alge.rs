@@ -8,7 +8,7 @@ use crate::{
     AstError,
 };
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum UnOp {
     //The ! op
     Not,
@@ -33,7 +33,7 @@ impl FromSitter for UnOp {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BinOp {
     Add,
     Sub,
@@ -63,7 +63,7 @@ impl FromSitter for BinOp {
 }
 
 ///Algebraic expression.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AlgeExpr {
     Identifier(Identifier),
     List(Vec<AlgeExpr>),

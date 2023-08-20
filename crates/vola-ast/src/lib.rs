@@ -99,10 +99,10 @@ impl<T> ReportNode for Result<T, AstError> {
 
 #[derive(Debug, Clone)]
 pub struct Ast {
-    fields: AHashMap<Identifier, Field>,
-    ops: AHashMap<Identifier, Op>,
-    prims: AHashMap<Identifier, Prim>,
-    alges: AHashMap<Identifier, Alge>,
+    pub fields: AHashMap<Identifier, Field>,
+    pub ops: AHashMap<Identifier, Op>,
+    pub prims: AHashMap<Identifier, Prim>,
+    pub alges: AHashMap<Identifier, Alge>,
 }
 
 impl Ast {
@@ -134,6 +134,16 @@ impl Ast {
         Ok(ast)
     }
 
+    pub fn from_string(string: &str) -> Result<Self, AstError> {
+        let mut parser = parser()?;
+        let str_bytes = string.as_bytes();
+        let syn_tree = { parser.parse(string, None).ok_or(AstError::ParseError)? };
+
+        let mut ast = Ast::empty();
+        ast.try_parse_tree(str_bytes, &syn_tree)?;
+        Ok(ast)
+    }
+
     ///Parses `tree` into `self`'s context.
     pub fn try_parse_tree(
         &mut self,
@@ -146,7 +156,17 @@ impl Ast {
             match top_level_node.kind() {
                 "alge_definition" => {}
                 "prim_definition" => {}
-                "op_definition" => {}
+                "op_definition" => match Op::parse_node(source, &top_level_node) {
+                    Ok(f) => {
+                        if let Some(old) = self.ops.insert(f.ident.clone(), f) {
+                            return Err(AstError::IdentifierAlreadyExists {
+                                ty: "Op".to_owned(),
+                                ident: old.ident.0,
+                            });
+                        }
+                    }
+                    Err(e) => println!("Failed to parse Op: {e}"),
+                },
                 "field_definition" => match Field::parse_node(source, &top_level_node) {
                     Ok(f) => {
                         if let Some(old) = self.fields.insert(f.ident.clone(), f) {

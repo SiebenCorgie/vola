@@ -3,7 +3,7 @@
 use crate::{alge::AlgeExpr, comb::OpNode, parser::FromSitter, AstError, ReportNode};
 
 ///Keywords
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Keyword {
     ///the @ symbol
     KwAt,
@@ -169,7 +169,7 @@ impl TypedIdent {
 }
 
 ///Top level field node
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Field {
     pub ident: Identifier,
     ///All arguments for that field.
@@ -223,6 +223,15 @@ pub struct Op {
     pub args: Vec<TypedIdent>,
     ///The sub tree that is being build from this op and its nodes
     pub op_tree: OpNode,
+}
+
+impl FromSitter for Op {
+    fn parse_node(source: &[u8], node: &tree_sitter::Node) -> Result<Self, AstError>
+    where
+        Self: Sized,
+    {
+        todo!()
+    }
 }
 
 ///Definition of a primitive. A primitive needs to return a primitive definition.

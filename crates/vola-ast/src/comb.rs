@@ -11,7 +11,7 @@ use crate::{
 
 ///A singular Op-Node in some fields Op-Tree. Note that the leafs of that tree are
 /// always primitive calls
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum OpNode {
     Node {
         ///Identifier of op that is being called
@@ -43,8 +43,6 @@ impl FromSitter for OpNode {
 
         //Match which kind of prim_expr we have
         let expr = node.child(0).unwrap();
-
-        println!("Found {}", expr.kind());
         match expr.kind() {
             "identifier" => Ok(OpNode::PrimIdent(Identifier::parse_node(source, &expr)?)),
             "call_expr" => {

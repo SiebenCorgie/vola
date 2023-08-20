@@ -22,7 +22,7 @@ op round<p>(radius){
     p
 }
 
-field my_param(argzero: vec3, argone, any: mat16x4){
+field my_param(){
     def mybox = box([1, 2, 3]);
     def my_sphere = sphere(1.0);
 
