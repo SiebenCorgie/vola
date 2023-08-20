@@ -81,6 +81,11 @@ pub enum AlgeExpr {
         ident: Identifier,
         args: Vec<AlgeExpr>,
     },
+    ///Acccess on an primitives field
+    PrimAccess {
+        ident: Identifier,
+        field: Identifier,
+    },
     //Some keyword
     Kw(Keyword),
     Float(ImmFloat),
@@ -105,13 +110,23 @@ impl FromSitter for AlgeExpr {
                 })
             }
             "binary_expr" => {
-                println!("binary");
-                Ok(AlgeExpr::Identifier(Identifier(String::new())))
+                assert!(
+                    node.child_count() == 3,
+                    "Binary expression must have 3 nodes"
+                );
+                let left = Self::parse_node(source, &node.child(0).unwrap())?;
+                let op = BinOp::parse_node(source, &node.child(1).unwrap())?;
+                let right = Self::parse_node(source, &node.child(2).unwrap())?;
+                Ok(AlgeExpr::BinOp {
+                    op,
+                    left: Box::new(left),
+                    right: Box::new(right),
+                })
             }
             "scoped_expr" => {
                 let mut walker = node.walk();
                 let mut children = node.children(&mut walker);
-                assert!(children.next().unwrap().kind() == "}");
+                assert!(children.next().unwrap().kind() == "{");
 
                 let mut life_idents = AHashMap::default();
                 for child in children {
@@ -140,8 +155,11 @@ impl FromSitter for AlgeExpr {
             }
             "identifier" => Ok(AlgeExpr::Identifier(Identifier::parse_node(source, node)?)),
             "arg_access" => {
-                println!("access not implemented!");
-                Ok(AlgeExpr::Identifier(Identifier(String::new())))
+                assert!(node.child_count() == 3);
+                let ident = Identifier::parse_node(source, &node.child(0).unwrap())?;
+                let field = Identifier::parse_node(source, &node.child(2).unwrap())?;
+
+                Ok(AlgeExpr::PrimAccess { ident, field })
             }
             "float" => Ok(AlgeExpr::Float(ImmFloat::parse_node(source, node)?)),
             "kw_at" => Ok(AlgeExpr::Kw(Keyword::parse_node(source, node)?)),
@@ -200,7 +218,7 @@ impl AlgeExpr {
                 }
             }
             AlgeExpr::UnaryOp { op: _, expr } => expr.resolve_identifier(life_algebraic_expr),
-            AlgeExpr::Float(_) | AlgeExpr::Kw(_) => {}
+            AlgeExpr::Float(_) | AlgeExpr::Kw(_) | AlgeExpr::PrimAccess { .. } => {}
         }
     }
 

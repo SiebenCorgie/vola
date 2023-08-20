@@ -154,8 +154,28 @@ impl Ast {
         let mut cursor = tree.walk();
         for top_level_node in root_node.children(&mut cursor) {
             match top_level_node.kind() {
-                "alge_definition" => {}
-                "prim_definition" => {}
+                "alge_definition" => match Alge::parse_node(source, &top_level_node) {
+                    Ok(f) => {
+                        if let Some(old) = self.alges.insert(f.ident.clone(), f) {
+                            return Err(AstError::IdentifierAlreadyExists {
+                                ty: "Alge".to_owned(),
+                                ident: old.ident.0,
+                            });
+                        }
+                    }
+                    Err(e) => println!("Failed to parse Op: {e}"),
+                },
+                "prim_definition" => match Prim::parse_node(source, &top_level_node) {
+                    Ok(f) => {
+                        if let Some(old) = self.prims.insert(f.ident.clone(), f) {
+                            return Err(AstError::IdentifierAlreadyExists {
+                                ty: "Prim".to_owned(),
+                                ident: old.ident.0,
+                            });
+                        }
+                    }
+                    Err(e) => println!("Failed to parse Prim: {e}"),
+                },
                 "op_definition" => match Op::parse_node(source, &top_level_node) {
                     Ok(f) => {
                         if let Some(old) = self.ops.insert(f.ident.clone(), f) {

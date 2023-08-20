@@ -173,7 +173,7 @@ impl OpNode {
                 "def_prim" => {
                     //a prim statment consists of the prims identifier, and possibly an initialization prim_stmt
                     let ident = Identifier::parse_node(source, &child.child(1).as_ref().unwrap())?;
-                    let init = if child.child_count() > 2 {
+                    let init = if child.child_count() > 3 {
                         let mut node =
                             OpNode::parse_node(source, &child.child(3).as_ref().unwrap())?;
                         //Immediatly resolve node's identifier

@@ -1,14 +1,18 @@
-alge something(some_var){
-   some_var - 10
+alge something(some_var, some_object){
+   some_var - 10 + some_object.fieldname
 }
 
 prim sphere(radius){
-    lenght(@) - radius
+    def sphere;
+    sphere.@ = lenght(@) - radius;
+    sphere
 }
 
 prim box(extend: vec3){
+    def box;
     let q = abs(@) - extend;
-    length(max(q, 0.0)) + min(max_element(q), 0.0)
+    box.@ = length(max(q, 0.0)) + min(max_element(q), 0.0);
+    box
 }
 
 
