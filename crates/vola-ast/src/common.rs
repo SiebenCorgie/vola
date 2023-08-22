@@ -1,6 +1,11 @@
 //! Common AST components like identifiers and types.
 
-use crate::{alge::AlgeExpr, comb::OpNode, parser::FromSitter, AstError, ReportNode};
+use crate::{
+    alge::{AlgeExpr, BinOp},
+    comb::OpNode,
+    parser::FromSitter,
+    AstError, ReportNode,
+};
 
 ///Keywords
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -190,15 +195,209 @@ impl TypedIdent {
     }
 }
 
+///A single statment within a block.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Stmt {
+    ///Sub expression that is bound to a identifier. Possibly uninitialised.
+    PrimDef {
+        ident: Identifier,
+        init: Option<OpNode>,
+    },
+    AtAssign {
+        assign_op: Option<BinOp>,
+        expr: AlgeExpr,
+    },
+    FieldAssign {
+        prim: Identifier,
+        field: Identifier,
+        assign_op: Option<BinOp>,
+        expr: AlgeExpr,
+    },
+    PrimAtAssign {
+        prim: Identifier,
+        assign_op: Option<BinOp>,
+        expr: AlgeExpr,
+    },
+    LetStmt {
+        ident: TypedIdent,
+        expr: AlgeExpr,
+    },
+}
+
+impl FromSitter for Stmt {
+    fn parse_node(source: &[u8], node: &tree_sitter::Node) -> Result<Self, AstError>
+    where
+        Self: Sized,
+    {
+        println!("stmt kind: {}", node.kind());
+
+        match node.kind() {
+            "assignment_stmt" => {
+                //find out which kind of assignment we have.
+                let mut walker = node.walk();
+                let mut children = node.children(&mut walker);
+
+                let assignee = children.next().unwrap();
+                assert!(assignee.kind() == "assignee");
+
+                // Based on the assignee we can find out which kind of assignment we have.
+                // If it begins with kw_at, its at_assign,
+                // Otherwise its a field assignment.
+                match assignee.child(0).as_ref().unwrap().kind() {
+                    "kw_at" => {
+                        let op = BinOp::parse_assign_op(source, children.next().as_ref().unwrap())?;
+                        let expr = AlgeExpr::parse_node(source, children.next().as_ref().unwrap())?;
+                        Ok(Stmt::AtAssign {
+                            assign_op: op,
+                            expr,
+                        })
+                    }
+                    _ => {
+                        //try to parse the two fields
+                        println!(
+                            "{}.{}",
+                            assignee.child(0).unwrap().kind(),
+                            assignee.child(2).unwrap().kind()
+                        );
+                        let prim = Identifier::parse_node(source, &assignee.child(0).unwrap())?;
+
+                        assert!(assignee.child(1).as_ref().unwrap().kind() == ".");
+
+                        let second_part = assignee.child(2).unwrap();
+                        match second_part.kind() {
+                            "identifier" => {
+                                //To find if its a normal _field_ or the _at field_, match the field behind the dot.
+                                let field =
+                                    Identifier::parse_node(source, &assignee.child(2).unwrap())?;
+                                let assign_op = BinOp::parse_assign_op(
+                                    source,
+                                    children.next().as_ref().unwrap(),
+                                )?;
+
+                                let expr = AlgeExpr::parse_node(
+                                    source,
+                                    children.next().as_ref().unwrap(),
+                                )?;
+                                Ok(Stmt::FieldAssign {
+                                    prim,
+                                    assign_op,
+                                    field,
+                                    expr,
+                                })
+                            }
+                            "kw_at" => {
+                                let assign_op = BinOp::parse_assign_op(
+                                    source,
+                                    children.next().as_ref().unwrap(),
+                                )?;
+
+                                let expr = AlgeExpr::parse_node(
+                                    source,
+                                    children.next().as_ref().unwrap(),
+                                )?;
+                                Ok(Stmt::PrimAtAssign {
+                                    prim,
+                                    assign_op,
+                                    expr,
+                                })
+                            },
+                            _=> Err(AstError::AnyError(format!("Unexpected token {} at second part of assignment (some_ident.<this>) at {:?} while parsing assignmet operation.", second_part.kind(), second_part))),
+                        }
+                    }
+                }
+            }
+            _ => Err(AstError::AnyError(format!(
+                "Unexpected token {} at {:?} while parsing Stmt",
+                node.kind(),
+                node
+            ))),
+        }
+    }
+}
+
+///Primitive block is characterised by a series of statements, and a final `op_tree`
+/// that defines the final tree that is being returned by this block.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PrimBlock {
+    pub stmt_list: Vec<Stmt>,
+    ///The Op-Tree that is being calculated by this field
+    pub op_tree: OpNode,
+}
+
+impl FromSitter for PrimBlock {
+    fn parse_node(source: &[u8], node: &tree_sitter::Node) -> Result<Self, AstError>
+    where
+        Self: Sized,
+    {
+        assert!(node.kind() == "block");
+        let mut walker = node.walk();
+        let mut children = node.children(&mut walker);
+        assert!(children.next().unwrap().kind() == "{");
+
+        let mut stmt_list = Vec::with_capacity(node.child_count().checked_sub(3).unwrap_or(0));
+        let mut ret_op = None;
+
+        for child in children {
+            match child.kind() {
+                "def_prim" => {
+                    //a prim statment consists of the prims identifier, and possibly an initialization prim_stmt
+                    let ident = Identifier::parse_node(source, &child.child(1).as_ref().unwrap())?;
+                    let init = if child.child_count() > 3 {
+                        let node = OpNode::parse_node(source, &child.child(3).as_ref().unwrap())?;
+                        Some(node)
+                    } else {
+                        None
+                    };
+
+                    stmt_list.push(Stmt::PrimDef { ident, init });
+                }
+                "let_stmt" => {
+                    let (ident, expr) = AlgeExpr::parse_let_stmt(source, &child)?;
+                    stmt_list.push(Stmt::LetStmt { ident, expr })
+                }
+                "assignment_stmt" => {
+                    stmt_list.push(Stmt::parse_node(source, &child)?);
+                }
+                "prim_expr" => {
+                    //this must be our last prim expression.
+                    let final_node = OpNode::parse_node(source, &child)?;
+                    if let Some(old_fin) = ret_op.take() {
+                        println!("WARN: Already had final node: {:?}", old_fin);
+                    }
+                    ret_op = Some(final_node);
+                }
+                //Ignoring comments at this point.
+                "comment" => {}
+                "}" => break, // block ended
+                _ => {
+                    return Err(AstError::AnyError(format!(
+                        "Unexpected token {} at {:?}",
+                        child.kind(),
+                        child
+                    )))
+                }
+            }
+        }
+
+        if let Some(ret) = ret_op {
+            Ok(PrimBlock {
+                stmt_list,
+                op_tree: ret,
+            })
+        } else {
+            //NOTE: happens if the block ended, but no primitive statment / optree was set.
+            Err(AstError::BlockEndNoPrim)
+        }
+    }
+}
+
 ///Top level field node
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Field {
     pub ident: Identifier,
     ///All arguments for that field.
     pub args: Vec<TypedIdent>,
-
-    ///The Op-Tree that is being calculated by this field
-    pub op_tree: OpNode,
+    pub block: PrimBlock,
 }
 
 impl FromSitter for Field {
@@ -227,13 +426,9 @@ impl FromSitter for Field {
         // therefore we can share the block parsing for `fields`  and `ops`. which is why we delegate that at this point.
         assert!(next_node.as_ref().unwrap().kind() == "block");
 
-        let op_tree = OpNode::parse_block(source, next_node.as_ref().unwrap())?;
+        let block = PrimBlock::parse_node(source, next_node.as_ref().unwrap())?;
 
-        Ok(Field {
-            ident,
-            args,
-            op_tree,
-        })
+        Ok(Field { ident, args, block })
     }
 }
 
@@ -243,8 +438,7 @@ pub struct Op {
     pub ident: Identifier,
     pub prims: Vec<Identifier>,
     pub args: Vec<TypedIdent>,
-    ///The sub tree that is being build from this op and its nodes
-    pub op_tree: OpNode,
+    pub block: PrimBlock,
 }
 
 impl FromSitter for Op {
@@ -279,14 +473,13 @@ impl FromSitter for Op {
 
         //at this point we should be at a block
         assert!(next_node.kind() == "block");
-
-        let op_tree = OpNode::parse_block(source, &next_node)?;
+        let block = PrimBlock::parse_node(source, &next_node)?;
 
         Ok(Op {
             ident,
             prims,
             args,
-            op_tree,
+            block,
         })
     }
 }
@@ -298,7 +491,7 @@ pub struct Prim {
     pub args: Vec<TypedIdent>,
 
     ///The primitive that is being returned. Possibly nested in a sub tree
-    pub ret: OpNode,
+    pub block: PrimBlock,
 }
 
 impl FromSitter for Prim {
@@ -325,10 +518,9 @@ impl FromSitter for Prim {
 
         //at this point we should be at a block
         assert!(next_node.kind() == "block");
+        let block = PrimBlock::parse_node(source, &next_node)?;
 
-        let ret = OpNode::parse_block(source, &next_node)?;
-
-        Ok(Prim { ident, args, ret })
+        Ok(Prim { ident, args, block })
     }
 }
 

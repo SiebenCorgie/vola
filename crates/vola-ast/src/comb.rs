@@ -1,29 +1,25 @@
 //! Combinatorical level AST.
 
-use ahash::{AHashMap};
+use ahash::AHashMap;
 
-use crate::{
-    alge::AlgeExpr,
-    common::{Identifier},
-    parser::FromSitter,
-    AstError,
-};
+use crate::{alge::AlgeExpr, common::Identifier, parser::FromSitter, AstError};
 
 ///A singular Op-Node in some fields Op-Tree. Note that the leafs of that tree are
 /// always primitive calls
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum OpNode {
-    Node {
-        ///Identifier of op that is being called
-        op_ident: Identifier,
-        ///Arguments to the op call,
-        args: Vec<AlgeExpr>,
-        ///Sub nodes to this tree.
-        prims: Vec<OpNode>,
-    },
     Prim {
         prim_call_ident: Identifier,
         args: Vec<AlgeExpr>,
+    },
+    ///A call to some `op some_name<prims, ..>(args, ..){block..}`
+    OpCall {
+        ///The operation that is being called.
+        ident: Identifier,
+        ///The arguments in this context that are supplied to the op-call
+        args: Vec<AlgeExpr>,
+        ///The sub nodes of that tree, aka. sub-trees for that op.
+        prims: Vec<OpNode>,
     },
     ///Identifier to a not-yet resolved primitive or sub-tree.
     PrimIdent(Identifier),
@@ -70,7 +66,7 @@ impl OpNode {
         let mut walker = node.walk();
         let mut children = node.children(&mut walker);
         //First must be the op ident
-        let op_ident = Identifier::parse_node(source, &children.next().unwrap())?;
+        let ident = Identifier::parse_node(source, &children.next().unwrap())?;
         assert!(children.next().unwrap().kind() == "<"); // take off the <
                                                          //now parse the primitives, which could potentually be subtrees.
         let mut prims = Vec::new();
@@ -93,129 +89,6 @@ impl OpNode {
             }
         }
 
-        Ok(OpNode::Node {
-            op_ident,
-            args,
-            prims,
-        })
-    }
-
-    ///Resolves all identifier that are referenced and life.
-    pub fn resolve_identifier(
-        &mut self,
-        life_algebraic: &AHashMap<Identifier, AlgeExpr>,
-        life_prims: &AHashMap<Identifier, Option<OpNode>>,
-    ) {
-        //TODO I'm not really sure right now if we should resolve sub expressions already. Instead we could already build data dependency
-        // vertices.  However, this would make the AST a Abstract-Syntax-DAG... so probably not.
-        //
-        // However, this way we loose the knowledge of common expressions / nodes at this point, and have to rebuild that
-        // later on.
-        //
-        // A resolution might be to somehow tag nodes and algebraic expressions.
-
-        match self {
-            Self::Node {
-                op_ident: _,
-                args,
-                prims,
-            } => {
-                //in case of a node, resolve all args that are an identifier,
-                for arg in args {
-                    arg.resolve_identifier(life_algebraic);
-                }
-                //Now recurse tree and resolve rest of the tree
-                for prim in prims {
-                    prim.resolve_identifier(life_algebraic, life_prims);
-                }
-            }
-            Self::Prim {
-                prim_call_ident: _,
-                args,
-            } => {
-                for arg in args {
-                    arg.resolve_identifier(life_algebraic);
-                }
-            }
-            Self::PrimIdent(ident) => {
-                //Try to resolve the primitive to a tree
-                if let Some(Some(resolved)) = life_prims.get(&ident) {
-                    *self = resolved.clone();
-                    //And restart
-                    self.resolve_identifier(life_algebraic, life_prims);
-                }
-            }
-        }
-    }
-
-    ///Parses the `block` part of the tree sitter grammar.
-    pub fn parse_block(source: &[u8], node: &tree_sitter::Node) -> Result<Self, AstError> {
-        //NOTE: This is the **magical** part. Basically at this point we build the actual
-        // op tree of some `op` or `field`.
-        //
-        // This works by collecting all
-        // def and let statements, and iteratively building all tree parts. We always inline them if possible until we reach the
-        // last tree, which will be the actual final node tree.
-        //
-        // Therefore any unused sub-tree will be discarded automatically at this point. By parsing top down we also implement
-        // let / def shadowing, since we always inline the most recent identifier at each step.
-
-        assert!(node.kind() == "block");
-        let mut life_algebraic = AHashMap::with_capacity(0);
-        let mut life_prims = AHashMap::with_capacity(0);
-
-        let mut walker = node.walk();
-        let mut children = node.children(&mut walker);
-        assert!(children.next().unwrap().kind() == "{");
-
-        for child in children {
-            match child.kind() {
-                "def_prim" => {
-                    //a prim statment consists of the prims identifier, and possibly an initialization prim_stmt
-                    let ident = Identifier::parse_node(source, &child.child(1).as_ref().unwrap())?;
-                    let init = if child.child_count() > 3 {
-                        let mut node =
-                            OpNode::parse_node(source, &child.child(3).as_ref().unwrap())?;
-                        //Immediatly resolve node's identifier
-                        node.resolve_identifier(&life_algebraic, &life_prims);
-                        Some(node)
-                    } else {
-                        None
-                    };
-
-                    let _old = life_prims.insert(ident, init);
-                }
-                "let_stmt" => {
-                    let (ident, expr) = AlgeExpr::parse_let_stmt(source, &child)?;
-                    //TODO: We lose the type here, but we
-                    if let Some(_old) = life_algebraic.insert(ident.ident, expr) {
-                        //TODO check types, or carry over
-                    }
-                }
-                "assignment_stmt" => {
-                    println!("Assignment not yet implemented!");
-                }
-                "prim_expr" => {
-                    //this must be our last prim expression.
-
-                    let mut final_node = Self::parse_node(source, &child)?;
-                    //Resolve with the final context
-                    final_node.resolve_identifier(&life_algebraic, &life_prims);
-                    return Ok(final_node);
-                }
-                //Ignoring comments at this point.
-                "comment" => {}
-                "}" => break, // block ended
-                _ => {
-                    return Err(AstError::AnyError(format!(
-                        "Unexpected token {} at {:?}",
-                        child.kind(),
-                        child
-                    )))
-                }
-            }
-        }
-
-        Err(AstError::BlockEndNoPrim)
+        Ok(OpNode::OpCall { ident, args, prims })
     }
 }

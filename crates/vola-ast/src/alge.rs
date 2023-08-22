@@ -42,6 +42,28 @@ pub enum BinOp {
     Mod,
 }
 
+impl BinOp {
+    ///Tries to parse assignment op. So `+=`, `*=` etc. Returns None if its just an assignment.
+    pub fn parse_assign_op(
+        _source: &[u8],
+        node: &tree_sitter::Node,
+    ) -> Result<Option<Self>, AstError> {
+        match node.kind() {
+            "+=" => Ok(Some(BinOp::Add)),
+            "-=" => Ok(Some(BinOp::Add)),
+            "*=" => Ok(Some(BinOp::Add)),
+            "/=" => Ok(Some(BinOp::Add)),
+            "%=" => Ok(Some(BinOp::Add)),
+            "=" => Ok(None),
+            _ => Err(AstError::AnyError(format!(
+                "Unexpected token {} at {:?} while parsing AssignOp",
+                node.kind(),
+                node
+            ))),
+        }
+    }
+}
+
 impl FromSitter for BinOp {
     fn parse_node(_source: &[u8], node: &tree_sitter::Node) -> Result<Self, AstError>
     where
@@ -141,8 +163,6 @@ impl FromSitter for AlgeExpr {
                         "}" => break, //finish
                         _ => {
                             let mut expr = Self::parse_node(source, &child)?;
-                            expr.resolve_identifier(&life_idents);
-                            //now return the parsed scoped expression
                             return Ok(expr);
                         }
                     }
@@ -190,38 +210,6 @@ impl FromSitter for AlgeExpr {
 }
 
 impl AlgeExpr {
-    pub fn resolve_identifier(&mut self, life_algebraic_expr: &AHashMap<Identifier, AlgeExpr>) {
-        match self {
-            AlgeExpr::BinOp { op: _, left, right } => {
-                left.resolve_identifier(life_algebraic_expr);
-                right.resolve_identifier(life_algebraic_expr);
-            }
-            AlgeExpr::Call { ident: _, args } => {
-                for arg in args {
-                    arg.resolve_identifier(life_algebraic_expr);
-                }
-            }
-            AlgeExpr::Identifier(ident) => {
-                //check if we can substitude our selfs
-                if let Some(substitution) = life_algebraic_expr.get(ident) {
-                    *self = substitution.clone();
-                    //if we could substitude, restart resolving
-                    self.resolve_identifier(life_algebraic_expr);
-                } else {
-                    //in this case we finish
-                    return;
-                }
-            }
-            AlgeExpr::List(list) => {
-                for litm in list {
-                    litm.resolve_identifier(life_algebraic_expr);
-                }
-            }
-            AlgeExpr::UnaryOp { op: _, expr } => expr.resolve_identifier(life_algebraic_expr),
-            AlgeExpr::Float(_) | AlgeExpr::Kw(_) | AlgeExpr::PrimAccess { .. } => {}
-        }
-    }
-
     ///Tries to parse a `call_expr`. If successfull, returns the call's identifier as well as all arguments.
     pub fn parse_call(
         source: &[u8],
@@ -237,11 +225,10 @@ impl AlgeExpr {
 
         let mut args = Vec::with_capacity(call_expr.child_count() - 2);
         for child in children {
-            if child.kind() == ")" {
-                break;
-            } else {
-                //try to parse the expr
-                args.push(AlgeExpr::parse_node(source, &child)?);
+            match child.kind(){
+                ")" => break,
+                "," => {},
+                _ => args.push(AlgeExpr::parse_node(source, &child)?),
             }
         }
 
