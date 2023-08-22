@@ -1,3 +1,12 @@
+//NOTE:
+//
+//Precedence: Right now unary operator have the highest precedence with 4.
+//After that 3 is "high binding binary" and 2 for low binding binary.
+//
+//Whenever a decission between "inner algebraic expression" and some other item must be found, the
+//algebraic expression gets 1 over standard (which is 0). This is needed for this case:
+// ... [x, y + z, w]. To bind x+z as algebraic expression instead of list items and a subsequent error.
+
 module.exports = grammar({
   name: 'vola',
 
@@ -214,18 +223,19 @@ module.exports = grammar({
       '}'
     ),
 
-    unary_expr: $ => prec(3, choice(
+
+    unary_expr: $ => prec(4, choice(
       seq('-', $._alge_expr),
       seq('!', $._alge_expr),
       //TODO more?
     )),
 
     binary_expr: $ => choice(
-      prec.left(2, seq($._alge_expr, '/', $._alge_expr)),
-      prec.left(2, seq($._alge_expr, '*', $._alge_expr)),
-      prec.left(1, seq($._alge_expr, '+', $._alge_expr)),
-      prec.left(1, seq($._alge_expr, '-', $._alge_expr)),
-      prec.left(1, seq($._alge_expr, '%', $._alge_expr)),
+      prec.left(3, seq($._alge_expr, '/', $._alge_expr)),
+      prec.left(3, seq($._alge_expr, '*', $._alge_expr)),
+      prec.left(2, seq($._alge_expr, '+', $._alge_expr)),
+      prec.left(2, seq($._alge_expr, '-', $._alge_expr)),
+      prec.left(2, seq($._alge_expr, '%', $._alge_expr)),
       // ...
     ),
 
@@ -282,20 +292,14 @@ module.exports = grammar({
     ),
 
     _list_iter: $ => choice(
-      $._list_item,
+      $._alge_expr,
       seq(
-        $._list_item,
+        //An item in the list is always some algebraic expression.
+        $._alge_expr,
         ',',
         //rest of the list
         $._list_iter
       )
-    ),
-
-    _list_item: $ => choice(
-      $.list,
-      $.float,
-      $.identifier,
-      $.kw_at,
     ),
 
 

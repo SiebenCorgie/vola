@@ -10,3 +10,4 @@ members = [
 [workspace.dependencies]
 tree-sitter = "0.20.10"
 thiserror = "1.0.44"
+ahash = "0.8.3"

@@ -4,14 +4,36 @@
 //!
 //!
 //! The AST is designed to be easily transformed into SSA 3-address code. This allows us to transform it into
-//! MLIR Code, or directly into SPIR-V, depending on the choosen back/middle end.
+//! MLIR Code, or directly into SPIR-V, depending on the chosen back/middle end.
+//!
+//!
+//! The design somewhat reflects the design of the vola language syntax. There are two levels,
+//! a `cobinatorical`, which applies operations to primitives, and, at the top level defines a `field`.
+//!
+//! Each of those primitives (and arguments to operations) are defined by an algebraic expression. That could be
+//! a simple value, lets say `5`, or an expression, lets say `5+a`.
+//!
+//! The AST thefore is split into two as well. The toplevel `combinatorical`, and a lower level, more traditional
+//! algebraic AST. For simplicity we call the combinatorical AST just **AST**.
+//!
+//! This allows a compiler to first resolve the evaluation time of each algebraic expression, before compiling down to
+//! the actual equation.
+//!
+//! NOTE(tendsin): Lets see if this actually works out this way :D
 
-use std::path::Path;
+use std::{num::ParseIntError, path::Path};
 
+use ahash::AHashMap;
+
+use common::{Alge, Field, Identifier, Op, Prim};
+pub use parser::parser;
 use thiserror::Error;
 
-mod parser;
-pub use parser::parser;
+use crate::parser::FromSitter;
+pub mod alge;
+pub mod comb;
+pub mod common;
+pub mod parser;
 
 #[derive(Debug, Error)]
 pub enum AstError {
@@ -21,31 +43,170 @@ pub enum AstError {
     IoError(#[from] std::io::Error),
     #[error("Failed to parse from file")]
     ParseError,
+    #[error("Failed to parse utf8 string in source code: {0}")]
+    Utf8Err(#[from] core::str::Utf8Error),
+    #[error("{ty} with name {ident} already existed")]
+    IdentifierAlreadyExists { ty: String, ident: String },
+    #[error("Could not parse digit: {0}")]
+    ParseDigitError(#[from] ParseIntError),
+    #[error("{0}")]
+    AnyError(String),
+    #[error("Block did not end with a primitive statement")]
+    BlockEndNoPrim,
+    #[error("Scoped algebra expression ended with a none algebraic expression")]
+    ScopedEndNoAlge,
 }
 
-///All node types
-pub enum Node {
-    EntryPoint,
+pub enum ReportType {
+    Note,
+    Warn,
+    Error,
 }
 
-pub struct Ast {}
+impl ReportType {
+    pub fn report(&self, node_string: &str, node: &tree_sitter::Node, reason: &str) {
+        let level_str = match self {
+            ReportType::Note => "NOTE",
+            ReportType::Warn => "WARN",
+            ReportType::Error => "ERROR",
+        };
+        println!(
+            "{}: {}\n --> {:?}\n{}",
+            level_str, reason, node, node_string
+        )
+    }
+}
+
+pub trait ReportNode {
+    fn ty(&self) -> ReportType {
+        ReportType::Error
+    }
+
+    ///Reports this node error/warning/whatever.
+    fn report(self, source: &[u8], node: &tree_sitter::Node) -> Self;
+}
+
+impl<T> ReportNode for Result<T, AstError> {
+    fn report(self, source: &[u8], node: &tree_sitter::Node) -> Self {
+        if let Err(err) = &self {
+            let node_string = node.utf8_text(source).unwrap_or("NODE_ERROR");
+            self.ty().report(node_string, node, &format!("{}", err))
+        }
+
+        self
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Ast {
+    pub fields: AHashMap<Identifier, Field>,
+    pub ops: AHashMap<Identifier, Op>,
+    pub prims: AHashMap<Identifier, Prim>,
+    pub alges: AHashMap<Identifier, Alge>,
+}
 
 impl Ast {
     ///Creates an empty Ast with the given root node
-    fn empty(root: Node) -> Self {
-        Ast {}
+    pub fn empty() -> Self {
+        Ast {
+            fields: AHashMap::default(),
+            ops: AHashMap::default(),
+            prims: AHashMap::default(),
+            alges: AHashMap::default(),
+        }
     }
 
     ///Tries to parse `file` using `tree-sitter-vola` into an [Ast].
-    fn from_file(file: impl AsRef<Path>) -> Result<Self, AstError> {
+    pub fn from_file(file: impl AsRef<Path>) -> Result<Self, AstError> {
         let mut parser = parser()?;
-        let text = std::fs::read_to_string(file)?;
-        let syn_tree = parser.parse(text, None).ok_or(AstError::ParseError)?;
+        let file = std::fs::read(file)?;
+        let syn_tree = {
+            let text = core::str::from_utf8(&file)?;
+            parser.parse(text, None).ok_or(AstError::ParseError)?
+        };
 
         //TODO transform to ast
 
-        let ast = Ast {};
+        let mut ast = Ast::empty();
+
+        ast.try_parse_tree(&file, &syn_tree)?;
 
         Ok(ast)
+    }
+
+    pub fn from_string(string: &str) -> Result<Self, AstError> {
+        let mut parser = parser()?;
+        let str_bytes = string.as_bytes();
+        let syn_tree = { parser.parse(string, None).ok_or(AstError::ParseError)? };
+
+        let mut ast = Ast::empty();
+        ast.try_parse_tree(str_bytes, &syn_tree)?;
+        Ok(ast)
+    }
+
+    ///Parses `tree` into `self`'s context.
+    pub fn try_parse_tree(
+        &mut self,
+        source: &[u8],
+        tree: &tree_sitter::Tree,
+    ) -> Result<(), AstError> {
+        let root_node = tree.root_node();
+        let mut cursor = tree.walk();
+        for top_level_node in root_node.children(&mut cursor) {
+            match top_level_node.kind() {
+                "alge_definition" => match Alge::parse_node(source, &top_level_node) {
+                    Ok(f) => {
+                        if let Some(old) = self.alges.insert(f.ident.clone(), f) {
+                            return Err(AstError::IdentifierAlreadyExists {
+                                ty: "Alge".to_owned(),
+                                ident: old.ident.0,
+                            });
+                        }
+                    }
+                    Err(e) => println!("Failed to parse Op: {e}"),
+                },
+                "prim_definition" => match Prim::parse_node(source, &top_level_node) {
+                    Ok(f) => {
+                        if let Some(old) = self.prims.insert(f.ident.clone(), f) {
+                            return Err(AstError::IdentifierAlreadyExists {
+                                ty: "Prim".to_owned(),
+                                ident: old.ident.0,
+                            });
+                        }
+                    }
+                    Err(e) => println!("Failed to parse Prim: {e}"),
+                },
+                "op_definition" => match Op::parse_node(source, &top_level_node) {
+                    Ok(f) => {
+                        if let Some(old) = self.ops.insert(f.ident.clone(), f) {
+                            return Err(AstError::IdentifierAlreadyExists {
+                                ty: "Op".to_owned(),
+                                ident: old.ident.0,
+                            });
+                        }
+                    }
+                    Err(e) => println!("Failed to parse Op: {e}"),
+                },
+                "field_definition" => match Field::parse_node(source, &top_level_node) {
+                    Ok(f) => {
+                        if let Some(old) = self.fields.insert(f.ident.clone(), f) {
+                            return Err(AstError::IdentifierAlreadyExists {
+                                ty: "Field".to_owned(),
+                                ident: old.ident.0,
+                            });
+                        }
+                    }
+                    Err(e) => println!("Failed to parse field: {e}"),
+                },
+                _ => {
+                    println!(
+                        "Unknown toplevel node {}. Skipping...",
+                        top_level_node.kind()
+                    );
+                }
+            }
+        }
+
+        Ok(())
     }
 }

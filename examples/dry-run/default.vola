@@ -1,0 +1,34 @@
+alge something(some_var, some_object){
+   some_var - 10 + some_object.fieldname
+}
+
+prim sphere(radius){
+    def sphere;
+    sphere.@ = lenght(@) - radius;
+    sphere
+}
+
+prim box(extend: vec3){
+    def box;
+    let q = abs(@) - extend;
+    box.@ = length(max(q, 0.0)) + min(max_element(q), 0.0);
+    box
+}
+
+
+op translate<p>(offset: vec3){
+    @ -= offset;
+    p
+}
+
+op round<p>(radius){
+    p.@ -= rad;
+    p
+}
+
+field my_param(){
+    def mybox = box([1, 2, 3]);
+    def my_sphere = sphere(1.0);
+
+    union<translate<mybox>([1.0, 0.0, 0.0]), round<my_sphere>(0.3)>()
+}
