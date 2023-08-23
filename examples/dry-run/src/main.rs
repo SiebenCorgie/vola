@@ -8,7 +8,7 @@ fn main() -> Result<(), AstError> {
 
     let ast = Ast::from_file(file)?;
 
-    println!("{:#?}", ast);
+    //println!("{:#?}", ast);
 
     Ok(())
 }

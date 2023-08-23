@@ -5,7 +5,7 @@ use ahash::AHashMap;
 use crate::{
     common::{Identifier, ImmFloat, Keyword, TypedIdent},
     parser::FromSitter,
-    AstError,
+    AstError, AstErrorTy,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -17,18 +17,21 @@ pub enum UnOp {
 }
 
 impl FromSitter for UnOp {
-    fn parse_node(_source: &[u8], node: &tree_sitter::Node) -> Result<Self, AstError>
+    fn parse_node(source: &[u8], node: &tree_sitter::Node) -> Result<Self, AstError>
     where
         Self: Sized,
     {
         match node.kind() {
             "!" => Ok(UnOp::Not),
             "-" => Ok(UnOp::Neg),
-            _ => Err(AstError::AnyError(format!(
-                "Unexpected token {} at {:?} while parsing UnaryOp",
-                node.kind(),
-                node
-            ))),
+            _ => Err(AstError::at_node(
+                source,
+                &node,
+                AstErrorTy::UnexpectedToken {
+                    token: node.kind().to_owned(),
+                    unit: "UnaryOperation".to_owned(),
+                },
+            )),
         }
     }
 }
@@ -45,7 +48,7 @@ pub enum BinOp {
 impl BinOp {
     ///Tries to parse assignment op. So `+=`, `*=` etc. Returns None if its just an assignment.
     pub fn parse_assign_op(
-        _source: &[u8],
+        source: &[u8],
         node: &tree_sitter::Node,
     ) -> Result<Option<Self>, AstError> {
         match node.kind() {
@@ -55,17 +58,20 @@ impl BinOp {
             "/=" => Ok(Some(BinOp::Add)),
             "%=" => Ok(Some(BinOp::Add)),
             "=" => Ok(None),
-            _ => Err(AstError::AnyError(format!(
-                "Unexpected token {} at {:?} while parsing AssignOp",
-                node.kind(),
-                node
-            ))),
+            _ => Err(AstError::at_node(
+                source,
+                &node,
+                AstErrorTy::UnexpectedToken {
+                    token: node.kind().to_owned(),
+                    unit: "Assignment BinOp".to_owned(),
+                },
+            )),
         }
     }
 }
 
 impl FromSitter for BinOp {
-    fn parse_node(_source: &[u8], node: &tree_sitter::Node) -> Result<Self, AstError>
+    fn parse_node(source: &[u8], node: &tree_sitter::Node) -> Result<Self, AstError>
     where
         Self: Sized,
     {
@@ -75,11 +81,14 @@ impl FromSitter for BinOp {
             "*" => Ok(BinOp::Mul),
             "/" => Ok(BinOp::Div),
             "%" => Ok(BinOp::Mod),
-            _ => Err(AstError::AnyError(format!(
-                "Unexpected token {} at {:?} while parsing BinaryOp",
-                node.kind(),
-                node
-            ))),
+            _ => Err(AstError::at_node(
+                source,
+                &node,
+                AstErrorTy::UnexpectedToken {
+                    token: node.kind().to_owned(),
+                    unit: "BinOp".to_owned(),
+                },
+            )),
         }
     }
 }
@@ -162,12 +171,12 @@ impl FromSitter for AlgeExpr {
                         "," => {}     //ignore
                         "}" => break, //finish
                         _ => {
-                            let mut expr = Self::parse_node(source, &child)?;
+                            let expr = Self::parse_node(source, &child)?;
                             return Ok(expr);
                         }
                     }
                 }
-                Err(AstError::ScopedEndNoAlge)
+                Err(AstErrorTy::ScopedEndNoAlge.into())
             }
             "call_expr" => {
                 let (ident, args) = Self::parse_call(source, node)?;
@@ -200,11 +209,14 @@ impl FromSitter for AlgeExpr {
                 }
                 Ok(AlgeExpr::List(list))
             }
-            _ => Err(AstError::AnyError(format!(
-                "Unexpected token {} at {:?} in AlgeExpr",
-                node.kind(),
-                node
-            ))),
+            _ => Err(AstError::at_node(
+                source,
+                &node,
+                AstErrorTy::UnexpectedToken {
+                    token: node.kind().to_owned(),
+                    unit: "AlgeExpr".to_owned(),
+                },
+            )),
         }
     }
 }
@@ -225,9 +237,9 @@ impl AlgeExpr {
 
         let mut args = Vec::with_capacity(call_expr.child_count() - 2);
         for child in children {
-            match child.kind(){
+            match child.kind() {
                 ")" => break,
-                "," => {},
+                "," => {}
                 _ => args.push(AlgeExpr::parse_node(source, &child)?),
             }
         }

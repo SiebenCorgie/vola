@@ -21,7 +21,11 @@
 //!
 //! NOTE(tendsin): Lets see if this actually works out this way :D
 
-use std::{num::ParseIntError, path::Path};
+use std::{
+    fmt::{write, Display},
+    num::ParseIntError,
+    path::Path,
+};
 
 use ahash::AHashMap;
 
@@ -30,13 +34,95 @@ pub use parser::parser;
 use thiserror::Error;
 
 use crate::parser::FromSitter;
+
 pub mod alge;
+pub mod ast;
 pub mod comb;
 pub mod common;
+pub mod ctx;
 pub mod parser;
 
+#[derive(Debug)]
+struct ESpan {
+    from: (usize, usize),
+    to: (usize, usize),
+}
+
+impl ESpan {
+    pub fn empty() -> Self {
+        ESpan {
+            from: (0, 0),
+            to: (0, 0),
+        }
+    }
+}
+
+impl<'a> From<&tree_sitter::Node<'a>> for ESpan {
+    fn from(value: &tree_sitter::Node) -> Self {
+        ESpan {
+            from: (value.start_position().row, value.start_position().column),
+            to: (value.end_position().row, value.end_position().column),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct AstError {
+    span: ESpan,
+    node_line: String,
+    source: AstErrorTy,
+}
+
+impl AstError {
+    pub fn at_node(source_code: &[u8], node: &tree_sitter::Node, source: AstErrorTy) -> Self {
+        let node_line = node
+            .utf8_text(source_code)
+            .unwrap_or("CouldNotParseLine")
+            .to_owned();
+
+        let span = ESpan::from(node);
+        AstError {
+            span,
+            node_line,
+            source,
+        }
+    }
+}
+
+impl From<AstErrorTy> for AstError {
+    fn from(value: AstErrorTy) -> Self {
+        AstError {
+            span: ESpan::empty(),
+            node_line: String::new(),
+            source: value,
+        }
+    }
+}
+
+impl Display for AstError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "
+Error: {}
+-->  {}:{} - {}:{}
+
+{}
+
+<--
+",
+            self.source,
+            self.span.from.0,
+            self.span.from.1,
+            self.span.to.0,
+            self.span.to.1,
+            self.node_line
+        )
+    }
+}
+
 #[derive(Debug, Error)]
-pub enum AstError {
+pub enum AstErrorTy {
     #[error("Failed to load vola parser: {0}")]
     LanguageError(#[from] tree_sitter::LanguageError),
     #[error("{0}")]
@@ -49,52 +135,12 @@ pub enum AstError {
     IdentifierAlreadyExists { ty: String, ident: String },
     #[error("Could not parse digit: {0}")]
     ParseDigitError(#[from] ParseIntError),
-    #[error("{0}")]
-    AnyError(String),
     #[error("Block did not end with a primitive statement")]
     BlockEndNoPrim,
     #[error("Scoped algebra expression ended with a none algebraic expression")]
     ScopedEndNoAlge,
-}
-
-pub enum ReportType {
-    Note,
-    Warn,
-    Error,
-}
-
-impl ReportType {
-    pub fn report(&self, node_string: &str, node: &tree_sitter::Node, reason: &str) {
-        let level_str = match self {
-            ReportType::Note => "NOTE",
-            ReportType::Warn => "WARN",
-            ReportType::Error => "ERROR",
-        };
-        println!(
-            "{}: {}\n --> {:?}\n{}",
-            level_str, reason, node, node_string
-        )
-    }
-}
-
-pub trait ReportNode {
-    fn ty(&self) -> ReportType {
-        ReportType::Error
-    }
-
-    ///Reports this node error/warning/whatever.
-    fn report(self, source: &[u8], node: &tree_sitter::Node) -> Self;
-}
-
-impl<T> ReportNode for Result<T, AstError> {
-    fn report(self, source: &[u8], node: &tree_sitter::Node) -> Self {
-        if let Err(err) = &self {
-            let node_string = node.utf8_text(source).unwrap_or("NODE_ERROR");
-            self.ty().report(node_string, node, &format!("{}", err))
-        }
-
-        self
-    }
+    #[error("Unexpected token {token} while parsing {unit}")]
+    UnexpectedToken { token: String, unit: String },
 }
 
 #[derive(Debug, Clone)]
@@ -118,11 +164,11 @@ impl Ast {
 
     ///Tries to parse `file` using `tree-sitter-vola` into an [Ast].
     pub fn from_file(file: impl AsRef<Path>) -> Result<Self, AstError> {
-        let mut parser = parser()?;
-        let file = std::fs::read(file)?;
+        let mut parser = parser().map_err(|e| AstErrorTy::from(e))?;
+        let file = std::fs::read(file).map_err(|e| AstErrorTy::from(e))?;
         let syn_tree = {
-            let text = core::str::from_utf8(&file)?;
-            parser.parse(text, None).ok_or(AstError::ParseError)?
+            let text = core::str::from_utf8(&file).map_err(|e| AstErrorTy::from(e))?;
+            parser.parse(text, None).ok_or(AstErrorTy::ParseError)?
         };
 
         //TODO transform to ast
@@ -135,9 +181,9 @@ impl Ast {
     }
 
     pub fn from_string(string: &str) -> Result<Self, AstError> {
-        let mut parser = parser()?;
+        let mut parser = parser().map_err(|e| AstErrorTy::from(e))?;
         let str_bytes = string.as_bytes();
-        let syn_tree = { parser.parse(string, None).ok_or(AstError::ParseError)? };
+        let syn_tree = { parser.parse(string, None).ok_or(AstErrorTy::ParseError)? };
 
         let mut ast = Ast::empty();
         ast.try_parse_tree(str_bytes, &syn_tree)?;
@@ -157,10 +203,14 @@ impl Ast {
                 "alge_definition" => match Alge::parse_node(source, &top_level_node) {
                     Ok(f) => {
                         if let Some(old) = self.alges.insert(f.ident.clone(), f) {
-                            return Err(AstError::IdentifierAlreadyExists {
-                                ty: "Alge".to_owned(),
-                                ident: old.ident.0,
-                            });
+                            return Err(AstError::at_node(
+                                source,
+                                &top_level_node,
+                                AstErrorTy::IdentifierAlreadyExists {
+                                    ty: "Alge".to_owned(),
+                                    ident: old.ident.0,
+                                },
+                            ));
                         }
                     }
                     Err(e) => println!("Failed to parse Op: {e}"),
@@ -168,10 +218,14 @@ impl Ast {
                 "prim_definition" => match Prim::parse_node(source, &top_level_node) {
                     Ok(f) => {
                         if let Some(old) = self.prims.insert(f.ident.clone(), f) {
-                            return Err(AstError::IdentifierAlreadyExists {
-                                ty: "Prim".to_owned(),
-                                ident: old.ident.0,
-                            });
+                            return Err(AstError::at_node(
+                                source,
+                                &top_level_node,
+                                AstErrorTy::IdentifierAlreadyExists {
+                                    ty: "Prim Definition".to_owned(),
+                                    ident: old.ident.0,
+                                },
+                            ));
                         }
                     }
                     Err(e) => println!("Failed to parse Prim: {e}"),
@@ -179,10 +233,14 @@ impl Ast {
                 "op_definition" => match Op::parse_node(source, &top_level_node) {
                     Ok(f) => {
                         if let Some(old) = self.ops.insert(f.ident.clone(), f) {
-                            return Err(AstError::IdentifierAlreadyExists {
-                                ty: "Op".to_owned(),
-                                ident: old.ident.0,
-                            });
+                            return Err(AstError::at_node(
+                                source,
+                                &top_level_node,
+                                AstErrorTy::IdentifierAlreadyExists {
+                                    ty: "Op Definition".to_owned(),
+                                    ident: old.ident.0,
+                                },
+                            ));
                         }
                     }
                     Err(e) => println!("Failed to parse Op: {e}"),
@@ -190,10 +248,14 @@ impl Ast {
                 "field_definition" => match Field::parse_node(source, &top_level_node) {
                     Ok(f) => {
                         if let Some(old) = self.fields.insert(f.ident.clone(), f) {
-                            return Err(AstError::IdentifierAlreadyExists {
-                                ty: "Field".to_owned(),
-                                ident: old.ident.0,
-                            });
+                            return Err(AstError::at_node(
+                                source,
+                                &top_level_node,
+                                AstErrorTy::IdentifierAlreadyExists {
+                                    ty: "Field Definition".to_owned(),
+                                    ident: old.ident.0,
+                                },
+                            ));
                         }
                     }
                     Err(e) => println!("Failed to parse field: {e}"),
