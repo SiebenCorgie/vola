@@ -68,6 +68,7 @@ Note: The techstack is not set in stone. We might switch to a hand written parse
 - `tree-sitter-vola`: Treesitter based parser. Also contains the language grammar
 - `vola-ast`: The Abstract-Syntax-Tree representation of any Vola program. Can either be build from a file (using `tree-sitter-vola`) or 
 by using this as a library. Servers as interface between the Vola frontend, and any middle- / backend.
+- `vola-hir`: HighLevel-Intermediate-Representation. Conceptually similar to Rust's [THIR](https://rustc-dev-guide.rust-lang.org/thir.html). Used for type resolving, and matching and building a crude data-dependency graph.
 
 ## Building
 ### Dependencies

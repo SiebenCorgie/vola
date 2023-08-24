@@ -4,7 +4,7 @@ use crate::{
     alge::{AlgeExpr, BinOp},
     comb::OpNode,
     parser::FromSitter,
-    AstError, ReportNode,
+    AstError, AstErrorTy,
 };
 
 ///Keywords
@@ -13,6 +13,8 @@ pub enum Keyword {
     ///the @ symbol
     KwAt,
     KwPrim,
+    ///Placeholder keyword
+    Nill,
 }
 
 impl FromSitter for Keyword {
@@ -24,11 +26,14 @@ impl FromSitter for Keyword {
             "kw_at" => Ok(Keyword::KwAt),
             "kw_prim" => Ok(Keyword::KwPrim),
             "keywoard" => Self::parse_node(source, &node.child(0).unwrap()),
-            _ => Err(AstError::AnyError(format!(
-                "Unexpected token {} at {:?} while parsing keyword",
-                node.kind(),
-                node
-            ))),
+            _ => Err(AstError::at_node(
+                source,
+                node,
+                crate::AstErrorTy::UnexpectedToken {
+                    token: node.kind().to_owned(),
+                    unit: "Keyword".to_owned(),
+                },
+            )),
         }
     }
 }
@@ -50,20 +55,41 @@ impl FromSitter for Ty {
             "scalar" => Ok(Ty::Scalar),
             "vec" => {
                 //need to parse vec's count, for that,
-                let count = node.child(1).unwrap().utf8_text(source).unwrap().parse()?;
+                let count = node
+                    .child(1)
+                    .unwrap()
+                    .utf8_text(source)
+                    .unwrap()
+                    .parse()
+                    .map_err(|e| AstErrorTy::from(e))?;
                 Ok(Ty::Vector { count })
             }
             "mat" => {
-                let width = node.child(1).unwrap().utf8_text(source).unwrap().parse()?;
-                let height = node.child(3).unwrap().utf8_text(source).unwrap().parse()?;
+                let width = node
+                    .child(1)
+                    .unwrap()
+                    .utf8_text(source)
+                    .unwrap()
+                    .parse()
+                    .map_err(|e| AstErrorTy::from(e))?;
+                let height = node
+                    .child(3)
+                    .unwrap()
+                    .utf8_text(source)
+                    .unwrap()
+                    .parse()
+                    .map_err(|e| AstErrorTy::from(e))?;
 
                 Ok(Ty::Mat { width, height })
             }
-            _ => Err(AstError::AnyError(format!(
-                "Unexpected node {} @ {:?}, expected type",
-                node.kind(),
-                node
-            ))),
+            _ => Err(AstError::at_node(
+                source,
+                node,
+                crate::AstErrorTy::UnexpectedToken {
+                    token: node.kind().to_owned(),
+                    unit: "Ty".to_owned(),
+                },
+            )),
         }
     }
 }
@@ -78,7 +104,7 @@ impl FromSitter for Identifier {
         Self: Sized,
     {
         assert!(node.kind() == "identifier");
-        let iden = node.utf8_text(source).map_err(|e| AstError::Utf8Err(e))?;
+        let iden = node.utf8_text(source).map_err(|e| AstErrorTy::from(e))?;
         Ok(Identifier(iden.to_owned()))
     }
 }
@@ -115,7 +141,12 @@ impl FromSitter for ImmVal {
         Self: Sized,
     {
         assert!(node.kind() == "number");
-        Ok(ImmVal(node.utf8_text(source).unwrap().parse()?))
+        Ok(ImmVal(
+            node.utf8_text(source)
+                .unwrap()
+                .parse()
+                .map_err(|e| AstErrorTy::from(e))?,
+        ))
     }
 }
 
@@ -182,11 +213,14 @@ impl TypedIdent {
                     args.push(arg);
                 }
                 _ => {
-                    return Err(AstError::AnyError(format!(
-                        "Unexpected token: {} at {:?}",
-                        child.kind(),
-                        child
-                    )))
+                    return Err(AstError::at_node(
+                        source,
+                        node,
+                        crate::AstErrorTy::UnexpectedToken {
+                            token: node.kind().to_owned(),
+                            unit: "TypedIdent".to_owned(),
+                        },
+                    ))
                 }
             }
         }
@@ -229,8 +263,6 @@ impl FromSitter for Stmt {
     where
         Self: Sized,
     {
-        println!("stmt kind: {}", node.kind());
-
         match node.kind() {
             "assignment_stmt" => {
                 //find out which kind of assignment we have.
@@ -254,11 +286,6 @@ impl FromSitter for Stmt {
                     }
                     _ => {
                         //try to parse the two fields
-                        println!(
-                            "{}.{}",
-                            assignee.child(0).unwrap().kind(),
-                            assignee.child(2).unwrap().kind()
-                        );
                         let prim = Identifier::parse_node(source, &assignee.child(0).unwrap())?;
 
                         assert!(assignee.child(1).as_ref().unwrap().kind() == ".");
@@ -300,17 +327,27 @@ impl FromSitter for Stmt {
                                     assign_op,
                                     expr,
                                 })
-                            },
-                            _=> Err(AstError::AnyError(format!("Unexpected token {} at second part of assignment (some_ident.<this>) at {:?} while parsing assignmet operation.", second_part.kind(), second_part))),
+                            }
+                            _ => Err(AstError::at_node(
+                                source,
+                                node,
+                                crate::AstErrorTy::UnexpectedToken {
+                                    token: second_part.kind().to_owned(),
+                                    unit: "Assignment in Stmt".to_owned(),
+                                },
+                            )),
                         }
                     }
                 }
             }
-            _ => Err(AstError::AnyError(format!(
-                "Unexpected token {} at {:?} while parsing Stmt",
-                node.kind(),
-                node
-            ))),
+            _ => Err(AstError::at_node(
+                source,
+                node,
+                crate::AstErrorTy::UnexpectedToken {
+                    token: node.kind().to_owned(),
+                    unit: "Stmt".to_owned(),
+                },
+            )),
         }
     }
 }
@@ -370,11 +407,14 @@ impl FromSitter for PrimBlock {
                 "comment" => {}
                 "}" => break, // block ended
                 _ => {
-                    return Err(AstError::AnyError(format!(
-                        "Unexpected token {} at {:?}",
-                        child.kind(),
-                        child
-                    )))
+                    return Err(AstError::at_node(
+                        source,
+                        &child,
+                        AstErrorTy::UnexpectedToken {
+                            token: child.kind().to_owned(),
+                            unit: "PrimBlock".to_owned(),
+                        },
+                    ))
                 }
             }
         }
@@ -386,7 +426,7 @@ impl FromSitter for PrimBlock {
             })
         } else {
             //NOTE: happens if the block ended, but no primitive statment / optree was set.
-            Err(AstError::BlockEndNoPrim)
+            Err(AstError::at_node(source, node, AstErrorTy::BlockEndNoPrim))
         }
     }
 }
@@ -410,7 +450,7 @@ impl FromSitter for Field {
         assert!(children.next().unwrap().kind() == "field");
         let ident = children.next().unwrap();
         assert!(ident.kind() == "identifier");
-        let ident = Identifier::parse_node(source, &ident).report(source, &ident)?;
+        let ident = Identifier::parse_node(source, &ident)?;
 
         let mut next_node = children.next();
         let args = if next_node.map(|node| node.kind()) == Some("parameter_list") {
@@ -472,7 +512,16 @@ impl FromSitter for Op {
         };
 
         //at this point we should be at a block
-        assert!(next_node.kind() == "block");
+        if next_node.kind() != "block" {
+            return Err(AstError::at_node(
+                source,
+                &next_node,
+                AstErrorTy::UnexpectedToken {
+                    token: next_node.kind().to_owned(),
+                    unit: "Block".to_owned(),
+                },
+            ));
+        }
         let block = PrimBlock::parse_node(source, &next_node)?;
 
         Ok(Op {

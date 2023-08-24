@@ -1,8 +1,6 @@
 //! Combinatorical level AST.
 
-use ahash::AHashMap;
-
-use crate::{alge::AlgeExpr, common::Identifier, parser::FromSitter, AstError};
+use crate::{alge::AlgeExpr, common::Identifier, parser::FromSitter, AstError, AstErrorTy};
 
 ///A singular Op-Node in some fields Op-Tree. Note that the leafs of that tree are
 /// always primitive calls
@@ -50,10 +48,14 @@ impl FromSitter for OpNode {
                 })
             }
             "optree" => Self::parse_optree(source, &expr),
-            _ => Err(AstError::AnyError(format!(
-                "Unexpected token {} in prim_expr while parsing OpNode",
-                expr.kind()
-            ))),
+            _ => Err(AstError::at_node(
+                source,
+                &expr,
+                AstErrorTy::UnexpectedToken {
+                    token: expr.kind().to_owned(),
+                    unit: "OpNode".to_owned(),
+                },
+            )),
         }
     }
 }
