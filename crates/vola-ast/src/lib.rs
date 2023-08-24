@@ -21,11 +21,7 @@
 //!
 //! NOTE(tendsin): Lets see if this actually works out this way :D
 
-use std::{
-    fmt::{write, Display},
-    num::ParseIntError,
-    path::Path,
-};
+use std::{fmt::Display, num::ParseIntError, path::Path};
 
 use ahash::AHashMap;
 
@@ -36,10 +32,8 @@ use thiserror::Error;
 use crate::parser::FromSitter;
 
 pub mod alge;
-pub mod ast;
 pub mod comb;
 pub mod common;
-pub mod ctx;
 pub mod parser;
 
 #[derive(Debug)]

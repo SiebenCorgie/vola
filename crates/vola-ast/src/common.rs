@@ -13,6 +13,8 @@ pub enum Keyword {
     ///the @ symbol
     KwAt,
     KwPrim,
+    ///Placeholder keyword
+    Nill,
 }
 
 impl FromSitter for Keyword {

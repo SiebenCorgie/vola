@@ -2,6 +2,7 @@
 members = [
 "crates/tree-sitter-vola",
 "crates/vola-ast",
+"crates/vola-hir",
 "examples/dry-run",
 "examples/runtime-patch"
 ]
