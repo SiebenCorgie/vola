@@ -37,23 +37,23 @@ pub mod common;
 pub mod parser;
 
 #[derive(Debug)]
-struct ESpan {
+struct Span {
     from: (usize, usize),
     to: (usize, usize),
 }
 
-impl ESpan {
+impl Span {
     pub fn empty() -> Self {
-        ESpan {
+        Span {
             from: (0, 0),
             to: (0, 0),
         }
     }
 }
 
-impl<'a> From<&tree_sitter::Node<'a>> for ESpan {
+impl<'a> From<&tree_sitter::Node<'a>> for Span {
     fn from(value: &tree_sitter::Node) -> Self {
-        ESpan {
+        Span {
             from: (value.start_position().row, value.start_position().column),
             to: (value.end_position().row, value.end_position().column),
         }
@@ -62,7 +62,7 @@ impl<'a> From<&tree_sitter::Node<'a>> for ESpan {
 
 #[derive(Debug)]
 pub struct AstError {
-    span: ESpan,
+    span: Span,
     node_line: String,
     source: AstErrorTy,
 }
@@ -74,7 +74,7 @@ impl AstError {
             .unwrap_or("CouldNotParseLine")
             .to_owned();
 
-        let span = ESpan::from(node);
+        let span = Span::from(node);
         AstError {
             span,
             node_line,
@@ -86,7 +86,7 @@ impl AstError {
 impl From<AstErrorTy> for AstError {
     fn from(value: AstErrorTy) -> Self {
         AstError {
-            span: ESpan::empty(),
+            span: Span::empty(),
             node_line: String::new(),
             source: value,
         }
