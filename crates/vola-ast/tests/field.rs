@@ -1,5 +1,5 @@
 use vola_ast::{
-    common::{Field, Identifier},
+    common::{Field, Identifier, PrimBlock},
     Ast,
 };
 
@@ -19,7 +19,10 @@ field my_param(){
     let expected = Field {
         ident: Identifier(String::from("my_param")),
         args: Vec::new(),
-        op_tree: vola_ast::comb::OpNode::PrimIdent(Identifier(String::new())),
+        block: PrimBlock {
+            stmt_list: Vec::new(),
+            op_tree: vola_ast::comb::OpNode::PrimIdent(Identifier(String::new())),
+        },
     };
 
     assert!(ast.fields.len() == 1);
