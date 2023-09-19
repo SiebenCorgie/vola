@@ -3,12 +3,12 @@ use graphviz_rust::{
     exec,
     printer::{DotPrinter, PrinterContext},
 };
-use vola_hir::{AlgeNode, AlgeOp, CombNode, CombOp, Module, ModuleBuilder};
+use vola_hir::{AlgeNode, AlgeOp, CombNode, CombOp, EntryPointType, Module, ModuleBuilder};
 
 fn main() {
     let mut builder = Module::builder();
 
-    builder.new_field("testfield", |mut b| {
+    builder.new_entrypoint("testfield", EntryPointType::Field, |mut b| {
         let arg_rad = b.register_arg("rad");
         let arg_offset = b.register_arg("offset");
 

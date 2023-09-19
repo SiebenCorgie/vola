@@ -27,11 +27,6 @@ impl<'a> RegionBuilder<'a> {
 
     ///Sets the out primitive
     pub fn set_out_node(&mut self, node: NodeRef) {
-        assert!(
-            self.module.is_ty(NodeTy::CombNode, node),
-            "out node must be combinatorical"
-        );
-
         self.out = Some(node);
     }
 

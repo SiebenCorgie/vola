@@ -2,6 +2,8 @@ use std::fmt::Display;
 
 use slotmap::new_key_type;
 use tinyvec::ArrayVec;
+pub use vola_ast::alge::{BinOp, UnOp};
+pub use vola_ast::common::ImmFloat;
 
 use crate::Ident;
 
@@ -89,6 +91,12 @@ pub enum AlgeOp {
     At,
     Call(Ident),
     Arg(Ident),
+    Ref(Ident),
+    BinOp(BinOp),
+    UnOp(UnOp),
+    Imm(ImmFloat),
+    List,
+    PrimAccess { prim: Ident, accessed: Ident },
 }
 
 impl Display for AlgeOp {
@@ -98,6 +106,14 @@ impl Display for AlgeOp {
             AlgeOp::None => write!(f, "None"),
             AlgeOp::Arg(i) => write!(f, "Arg_{}", i.0),
             AlgeOp::Call(c) => write!(f, "Call_{}", c.0),
+            AlgeOp::Ref(i) => write!(f, "Ref_{}", i.0),
+            AlgeOp::List => write!(f, "List"),
+            AlgeOp::BinOp(bo) => write!(f, "BinOp_{:?}", bo),
+            AlgeOp::UnOp(uo) => write!(f, "UnaryOp_{:?}", uo),
+            AlgeOp::PrimAccess { prim, accessed } => {
+                write!(f, "PrimAcces_{}_field_{}", prim.0, accessed.0)
+            }
+            AlgeOp::Imm(im) => write!(f, "Imm"),
         }
     }
 }

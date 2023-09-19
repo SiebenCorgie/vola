@@ -1,12 +1,12 @@
 use ahash::{AHashMap, AHashSet};
-use common::{EntryPoint, EntryPointType};
+use common::EntryPoint;
 use graph::{NodeRefs, NodeTy};
 use slotmap::SlotMap;
 
 mod graph;
 pub use graph::{region::RegionBuilder, AlgeNode, AlgeOp, CombNode, CombOp, Node, NodeRef, Region};
 mod common;
-pub use common::Ident;
+pub use common::{EntryPointType, Ident};
 mod symbol_table;
 pub use symbol_table::SymbolTable;
 mod debug;
@@ -73,9 +73,10 @@ impl ModuleBuilder {
     }
 
     //Creates a new field entry point. `on_builder` is the [Region] of that entry point.
-    pub fn new_field<'a>(
+    pub fn new_entrypoint<'a>(
         &'a mut self,
         ident: impl Into<Ident>,
+        entrypoint_type: EntryPointType,
         on_builder: impl FnOnce(RegionBuilder<'_>) -> RegionBuilder<'_>,
     ) {
         let node_ref = { self.new_region(on_builder) };
@@ -83,7 +84,7 @@ impl ModuleBuilder {
             ident.into(),
             EntryPoint {
                 root_node: node_ref,
-                ty: EntryPointType::Field,
+                ty: entrypoint_type,
             },
         );
     }
