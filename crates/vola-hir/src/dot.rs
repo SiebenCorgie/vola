@@ -20,35 +20,18 @@ fn subgraph_id(node: NodeRef) -> Id {
 }
 
 impl ModuleBuilder {
-    pub fn dot_graph(&self, entry_node: NodeRef) -> Graph {
+    pub fn dot_sub_graph(&self, entry_node: NodeRef) -> Subgraph {
         let mut stmts = Vec::new();
 
         let entry_vertex = self.dot_node(entry_node, &mut stmts);
-
-        let root_id = NodeId(Id::Plain("root".to_owned()), None);
-        stmts.push(Stmt::Node(graphviz_rust::dot_structures::Node {
-            id: root_id.clone(),
-            attributes: vec![
-                NodeAttributes::label(format!("root")),
-                NodeAttributes::shape(shape::circle),
-            ],
-        }));
-
-        stmts.push(Stmt::Edge(Edge {
-            ty: EdgeTy::Pair(Vertex::N(root_id), entry_vertex),
-            attributes: vec![
-                EdgeAttributes::dir(dir::forward),
-                EdgeAttributes::style("dotted".to_owned()),
-            ],
-        }));
+        let id = match &entry_vertex {
+            Vertex::N(node) => node.0.clone(),
+            Vertex::S(sg) => sg.id.clone(),
+        };
 
         println!("{}", stmts.len());
 
-        Graph::Graph {
-            id: graph_id(entry_node),
-            strict: true,
-            stmts,
-        }
+        Subgraph { id, stmts }
     }
 
     pub fn dot_node(&self, nref: NodeRef, stmts: &mut Vec<Stmt>) -> Vertex {

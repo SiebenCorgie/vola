@@ -8,7 +8,7 @@ use vola_hir::{AlgeNode, AlgeOp, CombNode, CombOp, Module, ModuleBuilder};
 fn main() {
     let mut builder = Module::builder();
 
-    let region = builder.new_region(|mut b| {
+    builder.new_field("testfield", |mut b| {
         let arg_rad = b.register_arg("rad");
         let arg_offset = b.register_arg("offset");
 
@@ -34,7 +34,7 @@ fn main() {
         b
     });
 
-    let graph = builder.dot_graph(region);
+    let graph = builder.dot_graph();
 
     let string = graph.print(&mut PrinterContext::default());
     println!("{}", string);

@@ -5,7 +5,7 @@ members = [
 "crates/vola-hir",
 "examples/dry-run",
 "examples/runtime-patch",
-"examples/hir-simple"
+"examples/hir-simple",
 ]
 
 
