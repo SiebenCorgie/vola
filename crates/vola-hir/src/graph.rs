@@ -1,9 +1,19 @@
 use slotmap::new_key_type;
 use tinyvec::ArrayVec;
 
+pub(crate) mod region;
+
 new_key_type! {pub struct NodeRef;}
 
 pub type NodeRefs = ArrayVec<[NodeRef; 3]>;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NodeTy {
+    Region,
+    AlgeNode,
+    CombNode,
+    Error,
+}
 
 ///All Node types we can express. This is intentionally kept really small.
 pub enum Node {
@@ -26,6 +36,39 @@ pub enum Node {
 
     ///The error node, used whenever a error was found
     Error,
+}
+
+impl Node {
+    pub fn is_ty(&self, ty: NodeTy) -> bool {
+        self.ty() == ty
+    }
+
+    pub fn ty(&self) -> NodeTy {
+        match self {
+            Node::Error => NodeTy::Error,
+            Node::AlgeNode(_) => NodeTy::AlgeNode,
+            Node::Region(_) => NodeTy::Region,
+            Node::CombNode(_) => NodeTy::CombNode,
+        }
+    }
+}
+
+impl From<Region> for Node {
+    fn from(value: Region) -> Self {
+        Node::Region(value)
+    }
+}
+
+impl From<AlgeNode> for Node {
+    fn from(value: AlgeNode) -> Self {
+        Node::AlgeNode(value)
+    }
+}
+
+impl From<CombNode> for Node {
+    fn from(value: CombNode) -> Self {
+        Node::CombNode(value)
+    }
 }
 
 pub struct Region {

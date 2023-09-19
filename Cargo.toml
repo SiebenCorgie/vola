@@ -4,7 +4,8 @@ members = [
 "crates/vola-ast",
 "crates/vola-hir",
 "examples/dry-run",
-"examples/runtime-patch"
+"examples/runtime-patch",
+"examples/hir-simple"
 ]
 
 
