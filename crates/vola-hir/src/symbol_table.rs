@@ -50,9 +50,8 @@ impl SymbolTable {
         assert!(x.is_none(), "Shadowing not yet supported!");
     }
 
-    pub fn resolve(&self, ident: impl Into<Ident>) -> Option<NodeRef> {
-        let ident = ident.into();
-        if let Some(r) = self.scope.get(&ident) {
+    pub fn resolve(&self, ident: &Ident) -> Option<NodeRef> {
+        if let Some(r) = self.scope.get(ident) {
             Some(r.node_ref.clone())
         } else {
             if let Some(supersc) = &self.super_scope {
@@ -77,8 +76,8 @@ mod tests {
         let mut scope = SymbolTable::new();
         scope.push_ref("k0", k0);
 
-        assert!(scope.resolve("k0").is_some());
-        assert!(scope.resolve("k0").unwrap() == k0);
+        assert!(scope.resolve(&"k0".into()).is_some());
+        assert!(scope.resolve(&"k0".into()).unwrap() == k0);
     }
 
     #[test]
@@ -91,15 +90,15 @@ mod tests {
         scope.open_scope();
         scope.push_ref("k1", k1);
 
-        assert!(scope.resolve("k0").is_some());
-        assert!(scope.resolve("k0").unwrap() == k0);
-        assert!(scope.resolve("k1").is_some());
-        assert!(scope.resolve("k1").unwrap() == k1);
+        assert!(scope.resolve(&"k0".into()).is_some());
+        assert!(scope.resolve(&"k0".into()).unwrap() == k0);
+        assert!(scope.resolve(&"k1".into()).is_some());
+        assert!(scope.resolve(&"k1".into()).unwrap() == k1);
 
         scope.close_scope();
 
-        assert!(scope.resolve("k0").is_some());
-        assert!(scope.resolve("k0").unwrap() == k0);
-        assert!(scope.resolve("k1").is_none());
+        assert!(scope.resolve(&"k0".into()).is_some());
+        assert!(scope.resolve(&"k0".into()).unwrap() == k0);
+        assert!(scope.resolve(&"k1".into()).is_none());
     }
 }

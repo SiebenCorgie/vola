@@ -10,6 +10,9 @@ pub use symbol_table::SymbolTable;
 mod debug;
 use debug::Span;
 
+#[cfg(feature = "dot")]
+mod dot;
+
 pub struct Module;
 
 impl Module {
@@ -39,6 +42,9 @@ impl ModuleBuilder {
         &'a mut self,
         on_builder: impl FnOnce(RegionBuilder<'a>) -> RegionBuilder<'a>,
     ) -> NodeRef {
+        //open new scope for the region
+        self.symbols.open_scope();
+
         let at_node = self.new_node(AlgeNode::new(AlgeOp::At));
         let builderctx = RegionBuilder {
             module: self,
@@ -48,6 +54,7 @@ impl ModuleBuilder {
         };
 
         let builder = on_builder(builderctx);
+
         builder.build()
     }
 

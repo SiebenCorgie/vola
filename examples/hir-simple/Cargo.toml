@@ -7,3 +7,4 @@ edition = "2021"
 
 [dependencies]
 vola-hir = {path = "../../crates/vola-hir"}
+graphviz-rust.workspace = true

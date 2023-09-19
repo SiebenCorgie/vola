@@ -1,5 +1,9 @@
+use std::fmt::Display;
+
 use slotmap::new_key_type;
 use tinyvec::ArrayVec;
+
+use crate::Ident;
 
 pub(crate) mod region;
 
@@ -83,6 +87,19 @@ pub struct Region {
 pub enum AlgeOp {
     None,
     At,
+    Call(Ident),
+    Arg(Ident),
+}
+
+impl Display for AlgeOp {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            AlgeOp::At => write!(f, "At"),
+            AlgeOp::None => write!(f, "None"),
+            AlgeOp::Arg(i) => write!(f, "Arg_{}", i.0),
+            AlgeOp::Call(c) => write!(f, "Call_{}", c.0),
+        }
+    }
 }
 
 pub struct AlgeNode {
@@ -105,10 +122,42 @@ impl AlgeNode {
 
 pub enum CombOp {
     None,
+    ///Defines that this calls some else defined op
+    OpCall(Ident),
+    ///Calls to some primitive definition
+    PrimCall(Ident),
+}
+
+impl Display for CombOp {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            CombOp::None => write!(f, "None"),
+            CombOp::OpCall(c) => write!(f, "CombOp_{}", c.0),
+            CombOp::PrimCall(c) => write!(f, "PrimCall_{}", c.0),
+        }
+    }
 }
 
 pub struct CombNode {
     pub in_args: NodeRefs,
     pub in_children: NodeRefs,
     pub op: CombOp,
+}
+
+impl CombNode {
+    pub fn new(op: CombOp) -> Self {
+        CombNode {
+            in_args: NodeRefs::new(),
+            in_children: NodeRefs::new(),
+            op,
+        }
+    }
+    pub fn with_arg(mut self, nref: NodeRef) -> Self {
+        self.in_args.push(nref);
+        self
+    }
+    pub fn with_child(mut self, nref: NodeRef) -> Self {
+        self.in_children.push(nref);
+        self
+    }
 }
