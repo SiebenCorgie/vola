@@ -1,14 +1,27 @@
-pub fn add(left: usize, right: usize) -> usize {
-    left + right
+use slotmap::SlotMap;
+
+mod graph;
+pub use graph::{AlgeOp, CombNode, CombOp, Node, NodeRef, Region};
+mod common;
+pub use common::Ident;
+mod symbol_table;
+pub use symbol_table::SymbolTable;
+mod debug;
+use debug::Span;
+
+pub struct Module;
+
+impl Module {
+    pub fn builder() -> ModuleBuilder {
+        let mut nodes = SlotMap::with_key();
+        let error_node = nodes.insert(Node::Error);
+
+        ModuleBuilder { error_node, nodes }
+    }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
+pub struct ModuleBuilder {
+    //Error node
+    pub error_node: NodeRef,
+    pub nodes: SlotMap<NodeRef, Node>,
 }
