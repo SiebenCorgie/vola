@@ -5,12 +5,12 @@ use crate::{graph::NodeTy, Ident, ModuleBuilder, Node, NodeRef, Region};
 use super::{AlgeNode, NodeRefs};
 
 pub struct RegionBuilder<'a> {
-    module: &'a mut ModuleBuilder,
+    pub(crate) module: &'a mut ModuleBuilder,
 
     //Preregistered at_ref
-    at_ref: NodeRef,
-    args: NodeRefs,
-    out: Option<NodeRef>,
+    pub(crate) at_ref: NodeRef,
+    pub(crate) args: NodeRefs,
+    pub(crate) out: Option<NodeRef>,
 }
 
 impl<'a> RegionBuilder<'a> {
@@ -38,16 +38,22 @@ impl<'a> RegionBuilder<'a> {
         self.out = Some(node);
     }
 
-    pub fn build(mut self) -> Region {
+    pub fn module(&mut self) -> &mut ModuleBuilder {
+        self.module
+    }
+
+    pub fn build(mut self) -> NodeRef {
         assert!(
             self.out.is_some(),
             "Out node must be set before building region!"
         );
 
-        Region {
+        let region = Region {
             in_at_node: self.at_ref,
             in_args: self.args,
             out: self.out.take().unwrap(),
-        }
+        };
+
+        self.module.new_node(region)
     }
 }

@@ -1,8 +1,8 @@
-use graph::NodeTy;
+use graph::{NodeRefs, NodeTy};
 use slotmap::SlotMap;
 
 mod graph;
-pub use graph::{region::RegionBuilder, AlgeOp, CombNode, CombOp, Node, NodeRef, Region};
+pub use graph::{region::RegionBuilder, AlgeNode, AlgeOp, CombNode, CombOp, Node, NodeRef, Region};
 mod common;
 pub use common::Ident;
 mod symbol_table;
@@ -35,7 +35,21 @@ pub struct ModuleBuilder {
 }
 
 impl ModuleBuilder {
-    pub fn new_region<'a>(&'a mut self, builder: impl FnOnce(RegionBuilder<'a>)) {}
+    pub fn new_region<'a>(
+        &'a mut self,
+        on_builder: impl FnOnce(RegionBuilder<'a>) -> RegionBuilder<'a>,
+    ) -> NodeRef {
+        let at_node = self.new_node(AlgeNode::new(AlgeOp::At));
+        let builderctx = RegionBuilder {
+            module: self,
+            at_ref: at_node,
+            args: NodeRefs::new(),
+            out: None,
+        };
+
+        let builder = on_builder(builderctx);
+        builder.build()
+    }
 
     pub fn new_node(&mut self, node: impl Into<Node>) -> NodeRef {
         self.nodes.insert(node.into())

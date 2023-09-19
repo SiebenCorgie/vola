@@ -82,11 +82,25 @@ pub struct Region {
 
 pub enum AlgeOp {
     None,
+    At,
 }
 
 pub struct AlgeNode {
     pub in_args: NodeRefs,
     pub op: AlgeOp,
+}
+
+impl AlgeNode {
+    pub fn new(op: AlgeOp) -> Self {
+        AlgeNode {
+            in_args: NodeRefs::new(),
+            op,
+        }
+    }
+    pub fn with_arg(mut self, nref: NodeRef) -> Self {
+        self.in_args.push(nref);
+        self
+    }
 }
 
 pub enum CombOp {
