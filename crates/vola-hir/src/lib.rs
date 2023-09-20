@@ -64,6 +64,7 @@ impl ModuleBuilder {
             module: self,
             at_ref: at_node,
             args: NodeRefs::new(),
+            prim_args: NodeRefs::new(),
             out: None,
         };
 

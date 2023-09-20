@@ -1,6 +1,6 @@
 use vola_ast::comb::OpNode;
 
-use crate::{graph::NodeTy, AlgeOp, Ident, ModuleBuilder, Node, NodeRef, Region};
+use crate::{graph::NodeTy, AlgeOp, CombNode, Ident, ModuleBuilder, Node, NodeRef, Region};
 
 use super::{AlgeNode, NodeRefs};
 
@@ -10,6 +10,7 @@ pub struct RegionBuilder<'a> {
     //Preregistered at_ref
     pub(crate) at_ref: NodeRef,
     pub(crate) args: NodeRefs,
+    pub(crate) prim_args: NodeRefs,
     pub(crate) out: Option<NodeRef>,
 }
 
@@ -21,6 +22,17 @@ impl<'a> RegionBuilder<'a> {
         self.module.symbols.push_ref(ident, node_key);
 
         self.args.push(node_key);
+
+        node_key
+    }
+
+    pub fn register_arg_prim(&mut self, ident: impl Into<Ident>) -> NodeRef {
+        let ident = ident.into();
+        let node = CombNode::new(crate::CombOp::PrimArg(ident.clone()));
+        let node_key = self.module.new_node(node);
+        self.module.symbols.push_ref(ident, node_key);
+
+        self.prim_args.push(node_key);
 
         node_key
     }
@@ -66,6 +78,7 @@ impl<'a> RegionBuilder<'a> {
         let region = Region {
             in_at_node: self.at_ref,
             in_args: self.args,
+            in_prims: self.prim_args,
             out: self.out.take().unwrap(),
         };
 

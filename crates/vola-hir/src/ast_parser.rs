@@ -1,7 +1,7 @@
 use vola_ast::{
     alge::AlgeExpr,
     comb::OpNode,
-    common::{Alge, Keyword, Prim, PrimBlock, Stmt},
+    common::{Alge, Keyword, Op, Prim, PrimBlock, Stmt},
     Ast,
 };
 
@@ -273,5 +273,30 @@ pub fn parse_ast(ast: Ast, mut builder: ModuleBuilder) -> ModuleBuilder {
             b
         });
     }
+
+    for (ident, op) in ast.ops {
+        let Op {
+            ident,
+            prims,
+            args,
+            block,
+        } = op;
+        builder.new_entrypoint(ident.0, EntryPointType::Op, |mut b| {
+            for arg in args {
+                let _argid = b.register_arg(arg.ident.0);
+            }
+
+            for argop in prims {
+                let _opid = b.register_arg_prim(argop.0);
+            }
+
+            let op_root = parse_prim(&block, &mut b);
+
+            b.set_out_node(op_root);
+
+            b
+        })
+    }
+
     builder
 }

@@ -92,6 +92,8 @@ pub struct Region {
     pub out: NodeRef,
     ///all inputs (plus the at node) of that region. Per definition always a algebraic node.
     pub in_args: NodeRefs,
+    ///all input primitives into that region.
+    pub in_prims: NodeRefs,
 }
 
 pub enum AlgeOp {
@@ -148,6 +150,7 @@ pub enum CombOp {
     None,
     ///Defines that this calls some else defined op
     OpCall(Ident),
+    PrimArg(Ident),
     ///Calls to some primitive definition
     PrimCall(Ident),
     //Creates a new primitive instance
@@ -164,6 +167,7 @@ impl Display for CombOp {
         match self {
             CombOp::None => write!(f, "None"),
             CombOp::OpCall(c) => write!(f, "CombOp_{}", c.0),
+            CombOp::PrimArg(c) => write!(f, "PrimArg_{}", c.0),
             CombOp::PrimCall(c) => write!(f, "PrimCall_{}", c.0),
             CombOp::PrimDef(ident) => write!(f, "PrimDef_{}", ident.0),
             CombOp::PrimFieldMutate { ident, op: _ } => write!(f, "PrimFieldMutate_{}", ident.0),
