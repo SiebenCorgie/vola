@@ -57,6 +57,14 @@ impl Node {
             Node::CombNode(_) => NodeTy::CombNode,
         }
     }
+
+    pub fn unwrap_comb_node(&mut self) -> &mut CombNode {
+        if let Node::CombNode(c) = self {
+            c
+        } else {
+            panic!("Was not a CombNode");
+        }
+    }
 }
 
 impl From<Region> for Node {
@@ -142,6 +150,13 @@ pub enum CombOp {
     OpCall(Ident),
     ///Calls to some primitive definition
     PrimCall(Ident),
+    //Creates a new primitive instance
+    PrimDef(Ident),
+    ///Mutates the given field with an argument
+    PrimFieldMutate {
+        ident: Ident,
+        op: Option<BinOp>,
+    },
 }
 
 impl Display for CombOp {
@@ -150,6 +165,8 @@ impl Display for CombOp {
             CombOp::None => write!(f, "None"),
             CombOp::OpCall(c) => write!(f, "CombOp_{}", c.0),
             CombOp::PrimCall(c) => write!(f, "PrimCall_{}", c.0),
+            CombOp::PrimDef(ident) => write!(f, "PrimDef_{}", ident.0),
+            CombOp::PrimFieldMutate { ident, op: _ } => write!(f, "PrimFieldMutate_{}", ident.0),
         }
     }
 }

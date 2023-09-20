@@ -13,6 +13,9 @@ fn main() -> Result<(), AstError> {
     });
 
     let ast = Ast::from_file(file)?;
+
+    println!("{:#?}", ast);
+
     let hir = Module::from_ast(ast);
 
     let graph = hir.dot_graph();

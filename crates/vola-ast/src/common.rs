@@ -131,6 +131,18 @@ impl Identifier {
     }
 }
 
+impl From<&str> for Identifier {
+    fn from(value: &str) -> Self {
+        Identifier(value.to_owned())
+    }
+}
+
+impl From<String> for Identifier {
+    fn from(value: String) -> Self {
+        Identifier(value)
+    }
+}
+
 ///A single digit
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct ImmVal(usize);

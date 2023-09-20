@@ -52,14 +52,21 @@ impl SymbolTable {
 
     pub fn resolve(&self, ident: &Ident) -> Option<NodeRef> {
         if let Some(r) = self.scope.get(ident) {
+            println!("Found node: {}", ident.0);
             Some(r.node_ref.clone())
         } else {
             if let Some(supersc) = &self.super_scope {
+                println!("resolve superscope");
                 supersc.resolve(ident)
             } else {
                 None
             }
         }
+    }
+
+    ///Returns true if this is the top most scope
+    pub fn is_top_scope(&self) -> bool {
+        self.super_scope.is_none()
     }
 }
 

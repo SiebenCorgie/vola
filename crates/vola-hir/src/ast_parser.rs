@@ -1,10 +1,14 @@
 use vola_ast::{
     alge::AlgeExpr,
-    common::{Alge, Keyword},
+    comb::OpNode,
+    common::{Alge, Keyword, Prim, PrimBlock, Stmt},
     Ast,
 };
 
-use crate::{AlgeNode, AlgeOp, EntryPointType, ModuleBuilder, NodeRef, RegionBuilder};
+use crate::{
+    AlgeNode, AlgeOp, CombNode, CombOp, EntryPointType, Ident, ModuleBuilder, Node, NodeRef,
+    RegionBuilder,
+};
 
 pub fn parse_alge_expr<'a>(exprs: &AlgeExpr, builder: &mut RegionBuilder<'a>) -> NodeRef {
     match exprs {
@@ -76,10 +80,181 @@ pub fn parse_alge_expr<'a>(exprs: &AlgeExpr, builder: &mut RegionBuilder<'a>) ->
     }
 }
 
-pub fn parse_ast(ast: Ast, mut builder: ModuleBuilder) -> ModuleBuilder {
-    for (ident, alge) in ast.alges {
-        let Alge { ident, args, ret } = alge;
+///Parses the single statment, returning its node
+pub fn parse_stmt<'a>(stmt: &Stmt, builder: &mut RegionBuilder<'a>) -> NodeRef {
+    match stmt {
+        Stmt::AtAssign { assign_op, expr } => {
+            //Rewrite at node to be calculation
+            if let Some(assign_op) = assign_op {
+                let assign_expr = parse_alge_expr(expr, builder);
 
+                let old_at = builder.get_at();
+
+                //wrap into the op
+                let wrapped = builder.module().new_node(
+                    AlgeNode::new(AlgeOp::BinOp(assign_op.clone()))
+                        .with_arg(old_at)
+                        .with_arg(assign_expr),
+                );
+                builder.at_ref = wrapped;
+            } else {
+                builder.at_ref = parse_alge_expr(expr, builder);
+            }
+
+            builder.get_at()
+        }
+        Stmt::FieldAssign {
+            prim,
+            field,
+            assign_op,
+            expr,
+        } => {
+            let primref = if let Some(nref) = builder
+                .module()
+                .symbols
+                .resolve(&Ident::from(prim.0.as_str()))
+            {
+                nref
+            } else {
+                panic!("Unknown reference to primitive {} in scope", prim.0);
+            };
+
+            let subarg = parse_alge_expr(expr, builder);
+            let mutate_node = builder.module().new_node(
+                CombNode::new(CombOp::PrimFieldMutate {
+                    ident: field.0.as_str().into(), // NOTE currently hardcoding to "AT"
+                    op: assign_op.clone(),
+                })
+                .with_child(primref)
+                .with_arg(subarg),
+            );
+
+            //now push mutation as child to primref
+
+            println!("Field assign");
+
+            builder
+                .module()
+                .nodes
+                .get_mut(primref)
+                .unwrap()
+                .unwrap_comb_node()
+                .in_children
+                .push(mutate_node);
+
+            mutate_node
+        }
+        Stmt::LetStmt { ident, expr } => {
+            //let statement is a algebraic expression that is bound to the identifier.
+            println!("Let: {}", ident.ident.0);
+            let algeexpr = parse_alge_expr(expr, builder);
+            builder
+                .module()
+                .symbols
+                .push_ref(ident.ident.0.as_str(), algeexpr);
+            algeexpr
+        }
+        Stmt::PrimAtAssign {
+            prim,
+            assign_op,
+            expr,
+        } => {
+            println!("PrimAtAssgin rewrite to FieldAt");
+            //Rewrite as "AT" field assignment
+            parse_stmt(
+                &Stmt::FieldAssign {
+                    prim: prim.clone(),
+                    field: "At".into(),
+                    assign_op: assign_op.clone(),
+                    expr: expr.clone(),
+                },
+                builder,
+            )
+        }
+        Stmt::PrimDef { ident, init } => {
+            println!("PrimDef");
+            let mut node = CombNode::new(CombOp::PrimDef(ident.0.as_str().into()));
+
+            if let Some(init) = init {
+                node = node.with_child(parse_op_node(init, builder));
+            }
+
+            let node_ref = builder.module().new_node(node);
+
+            builder
+                .module()
+                .symbols
+                .push_ref(ident.0.as_str(), node_ref);
+            node_ref
+        }
+    }
+}
+
+pub fn parse_op_node<'a>(node: &OpNode, builder: &mut RegionBuilder<'a>) -> NodeRef {
+    println!("Node: {:?}", node);
+    match node {
+        OpNode::OpCall { ident, args, prims } => {
+            println!("OpCall");
+            let mut node = CombNode::new(CombOp::OpCall(ident.0.as_str().into()));
+
+            for arg in args {
+                node = node.with_arg(parse_alge_expr(arg, builder));
+            }
+
+            for prim in prims {
+                node = node.with_child(parse_op_node(prim, builder));
+            }
+
+            builder.module().new_node(node)
+        }
+        OpNode::Prim {
+            prim_call_ident,
+            args,
+        } => {
+            println!("Prim");
+            let mut node = CombNode::new(CombOp::PrimCall(prim_call_ident.0.as_str().into()));
+
+            for arg in args {
+                node = node.with_arg(parse_alge_expr(arg, builder));
+            }
+
+            builder.module().new_node(node)
+        }
+        OpNode::PrimIdent(ident) => {
+            //in the case of an ident, try to get the primitive for that ident, if not available, retrun the ref
+            if let Some(nref) = builder
+                .module()
+                .symbols
+                .resolve(&Ident::from(ident.0.as_str()))
+            {
+                nref
+            } else {
+                println!("Could not resolve");
+                builder
+                    .module()
+                    .new_node(CombNode::new(CombOp::PrimCall(ident.0.as_str().into())))
+            }
+        }
+    }
+}
+
+pub fn parse_prim<'a>(prim: &PrimBlock, builder: &mut RegionBuilder<'a>) -> NodeRef {
+    //First parse all statements
+    for stmt in &prim.stmt_list {
+        let _stmt_node = parse_stmt(stmt, builder);
+    }
+
+    println!("Parse optree");
+    //Now build the op-tree for that prim
+    parse_op_node(&prim.op_tree, builder)
+}
+
+pub fn parse_ast(ast: Ast, mut builder: ModuleBuilder) -> ModuleBuilder {
+    assert!(builder.symbols.is_top_scope());
+
+    for (ident, alge) in ast.alges {
+        assert!(builder.symbols.is_top_scope());
+        let Alge { ident, args, ret } = alge;
         builder.new_entrypoint(ident.0, EntryPointType::Alge, |mut b| {
             for arg in args {
                 //TODO add types
@@ -94,5 +269,22 @@ pub fn parse_ast(ast: Ast, mut builder: ModuleBuilder) -> ModuleBuilder {
         });
     }
 
+    for (ident, prim) in ast.prims {
+        assert!(builder.symbols.is_top_scope());
+        builder.new_entrypoint(ident.0, EntryPointType::Prim, |mut b| {
+            let Prim { ident, args, block } = prim;
+            for arg in args {
+                //TODO add types
+                let _argid = b.register_arg(arg.ident.0);
+            }
+
+            let prim_root = parse_prim(&block, &mut b);
+
+            b.set_out_node(prim_root);
+            println!("Finish up prim {}", ident.0);
+            b
+        });
+    }
+    println!("end parser");
     builder
 }

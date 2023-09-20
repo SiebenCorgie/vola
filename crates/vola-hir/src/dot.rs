@@ -22,8 +22,8 @@ fn subgraph_id(node: NodeRef) -> Id {
 impl ModuleBuilder {
     pub fn dot_sub_graph(&self, entry_node: NodeRef) -> Subgraph {
         let mut stmts = Vec::new();
-
-        let entry_vertex = self.dot_node(entry_node, &mut stmts);
+        let mut known = AHashSet::default();
+        let entry_vertex = self.dot_node(entry_node, &mut known, &mut stmts).unwrap();
         let id = match &entry_vertex {
             Vertex::N(node) => node.0.clone(),
             Vertex::S(sg) => sg.id.clone(),
@@ -34,7 +34,18 @@ impl ModuleBuilder {
         Subgraph { id, stmts }
     }
 
-    pub fn dot_node(&self, nref: NodeRef, stmts: &mut Vec<Stmt>) -> Vertex {
+    pub fn dot_node(
+        &self,
+        nref: NodeRef,
+        known_refs: &mut AHashSet<NodeRef>,
+        stmts: &mut Vec<Stmt>,
+    ) -> Option<Vertex> {
+        if !known_refs.contains(&nref) {
+            known_refs.insert(nref);
+        } else {
+            return None;
+        }
+
         if let Some(node) = self.nodes.get(nref.clone()) {
             match node {
                 Node::Region(r) => {
@@ -43,11 +54,11 @@ impl ModuleBuilder {
 
                     //Push exit node first, then args. This
                     // should schedule the argnodes last.
-                    let out_node_id = self.dot_node(r.out, &mut sub_stmts);
+                    let out_node_id = self.dot_node(r.out, known_refs, &mut sub_stmts);
 
-                    self.dot_node(r.in_at_node, &mut sub_stmts);
+                    self.dot_node(r.in_at_node, known_refs, &mut sub_stmts);
                     for arg in r.in_args {
-                        self.dot_node(arg, &mut sub_stmts);
+                        let _ver = self.dot_node(arg, known_refs, &mut sub_stmts);
                     }
 
                     let thisid = subgraph_id(nref);
@@ -73,18 +84,18 @@ impl ModuleBuilder {
                     }));
                     //now schedule all args and draw edge between us and them
                     for arg in a.in_args {
-                        let arg_id = self.dot_node(arg, stmts);
-
-                        stmts.push(Stmt::Edge(Edge {
-                            ty: EdgeTy::Pair(thisid.clone(), arg_id),
-                            attributes: vec![
-                                EdgeAttributes::dir(dir::forward),
-                                EdgeAttributes::style("dotted".to_owned()),
-                            ],
-                        }))
+                        if let Some(arg_id) = self.dot_node(arg, known_refs, stmts) {
+                            stmts.push(Stmt::Edge(Edge {
+                                ty: EdgeTy::Pair(thisid.clone(), arg_id),
+                                attributes: vec![
+                                    EdgeAttributes::dir(dir::forward),
+                                    EdgeAttributes::style("dotted".to_owned()),
+                                ],
+                            }))
+                        }
                     }
 
-                    thisid
+                    Some(thisid)
                 }
                 Node::CombNode(c) => {
                     //get our own id
@@ -100,34 +111,34 @@ impl ModuleBuilder {
                     }));
                     //now schedule all args and draw edge between us and them
                     for arg in c.in_args {
-                        let arg_id = self.dot_node(arg, stmts);
-
-                        stmts.push(Stmt::Edge(Edge {
-                            ty: EdgeTy::Pair(thisid.clone(), arg_id),
-                            attributes: vec![
-                                EdgeAttributes::dir(dir::forward),
-                                EdgeAttributes::style("dotted".to_owned()),
-                            ],
-                        }))
+                        if let Some(arg_id) = self.dot_node(arg, known_refs, stmts) {
+                            stmts.push(Stmt::Edge(Edge {
+                                ty: EdgeTy::Pair(thisid.clone(), arg_id),
+                                attributes: vec![
+                                    EdgeAttributes::dir(dir::forward),
+                                    EdgeAttributes::style("dotted".to_owned()),
+                                ],
+                            }));
+                        }
                     }
                     for child in c.in_children {
-                        let child_id = self.dot_node(child, stmts);
-                        stmts.push(Stmt::Edge(Edge {
-                            ty: EdgeTy::Pair(thisid.clone(), child_id),
-                            attributes: vec![
-                                EdgeAttributes::dir(dir::forward),
-                                EdgeAttributes::style("solid".to_owned()),
-                            ],
-                        }))
+                        if let Some(child_id) = self.dot_node(child, known_refs, stmts) {
+                            stmts.push(Stmt::Edge(Edge {
+                                ty: EdgeTy::Pair(thisid.clone(), child_id),
+                                attributes: vec![
+                                    EdgeAttributes::dir(dir::forward),
+                                    EdgeAttributes::style("solid".to_owned()),
+                                ],
+                            }))
+                        }
                     }
-
-                    thisid
+                    Some(thisid)
                 }
-                Node::Error => Vertex::N(node_id(self.error_node)),
+                Node::Error => Some(Vertex::N(node_id(self.error_node))),
             }
         } else {
             println!("No Node!");
-            Vertex::N(node_id(self.error_node))
+            Some(Vertex::N(node_id(self.error_node)))
         }
     }
 }
