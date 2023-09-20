@@ -6,7 +6,7 @@ use vola_ast::{
 };
 
 use crate::{
-    AlgeNode, AlgeOp, CombNode, CombOp, EntryPointType, Ident, ModuleBuilder, Node, NodeRef,
+    AlgeNode, AlgeOp, CombNode, CombOp, EntryPointType, Ident, ModuleBuilder, NodeRef,
     RegionBuilder,
 };
 
@@ -130,9 +130,6 @@ pub fn parse_stmt<'a>(stmt: &Stmt, builder: &mut RegionBuilder<'a>) -> NodeRef {
             );
 
             //now push mutation as child to primref
-
-            println!("Field assign");
-
             builder
                 .module()
                 .nodes
@@ -146,7 +143,6 @@ pub fn parse_stmt<'a>(stmt: &Stmt, builder: &mut RegionBuilder<'a>) -> NodeRef {
         }
         Stmt::LetStmt { ident, expr } => {
             //let statement is a algebraic expression that is bound to the identifier.
-            println!("Let: {}", ident.ident.0);
             let algeexpr = parse_alge_expr(expr, builder);
             builder
                 .module()
@@ -159,7 +155,6 @@ pub fn parse_stmt<'a>(stmt: &Stmt, builder: &mut RegionBuilder<'a>) -> NodeRef {
             assign_op,
             expr,
         } => {
-            println!("PrimAtAssgin rewrite to FieldAt");
             //Rewrite as "AT" field assignment
             parse_stmt(
                 &Stmt::FieldAssign {
@@ -172,7 +167,6 @@ pub fn parse_stmt<'a>(stmt: &Stmt, builder: &mut RegionBuilder<'a>) -> NodeRef {
             )
         }
         Stmt::PrimDef { ident, init } => {
-            println!("PrimDef");
             let mut node = CombNode::new(CombOp::PrimDef(ident.0.as_str().into()));
 
             if let Some(init) = init {
@@ -191,10 +185,8 @@ pub fn parse_stmt<'a>(stmt: &Stmt, builder: &mut RegionBuilder<'a>) -> NodeRef {
 }
 
 pub fn parse_op_node<'a>(node: &OpNode, builder: &mut RegionBuilder<'a>) -> NodeRef {
-    println!("Node: {:?}", node);
     match node {
         OpNode::OpCall { ident, args, prims } => {
-            println!("OpCall");
             let mut node = CombNode::new(CombOp::OpCall(ident.0.as_str().into()));
 
             for arg in args {
@@ -211,7 +203,6 @@ pub fn parse_op_node<'a>(node: &OpNode, builder: &mut RegionBuilder<'a>) -> Node
             prim_call_ident,
             args,
         } => {
-            println!("Prim");
             let mut node = CombNode::new(CombOp::PrimCall(prim_call_ident.0.as_str().into()));
 
             for arg in args {
@@ -229,7 +220,6 @@ pub fn parse_op_node<'a>(node: &OpNode, builder: &mut RegionBuilder<'a>) -> Node
             {
                 nref
             } else {
-                println!("Could not resolve");
                 builder
                     .module()
                     .new_node(CombNode::new(CombOp::PrimCall(ident.0.as_str().into())))
@@ -244,7 +234,6 @@ pub fn parse_prim<'a>(prim: &PrimBlock, builder: &mut RegionBuilder<'a>) -> Node
         let _stmt_node = parse_stmt(stmt, builder);
     }
 
-    println!("Parse optree");
     //Now build the op-tree for that prim
     parse_op_node(&prim.op_tree, builder)
 }
@@ -281,10 +270,8 @@ pub fn parse_ast(ast: Ast, mut builder: ModuleBuilder) -> ModuleBuilder {
             let prim_root = parse_prim(&block, &mut b);
 
             b.set_out_node(prim_root);
-            println!("Finish up prim {}", ident.0);
             b
         });
     }
-    println!("end parser");
     builder
 }

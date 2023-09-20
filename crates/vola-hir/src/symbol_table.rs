@@ -39,15 +39,20 @@ impl SymbolTable {
     }
 
     pub fn push_ref(&mut self, ident: impl Into<Ident>, node: NodeRef) {
+        let ident = ident.into();
         let x = self.scope.insert(
-            ident.into(),
+            ident.clone(),
             SymbolDescriptor {
                 node_ref: node,
                 definition: Span {},
             },
         );
 
-        assert!(x.is_none(), "Shadowing not yet supported!");
+        assert!(
+            x.is_none(),
+            "Shadowing (of variable {}) not yet supported!",
+            ident.0
+        );
     }
 
     pub fn resolve(&self, ident: &Ident) -> Option<NodeRef> {

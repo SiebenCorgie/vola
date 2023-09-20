@@ -12,6 +12,7 @@ prim box(extend: vec3){
     def box;
     let q = abs(@) - extend;
     box.@ = length(max(q, 0.0)) + min(max_element(q), 0.0);
+    box.some_other_field = min(q, 32.0);
     box
 }
 
