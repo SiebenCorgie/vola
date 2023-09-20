@@ -1,7 +1,7 @@
 use vola_ast::{
     alge::AlgeExpr,
     comb::OpNode,
-    common::{Alge, Keyword, Op, Prim, PrimBlock, Stmt},
+    common::{Alge, Field, Keyword, Op, Prim, PrimBlock, Stmt},
     Ast,
 };
 
@@ -228,7 +228,7 @@ pub fn parse_op_node<'a>(node: &OpNode, builder: &mut RegionBuilder<'a>) -> Node
     }
 }
 
-pub fn parse_prim<'a>(prim: &PrimBlock, builder: &mut RegionBuilder<'a>) -> NodeRef {
+pub fn parse_block<'a>(prim: &PrimBlock, builder: &mut RegionBuilder<'a>) -> NodeRef {
     //First parse all statements
     for stmt in &prim.stmt_list {
         let _stmt_node = parse_stmt(stmt, builder);
@@ -267,7 +267,7 @@ pub fn parse_ast(ast: Ast, mut builder: ModuleBuilder) -> ModuleBuilder {
                 let _argid = b.register_arg(arg.ident.0);
             }
 
-            let prim_root = parse_prim(&block, &mut b);
+            let prim_root = parse_block(&block, &mut b);
 
             b.set_out_node(prim_root);
             b
@@ -290,7 +290,22 @@ pub fn parse_ast(ast: Ast, mut builder: ModuleBuilder) -> ModuleBuilder {
                 let _opid = b.register_arg_prim(argop.0);
             }
 
-            let op_root = parse_prim(&block, &mut b);
+            let op_root = parse_block(&block, &mut b);
+
+            b.set_out_node(op_root);
+
+            b
+        })
+    }
+
+    for (ident, field) in ast.fields {
+        let Field { ident, args, block } = field;
+        builder.new_entrypoint(ident.0, EntryPointType::Field, |mut b| {
+            for arg in args {
+                let _argid = b.register_arg(arg.ident.0);
+            }
+
+            let op_root = parse_block(&block, &mut b);
 
             b.set_out_node(op_root);
 
