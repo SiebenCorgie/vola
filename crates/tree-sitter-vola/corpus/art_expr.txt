@@ -19,13 +19,13 @@ alge my_expr(){
            (identifier))
         (binary_expr
           (float
-            (number))
+            (digit))
           (binary_expr
             (float
-              (number))
+              (digit))
             (float
-              (number)
-              (number)))))
+              (digit)
+              (digit)))))
       (identifier))))
 
 ==================
@@ -77,7 +77,7 @@ op test<p>(){
           (identifier))
         (binary_expr
           (float
-            (number))
+            (digit))
           (identifier)))
       (prim_expr
         (identifier)))))
@@ -163,14 +163,14 @@ op test<p>(){
               (identifier))
             (list
               (float
-                (number)
-                (number))
+                (digit)
+                (digit))
               (float
-                (number)
-                (number))
+                (digit)
+                (digit))
               (float
-                (number)
-                (number))))
+                (digit)
+                (digit))))
           (prim_expr
             (identifier)))))
 
@@ -197,12 +197,12 @@ op test<p>(){
               (identifier))
             (list
               (float
-                (number)
-                (number))
+                (digit)
+                (digit))
               (identifier)
               (float
-                (number)
-                (number))
+                (digit)
+                (digit))
               (identifier)))
           (prim_expr
             (identifier)))))
@@ -230,14 +230,14 @@ op test<p>(){
               (identifier))
             (list
               (float
-                (number)
-                (number))
+                (digit)
+                (digit))
               (binary_expr
                 (identifier)
                 (identifier))
               (float
-                (number)
-                (number))
+                (digit)
+                (digit))
               (identifier)))
           (prim_expr
             (identifier)))))
@@ -274,8 +274,8 @@ op test<p>(){
               (identifier))
             (list
               (float
-                (number)
-                (number))
+                (digit)
+                (digit))
               (scoped_expr
                 (let_stmt
                   (typed_identifier
@@ -287,18 +287,18 @@ op test<p>(){
                   (typed_identifier
                     (identifier))
                   (float
-                    (number)
-                    (number)))
+                    (digit)
+                    (digit)))
                 (binary_expr
                   (binary_expr
                     (identifier)
                     (identifier))
                   (float
-                    (number)
-                    (number))))
+                    (digit)
+                    (digit))))
               (float
-                (number)
-                (number))
+                (digit)
+                (digit))
               (identifier)))
           (prim_expr
             (identifier)))))

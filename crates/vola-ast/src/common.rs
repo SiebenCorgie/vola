@@ -145,15 +145,15 @@ impl From<String> for Identifier {
 
 ///A single digit
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
-pub struct ImmVal(pub usize);
+pub struct Digit(pub usize);
 
-impl FromSitter for ImmVal {
+impl FromSitter for Digit {
     fn parse_node(source: &[u8], node: &tree_sitter::Node) -> Result<Self, AstError>
     where
         Self: Sized,
     {
-        assert!(node.kind() == "number");
-        Ok(ImmVal(
+        assert!(node.kind() == "digit");
+        Ok(Digit(
             node.utf8_text(source)
                 .unwrap()
                 .parse()
@@ -164,24 +164,24 @@ impl FromSitter for ImmVal {
 
 ///a float immediate value
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
-pub struct ImmFloat(pub ImmVal, pub ImmVal);
+pub struct Imm(pub Digit, pub Digit);
 
-impl FromSitter for ImmFloat {
+impl FromSitter for Imm {
     fn parse_node(source: &[u8], node: &tree_sitter::Node) -> Result<Self, AstError>
     where
         Self: Sized,
     {
         assert!(node.kind() == "float");
-        let first = ImmVal::parse_node(source, &node.child(0).unwrap())?;
+        let first = Digit::parse_node(source, &node.child(0).unwrap())?;
 
         //NOTE: 1 is the . symbol
         let second = if node.child_count() >= 3 {
-            ImmVal::parse_node(source, &node.child(2).unwrap())?
+            Digit::parse_node(source, &node.child(2).unwrap())?
         } else {
-            ImmVal(0)
+            Digit(0)
         };
 
-        Ok(ImmFloat(first, second))
+        Ok(Imm(first, second))
     }
 }
 

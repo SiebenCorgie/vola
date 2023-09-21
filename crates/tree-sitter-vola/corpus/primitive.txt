@@ -80,7 +80,7 @@ prim sphere(radius: vec2){
       (typed_identifier
         (identifier)
         (vec
-          (number))))
+          (digit))))
     (block
       (def_prim
         (kw_prim)
@@ -90,8 +90,8 @@ prim sphere(radius: vec2){
           (identifier)
           (identifier))
           (float
-            (number)
-            (number)))
+            (digit)
+            (digit)))
       (prim_expr
         (identifier)))))
 

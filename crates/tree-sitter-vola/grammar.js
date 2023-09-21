@@ -12,6 +12,7 @@ module.exports = grammar({
 
   word: $ => $.identifier,
 
+
   rules: {
 
     //Any definition of anything in the file.
@@ -315,27 +316,31 @@ module.exports = grammar({
 
     vec: $ => seq(
       'vec',
-      $.number,
+      $.digit,
     ),
 
     mat: $ => seq(
       'mat',
-      $.number,
+      $.digit,
       'x',
-      $.number,
+      $.digit,
     ),
 
     identifier: $ => /[a-z_]+/,
 
     float: $ => seq(
-      $.number,
-      optional(seq(
-        '.',
-        $.number
-      ))
+      $.digit,
+      optional(
+        seq(
+          '.',
+          $.digit,
+        )
+      ),
     ),
 
-    number: $ => /\d+/,
+    digit: $ => /\d+/,
+
+
 
     keyword: $ => choice(
       $.kw_at,

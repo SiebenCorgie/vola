@@ -42,7 +42,7 @@ scoped algebra
 
 prim test(){
     let a = {
-        let x = 5 + 5;
+        let x = 5 + -5;
         let b = x - 4;
         let c = some_functio(x,b);
         b + c
@@ -68,16 +68,17 @@ prim test(){
               (identifier))
             (binary_expr
               (float
-                (number))
-              (float
-                (number))))
+                (digit))
+              (unary_expr
+                (float
+                  (digit)))))
           (let_stmt
             (typed_identifier
               (identifier))
             (binary_expr
               (identifier)
                 (float
-                  (number))))
+                  (digit))))
           (let_stmt
             (typed_identifier
               (identifier))

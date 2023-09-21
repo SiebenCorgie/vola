@@ -19,7 +19,7 @@ alge some_function(arg_one, arg_two: vec3){
       (typed_identifier
         (identifier)
         (vec
-          (number))))
+          (digit))))
     (scoped_expr
       (let_stmt
         (typed_identifier
@@ -27,7 +27,7 @@ alge some_function(arg_one, arg_two: vec3){
         (binary_expr
           (identifier)
             (float
-              (number))))
+              (digit))))
         (binary_expr
           (identifier)
           (identifier)))))
@@ -57,7 +57,7 @@ prim sphere(a: s, b: vec3){
       (typed_identifier
         (identifier)
           (vec
-            (number))))
+            (digit))))
       (block
         (comment)
         (def_prim
@@ -101,7 +101,7 @@ prim box(extend: vec3){
           (typed_identifier
             (identifier)
             (vec
-              (number))))
+              (digit))))
         (block
           (def_prim
             (kw_prim)
@@ -131,8 +131,8 @@ prim box(extend: vec3){
                   (identifier)
                   (identifier))
                 (float
-                  (number)
-                  (number)))))
+                  (digit)
+                  (digit)))))
           (prim_expr
             (identifier)))))
 
@@ -206,13 +206,13 @@ op smooth_union<a, b>(radius){
               (identifier)
               (binary_expr
                 (float
-                  (number)
-                  (number))
+                  (digit)
+                  (digit))
                 (binary_expr
                   (binary_expr
                     (float
-                      (number)
-                      (number))
+                      (digit)
+                      (digit))
                     (binary_expr
                       (arg_access
                         (identifier)
@@ -222,11 +222,11 @@ op smooth_union<a, b>(radius){
                         (kw_at))))
                   (identifier)))
               (float
-                (number)
-                (number))
+                (digit)
+                (digit))
               (float
-                (number)
-                (number))))
+                (digit)
+                (digit))))
           (comment)
           (def_prim
             (kw_prim)
@@ -248,8 +248,8 @@ op smooth_union<a, b>(radius){
                 (identifier))
               (binary_expr
                 (float
-                  (number)
-                  (number))
+                  (digit)
+                  (digit))
                 (identifier))))
           (prim_expr
             (identifier)))))
@@ -287,20 +287,20 @@ field my_field(){
               (call_expr
                 (identifier)
                 (float
-                  (number)
-                  (number))))
+                  (digit)
+                  (digit))))
             (prim_expr
               (identifier))
             (list
               (float
-                (number)
-                (number))
+                (digit)
+                (digit))
               (float
-                (number)
-                (number))
+                (digit)
+                (digit))
               (float
-                (number)
-                (number))))))
+                (digit)
+                (digit))))))
       (def_prim
         (kw_prim)
         (identifier)
@@ -308,8 +308,8 @@ field my_field(){
           (call_expr
             (identifier)
             (float
-              (number)
-              (number)))))
+              (digit)
+              (digit)))))
       (prim_expr
         (optree
           (identifier)
@@ -318,6 +318,5 @@ field my_field(){
           (prim_expr
             (identifier))
           (float
-            (number)
-            (number)))))))
-
+            (digit)
+            (digit)))))))

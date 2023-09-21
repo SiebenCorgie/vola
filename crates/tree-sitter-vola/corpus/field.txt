@@ -24,12 +24,12 @@ field my_field(){
         (typed_identifier
           (identifier))
         (float
-          (number)))
+          (digit)))
       (let_stmt
         (typed_identifier
           (identifier))
         (float
-          (number)))
+          (digit)))
       (def_prim
         (kw_prim)
         (identifier)
@@ -46,17 +46,17 @@ field my_field(){
               (call_expr
                 (identifier)
                 (float
-                  (number)
-                  (number))))
+                  (digit)
+                  (digit))))
             (prim_expr
               (identifier))
             (list
               (float
-                (number)
-                (number))
+                (digit)
+                (digit))
               (float
-                (number)
-                (number))
+                (digit)
+                (digit))
               (binary_expr
                 (identifier)
                 (identifier))))))
@@ -67,8 +67,8 @@ field my_field(){
           (call_expr
             (identifier)
             (float
-              (number)
-              (number)))))
+              (digit)
+              (digit)))))
       (prim_expr
         (optree
           (identifier)
@@ -77,8 +77,8 @@ field my_field(){
           (prim_expr
             (identifier))
           (float
-            (number)
-            (number)))))))
+            (digit)
+            (digit)))))))
 
 ==================
 noarg op in field
