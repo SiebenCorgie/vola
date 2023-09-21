@@ -302,3 +302,60 @@ op test<p>(){
               (identifier)))
           (prim_expr
             (identifier)))))
+
+==================
+art negated sub
+==================
+
+op test<p>(){
+    let a = 5 - -4;
+    p
+}
+
+---
+(source_file
+      (op_definition
+        (identifier)
+        (prim_list
+          (identifier))
+        (parameter_list)
+        (block
+          (let_stmt
+            (typed_identifier
+              (identifier))
+            (binary_expr
+              (float
+                (digit))
+              (unary_expr
+                (float
+                  (digit)))))
+          (prim_expr
+            (identifier)))))
+
+==================
+art negated sub ident
+==================
+
+op test<p>(){
+    let a = 5 - -a;
+    p
+}
+
+---
+(source_file
+      (op_definition
+        (identifier)
+        (prim_list
+          (identifier))
+        (parameter_list)
+        (block
+          (let_stmt
+            (typed_identifier
+              (identifier))
+            (binary_expr
+              (float
+                (digit))
+              (unary_expr
+                (identifier))))
+          (prim_expr
+            (identifier)))))
