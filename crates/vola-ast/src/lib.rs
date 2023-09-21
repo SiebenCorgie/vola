@@ -36,6 +36,9 @@ pub mod comb;
 pub mod common;
 pub mod parser;
 
+#[cfg(feature = "dot")]
+pub mod dot;
+
 #[derive(Debug)]
 struct Span {
     from: (usize, usize),
@@ -165,7 +168,7 @@ impl Ast {
             parser.parse(text, None).ok_or(AstErrorTy::ParseError)?
         };
 
-        //TODO transform to ast
+        println!("Syntaxtree: {:#?}", syn_tree);
 
         let mut ast = Ast::empty();
 
@@ -264,5 +267,72 @@ impl Ast {
         }
 
         Ok(())
+    }
+
+    #[cfg(feature = "dot")]
+    pub fn dot_graph(&self) -> graphviz_rust::dot_structures::Graph {
+        //Build syntax tree for each field, op, prim, alge as a cluster
+
+        let mut subgraphs = Vec::new();
+        let mut rnd = 0usize;
+        for (ident, field) in &self.fields {
+            let mut local_stmt = Vec::new();
+
+            let _root_node = field.dot_node(&mut rnd, &mut local_stmt);
+
+            //Push as subgraph
+            subgraphs.push(graphviz_rust::dot_structures::Stmt::Subgraph(
+                graphviz_rust::dot_structures::Subgraph {
+                    id: graphviz_rust::dot_structures::Id::Plain(format!("cluster_{}", ident.0)),
+                    stmts: local_stmt,
+                },
+            ))
+        }
+        for (ident, op) in &self.ops {
+            let mut local_stmt = Vec::new();
+
+            let _root_node = op.dot_node(&mut rnd, &mut local_stmt);
+
+            //Push as subgraph
+            subgraphs.push(graphviz_rust::dot_structures::Stmt::Subgraph(
+                graphviz_rust::dot_structures::Subgraph {
+                    id: graphviz_rust::dot_structures::Id::Plain(format!("cluster_{}", ident.0)),
+                    stmts: local_stmt,
+                },
+            ))
+        }
+        for (ident, prim) in &self.prims {
+            let mut local_stmt = Vec::new();
+
+            let _root_node = prim.dot_node(&mut rnd, &mut local_stmt);
+
+            //Push as subgraph
+            subgraphs.push(graphviz_rust::dot_structures::Stmt::Subgraph(
+                graphviz_rust::dot_structures::Subgraph {
+                    id: graphviz_rust::dot_structures::Id::Plain(format!("cluster_{}", ident.0)),
+                    stmts: local_stmt,
+                },
+            ))
+        }
+
+        for (ident, alge) in &self.alges {
+            let mut local_stmt = Vec::new();
+
+            let _root_node = alge.dot_node(&mut rnd, &mut local_stmt);
+
+            //Push as subgraph
+            subgraphs.push(graphviz_rust::dot_structures::Stmt::Subgraph(
+                graphviz_rust::dot_structures::Subgraph {
+                    id: graphviz_rust::dot_structures::Id::Plain(format!("cluster_{}", ident.0)),
+                    stmts: local_stmt,
+                },
+            ))
+        }
+
+        graphviz_rust::dot_structures::Graph::Graph {
+            id: graphviz_rust::dot_structures::Id::Plain("AllAsts".to_owned()),
+            strict: true,
+            stmts: subgraphs,
+        }
     }
 }

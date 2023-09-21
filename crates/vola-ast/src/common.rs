@@ -145,7 +145,7 @@ impl From<String> for Identifier {
 
 ///A single digit
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
-pub struct ImmVal(usize);
+pub struct ImmVal(pub usize);
 
 impl FromSitter for ImmVal {
     fn parse_node(source: &[u8], node: &tree_sitter::Node) -> Result<Self, AstError>
@@ -164,7 +164,7 @@ impl FromSitter for ImmVal {
 
 ///a float immediate value
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
-pub struct ImmFloat(ImmVal, ImmVal);
+pub struct ImmFloat(pub ImmVal, pub ImmVal);
 
 impl FromSitter for ImmFloat {
     fn parse_node(source: &[u8], node: &tree_sitter::Node) -> Result<Self, AstError>

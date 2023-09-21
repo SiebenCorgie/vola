@@ -29,8 +29,6 @@ impl ModuleBuilder {
             Vertex::S(sg) => sg.id.clone(),
         };
 
-        println!("{}", stmts.len());
-
         Subgraph { id, stmts }
     }
 
@@ -40,16 +38,13 @@ impl ModuleBuilder {
         known_refs: &mut AHashMap<NodeRef, Vertex>,
         stmts: &mut Vec<Stmt>,
     ) -> Vertex {
-        println!("Try: {:?}", nref);
         if let Some(vert) = known_refs.get(&nref) {
-            println!("{:?} known", nref);
             return vert.clone();
         }
 
         if let Some(node) = self.nodes.get(nref.clone()) {
             match node {
                 Node::Region(r) => {
-                    println!("Is Region");
                     //Region is characterized by a sub graph cluster
                     let mut sub_stmts = Vec::new();
 
@@ -73,7 +68,6 @@ impl ModuleBuilder {
                     out_node_id
                 }
                 Node::AlgeNode(a) => {
-                    println!("Is Alge");
                     //get our own id
                     let id = node_id(nref);
                     let thisid = Vertex::N(id.clone());
@@ -101,7 +95,6 @@ impl ModuleBuilder {
                     thisid
                 }
                 Node::CombNode(c) => {
-                    println!("Is Comb");
                     //get our own id
                     let id = node_id(nref);
                     let thisid = Vertex::N(id.clone());
@@ -140,7 +133,6 @@ impl ModuleBuilder {
                 Node::Error => Vertex::N(node_id(self.error_node)),
             }
         } else {
-            println!("No Node!");
             Vertex::N(node_id(self.error_node))
         }
     }

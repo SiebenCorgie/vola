@@ -13,6 +13,17 @@ fn main() -> Result<(), AstError> {
     });
 
     let ast = Ast::from_file(file)?;
+    let ast_graph = ast.dot_graph();
+
+    exec(
+        ast_graph,
+        &mut PrinterContext::default(),
+        vec![
+            Format::Svg.into(),
+            CommandArg::Output("dryrun-ast.svg".to_string()),
+        ],
+    )
+    .unwrap();
 
     println!("{:#?}", ast);
 
