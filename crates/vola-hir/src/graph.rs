@@ -3,7 +3,7 @@ use std::fmt::Display;
 use slotmap::new_key_type;
 use tinyvec::ArrayVec;
 pub use vola_ast::alge::{BinOp, UnOp};
-pub use vola_ast::common::ImmFloat;
+pub use vola_ast::common::Imm;
 
 use crate::Ident;
 
@@ -104,7 +104,7 @@ pub enum AlgeOp {
     Ref(Ident),
     BinOp(BinOp),
     UnOp(UnOp),
-    Imm(ImmFloat),
+    Imm(Imm),
     List,
     PrimAccess { prim: Ident, accessed: Ident },
 }

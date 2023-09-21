@@ -3,7 +3,7 @@
 use ahash::AHashMap;
 
 use crate::{
-    common::{Identifier, ImmFloat, Keyword, TypedIdent},
+    common::{Identifier, Imm, Keyword, TypedIdent},
     parser::FromSitter,
     AstError, AstErrorTy,
 };
@@ -119,7 +119,7 @@ pub enum AlgeExpr {
     },
     //Some keyword
     Kw(Keyword),
-    Float(ImmFloat),
+    Float(Imm),
 }
 
 impl FromSitter for AlgeExpr {
@@ -190,7 +190,7 @@ impl FromSitter for AlgeExpr {
 
                 Ok(AlgeExpr::PrimAccess { ident, field })
             }
-            "float" => Ok(AlgeExpr::Float(ImmFloat::parse_node(source, node)?)),
+            "float" => Ok(AlgeExpr::Float(Imm::parse_node(source, node)?)),
             "kw_at" => Ok(AlgeExpr::Kw(Keyword::parse_node(source, node)?)),
             "list" => {
                 let mut walker = node.walk();

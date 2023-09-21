@@ -11,7 +11,7 @@ prim sphere(radius){
 prim box(extend: vec3){
     def box;
     let q = abs(@) - extend;
-    box.@ = length(max(q, 0.0)) + min(max_element(q), 0.0);
+    box.@ = length(max(q, -8)) + min(max_element(q), 0.0);
     box
 }
 
