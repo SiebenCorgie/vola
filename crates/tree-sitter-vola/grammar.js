@@ -146,11 +146,11 @@ module.exports = grammar({
       '<',
       //the primitives that are being modified, possibly nested.
       //Must be at least 1, since there are no ops on no primitives
-      $._prim_list,
+      optional($._prim_list),
       '>',
       '(',
       //list of algebraic arguments
-      $._alge_list,
+      optional($._alge_list),
       ')',
     ),
 

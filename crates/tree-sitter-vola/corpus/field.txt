@@ -79,3 +79,42 @@ field my_field(){
           (float
             (number)
             (number)))))))
+
+==================
+noarg op in field
+==================
+
+field my_field(){
+    union<transphere, mybox>()
+}
+
+---
+(source_file
+      (field_definition
+        (identifier)
+        (parameter_list)
+        (block
+          (prim_expr
+            (optree
+              (identifier)
+              (prim_expr
+                (identifier))
+              (prim_expr
+                (identifier)))))))
+==================
+noarg noprim op in field
+==================
+
+field my_field(){
+    identityop<>()
+}
+
+---
+(source_file
+      (field_definition
+        (identifier)
+        (parameter_list)
+        (block
+          (prim_expr
+            (optree
+              (identifier))))))
