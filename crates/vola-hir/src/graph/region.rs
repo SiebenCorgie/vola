@@ -1,6 +1,8 @@
 use vola_ast::comb::OpNode;
 
-use crate::{graph::NodeTy, AlgeOp, CombNode, Ident, ModuleBuilder, Node, NodeRef, Region};
+use crate::{
+    graph::NodeTy, AlgeOp, CombNode, Ident, ModuleBuilder, Node, NodeRef, Region, SymbolTable,
+};
 
 use super::{AlgeNode, NodeRefs};
 
@@ -12,6 +14,8 @@ pub struct RegionBuilder<'a> {
     pub(crate) args: NodeRefs,
     pub(crate) prim_args: NodeRefs,
     pub(crate) out: Option<NodeRef>,
+    ///Safes the current symbol table state
+    pub symbols: SymbolTable,
 }
 
 impl<'a> RegionBuilder<'a> {
@@ -19,7 +23,7 @@ impl<'a> RegionBuilder<'a> {
         let ident = ident.into();
         let node = AlgeNode::new(AlgeOp::Arg(ident.clone()));
         let node_key = self.module.new_node(node);
-        self.module.symbols.push_ref(ident, node_key);
+        self.symbols.push_ref(ident, node_key);
 
         self.args.push(node_key);
 
@@ -28,9 +32,9 @@ impl<'a> RegionBuilder<'a> {
 
     pub fn register_arg_prim(&mut self, ident: impl Into<Ident>) -> NodeRef {
         let ident = ident.into();
-        let node = CombNode::new(crate::CombOp::PrimArg(ident.clone()));
+        let node = CombNode::new(crate::CombOp::PrimArg(ident.clone()), self.get_at());
         let node_key = self.module.new_node(node);
-        self.module.symbols.push_ref(ident, node_key);
+        self.symbols.push_ref(ident, node_key);
 
         self.prim_args.push(node_key);
 
@@ -59,17 +63,24 @@ impl<'a> RegionBuilder<'a> {
         let node_key = self.module.new_node(node);
 
         if let Some(ident) = ident {
-            self.module.symbols.push_ref(ident, node_key);
+            self.symbols.push_ref(ident, node_key);
         }
 
         node_key
     }
 
     pub fn get_ref(&self, ident: &Ident) -> Option<NodeRef> {
-        self.module.symbols.resolve(ident)
+        self.symbols.resolve(ident)
     }
 
-    pub fn build(mut self) -> NodeRef {
+    ///Creates a unique copy of nrfe which inherits all children and arguments
+    /// from its source.
+    pub fn copy(&mut self, nref: NodeRef) -> NodeRef {
+        let new_node: Node = self.module.nodes.get(nref).cloned().unwrap();
+        self.module().new_node(new_node)
+    }
+
+    pub fn build(mut self, config: RegionConfig) -> NodeRef {
         assert!(
             self.out.is_some(),
             "Out node must be set before building region!"
@@ -83,7 +94,28 @@ impl<'a> RegionBuilder<'a> {
         };
 
         //Close the builders scope
-        self.module.symbols.close_scope();
         self.module.new_node(region)
+    }
+}
+
+pub struct RegionConfig {
+    ///Scheduls a pass that tries to find a fitting callsite for any primitive arg.
+    /// only valid on Operation regions.
+    pub resolve_prim_callsite: bool,
+}
+
+impl RegionConfig {
+    pub fn none() -> Self {
+        RegionConfig {
+            resolve_prim_callsite: false,
+        }
+    }
+}
+
+impl Default for RegionConfig {
+    fn default() -> Self {
+        RegionConfig {
+            resolve_prim_callsite: false,
+        }
     }
 }

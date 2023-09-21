@@ -1,6 +1,6 @@
 use ahash::{AHashMap, AHashSet};
 use common::EntryPoint;
-use graph::{NodeRefs, NodeTy};
+use graph::{region::RegionConfig, NodeRefs, NodeTy};
 use slotmap::SlotMap;
 
 mod graph;
@@ -28,14 +28,13 @@ impl Module {
         ModuleBuilder {
             error_node,
             nodes,
-            symbols: SymbolTable::new(),
             entry_points: AHashMap::default(),
         }
     }
 
     ///Creates the builder by reading in an [vola-ast::Ast].
     pub fn from_ast(ast: Ast) -> ModuleBuilder {
-        let mut builder = Module::builder();
+        let builder = Module::builder();
         ast_parser::parse_ast(ast, builder)
     }
 }
@@ -45,9 +44,6 @@ pub struct ModuleBuilder {
     pub error_node: NodeRef,
     pub nodes: SlotMap<NodeRef, Node>,
 
-    ///Safes the current symbol table state
-    symbols: SymbolTable,
-
     entry_points: AHashMap<Ident, EntryPoint>,
 }
 
@@ -55,10 +51,8 @@ impl ModuleBuilder {
     pub fn new_region<'a>(
         &'a mut self,
         on_builder: impl FnOnce(RegionBuilder<'a>) -> RegionBuilder<'a>,
+        resolve_passes: RegionConfig,
     ) -> NodeRef {
-        //open new scope for the region
-        self.symbols.open_scope();
-
         let at_node = self.new_node(AlgeNode::new(AlgeOp::At));
         let builderctx = RegionBuilder {
             module: self,
@@ -66,11 +60,12 @@ impl ModuleBuilder {
             args: NodeRefs::new(),
             prim_args: NodeRefs::new(),
             out: None,
+            symbols: SymbolTable::new(),
         };
 
         let builder = on_builder(builderctx);
 
-        builder.build()
+        builder.build(resolve_passes)
     }
 
     //Creates a new field entry point. `on_builder` is the [Region] of that entry point.
@@ -80,7 +75,15 @@ impl ModuleBuilder {
         entrypoint_type: EntryPointType,
         on_builder: impl FnOnce(RegionBuilder<'_>) -> RegionBuilder<'_>,
     ) {
-        let node_ref = { self.new_region(on_builder) };
+        let config = match entrypoint_type {
+            EntryPointType::Op => RegionConfig {
+                resolve_prim_callsite: true,
+                ..Default::default()
+            },
+            _ => RegionConfig::default(),
+        };
+
+        let node_ref = { self.new_region(on_builder, config) };
         self.entry_points.insert(
             ident.into(),
             EntryPoint {
@@ -100,6 +103,17 @@ impl ModuleBuilder {
             n.is_ty(ty)
         } else {
             false
+        }
+    }
+
+    ///Returns true if this node is not a concrete value, but a template
+    pub fn is_template(&self, node: NodeRef) -> bool {
+        match self.nodes.get(node).as_ref().unwrap() {
+            Node::CombNode(CombNode {
+                op: CombOp::PrimArg(_),
+                ..
+            }) => true,
+            _ => false,
         }
     }
 

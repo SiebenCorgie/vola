@@ -22,6 +22,7 @@ pub enum NodeTy {
 }
 
 ///All Node types we can express. This is intentionally kept really small.
+#[derive(Clone, Debug)]
 pub enum Node {
     ///Similarly defined as MLIR's *Region*. This is a node with a defined entry block and signature,
     /// as well as a defined out-block and signature. The internal structure of that region can
@@ -85,6 +86,7 @@ impl From<CombNode> for Node {
     }
 }
 
+#[derive(Clone, Debug)]
 pub struct Region {
     ///Reference to the input `at` node of this region.
     pub in_at_node: NodeRef,
@@ -96,6 +98,7 @@ pub struct Region {
     pub in_prims: NodeRefs,
 }
 
+#[derive(Clone, Debug)]
 pub enum AlgeOp {
     None,
     At,
@@ -128,6 +131,7 @@ impl Display for AlgeOp {
     }
 }
 
+#[derive(Clone, Debug)]
 pub struct AlgeNode {
     pub in_args: NodeRefs,
     pub op: AlgeOp,
@@ -153,6 +157,7 @@ impl AlgeNode {
     }
 }
 
+#[derive(Clone, Debug)]
 pub enum CombOp {
     None,
     ///Defines that this calls some else defined op
@@ -182,15 +187,19 @@ impl Display for CombOp {
     }
 }
 
+#[derive(Clone, Debug)]
 pub struct CombNode {
+    ///The "At" value must always be given to a comb node, since that is implicitly traversed
+    pub in_at: NodeRef,
     pub in_args: NodeRefs,
     pub in_children: NodeRefs,
     pub op: CombOp,
 }
 
 impl CombNode {
-    pub fn new(op: CombOp) -> Self {
+    pub fn new(op: CombOp, at_ref: NodeRef) -> Self {
         CombNode {
+            in_at: at_ref,
             in_args: NodeRefs::new(),
             in_children: NodeRefs::new(),
             op,

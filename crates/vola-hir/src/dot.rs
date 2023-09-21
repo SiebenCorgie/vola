@@ -138,6 +138,15 @@ impl ModuleBuilder {
                             ],
                         }))
                     }
+                    let at_id = self.dot_node(c.in_at, known_refs, stmts);
+                    //Reference at node
+                    stmts.push(Stmt::Edge(Edge {
+                        ty: EdgeTy::Pair(thisid.clone(), at_id),
+                        attributes: vec![
+                            EdgeAttributes::dir(dir::forward),
+                            EdgeAttributes::style("dotted".to_owned()),
+                        ],
+                    }));
 
                     thisid
                 }
