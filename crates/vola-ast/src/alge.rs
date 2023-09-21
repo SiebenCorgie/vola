@@ -53,10 +53,10 @@ impl BinOp {
     ) -> Result<Option<Self>, AstError> {
         match node.kind() {
             "+=" => Ok(Some(BinOp::Add)),
-            "-=" => Ok(Some(BinOp::Add)),
-            "*=" => Ok(Some(BinOp::Add)),
-            "/=" => Ok(Some(BinOp::Add)),
-            "%=" => Ok(Some(BinOp::Add)),
+            "-=" => Ok(Some(BinOp::Sub)),
+            "*=" => Ok(Some(BinOp::Mul)),
+            "/=" => Ok(Some(BinOp::Div)),
+            "%=" => Ok(Some(BinOp::Mod)),
             "=" => Ok(None),
             _ => Err(AstError::at_node(
                 source,

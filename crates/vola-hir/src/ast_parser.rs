@@ -57,10 +57,16 @@ pub fn parse_alge_expr<'a>(exprs: &AlgeExpr, builder: &mut RegionBuilder<'a>) ->
             builder.module().new_node(call_node)
         }
         AlgeExpr::PrimAccess { ident, field } => {
-            builder.module().new_node(AlgeNode::new(AlgeOp::PrimAccess {
-                prim: ident.0.clone().into(),
-                accessed: field.0.clone().into(),
-            }))
+            let node = AlgeNode::new(AlgeOp::FieldAccess(field.0.clone().into())).with_child(
+                builder
+                    .module()
+                    .symbols
+                    .resolve(&ident.0.as_str().into())
+                    .expect("FieldAccess node was not declared before"),
+            );
+            //find the reference
+
+            builder.module().new_node(node)
         }
 
         AlgeExpr::Kw(kw) => {

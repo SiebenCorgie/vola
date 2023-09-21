@@ -92,6 +92,17 @@ impl ModuleBuilder {
                         }));
                     }
 
+                    if let Some(child) = a.child_prim {
+                        let arg_id = self.dot_node(child, known_refs, stmts);
+                        stmts.push(Stmt::Edge(Edge {
+                            ty: EdgeTy::Pair(thisid.clone(), arg_id),
+                            attributes: vec![
+                                EdgeAttributes::dir(dir::forward),
+                                EdgeAttributes::style("solid".to_owned()),
+                            ],
+                        }));
+                    }
+
                     thisid
                 }
                 Node::CombNode(c) => {

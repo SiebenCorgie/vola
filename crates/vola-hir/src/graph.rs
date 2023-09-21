@@ -106,7 +106,7 @@ pub enum AlgeOp {
     UnOp(UnOp),
     Imm(Imm),
     List,
-    PrimAccess { prim: Ident, accessed: Ident },
+    FieldAccess(Ident),
 }
 
 impl Display for AlgeOp {
@@ -120,8 +120,8 @@ impl Display for AlgeOp {
             AlgeOp::List => write!(f, "List"),
             AlgeOp::BinOp(bo) => write!(f, "BinOp_{:?}", bo),
             AlgeOp::UnOp(uo) => write!(f, "UnaryOp_{:?}", uo),
-            AlgeOp::PrimAccess { prim, accessed } => {
-                write!(f, "PrimAcces_{}_field_{}", prim.0, accessed.0)
+            AlgeOp::FieldAccess(accessed) => {
+                write!(f, "FieldAccess_{}", accessed.0)
             }
             AlgeOp::Imm(im) => write!(f, "Imm"),
         }
@@ -131,6 +131,8 @@ impl Display for AlgeOp {
 pub struct AlgeNode {
     pub in_args: NodeRefs,
     pub op: AlgeOp,
+    ///In the case of a FieldAccess methode we actually need a reference to a comb node.
+    pub child_prim: Option<NodeRef>,
 }
 
 impl AlgeNode {
@@ -138,10 +140,15 @@ impl AlgeNode {
         AlgeNode {
             in_args: NodeRefs::new(),
             op,
+            child_prim: None,
         }
     }
     pub fn with_arg(mut self, nref: NodeRef) -> Self {
         self.in_args.push(nref);
+        self
+    }
+    pub fn with_child(mut self, child: NodeRef) -> Self {
+        self.child_prim = Some(child);
         self
     }
 }

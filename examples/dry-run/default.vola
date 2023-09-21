@@ -22,7 +22,7 @@ op translate<p>(offset: vec3){
 }
 
 op round<p>(radius){
-    p.@ -= rad;
+    p.@ -= radius;
     p
 }
 
