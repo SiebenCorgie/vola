@@ -101,7 +101,8 @@ impl Display for AstError {
         write!(
             f,
             "
-Error: {}
+
+Error: \"{}\"
 -->  {}:{} - {}:{}
 
 {}
@@ -109,10 +110,10 @@ Error: {}
 <--
 ",
             self.source,
-            self.span.from.0,
-            self.span.from.1,
-            self.span.to.0,
-            self.span.to.1,
+            self.span.from.0 + 1,
+            self.span.from.1 + 1,
+            self.span.to.0 + 1,
+            self.span.to.1 + 1,
             self.node_line
         )
     }
@@ -167,8 +168,6 @@ impl Ast {
             let text = core::str::from_utf8(&file).map_err(|e| AstErrorTy::from(e))?;
             parser.parse(text, None).ok_or(AstErrorTy::ParseError)?
         };
-
-        println!("Syntaxtree: {:#?}", syn_tree);
 
         let mut ast = Ast::empty();
 

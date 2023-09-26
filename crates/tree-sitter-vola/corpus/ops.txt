@@ -33,8 +33,9 @@ assign_op
 ==================
 
 op color<p>(color){
-    p.color = color;
-    p
+    eval p -> prim;
+    prim.color = color;
+    prim
 }
 
 ---
@@ -48,6 +49,9 @@ op color<p>(color){
       (typed_identifier
         (identifier)))
     (block
+      (eval
+        (identifier)
+        (identifier))
       (assignment_stmt
             (assignee
               (identifier)
@@ -55,3 +59,36 @@ op color<p>(color){
         (identifier))
       (prim_expr
         (identifier)))))
+
+
+==================
+eval location
+==================
+
+op round<p>(radius){
+    //Evaluates the template p to "prim"
+    eval p -> prim;
+    prim.@ -= radius;
+    prim
+}
+---
+(source_file
+      (op_definition
+        (identifier)
+        (prim_list
+          (identifier))
+        (parameter_list
+          (typed_identifier
+            (identifier)))
+        (block
+          (comment)
+          (eval
+            (identifier)
+            (identifier))
+          (assignment_stmt
+            (assignee
+              (identifier)
+              (kw_at))
+            (identifier))
+          (prim_expr
+            (identifier)))))

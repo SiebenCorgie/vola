@@ -25,13 +25,10 @@ fn main() -> Result<(), AstError> {
     )
     .unwrap();
 
-    println!("{:#?}", ast);
-
     let hir = Module::from_ast(ast);
 
     let graph = hir.dot_graph();
     let string = graph.print(&mut PrinterContext::default());
-    println!("{}", string);
 
     exec(
         graph,

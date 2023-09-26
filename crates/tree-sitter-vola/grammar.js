@@ -121,6 +121,7 @@ module.exports = grammar({
     _stmt: $ => choice(
       $.let_stmt,
       $.def_prim,
+      $.eval,
       $.assignment_stmt,
       $.comment,
     ),
@@ -179,6 +180,13 @@ module.exports = grammar({
       ';'
     ),
 
+    eval: $ => seq(
+      "eval",
+      $.identifier,
+      "->",
+      $.identifier,
+      ";"
+    ),
 // Algebraic statements
 //=================
 
