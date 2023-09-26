@@ -257,6 +257,23 @@ impl crate::common::Stmt {
 
                 Vertex::N(id)
             }
+            crate::common::Stmt::EvalStmt {
+                template_ident,
+                binding,
+            } => {
+                let id = NodeId(Id::Plain(format!("EvalStmt_{}_{rnd}", binding.0)), None);
+                *rnd += 1;
+
+                stmt.push(Stmt::Node(Node {
+                    id: id.clone(),
+                    attributes: vec![NodeAttributes::label(format!(
+                        "\"eval {} -> {} \"",
+                        template_ident.0, binding.0
+                    ))],
+                }));
+
+                Vertex::N(id)
+            }
         }
     }
 }

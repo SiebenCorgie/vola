@@ -268,6 +268,12 @@ pub enum Stmt {
         ident: TypedIdent,
         expr: AlgeExpr,
     },
+    EvalStmt {
+        ///The template argument we evaluate
+        template_ident: Identifier,
+        ///The identifier we bind it to.
+        binding: Identifier,
+    },
 }
 
 impl FromSitter for Stmt {
@@ -352,6 +358,24 @@ impl FromSitter for Stmt {
                     }
                 }
             }
+            "eval" => {
+                let mut walker = node.walk();
+                let mut children = node.children(&mut walker);
+
+                assert!(children.next().unwrap().kind() == "eval");
+                let template_ident = Identifier::parse_node(source, &children.next().unwrap())?;
+                assert!(children.next().unwrap().kind() == "->");
+                let binding = Identifier::parse_node(source, &children.next().unwrap())?;
+                assert!(children.next().unwrap().kind() == ";");
+
+                for c in children {
+                    println!("{}", c.kind());
+                }
+                Ok(Stmt::EvalStmt {
+                    template_ident,
+                    binding,
+                })
+            }
             _ => Err(AstError::at_node(
                 source,
                 node,
@@ -414,6 +438,10 @@ impl FromSitter for PrimBlock {
                         println!("WARN: Already had final node: {:?}", old_fin);
                     }
                     ret_op = Some(final_node);
+                }
+                "eval" => {
+                    //eval expression has two identifiers we are interested in.
+                    stmt_list.push(Stmt::parse_node(source, &child)?)
                 }
                 //Ignoring comments at this point.
                 "comment" => {}

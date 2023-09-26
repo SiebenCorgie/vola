@@ -182,6 +182,13 @@ pub fn parse_stmt<'a>(stmt: &Stmt, builder: &mut RegionBuilder<'a>) -> NodeRef {
             builder.symbols.push_ref(ident.0.as_str(), node_ref);
             node_ref
         }
+
+        Stmt::EvalStmt {
+            template_ident,
+            binding,
+        } => {
+            todo!()
+        }
     }
 }
 
