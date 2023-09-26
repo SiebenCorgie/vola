@@ -14,18 +14,18 @@ fn main() {
 
         let sphere_def = b.register_node(
             Some("sphere_def"),
-            CombNode::new(CombOp::PrimCall("Sphere".into())).with_arg(arg_rad),
+            CombNode::new(CombOp::PrimCall("Sphere".into()), b.get_at()).with_arg(arg_rad),
         );
         let trans = b.register_node(
             Some("trans"),
-            CombNode::new(CombOp::OpCall("Translate".into()))
+            CombNode::new(CombOp::OpCall("Translate".into()), b.get_at())
                 .with_arg(b.get_at())
                 .with_arg(arg_offset)
                 .with_child(sphere_def),
         );
         let union = b.register_node(
             Some("union"),
-            CombNode::new(CombOp::OpCall("Union".into()))
+            CombNode::new(CombOp::OpCall("Union".into()), b.get_at())
                 .with_child(trans)
                 .with_child(sphere_def),
         );
