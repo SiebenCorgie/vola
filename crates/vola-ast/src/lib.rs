@@ -105,7 +105,7 @@ impl Ast {
                                 &top_level_node,
                                 AstErrorTy::IdentifierAlreadyExists {
                                     ty: "Alge".to_owned(),
-                                    ident: old.ident.0,
+                                    ident: old.ident.imm,
                                 },
                             ));
                         }
@@ -120,7 +120,7 @@ impl Ast {
                                 &top_level_node,
                                 AstErrorTy::IdentifierAlreadyExists {
                                     ty: "Prim Definition".to_owned(),
-                                    ident: old.ident.0,
+                                    ident: old.ident.imm,
                                 },
                             ));
                         }
@@ -135,7 +135,7 @@ impl Ast {
                                 &top_level_node,
                                 AstErrorTy::IdentifierAlreadyExists {
                                     ty: "Op Definition".to_owned(),
-                                    ident: old.ident.0,
+                                    ident: old.ident.imm,
                                 },
                             ));
                         }
@@ -150,7 +150,7 @@ impl Ast {
                                 &top_level_node,
                                 AstErrorTy::IdentifierAlreadyExists {
                                     ty: "Field Definition".to_owned(),
-                                    ident: old.ident.0,
+                                    ident: old.ident.imm,
                                 },
                             ));
                         }
@@ -190,7 +190,7 @@ impl Ast {
             //Push as subgraph
             subgraphs.push(graphviz_rust::dot_structures::Stmt::Subgraph(
                 graphviz_rust::dot_structures::Subgraph {
-                    id: graphviz_rust::dot_structures::Id::Plain(format!("cluster_{}", ident.0)),
+                    id: graphviz_rust::dot_structures::Id::Plain(format!("cluster_{}", ident.imm)),
                     stmts: local_stmt,
                 },
             ))
@@ -203,7 +203,7 @@ impl Ast {
             //Push as subgraph
             subgraphs.push(graphviz_rust::dot_structures::Stmt::Subgraph(
                 graphviz_rust::dot_structures::Subgraph {
-                    id: graphviz_rust::dot_structures::Id::Plain(format!("cluster_{}", ident.0)),
+                    id: graphviz_rust::dot_structures::Id::Plain(format!("cluster_{}", ident.imm)),
                     stmts: local_stmt,
                 },
             ))
@@ -216,7 +216,7 @@ impl Ast {
             //Push as subgraph
             subgraphs.push(graphviz_rust::dot_structures::Stmt::Subgraph(
                 graphviz_rust::dot_structures::Subgraph {
-                    id: graphviz_rust::dot_structures::Id::Plain(format!("cluster_{}", ident.0)),
+                    id: graphviz_rust::dot_structures::Id::Plain(format!("cluster_{}", ident.imm)),
                     stmts: local_stmt,
                 },
             ))
@@ -230,7 +230,7 @@ impl Ast {
             //Push as subgraph
             subgraphs.push(graphviz_rust::dot_structures::Stmt::Subgraph(
                 graphviz_rust::dot_structures::Subgraph {
-                    id: graphviz_rust::dot_structures::Id::Plain(format!("cluster_{}", ident.0)),
+                    id: graphviz_rust::dot_structures::Id::Plain(format!("cluster_{}", ident.imm)),
                     stmts: local_stmt,
                 },
             ))

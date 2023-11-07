@@ -1,10 +1,9 @@
 //! Common AST components like identifiers and types.
 
-use std::panic::RefUnwindSafe;
-
 use crate::{
     alge::{AlgeExpr, BinOp},
     comb::OpNode,
+    diag::Span,
     parser::FromSitter,
     AstError, AstErrorTy,
 };
@@ -98,7 +97,10 @@ impl FromSitter for Ty {
 
 //A string identifier.
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
-pub struct Identifier(pub String);
+pub struct Identifier {
+    pub src: Span,
+    pub imm: String,
+}
 
 impl FromSitter for Identifier {
     fn parse_node(source: &[u8], node: &tree_sitter::Node) -> Result<Self, AstError>
@@ -108,7 +110,10 @@ impl FromSitter for Identifier {
         AstError::kind_expected(source, node, "identifier")?;
 
         let iden = node.utf8_text(source).map_err(|e| AstErrorTy::from(e))?;
-        Ok(Identifier(iden.to_owned()))
+        Ok(Identifier {
+            imm: iden.to_owned(),
+            src: Span::from(node),
+        })
     }
 }
 
@@ -136,19 +141,28 @@ impl Identifier {
 
 impl From<&str> for Identifier {
     fn from(value: &str) -> Self {
-        Identifier(value.to_owned())
+        Identifier {
+            imm: value.to_owned(),
+            src: Span::empty(),
+        }
     }
 }
 
 impl From<String> for Identifier {
     fn from(value: String) -> Self {
-        Identifier(value)
+        Identifier {
+            imm: value,
+            src: Span::empty(),
+        }
     }
 }
 
 ///A single digit
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
-pub struct Digit(pub usize);
+pub struct Digit {
+    pub src: Span,
+    pub digit: usize,
+}
 
 impl FromSitter for Digit {
     fn parse_node(source: &[u8], node: &tree_sitter::Node) -> Result<Self, AstError>
@@ -157,18 +171,23 @@ impl FromSitter for Digit {
     {
         AstError::kind_expected(source, node, "digit")?;
 
-        Ok(Digit(
-            node.utf8_text(source)
+        Ok(Digit {
+            src: Span::from(node),
+            digit: node
+                .utf8_text(source)
                 .unwrap()
                 .parse()
                 .map_err(|e| AstErrorTy::from(e))?,
-        ))
+        })
     }
 }
 
 ///a float immediate value
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
-pub struct Imm(pub Digit, pub Digit);
+pub struct Imm {
+    pub src: Span,
+    pub digits: (Digit, Digit),
+}
 
 impl FromSitter for Imm {
     fn parse_node(source: &[u8], node: &tree_sitter::Node) -> Result<Self, AstError>
@@ -183,15 +202,22 @@ impl FromSitter for Imm {
         let second = if node.child_count() >= 3 {
             Digit::parse_node(source, &node.child(2).unwrap())?
         } else {
-            Digit(0)
+            Digit {
+                digit: 0,
+                src: Span::empty(),
+            }
         };
 
-        Ok(Imm(first, second))
+        Ok(Imm {
+            src: Span::from(node),
+            digits: (first, second),
+        })
     }
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct TypedIdent {
+    pub src: Span,
     pub ident: Identifier,
     pub ty: Option<Ty>,
 }
@@ -211,7 +237,11 @@ impl FromSitter for TypedIdent {
             None
         };
 
-        Ok(TypedIdent { ident, ty })
+        Ok(TypedIdent {
+            src: Span::from(node),
+            ident,
+            ty,
+        })
     }
 }
 
@@ -252,29 +282,35 @@ impl TypedIdent {
 pub enum Stmt {
     ///Sub expression that is bound to a identifier. Possibly uninitialised.
     PrimDef {
+        src: Span,
         ident: Identifier,
         init: Option<OpNode>,
     },
     AtAssign {
+        src: Span,
         assign_op: Option<BinOp>,
         expr: AlgeExpr,
     },
     FieldAssign {
+        src: Span,
         prim: Identifier,
         field: Identifier,
         assign_op: Option<BinOp>,
         expr: AlgeExpr,
     },
     PrimAtAssign {
+        src: Span,
         prim: Identifier,
         assign_op: Option<BinOp>,
         expr: AlgeExpr,
     },
     LetStmt {
+        src: Span,
         ident: TypedIdent,
         expr: AlgeExpr,
     },
     EvalStmt {
+        src: Span,
         ///The template argument we evaluate
         template_ident: Identifier,
         ///The identifier we bind it to.
@@ -305,6 +341,7 @@ impl FromSitter for Stmt {
                         let op = BinOp::parse_assign_op(source, children.next().as_ref().unwrap())?;
                         let expr = AlgeExpr::parse_node(source, children.next().as_ref().unwrap())?;
                         Ok(Stmt::AtAssign {
+                            src: Span::from(&assignee),
                             assign_op: op,
                             expr,
                         })
@@ -331,6 +368,7 @@ impl FromSitter for Stmt {
                                     children.next().as_ref().unwrap(),
                                 )?;
                                 Ok(Stmt::FieldAssign {
+                                    src: Span::from(node),
                                     prim,
                                     assign_op,
                                     field,
@@ -348,6 +386,7 @@ impl FromSitter for Stmt {
                                     children.next().as_ref().unwrap(),
                                 )?;
                                 Ok(Stmt::PrimAtAssign {
+                                    src: Span::from(node),
                                     prim,
                                     assign_op,
                                     expr,
@@ -373,6 +412,7 @@ impl FromSitter for Stmt {
                 let binding = Identifier::parse_node(source, &children.next().unwrap())?;
 
                 Ok(Stmt::EvalStmt {
+                    src: Span::from(node),
                     template_ident,
                     binding,
                 })
@@ -396,6 +436,7 @@ impl FromSitter for Stmt {
 /// that defines the final tree that is being returned by this block.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PrimBlock {
+    pub src: Span,
     pub stmt_list: Vec<Stmt>,
     ///The Op-Tree that is being calculated by this field
     pub op_tree: OpNode,
@@ -435,11 +476,19 @@ impl FromSitter for PrimBlock {
                         None
                     };
 
-                    stmt_list.push(Stmt::PrimDef { ident, init });
+                    stmt_list.push(Stmt::PrimDef {
+                        src: Span::from(&child),
+                        ident,
+                        init,
+                    });
                 }
                 "let_stmt" => {
                     let (ident, expr) = AlgeExpr::parse_let_stmt(source, &child)?;
-                    stmt_list.push(Stmt::LetStmt { ident, expr })
+                    stmt_list.push(Stmt::LetStmt {
+                        src: Span::from(&child),
+                        ident,
+                        expr,
+                    })
                 }
                 "assignment_stmt" => {
                     stmt_list.push(Stmt::parse_node(source, &child)?);
@@ -477,6 +526,7 @@ impl FromSitter for PrimBlock {
         AstError::uncaught_error(source, node)?;
         if let Some(ret) = ret_op {
             Ok(PrimBlock {
+                src: Span::from(node),
                 stmt_list,
                 op_tree: ret,
             })
@@ -490,6 +540,7 @@ impl FromSitter for PrimBlock {
 ///Top level field node
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Field {
+    pub src: Span,
     pub ident: Identifier,
     ///All arguments for that field.
     pub args: Vec<TypedIdent>,
@@ -535,13 +586,19 @@ impl FromSitter for Field {
         let block = PrimBlock::parse_node(source, next_node.as_ref().unwrap())?;
 
         AstError::uncaught_error(source, node)?;
-        Ok(Field { ident, args, block })
+        Ok(Field {
+            ident,
+            args,
+            block,
+            src: Span::from(node),
+        })
     }
 }
 
 ///Operation definition (not to be confused with a Op-Tree made from [OpNode]s).
 #[derive(Debug, Clone)]
 pub struct Op {
+    pub src: Span,
     pub ident: Identifier,
     pub prims: Vec<Identifier>,
     pub args: Vec<TypedIdent>,
@@ -593,6 +650,7 @@ impl FromSitter for Op {
 
         AstError::uncaught_error(source, node)?;
         Ok(Op {
+            src: Span::from(node),
             ident,
             prims,
             args,
@@ -604,6 +662,7 @@ impl FromSitter for Op {
 ///Definition of a primitive. A primitive needs to return a primitive definition.
 #[derive(Debug, Clone)]
 pub struct Prim {
+    pub src: Span,
     pub ident: Identifier,
     pub args: Vec<TypedIdent>,
 
@@ -638,13 +697,19 @@ impl FromSitter for Prim {
         let block = PrimBlock::parse_node(source, &next_node)?;
 
         AstError::uncaught_error(source, node)?;
-        Ok(Prim { ident, args, block })
+        Ok(Prim {
+            ident,
+            args,
+            block,
+            src: Span::from(node),
+        })
     }
 }
 
 ///An algebraic function.
 #[derive(Debug, Clone)]
 pub struct Alge {
+    pub src: Span,
     pub ident: Identifier,
     pub args: Vec<TypedIdent>,
     pub ret: AlgeExpr,
@@ -677,6 +742,11 @@ impl FromSitter for Alge {
         let ret = AlgeExpr::parse_node(source, &next_node)?;
 
         AstError::uncaught_error(source, node)?;
-        Ok(Alge { ident, args, ret })
+        Ok(Alge {
+            src: Span::from(node),
+            ident,
+            args,
+            ret,
+        })
     }
 }

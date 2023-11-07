@@ -10,10 +10,10 @@ use annotate_snippets::{
     snippet::{Annotation, AnnotationType, Slice, Snippet, SourceAnnotation},
 };
 
-#[derive(Debug)]
-struct Span {
-    from: (usize, usize),
-    to: (usize, usize),
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Span {
+    pub from: (usize, usize),
+    pub to: (usize, usize),
 }
 
 impl Span {
