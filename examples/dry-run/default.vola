@@ -22,8 +22,10 @@ op translate<p>(offset: vec3){
 }
 
 op round<p>(radius){
-    p.@ -= radius;
-    p
+    //Evaluates the template p to "prim"
+    eval p -> prim;
+    prim.@ -= radius;
+    prim
 }
 
 field my_param(){

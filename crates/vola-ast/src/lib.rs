@@ -21,9 +21,9 @@
 //!
 //! NOTE(tendsin): Lets see if this actually works out this way :D
 
-use std::{fmt::Display, num::ParseIntError, path::Path};
-
 use ahash::AHashMap;
+use backtrace::Backtrace;
+use std::{fmt::Display, num::ParseIntError, path::Path};
 
 use common::{Alge, Field, Identifier, Op, Prim};
 pub use parser::parser;
@@ -68,6 +68,7 @@ pub struct AstError {
     span: Span,
     node_line: String,
     source: AstErrorTy,
+    backtrace: Option<Backtrace>,
 }
 
 impl AstError {
@@ -82,6 +83,7 @@ impl AstError {
             span,
             node_line,
             source,
+            backtrace: Some(Backtrace::new()),
         }
     }
 }
@@ -92,6 +94,7 @@ impl From<AstErrorTy> for AstError {
             span: Span::empty(),
             node_line: String::new(),
             source: value,
+            backtrace: None,
         }
     }
 }
@@ -101,20 +104,24 @@ impl Display for AstError {
         write!(
             f,
             "
-Error: {}
+
+Error: \"{}\"
 -->  {}:{} - {}:{}
-
-{}
-
-<--
+     {}
 ",
             self.source,
-            self.span.from.0,
-            self.span.from.1,
-            self.span.to.0,
-            self.span.to.1,
-            self.node_line
-        )
+            self.span.from.0 + 1,
+            self.span.from.1 + 1,
+            self.span.to.0 + 1,
+            self.span.to.1 + 1,
+            self.node_line,
+        )?;
+
+        if let Some(bt) = &self.backtrace {
+            write!(f, "\n{:?}", bt)?;
+        }
+
+        write!(f, "<--")
     }
 }
 
@@ -167,8 +174,6 @@ impl Ast {
             let text = core::str::from_utf8(&file).map_err(|e| AstErrorTy::from(e))?;
             parser.parse(text, None).ok_or(AstErrorTy::ParseError)?
         };
-
-        println!("Syntaxtree: {:#?}", syn_tree);
 
         let mut ast = Ast::empty();
 

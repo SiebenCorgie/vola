@@ -182,6 +182,26 @@ pub fn parse_stmt<'a>(stmt: &Stmt, builder: &mut RegionBuilder<'a>) -> NodeRef {
             builder.symbols.push_ref(ident.0.as_str(), node_ref);
             node_ref
         }
+
+        Stmt::EvalStmt {
+            template_ident,
+            binding,
+        } => {
+            let mut node = CombNode::new(
+                CombOp::PrimEval(binding.0.as_str().into()),
+                builder.get_at(),
+            );
+
+            let src = builder
+                .symbols
+                .resolve(&template_ident.0.as_str().into())
+                .unwrap();
+            node = node.with_child(src);
+            let node_ref = builder.module().new_node(node);
+            builder.symbols.push_ref(binding.0.as_str(), node_ref);
+
+            node_ref
+        }
     }
 }
 

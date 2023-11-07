@@ -84,9 +84,7 @@ impl OpNode {
         //now parse all args
         let mut args = Vec::new();
 
-        println!("ARGS--->");
         for child in children {
-            println!("{}", child.kind());
             match child.kind() {
                 ")" => break,
                 "," => {}

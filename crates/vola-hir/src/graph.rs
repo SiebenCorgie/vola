@@ -165,8 +165,10 @@ pub enum CombOp {
     PrimArg(Ident),
     ///Calls to some primitive definition
     PrimCall(Ident),
-    //Creates a new primitive instance
+    //Creates a new primitive template
     PrimDef(Ident),
+    ///Evaluates a primitive template to an actual value.
+    PrimEval(Ident),
     ///Mutates the given field with an argument
     PrimFieldMutate {
         ident: Ident,
@@ -182,6 +184,7 @@ impl Display for CombOp {
             CombOp::PrimArg(c) => write!(f, "PrimArg_{}", c.0),
             CombOp::PrimCall(c) => write!(f, "PrimCall_{}", c.0),
             CombOp::PrimDef(ident) => write!(f, "PrimDef_{}", ident.0),
+            CombOp::PrimEval(ident) => write!(f, "PrimEval_{}", ident.0),
             CombOp::PrimFieldMutate { ident, op: _ } => write!(f, "PrimFieldMutate_{}", ident.0),
         }
     }

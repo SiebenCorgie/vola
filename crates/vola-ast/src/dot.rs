@@ -1,4 +1,7 @@
-use graphviz_rust::dot_structures::{Edge, EdgeTy, Id, Node, NodeId, Stmt, Vertex};
+use graphviz_rust::{
+    attributes::NodeAttributes,
+    dot_structures::{Edge, EdgeTy, Id, Node, NodeId, Stmt, Vertex},
+};
 
 use crate::{
     alge::AlgeExpr,
@@ -8,7 +11,7 @@ use crate::{
 
 impl Field {
     pub fn dot_node(&self, rnd: &mut usize, stmt: &mut Vec<Stmt>) -> Vertex {
-        let block_id = self.block.dot_node(rnd, stmt);
+        let block_id = self.block.dot_node(rnd, &self.ident, stmt);
         for arg in &self.args {
             let arg_id = arg.dot_node(rnd, stmt);
             stmt.push(Stmt::Edge(Edge {
@@ -23,7 +26,7 @@ impl Field {
 
 impl Op {
     pub fn dot_node(&self, rnd: &mut usize, stmt: &mut Vec<Stmt>) -> Vertex {
-        let block_id = self.block.dot_node(rnd, stmt);
+        let block_id = self.block.dot_node(rnd, &self.ident, stmt);
         for arg in &self.args {
             let arg_id = arg.dot_node(rnd, stmt);
             stmt.push(Stmt::Edge(Edge {
@@ -45,7 +48,7 @@ impl Op {
 
 impl Prim {
     pub fn dot_node(&self, rnd: &mut usize, stmt: &mut Vec<Stmt>) -> Vertex {
-        let block_id = self.block.dot_node(rnd, stmt);
+        let block_id = self.block.dot_node(rnd, &self.ident, stmt);
         for arg in &self.args {
             let arg_id = arg.dot_node(rnd, stmt);
             stmt.push(Stmt::Edge(Edge {
@@ -79,7 +82,7 @@ impl Identifier {
         *rnd += 1;
         stmt.push(Stmt::Node(Node {
             id: id.clone(),
-            attributes: vec![],
+            attributes: vec![NodeAttributes::label(format!("\"{}\"", self.0))],
         }));
         Vertex::N(id)
     }
@@ -91,16 +94,25 @@ impl TypedIdent {
         *rnd += 1;
         stmt.push(Stmt::Node(Node {
             id: id.clone(),
-            attributes: vec![],
+            attributes: vec![if let Some(ty) = &self.ty {
+                NodeAttributes::label(format!("\"{}: {:?}\"", self.ident.0, ty))
+            } else {
+                NodeAttributes::label(format!("\"{}: NoTy\"", self.ident.0))
+            }],
         }));
         Vertex::N(id)
     }
 }
 
 impl PrimBlock {
-    pub fn dot_node(&self, rnd: &mut usize, stmt: &mut Vec<Stmt>) -> Vertex {
+    pub fn dot_node(&self, rnd: &mut usize, ident: &Identifier, stmt: &mut Vec<Stmt>) -> Vertex {
         let id = NodeId(Id::Plain(format!("Block_{rnd}")), None);
         *rnd += 1;
+
+        stmt.push(Stmt::Node(Node {
+            id: id.clone(),
+            attributes: vec![NodeAttributes::label(format!("\"{}\"", ident.0))],
+        }));
         for local_stmt in &self.stmt_list {
             let stmt_id = local_stmt.dot_node(rnd, stmt);
 
@@ -134,7 +146,7 @@ impl crate::common::Stmt {
                 let expr_vertex = expr.dot_node(rnd, stmt);
                 stmt.push(Stmt::Node(Node {
                     id: id.clone(),
-                    attributes: vec![],
+                    attributes: vec![NodeAttributes::label(format!("\"@ {:?}= \"", assign_op))],
                 }));
                 stmt.push(Stmt::Edge(Edge {
                     ty: EdgeTy::Pair(Vertex::N(id.clone()), expr_vertex),
@@ -164,7 +176,10 @@ impl crate::common::Stmt {
                 let expr_vertex = expr.dot_node(rnd, stmt);
                 stmt.push(Stmt::Node(Node {
                     id: id.clone(),
-                    attributes: vec![],
+                    attributes: vec![NodeAttributes::label(format!(
+                        "\"{}.{} {:?}= \"",
+                        prim.0, field.0, assign_op
+                    ))],
                 }));
                 stmt.push(Stmt::Edge(Edge {
                     ty: EdgeTy::Pair(Vertex::N(id.clone()), expr_vertex),
@@ -180,7 +195,10 @@ impl crate::common::Stmt {
 
                 stmt.push(Stmt::Node(Node {
                     id: id.clone(),
-                    attributes: vec![],
+                    attributes: vec![NodeAttributes::label(format!(
+                        "\"let {}= \"",
+                        ident.ident.0
+                    ))],
                 }));
                 stmt.push(Stmt::Edge(Edge {
                     ty: EdgeTy::Pair(Vertex::N(id.clone()), sub_expr),
@@ -208,7 +226,10 @@ impl crate::common::Stmt {
                 let expr_vertex = expr.dot_node(rnd, stmt);
                 stmt.push(Stmt::Node(Node {
                     id: id.clone(),
-                    attributes: vec![],
+                    attributes: vec![NodeAttributes::label(format!(
+                        "\"{}.@ {:?}= \"",
+                        prim.0, assign_op
+                    ))],
                 }));
                 stmt.push(Stmt::Edge(Edge {
                     ty: EdgeTy::Pair(Vertex::N(id.clone()), expr_vertex),
@@ -223,7 +244,7 @@ impl crate::common::Stmt {
 
                 stmt.push(Stmt::Node(Node {
                     id: id.clone(),
-                    attributes: vec![],
+                    attributes: vec![NodeAttributes::label(format!("\"def {} = \"", ident.0))],
                 }));
                 if let Some(subexp) = init {
                     let sub_expr = subexp.dot_node(rnd, stmt);
@@ -233,6 +254,23 @@ impl crate::common::Stmt {
                         attributes: vec![],
                     }));
                 }
+
+                Vertex::N(id)
+            }
+            crate::common::Stmt::EvalStmt {
+                template_ident,
+                binding,
+            } => {
+                let id = NodeId(Id::Plain(format!("EvalStmt_{}_{rnd}", binding.0)), None);
+                *rnd += 1;
+
+                stmt.push(Stmt::Node(Node {
+                    id: id.clone(),
+                    attributes: vec![NodeAttributes::label(format!(
+                        "\"eval {} -> {} \"",
+                        template_ident.0, binding.0
+                    ))],
+                }));
 
                 Vertex::N(id)
             }
@@ -249,7 +287,7 @@ impl AlgeExpr {
 
                 stmt.push(Stmt::Node(Node {
                     id: id.clone(),
-                    attributes: vec![],
+                    attributes: vec![NodeAttributes::label(format!("\"x {:?} y\"", op))],
                 }));
 
                 let left = left.dot_node(rnd, stmt);
@@ -272,7 +310,7 @@ impl AlgeExpr {
 
                 stmt.push(Stmt::Node(Node {
                     id: id.clone(),
-                    attributes: vec![],
+                    attributes: vec![NodeAttributes::label(format!("\"{:?} x\"", op))],
                 }));
                 let exp = expr.dot_node(rnd, stmt);
                 stmt.push(Stmt::Edge(Edge {
@@ -287,7 +325,7 @@ impl AlgeExpr {
                 *rnd += 1;
                 stmt.push(Stmt::Node(Node {
                     id: id.clone(),
-                    attributes: vec![],
+                    attributes: vec![NodeAttributes::label(format!("\"{}() \"", ident.0))],
                 }));
 
                 for arg in args {
@@ -309,7 +347,10 @@ impl AlgeExpr {
                 *rnd += 1;
                 stmt.push(Stmt::Node(Node {
                     id: id.clone(),
-                    attributes: vec![],
+                    attributes: vec![NodeAttributes::label(format!(
+                        "\"{}.{}\"",
+                        ident.0, field.0
+                    ))],
                 }));
                 Vertex::N(id)
             }
@@ -318,7 +359,7 @@ impl AlgeExpr {
                 *rnd += 1;
                 stmt.push(Stmt::Node(Node {
                     id: id.clone(),
-                    attributes: vec![],
+                    attributes: vec![NodeAttributes::label(format!("\"List\""))],
                 }));
 
                 for arg in list {
@@ -339,7 +380,10 @@ impl AlgeExpr {
                 *rnd += 1;
                 stmt.push(Stmt::Node(Node {
                     id: id.clone(),
-                    attributes: vec![],
+                    attributes: vec![NodeAttributes::label(format!(
+                        "\"{}.{}\"",
+                        imm.0 .0, imm.1 .0
+                    ))],
                 }));
                 Vertex::N(id)
             }
@@ -348,7 +392,7 @@ impl AlgeExpr {
                 *rnd += 1;
                 stmt.push(Stmt::Node(Node {
                     id: id.clone(),
-                    attributes: vec![],
+                    attributes: vec![NodeAttributes::label(format!("\"{}\"", ident.0))],
                 }));
                 Vertex::N(id)
             }
@@ -357,7 +401,7 @@ impl AlgeExpr {
                 *rnd += 1;
                 stmt.push(Stmt::Node(Node {
                     id: id.clone(),
-                    attributes: vec![],
+                    attributes: vec![NodeAttributes::label(format!("\"KW:{:?}\"", kw))],
                 }));
                 Vertex::N(id)
             }
@@ -373,41 +417,22 @@ impl OpNode {
                 *rnd += 1;
                 stmt.push(Stmt::Node(Node {
                     id: id.clone(),
-                    attributes: vec![],
+                    attributes: vec![NodeAttributes::label(format!("\"call {} \"", ident.0))],
                 }));
 
                 for arg in args {
-                    let arg_id = NodeId(Id::Plain(format!("Arg_{}_{rnd}", ident.0)), None);
-                    *rnd += 1;
-                    stmt.push(Stmt::Node(Node {
-                        id: arg_id.clone(),
-                        attributes: vec![],
-                    }));
                     let arg_expr = arg.dot_node(rnd, stmt);
+
                     stmt.push(Stmt::Edge(Edge {
-                        ty: EdgeTy::Pair(Vertex::N(arg_id.clone()), arg_expr),
-                        attributes: vec![],
-                    }));
-                    stmt.push(Stmt::Edge(Edge {
-                        ty: EdgeTy::Pair(Vertex::N(id.clone()), Vertex::N(arg_id.clone())),
+                        ty: EdgeTy::Pair(Vertex::N(id.clone()), arg_expr),
                         attributes: vec![],
                     }));
                 }
 
                 for prim in prims {
-                    let arg_id = NodeId(Id::Plain(format!("PrimArg_{}_{rnd}", ident.0)), None);
-                    *rnd += 1;
-                    stmt.push(Stmt::Node(Node {
-                        id: arg_id.clone(),
-                        attributes: vec![],
-                    }));
                     let arg_expr = prim.dot_node(rnd, stmt);
                     stmt.push(Stmt::Edge(Edge {
-                        ty: EdgeTy::Pair(Vertex::N(arg_id.clone()), arg_expr),
-                        attributes: vec![],
-                    }));
-                    stmt.push(Stmt::Edge(Edge {
-                        ty: EdgeTy::Pair(Vertex::N(id.clone()), Vertex::N(arg_id.clone())),
+                        ty: EdgeTy::Pair(Vertex::N(id.clone()), arg_expr),
                         attributes: vec![],
                     }));
                 }
@@ -425,7 +450,10 @@ impl OpNode {
                 *rnd += 1;
                 stmt.push(Stmt::Node(Node {
                     id: id.clone(),
-                    attributes: vec![],
+                    attributes: vec![NodeAttributes::label(format!(
+                        "\"prim {} \"",
+                        prim_call_ident.0
+                    ))],
                 }));
 
                 for arg in args {
@@ -442,7 +470,7 @@ impl OpNode {
                 *rnd += 1;
                 stmt.push(Stmt::Node(Node {
                     id: id.clone(),
-                    attributes: vec![],
+                    attributes: vec![NodeAttributes::label(format!("\"prim ref {} \"", ident.0))],
                 }));
                 Vertex::N(id)
             }
