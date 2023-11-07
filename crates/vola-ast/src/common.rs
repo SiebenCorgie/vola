@@ -504,7 +504,16 @@ impl FromSitter for Field {
 
         //At this point the next must be a block. Per-grammar this block will end with a optree (called prim_expr in treesitter)
         // therefore we can share the block parsing for `fields`  and `ops`. which is why we delegate that at this point.
-        assert!(next_node.as_ref().unwrap().kind() == "block");
+        if next_node.as_ref().unwrap().kind() != "block" {
+            return Err(AstError::at_node(
+                source,
+                next_node.as_ref().unwrap(),
+                AstErrorTy::UnexpectedToken {
+                    token: next_node.as_ref().unwrap().kind().to_string(),
+                    unit: "Field".to_owned(),
+                },
+            ));
+        }
 
         let block = PrimBlock::parse_node(source, next_node.as_ref().unwrap())?;
 

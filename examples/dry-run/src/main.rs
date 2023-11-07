@@ -3,7 +3,7 @@ use graphviz_rust::{
     exec,
     printer::{DotPrinter, PrinterContext},
 };
-use vola_ast::{Ast, AstError};
+use vola_ast::{diag::AstError, Ast};
 use vola_hir::Module;
 
 fn main() -> Result<(), AstError> {

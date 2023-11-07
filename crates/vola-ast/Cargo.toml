@@ -17,3 +17,4 @@ ahash.workspace = true
 tinyvec.workspace = true
 graphviz-rust = {workspace = true, optional = true}
 backtrace.workspace = true
+annotate-snippets.workspace = true
