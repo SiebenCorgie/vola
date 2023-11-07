@@ -1,0 +1,63 @@
+
+==================
+simple list
+==================
+
+op test<p>(){
+    let a = [1,2,3];
+    p
+}
+
+---
+(source_file
+      (op_definition
+        (identifier)
+        (prim_list
+          (identifier))
+        (parameter_list)
+        (block
+          (let_stmt
+            (typed_identifier
+              (identifier))
+            (list
+              (float
+                (digit))
+              (float
+                (digit))
+              (float
+                (digit))))
+          (prim_expr
+            (identifier)))))
+
+
+
+==================
+list trailing brace
+==================
+
+op test<p>(){
+    let a = [1,2,3]];
+    p
+}
+
+---
+(source_file
+      (op_definition
+        (identifier)
+        (prim_list
+          (identifier))
+        (parameter_list)
+        (block
+          (let_stmt
+            (typed_identifier
+              (identifier))
+            (list
+              (float
+                (digit))
+              (float
+                (digit))
+              (float
+                (digit)))
+            (ERROR))
+          (prim_expr
+            (identifier)))))

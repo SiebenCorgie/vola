@@ -5,6 +5,7 @@ alge something(some_var, some_object){
 prim sphere(radius){
     def sphere;
     sphere.@ = length(@) - radius;
+
     sphere
 }
 
@@ -30,6 +31,7 @@ op round<p>(radius){
 
 field my_param(){
     def mybox = box([1, 2, 3]);
+
     def my_sphere = sphere(1.0);
 
     union<translate<mybox>([1.0, 0.0, 0.0]), round<mybox>(0.3)>()

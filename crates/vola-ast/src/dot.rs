@@ -78,11 +78,11 @@ impl Alge {
 
 impl Identifier {
     pub fn dot_node(&self, rnd: &mut usize, stmt: &mut Vec<Stmt>) -> Vertex {
-        let id = NodeId(Id::Plain(format!("Ident_{}_{rnd}", self.0)), None);
+        let id = NodeId(Id::Plain(format!("Ident_{}_{rnd}", self.imm)), None);
         *rnd += 1;
         stmt.push(Stmt::Node(Node {
             id: id.clone(),
-            attributes: vec![NodeAttributes::label(format!("\"{}\"", self.0))],
+            attributes: vec![NodeAttributes::label(format!("\"{}\"", self.imm))],
         }));
         Vertex::N(id)
     }
@@ -90,14 +90,14 @@ impl Identifier {
 
 impl TypedIdent {
     pub fn dot_node(&self, rnd: &mut usize, stmt: &mut Vec<Stmt>) -> Vertex {
-        let id = NodeId(Id::Plain(format!("Ident_{}_{rnd}", self.ident.0)), None);
+        let id = NodeId(Id::Plain(format!("Ident_{}_{rnd}", self.ident.imm)), None);
         *rnd += 1;
         stmt.push(Stmt::Node(Node {
             id: id.clone(),
             attributes: vec![if let Some(ty) = &self.ty {
-                NodeAttributes::label(format!("\"{}: {:?}\"", self.ident.0, ty))
+                NodeAttributes::label(format!("\"{}: {:?}\"", self.ident.imm, ty))
             } else {
-                NodeAttributes::label(format!("\"{}: NoTy\"", self.ident.0))
+                NodeAttributes::label(format!("\"{}: NoTy\"", self.ident.imm))
             }],
         }));
         Vertex::N(id)
@@ -111,7 +111,7 @@ impl PrimBlock {
 
         stmt.push(Stmt::Node(Node {
             id: id.clone(),
-            attributes: vec![NodeAttributes::label(format!("\"{}\"", ident.0))],
+            attributes: vec![NodeAttributes::label(format!("\"{}\"", ident.imm))],
         }));
         for local_stmt in &self.stmt_list {
             let stmt_id = local_stmt.dot_node(rnd, stmt);
@@ -136,7 +136,11 @@ impl PrimBlock {
 impl crate::common::Stmt {
     pub fn dot_node(&self, rnd: &mut usize, stmt: &mut Vec<Stmt>) -> Vertex {
         match self {
-            crate::common::Stmt::AtAssign { assign_op, expr } => {
+            crate::common::Stmt::AtAssign {
+                assign_op,
+                expr,
+                src: _,
+            } => {
                 let id = if let Some(op) = assign_op {
                     NodeId(Id::Plain(format!("AtAssign_{:?}_{rnd}", op)), None)
                 } else {
@@ -156,6 +160,7 @@ impl crate::common::Stmt {
                 Vertex::N(id)
             }
             crate::common::Stmt::FieldAssign {
+                src: _,
                 prim,
                 field,
                 assign_op,
@@ -163,12 +168,15 @@ impl crate::common::Stmt {
             } => {
                 let id = if let Some(op) = assign_op {
                     NodeId(
-                        Id::Plain(format!("FieldAssign_{}_{:?}_{}_rnd", prim.0, op, field.0)),
+                        Id::Plain(format!(
+                            "FieldAssign_{}_{:?}_{}_rnd",
+                            prim.imm, op, field.imm
+                        )),
                         None,
                     )
                 } else {
                     NodeId(
-                        Id::Plain(format!("FieldAssign_{}_NONE_{}_{rnd}", prim.0, field.0)),
+                        Id::Plain(format!("FieldAssign_{}_NONE_{}_{rnd}", prim.imm, field.imm)),
                         None,
                     )
                 };
@@ -178,7 +186,7 @@ impl crate::common::Stmt {
                     id: id.clone(),
                     attributes: vec![NodeAttributes::label(format!(
                         "\"{}.{} {:?}= \"",
-                        prim.0, field.0, assign_op
+                        prim.imm, field.imm, assign_op
                     ))],
                 }));
                 stmt.push(Stmt::Edge(Edge {
@@ -188,8 +196,15 @@ impl crate::common::Stmt {
 
                 Vertex::N(id)
             }
-            crate::common::Stmt::LetStmt { ident, expr } => {
-                let id = NodeId(Id::Plain(format!("LetStmt_{}_{rnd}", ident.ident.0)), None);
+            crate::common::Stmt::LetStmt {
+                src: _,
+                ident,
+                expr,
+            } => {
+                let id = NodeId(
+                    Id::Plain(format!("LetStmt_{}_{rnd}", ident.ident.imm)),
+                    None,
+                );
                 *rnd += 1;
                 let sub_expr = expr.dot_node(rnd, stmt);
 
@@ -197,7 +212,7 @@ impl crate::common::Stmt {
                     id: id.clone(),
                     attributes: vec![NodeAttributes::label(format!(
                         "\"let {}= \"",
-                        ident.ident.0
+                        ident.ident.imm
                     ))],
                 }));
                 stmt.push(Stmt::Edge(Edge {
@@ -207,18 +222,19 @@ impl crate::common::Stmt {
                 Vertex::N(id)
             }
             crate::common::Stmt::PrimAtAssign {
+                src: _,
                 prim,
                 assign_op,
                 expr,
             } => {
                 let id = if let Some(op) = assign_op {
                     NodeId(
-                        Id::Plain(format!("FieldAssign_{}_{:?}_AT_{rnd}", prim.0, op)),
+                        Id::Plain(format!("FieldAssign_{}_{:?}_AT_{rnd}", prim.imm, op)),
                         None,
                     )
                 } else {
                     NodeId(
-                        Id::Plain(format!("FieldAssign_{}_NONE_AT_{rnd}", prim.0)),
+                        Id::Plain(format!("FieldAssign_{}_NONE_AT_{rnd}", prim.imm)),
                         None,
                     )
                 };
@@ -228,7 +244,7 @@ impl crate::common::Stmt {
                     id: id.clone(),
                     attributes: vec![NodeAttributes::label(format!(
                         "\"{}.@ {:?}= \"",
-                        prim.0, assign_op
+                        prim.imm, assign_op
                     ))],
                 }));
                 stmt.push(Stmt::Edge(Edge {
@@ -238,13 +254,17 @@ impl crate::common::Stmt {
 
                 Vertex::N(id)
             }
-            crate::common::Stmt::PrimDef { ident, init } => {
-                let id = NodeId(Id::Plain(format!("PrimDef_{}_{rnd}", ident.0)), None);
+            crate::common::Stmt::PrimDef {
+                src: _,
+                ident,
+                init,
+            } => {
+                let id = NodeId(Id::Plain(format!("PrimDef_{}_{rnd}", ident.imm)), None);
                 *rnd += 1;
 
                 stmt.push(Stmt::Node(Node {
                     id: id.clone(),
-                    attributes: vec![NodeAttributes::label(format!("\"def {} = \"", ident.0))],
+                    attributes: vec![NodeAttributes::label(format!("\"def {} = \"", ident.imm))],
                 }));
                 if let Some(subexp) = init {
                     let sub_expr = subexp.dot_node(rnd, stmt);
@@ -258,17 +278,18 @@ impl crate::common::Stmt {
                 Vertex::N(id)
             }
             crate::common::Stmt::EvalStmt {
+                src: _,
                 template_ident,
                 binding,
             } => {
-                let id = NodeId(Id::Plain(format!("EvalStmt_{}_{rnd}", binding.0)), None);
+                let id = NodeId(Id::Plain(format!("EvalStmt_{}_{rnd}", binding.imm)), None);
                 *rnd += 1;
 
                 stmt.push(Stmt::Node(Node {
                     id: id.clone(),
                     attributes: vec![NodeAttributes::label(format!(
                         "\"eval {} -> {} \"",
-                        template_ident.0, binding.0
+                        template_ident.imm, binding.imm
                     ))],
                 }));
 
@@ -321,11 +342,11 @@ impl AlgeExpr {
                 Vertex::N(id)
             }
             AlgeExpr::Call { ident, args } => {
-                let id = NodeId(Id::Plain(format!("Call_{}_{rnd}", ident.0)), None);
+                let id = NodeId(Id::Plain(format!("Call_{}_{rnd}", ident.imm)), None);
                 *rnd += 1;
                 stmt.push(Stmt::Node(Node {
                     id: id.clone(),
-                    attributes: vec![NodeAttributes::label(format!("\"{}() \"", ident.0))],
+                    attributes: vec![NodeAttributes::label(format!("\"{}() \"", ident.imm))],
                 }));
 
                 for arg in args {
@@ -340,7 +361,7 @@ impl AlgeExpr {
             }
             AlgeExpr::PrimAccess { ident, field } => {
                 let id = NodeId(
-                    Id::Plain(format!("PrimAccess_{}_{}_{rnd}", ident.0, field.0)),
+                    Id::Plain(format!("PrimAccess_{}_{}_{rnd}", ident.imm, field.imm)),
                     None,
                 );
 
@@ -349,7 +370,7 @@ impl AlgeExpr {
                     id: id.clone(),
                     attributes: vec![NodeAttributes::label(format!(
                         "\"{}.{}\"",
-                        ident.0, field.0
+                        ident.imm, field.imm
                     ))],
                 }));
                 Vertex::N(id)
@@ -374,7 +395,10 @@ impl AlgeExpr {
             }
             AlgeExpr::Float(imm) => {
                 let id = NodeId(
-                    Id::Plain(format!("Float_{}_{}_{rnd}", imm.0 .0, imm.1 .0)),
+                    Id::Plain(format!(
+                        "Float_{}_{}_{rnd}",
+                        imm.digits.0.digit, imm.digits.1.digit
+                    )),
                     None,
                 );
                 *rnd += 1;
@@ -382,17 +406,17 @@ impl AlgeExpr {
                     id: id.clone(),
                     attributes: vec![NodeAttributes::label(format!(
                         "\"{}.{}\"",
-                        imm.0 .0, imm.1 .0
+                        imm.digits.0.digit, imm.digits.1.digit
                     ))],
                 }));
                 Vertex::N(id)
             }
             AlgeExpr::Identifier(ident) => {
-                let id = NodeId(Id::Plain(format!("Ident_{}_{rnd}", ident.0)), None);
+                let id = NodeId(Id::Plain(format!("Ident_{}_{rnd}", ident.imm)), None);
                 *rnd += 1;
                 stmt.push(Stmt::Node(Node {
                     id: id.clone(),
-                    attributes: vec![NodeAttributes::label(format!("\"{}\"", ident.0))],
+                    attributes: vec![NodeAttributes::label(format!("\"{}\"", ident.imm))],
                 }));
                 Vertex::N(id)
             }
@@ -413,11 +437,11 @@ impl OpNode {
     pub fn dot_node(&self, rnd: &mut usize, stmt: &mut Vec<Stmt>) -> Vertex {
         match self {
             OpNode::OpCall { ident, args, prims } => {
-                let id = NodeId(Id::Plain(format!("OpCall_{}_{rnd}", ident.0)), None);
+                let id = NodeId(Id::Plain(format!("OpCall_{}_{rnd}", ident.imm)), None);
                 *rnd += 1;
                 stmt.push(Stmt::Node(Node {
                     id: id.clone(),
-                    attributes: vec![NodeAttributes::label(format!("\"call {} \"", ident.0))],
+                    attributes: vec![NodeAttributes::label(format!("\"call {} \"", ident.imm))],
                 }));
 
                 for arg in args {
@@ -444,7 +468,7 @@ impl OpNode {
                 args,
             } => {
                 let id = NodeId(
-                    Id::Plain(format!("PrimCall_{}_{rnd}", prim_call_ident.0)),
+                    Id::Plain(format!("PrimCall_{}_{rnd}", prim_call_ident.imm)),
                     None,
                 );
                 *rnd += 1;
@@ -452,7 +476,7 @@ impl OpNode {
                     id: id.clone(),
                     attributes: vec![NodeAttributes::label(format!(
                         "\"prim {} \"",
-                        prim_call_ident.0
+                        prim_call_ident.imm
                     ))],
                 }));
 
@@ -466,11 +490,14 @@ impl OpNode {
                 Vertex::N(id)
             }
             OpNode::PrimIdent(ident) => {
-                let id = NodeId(Id::Plain(format!("Prim_{}_{rnd}", ident.0)), None);
+                let id = NodeId(Id::Plain(format!("Prim_{}_{rnd}", ident.imm)), None);
                 *rnd += 1;
                 stmt.push(Stmt::Node(Node {
                     id: id.clone(),
-                    attributes: vec![NodeAttributes::label(format!("\"prim ref {} \"", ident.0))],
+                    attributes: vec![NodeAttributes::label(format!(
+                        "\"prim ref {} \"",
+                        ident.imm
+                    ))],
                 }));
                 Vertex::N(id)
             }

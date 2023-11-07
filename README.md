@@ -96,6 +96,10 @@ If no file is provided, `examples/dry-run/default.vola` will be used.
 cargo run --bin dry-run -- path/to/vola/file
 ```
 
+### Debugging
+You can set `VOLA_BACKTRACE=1` to print a backtrace whenever an error is reported. There are `cargo test` units in place, as well as tree-sitter tests. Those should always 
+work.
+
 ## Support
 
 The language's grammar is located in `crates/vola-parser/grammar.js`

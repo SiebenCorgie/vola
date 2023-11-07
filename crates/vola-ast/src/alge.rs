@@ -227,7 +227,7 @@ impl AlgeExpr {
         source: &[u8],
         call_expr: &tree_sitter::Node,
     ) -> Result<(Identifier, Vec<AlgeExpr>), AstError> {
-        assert!(call_expr.kind() == "call_expr");
+        AstError::kind_expected(source, call_expr, "call_expr")?;
 
         let mut walker = call_expr.walk();
         let mut children = call_expr.children(&mut walker);
