@@ -1,7 +1,7 @@
 use graphviz_rust::{
     cmd::{CommandArg, Format},
     exec,
-    printer::{DotPrinter, PrinterContext},
+    printer::PrinterContext,
 };
 use vola_ast::{diag::AstError, Ast};
 use vola_hir::Module;
@@ -28,7 +28,7 @@ fn main() -> Result<(), AstError> {
     let hir = Module::from_ast(ast);
 
     let graph = hir.dot_graph();
-    let string = graph.print(&mut PrinterContext::default());
+    //let string = graph.print(&mut PrinterContext::default());
 
     exec(
         graph,

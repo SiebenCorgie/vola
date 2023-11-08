@@ -3,7 +3,7 @@ use graphviz_rust::{
     exec,
     printer::{DotPrinter, PrinterContext},
 };
-use vola_hir::{AlgeNode, AlgeOp, CombNode, CombOp, EntryPointType, Module, ModuleBuilder};
+use vola_hir::{CombNode, CombOp, EntryPointType, Module};
 
 fn main() {
     let mut builder = Module::builder();

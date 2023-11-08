@@ -4,6 +4,7 @@ use crate::{debug::Span, Ident, NodeRef};
 
 pub struct SymbolDescriptor {
     node_ref: NodeRef,
+    #[allow(dead_code)]
     definition: Span,
 }
 

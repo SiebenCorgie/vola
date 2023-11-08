@@ -126,7 +126,7 @@ impl Display for AlgeOp {
             AlgeOp::FieldAccess(accessed) => {
                 write!(f, "FieldAccess_{}", accessed.0)
             }
-            AlgeOp::Imm(im) => write!(f, "Imm"),
+            AlgeOp::Imm(_im) => write!(f, "Imm"),
         }
     }
 }
