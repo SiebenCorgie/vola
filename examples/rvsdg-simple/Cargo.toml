@@ -1,0 +1,11 @@
+[package]
+name = "rvsdg-simple"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+rvsdg = {path = "../../crates/rvsdg"}
+rvsdg-viewer = {path = "../../crates/rvsdg-viewer"}
+graphviz-rust.workspace = true

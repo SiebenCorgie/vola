@@ -2,7 +2,7 @@ use std::marker::PhantomData;
 
 use tinyvec::ArrayVec;
 
-use crate::{EdgeRef, NodeRef};
+use crate::EdgeRef;
 
 pub struct Port(pub Option<EdgeRef>);
 
@@ -22,8 +22,6 @@ impl<E> From<TypedPort<E>> for Port {
 ///
 /// A region R = (A, N, E, R) is characterized through a set of arguments A, its internal nodes N and edges E, and a result tuple R.
 pub struct Region {
-    nodes: ArrayVec<[NodeRef; 10]>,
-    edges: ArrayVec<[EdgeRef; 10]>,
-    inputs: ArrayVec<[Port; 3]>,
-    outputs: ArrayVec<[Port; 3]>,
+    arguments: ArrayVec<[Port; 3]>,
+    results: ArrayVec<[Port; 3]>,
 }

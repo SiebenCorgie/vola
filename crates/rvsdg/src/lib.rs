@@ -15,6 +15,7 @@ use nodes::{LanguageNode, Node};
 use region::Region;
 use slotmap::{new_key_type, SlotMap};
 
+pub mod builder;
 pub mod common;
 pub mod nodes;
 pub mod region;
@@ -35,4 +36,19 @@ pub struct Rvsdg<N: LanguageNode + 'static, E: 'static> {
     pub regions: SlotMap<RegionRef, Region>,
     pub nodes: SlotMap<NodeRef, Node<N>>,
     pub edges: SlotMap<EdgeRef, E>,
+}
+
+impl<N: LanguageNode + 'static, E: 'static> Rvsdg<N, E> {
+    pub fn new() -> Self {
+        Rvsdg {
+            regions: SlotMap::default(),
+            nodes: SlotMap::default(),
+            edges: SlotMap::default(),
+        }
+    }
+
+    ///Allows you to use the [RvsdgBuilder](builder::RvsdgBuilder) utility to create a new translation-unit / [ω-Node](nodes::OmegaNode).
+    pub fn builder<'a>(&'a mut self) -> builder::RvsdgBuilder<'a, N, E> {
+        builder::RvsdgBuilder::on_rvsd(self)
+    }
 }
