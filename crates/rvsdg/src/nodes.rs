@@ -17,16 +17,17 @@
 use tinyvec::ArrayVec;
 
 use crate::{
+    err::LegalizationError,
     region::{Port, TypedPort},
-    EdgeRef, RegionRef,
+    RegionRef,
 };
 
 ///simple node of a language. The trait lets us embed such a node in our overall RVSDG graph.
 ///
 /// For the RVSDG the in and out edges are the most interesting aspects.
 pub trait LanguageNode {
-    fn inputs(&self) -> &[EdgeRef];
-    fn outputs(&self) -> &[EdgeRef];
+    fn inputs(&self) -> &[Port];
+    fn outputs(&self) -> &[Port];
 }
 
 ///Different node types as outlined in section 4. of the RVSDG paper. The _Simple_ node represent your IR's instruction. All other nodes are
@@ -52,15 +53,48 @@ pub enum Node<N: LanguageNode + 'static> {
 }
 
 impl<N: LanguageNode + 'static> Node<N> {
-    /*
-    pub fn inputs(&self) -> &[EdgeRef] {
+    pub fn inputs(&self) -> &[Port] {
         match &self {
             Node::Simple(node) => node.inputs(),
-            Node::Gamma(g) =>
+            Node::Gamma(g) => &g.inputs,
+            Node::Theta(g) => &g.inputs,
+            Node::Lambda(g) => &g.inputs,
+            Node::Apply(g) => &g.outputs,
+            Node::Delta(g) => &g.inputs,
+            Node::Phi(g) => &g.inputs,
+            Node::Omega(g) => &g.inputs,
         }
-    }*/
-    //pub fn outputs(&self) -> &[EdgeRef] {}
-    //pub fn legalize(&mut self) -> Result<(), LegalizationError>;
+    }
+    pub fn outputs(&self) -> &[Port] {
+        match &self {
+            Node::Simple(node) => node.outputs(),
+            Node::Gamma(g) => &g.outputs,
+            Node::Theta(g) => &g.outputs,
+            Node::Lambda(g) => core::slice::from_ref(&g.output),
+            Node::Apply(g) => &g.outputs,
+            Node::Delta(g) => core::slice::from_ref(&g.output),
+            Node::Phi(g) => core::slice::from_ref(&g.output),
+            Node::Omega(g) => &g.outputs,
+        }
+    }
+
+    ///Reference to all internal regions. This will mostly have length 0/1. Only gamma nodes have >1 regions.
+    pub fn regions(&self) -> &[RegionRef] {
+        match &self {
+            Node::Simple(_node) => &[],
+            Node::Gamma(g) => &g.regions,
+            Node::Theta(g) => core::slice::from_ref(&g.loop_body),
+            Node::Lambda(g) => core::slice::from_ref(&g.body),
+            Node::Apply(_g) => &[],
+            Node::Delta(g) => core::slice::from_ref(&g.body),
+            Node::Phi(g) => core::slice::from_ref(&g.body),
+            Node::Omega(g) => core::slice::from_ref(&g.body),
+        }
+    }
+
+    pub fn legalize(&mut self) -> Result<(), LegalizationError> {
+        todo!("Implement legalization")
+    }
 }
 
 pub type DecisionNode = GammaNode;
@@ -72,7 +106,7 @@ pub type DecisionNode = GammaNode;
 pub struct GammaNode {
     ///Consumer of the switch predicate.
     pub predicate: Port,
-    pub regions: ArrayVec<RegionRef>,
+    pub regions: ArrayVec<[RegionRef; 3]>,
     pub inputs: ArrayVec<[Port; 3]>,
     pub outputs: ArrayVec<[Port; 3]>,
 }
@@ -89,6 +123,8 @@ pub type LoopNode = ThetaNode;
 /// output (on break / loop-end), or routed back as region arguments
 pub struct ThetaNode {
     pub loop_body: RegionRef,
+    pub inputs: ArrayVec<[Port; 3]>,
+    pub outputs: ArrayVec<[Port; 3]>,
 }
 
 ///Related to the [λ-Node](LambdaNode). Represents a call of some function.
@@ -107,6 +143,8 @@ pub type FunctionNode = LambdaNode;
 ///
 /// A function is called via an [ApplyNode], where the function being called (callee), is an argument to the [ApplyNode] (referred to as Caller).
 pub struct LambdaNode {
+    pub inputs: ArrayVec<[Port; 3]>,
+    pub output: Port,
     pub body: RegionRef,
     ///ContextVariables basically represent functions and arguments that are used _internally_ in this λ-node/function.
     /// For instance consider this code:
@@ -133,9 +171,10 @@ pub type GlobalVariable = DeltaNode;
 ///
 /// A δ-node must always provide a single output.
 pub struct DeltaNode {
-    pub input: ArrayVec<[Port; 3]>,
+    pub inputs: ArrayVec<[Port; 3]>,
     /// See [LambdaNode]'s `context_variable` documentation, as well as Figure 3.a in the source paper.
     pub context_variables: ArrayVec<[Port; 3]>,
+    pub body: RegionRef,
     pub output: Port,
 }
 
@@ -160,6 +199,9 @@ pub struct PhiNode {
     ///
     /// Then the recursion variable is made out of `a` as well as the result of `f()`.
     pub recursion_variables: ArrayVec<[(Port, Port); 2]>,
+
+    pub output: Port,
+    pub inputs: ArrayVec<[Port; 3]>,
 }
 
 pub type TranslationUnit = OmegaNode;
@@ -168,4 +210,6 @@ pub type TranslationUnit = OmegaNode;
 /// external dependencies to the translation unit.
 pub struct OmegaNode {
     pub body: RegionRef,
+    pub inputs: ArrayVec<[Port; 3]>,
+    pub outputs: ArrayVec<[Port; 3]>,
 }

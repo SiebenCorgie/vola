@@ -17,6 +17,7 @@ use slotmap::{new_key_type, SlotMap};
 
 pub mod builder;
 pub mod common;
+pub mod err;
 pub mod nodes;
 pub mod region;
 
@@ -36,6 +37,9 @@ pub struct Rvsdg<N: LanguageNode + 'static, E: 'static> {
     pub regions: SlotMap<RegionRef, Region>,
     pub nodes: SlotMap<NodeRef, Node<N>>,
     pub edges: SlotMap<EdgeRef, E>,
+
+    ///Entrypoint of this translation unit.
+    entry_omega: Option<NodeRef>,
 }
 
 impl<N: LanguageNode + 'static, E: 'static> Rvsdg<N, E> {
@@ -44,11 +48,40 @@ impl<N: LanguageNode + 'static, E: 'static> Rvsdg<N, E> {
             regions: SlotMap::default(),
             nodes: SlotMap::default(),
             edges: SlotMap::default(),
+            entry_omega: None,
         }
     }
 
     ///Allows you to use the [RvsdgBuilder](builder::RvsdgBuilder) utility to create a new translation-unit / [ω-Node](nodes::OmegaNode).
     pub fn builder<'a>(&'a mut self) -> builder::RvsdgBuilder<'a, N, E> {
         builder::RvsdgBuilder::on_rvsd(self)
+    }
+
+    pub fn new_node(&mut self, node: Node<N>) -> NodeRef {
+        self.nodes.insert(node)
+    }
+
+    ///Returns reference to the node, assuming that it exists. Panics if it does not exist.
+    pub fn node(&self, nref: NodeRef) -> &Node<N> {
+        self.nodes.get(nref).as_ref().unwrap()
+    }
+
+    ///Returns reference to the node, assuming that it exists. Panics if it does not exist.
+    pub fn node_mut(&mut self, nref: NodeRef) -> &mut Node<N> {
+        self.nodes.get_mut(nref).unwrap()
+    }
+
+    pub fn new_region(&mut self) -> RegionRef {
+        self.regions.insert(Region::new())
+    }
+
+    ///Returns reference to the region, assuming that it exists. Panics if it does not exist.
+    pub fn region(&self, rref: RegionRef) -> &Region {
+        self.regions.get(rref).as_ref().unwrap()
+    }
+
+    ///Returns reference to the region, assuming that it exists. Panics if it does not exist.
+    pub fn region_mut(&mut self, rref: RegionRef) -> &mut Region {
+        self.regions.get_mut(rref).unwrap()
     }
 }
