@@ -11,6 +11,7 @@
 //! We expose some helper types and functions to get up to speed easily for *normal* languages. This includes
 //! a generic type system for nodes and edges as well builder for common constructs like loops, if-else nodes and function
 //! calls. Those things reside in the [common] module.
+use builder::LambdaBuilder;
 use nodes::{LanguageNode, Node, OmegaNode};
 use region::Region;
 use slotmap::{new_key_type, SlotMap};
@@ -60,6 +61,25 @@ impl<N: LanguageNode + 'static, E: 'static> Rvsdg<N, E> {
             nodes,
             omega,
         }
+    }
+
+    ///Creates a new top-level lambda node for the graph. If `export` is set, the function will be exported from the
+    /// RVSDG. Otherwise it can only be used within the RVSDV.
+    pub fn new_lamdda(
+        mut self,
+        export: bool,
+        building: impl FnOnce(LambdaBuilder<N, E>) -> LambdaBuilder<N, E>,
+    ) -> Self {
+        let fnref = {
+            let builder = LambdaBuilder::new(&mut self);
+            building(builder).build()
+        };
+
+        if export {
+            todo!("Register lambda {:?} in Omega node {:?}", fnref, self.omega);
+        }
+
+        self
     }
 
     pub fn new_node(&mut self, node: Node<N>) -> NodeRef {
