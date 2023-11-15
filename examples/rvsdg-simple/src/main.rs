@@ -44,8 +44,6 @@ impl View for LNode{
 async fn main() {
     let mut graph = CommonRvsdg::<LNode>::new();
 
-    graph.builder();
-
 
     view(graph).await;
 }

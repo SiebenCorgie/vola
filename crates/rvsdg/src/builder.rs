@@ -11,40 +11,13 @@
 //! Nesting is represented by the closures used to build such special methodes.
 //!
 
-use tinyvec::ArrayVec;
+use crate::{nodes::LanguageNode, NodeRef, RegionRef, Rvsdg};
 
-use crate::{
-    nodes::{LanguageNode, OmegaNode},
-    NodeRef, RegionRef, Rvsdg,
-};
-
-///Top level ω-region builder.
-pub struct RvsdgBuilder<'a, N: LanguageNode + 'static, E: 'static> {
+///[λ-region](crate::nodes::LambdaNode) builder.
+pub struct LambdaBuilder<'a, N: LanguageNode + 'static, E: 'static> {
     ctx: &'a mut Rvsdg<N, E>,
     region: RegionRef,
     omega: NodeRef,
 }
 
-impl<'a, N: LanguageNode + 'static, E: 'static> RvsdgBuilder<'a, N, E> {
-    pub fn on_rvsd(rvsdg: &'a mut Rvsdg<N, E>) -> Self {
-        let region = rvsdg.new_region();
-        let omega = rvsdg.new_node(crate::nodes::Node::Omega(OmegaNode {
-            body: region,
-            outputs: ArrayVec::default(),
-            inputs: ArrayVec::default(),
-        }));
-        RvsdgBuilder {
-            ctx: rvsdg,
-            region,
-            omega,
-        }
-    }
-
-    pub fn build(self) -> NodeRef {
-        debug_assert!(
-            self.region == self.ctx.node(self.omega).regions()[0],
-            "OmegaNode regions don't match!"
-        );
-        self.omega
-    }
-}
+impl<'a, N: LanguageNode + 'static, E: 'static> LambdaBuilder<'a, N, E> {}

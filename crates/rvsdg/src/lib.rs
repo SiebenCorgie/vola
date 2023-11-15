@@ -11,9 +11,10 @@
 //! We expose some helper types and functions to get up to speed easily for *normal* languages. This includes
 //! a generic type system for nodes and edges as well builder for common constructs like loops, if-else nodes and function
 //! calls. Those things reside in the [common] module.
-use nodes::{LanguageNode, Node};
+use nodes::{LanguageNode, Node, OmegaNode};
 use region::Region;
 use slotmap::{new_key_type, SlotMap};
+use tinyvec::ArrayVec;
 
 pub mod builder;
 pub mod common;
@@ -34,27 +35,31 @@ new_key_type! {pub struct RegionRef;}
 ///
 /// For ease of use you can always type N as `Box<dyn SomeNodeTrait + 'static>`.
 pub struct Rvsdg<N: LanguageNode + 'static, E: 'static> {
-    pub regions: SlotMap<RegionRef, Region>,
-    pub nodes: SlotMap<NodeRef, Node<N>>,
-    pub edges: SlotMap<EdgeRef, E>,
+    pub(crate) regions: SlotMap<RegionRef, Region>,
+    pub(crate) nodes: SlotMap<NodeRef, Node<N>>,
+    pub(crate) edges: SlotMap<EdgeRef, E>,
 
     ///Entrypoint of this translation unit.
-    entry_omega: Option<NodeRef>,
+    pub(crate) omega: NodeRef,
 }
 
 impl<N: LanguageNode + 'static, E: 'static> Rvsdg<N, E> {
     pub fn new() -> Self {
-        Rvsdg {
-            regions: SlotMap::default(),
-            nodes: SlotMap::default(),
-            edges: SlotMap::default(),
-            entry_omega: None,
-        }
-    }
+        //Pre-create the omega node we use to track imports/exports
+        let mut nodes = SlotMap::default();
+        let mut regions = SlotMap::default();
+        let omega = nodes.insert(Node::Omega(OmegaNode {
+            body: regions.insert(Region::new()),
+            outputs: ArrayVec::default(),
+            inputs: ArrayVec::default(),
+        }));
 
-    ///Allows you to use the [RvsdgBuilder](builder::RvsdgBuilder) utility to create a new translation-unit / [ω-Node](nodes::OmegaNode).
-    pub fn builder<'a>(&'a mut self) -> builder::RvsdgBuilder<'a, N, E> {
-        builder::RvsdgBuilder::on_rvsd(self)
+        Rvsdg {
+            edges: SlotMap::default(),
+            regions,
+            nodes,
+            omega,
+        }
     }
 
     pub fn new_node(&mut self, node: Node<N>) -> NodeRef {
