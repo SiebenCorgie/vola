@@ -25,14 +25,14 @@ use crate::{
 ///simple node of a language. The trait lets us embed such a node in our overall RVSDG graph.
 ///
 /// For the RVSDG the in and out edges are the most interesting aspects.
-pub trait LanguageNode {
+pub trait LangNode {
     fn inputs(&self) -> &[Port];
     fn outputs(&self) -> &[Port];
 }
-
-///Different node types as outlined in section 4. of the RVSDG paper. The _Simple_ node represent your IR's instruction. All other nodes are
-/// RVSDG specific architectural nodes.
-pub enum Node<N: LanguageNode + 'static> {
+///Different node types as outlined in section 4. of the RVSDG paper. The
+/// _Simple_ node represent your IR's instruction. All other nodes are RVSDG
+/// specific architectural nodes.
+pub enum Node<N: LangNode + 'static> {
     ///Simple input/output sequential node
     Simple(N),
     ///Decision point node of matching signatures
@@ -50,9 +50,11 @@ pub enum Node<N: LanguageNode + 'static> {
     Phi(PhiNode),
     ///Represents the top-node of the RVSDG. This allows us to clearly define import and exported values.
     Omega(OmegaNode),
+    ///Represents an invalid node. Mostly used to either allocate node keys, or represent invalid graph state
+    Invalid,
 }
 
-impl<N: LanguageNode + 'static> Node<N> {
+impl<N: LangNode + 'static> Node<N> {
     pub fn inputs(&self) -> &[Port] {
         match &self {
             Node::Simple(node) => node.inputs(),
@@ -63,6 +65,7 @@ impl<N: LanguageNode + 'static> Node<N> {
             Node::Delta(g) => &g.inputs,
             Node::Phi(g) => &g.inputs,
             Node::Omega(g) => &g.inputs,
+            Node::Invalid => &[],
         }
     }
     pub fn outputs(&self) -> &[Port] {
@@ -75,6 +78,7 @@ impl<N: LanguageNode + 'static> Node<N> {
             Node::Delta(g) => core::slice::from_ref(&g.output),
             Node::Phi(g) => core::slice::from_ref(&g.output),
             Node::Omega(g) => &g.outputs,
+            Node::Invalid => &[],
         }
     }
 
@@ -89,6 +93,7 @@ impl<N: LanguageNode + 'static> Node<N> {
             Node::Delta(g) => core::slice::from_ref(&g.body),
             Node::Phi(g) => core::slice::from_ref(&g.body),
             Node::Omega(g) => core::slice::from_ref(&g.body),
+            Node::Invalid => &[],
         }
     }
 

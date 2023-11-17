@@ -5,11 +5,16 @@ use tinyvec::ArrayVec;
 
 use crate::{EdgeRef, NodeRef};
 
-pub struct Port(pub Option<EdgeRef>);
+///A port allows us to partially define a edge. They are used to represent partially setup
+/// interprocedural nodes (All nodes except _simple_ nodes).
+pub struct Port {
+    ///The edge reference for this node
+    pub edge: Option<EdgeRef>,
+}
 
 impl Default for Port {
     fn default() -> Self {
-        Port(None)
+        Port { edge: None }
     }
 }
 
@@ -30,7 +35,7 @@ impl<E> Default for TypedPort<E> {
 
 impl<E> From<TypedPort<E>> for Port {
     fn from(value: TypedPort<E>) -> Self {
-        Port(value.edge)
+        Port { edge: value.edge }
     }
 }
 
@@ -38,10 +43,10 @@ impl<E> From<TypedPort<E>> for Port {
 ///
 /// A region R = (A, N, E, R) is characterized through a set of arguments A, its internal nodes N and edges E, and a result tuple R.
 pub struct Region {
-    arguments: ArrayVec<[Port; 3]>,
-    results: ArrayVec<[Port; 3]>,
-    nodes: AHashSet<NodeRef>,
-    edges: AHashSet<EdgeRef>,
+    pub arguments: ArrayVec<[Port; 3]>,
+    pub results: ArrayVec<[Port; 3]>,
+    pub nodes: AHashSet<NodeRef>,
+    pub edges: AHashSet<EdgeRef>,
 }
 
 impl Region {

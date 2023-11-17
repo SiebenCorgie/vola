@@ -12,13 +12,15 @@
 //! a generic type system for nodes and edges as well builder for common constructs like loops, if-else nodes and function
 //! calls. Those things reside in the [common] module.
 use builder::LambdaBuilder;
-use nodes::{LanguageNode, Node, OmegaNode};
+use edge::{Edge, LangEdge};
+use nodes::{LangNode, Node, OmegaNode};
 use region::Region;
 use slotmap::{new_key_type, SlotMap};
 use tinyvec::ArrayVec;
 
 pub mod builder;
 pub mod common;
+pub mod edge;
 pub mod err;
 pub mod nodes;
 pub mod region;
@@ -35,16 +37,16 @@ new_key_type! {pub struct RegionRef;}
 /// However, you are free to represent any kind of other dependency.
 ///
 /// For ease of use you can always type N as `Box<dyn SomeNodeTrait + 'static>`.
-pub struct Rvsdg<N: LanguageNode + 'static, E: 'static> {
+pub struct Rvsdg<N: LangNode + 'static, E: LangEdge + 'static> {
     pub(crate) regions: SlotMap<RegionRef, Region>,
     pub(crate) nodes: SlotMap<NodeRef, Node<N>>,
-    pub(crate) edges: SlotMap<EdgeRef, E>,
+    pub(crate) edges: SlotMap<EdgeRef, Edge<E>>,
 
     ///Entrypoint of this translation unit.
     pub(crate) omega: NodeRef,
 }
 
-impl<N: LanguageNode + 'static, E: 'static> Rvsdg<N, E> {
+impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
     pub fn new() -> Self {
         //Pre-create the omega node we use to track imports/exports
         let mut nodes = SlotMap::default();
@@ -65,7 +67,7 @@ impl<N: LanguageNode + 'static, E: 'static> Rvsdg<N, E> {
 
     ///Creates a new top-level lambda node for the graph. If `export` is set, the function will be exported from the
     /// RVSDG. Otherwise it can only be used within the RVSDV.
-    pub fn new_lamdda(
+    pub fn new_lambda(
         mut self,
         export: bool,
         building: impl FnOnce(LambdaBuilder<N, E>) -> LambdaBuilder<N, E>,
@@ -96,6 +98,28 @@ impl<N: LanguageNode + 'static, E: 'static> Rvsdg<N, E> {
         self.nodes.get_mut(nref).unwrap()
     }
 
+    pub fn on_node<T: 'static>(&mut self, n: NodeRef, f: impl FnOnce(&mut Node<N>) -> T) -> T {
+        f(self.node_mut(n))
+    }
+
+    pub fn new_edge(&mut self, edge_type: E, src: NodeRef, dst: NodeRef) -> EdgeRef {
+        self.edges.insert(Edge {
+            src,
+            dst,
+            ty: edge_type,
+        })
+    }
+
+    ///Returns reference to the edge, assuming that it exists. Panics if it does not exist.
+    pub fn edge(&self, eref: EdgeRef) -> &Edge<E> {
+        self.edges.get(eref).as_ref().unwrap()
+    }
+
+    ///Returns reference to the edge, assuming that it exists. Panics if it does not exist.
+    pub fn edge_mut(&mut self, eref: EdgeRef) -> &mut Edge<E> {
+        self.edges.get_mut(eref).unwrap()
+    }
+
     pub fn new_region(&mut self) -> RegionRef {
         self.regions.insert(Region::new())
     }
@@ -108,5 +132,9 @@ impl<N: LanguageNode + 'static, E: 'static> Rvsdg<N, E> {
     ///Returns reference to the region, assuming that it exists. Panics if it does not exist.
     pub fn region_mut(&mut self, rref: RegionRef) -> &mut Region {
         self.regions.get_mut(rref).unwrap()
+    }
+
+    pub fn on_region<T: 'static>(&mut self, r: RegionRef, f: impl FnOnce(&mut Region) -> T) -> T {
+        f(self.region_mut(r))
     }
 }

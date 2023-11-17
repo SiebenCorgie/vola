@@ -1,4 +1,4 @@
-use rvsdg::{common::CommonRvsdg, nodes::LanguageNode, EdgeRef, region::Port};
+use rvsdg::{common::CommonRvsdg, nodes::LangNode, EdgeRef, region::Port};
 use rvsdg_viewer::{macroquad::{main, prelude::BLUE}, view, View};
 pub use rvsdg_viewer::macroquad;
 ///Builds the simple rvsdg structures presented in figure 2 of the RVSDG paper.
@@ -19,7 +19,7 @@ struct LNode {
     outputs: Vec<Port>,
 }
 
-impl LanguageNode for LNode {
+impl LangNode for LNode {
     fn inputs(&self) -> &[Port] {
         &self.inputs
     }

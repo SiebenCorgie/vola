@@ -23,7 +23,7 @@ use macroquad::{
     text::draw_text,
     window::{clear_background, next_frame},
 };
-use rvsdg::{nodes::{LanguageNode, Node}, Rvsdg, common::VSEdge};
+use rvsdg::{nodes::{LangNode, Node}, Rvsdg, common::VSEdge, edge::LangEdge};
 
 pub trait View {
     fn name(&self) -> &str;
@@ -45,7 +45,7 @@ impl View for rvsdg::common::VSEdge{
     }
 }
 
-impl<N: View + LanguageNode + 'static> View for rvsdg::nodes::Node<N>{
+impl<N: View + LangNode + 'static> View for rvsdg::nodes::Node<N>{
     fn color(&self) -> macroquad::color::Color {
         match self{
             Node::Apply(_) => YELLOW,
@@ -55,7 +55,8 @@ impl<N: View + LanguageNode + 'static> View for rvsdg::nodes::Node<N>{
             Node::Omega(_) => Color::from_rgba(50, 50, 50, 100),
             Node::Phi(_) => ORANGE,
             Node::Simple(n) => n.color(),
-            Node::Theta(_) => RED
+            Node::Theta(_) => RED,
+            Node::Invalid => BLACK
         }
     }
     fn name(&self) -> &str {
@@ -67,12 +68,13 @@ impl<N: View + LanguageNode + 'static> View for rvsdg::nodes::Node<N>{
             Node::Omega(_) => "Omega",
             Node::Phi(_) => "Phi",
             Node::Simple(n) => n.name(),
-            Node::Theta(_) => "Theta"
+            Node::Theta(_) => "Theta",
+            Node::Invalid => "Invalid"
         }
     }
 }
 
-pub async fn view<N: View + LanguageNode + 'static, E: View + 'static>(rvsdg: Rvsdg<N, E>) {
+pub async fn view<N: View + LangNode + 'static, E: View + LangEdge + 'static>(rvsdg: Rvsdg<N, E>) {
     loop {
         clear_background(BLUE);
 
