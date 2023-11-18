@@ -39,7 +39,6 @@ impl View for LNode{
 }
 
 
-
 #[main("RVSDGSimple")]
 async fn main() {
     let mut graph = CommonRvsdg::<LNode>::new();

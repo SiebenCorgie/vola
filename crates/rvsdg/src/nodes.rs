@@ -14,9 +14,12 @@
 //! - [DeltaNode] ~ [GlobalVariable] : As the name implies, global data. Can have external input, so this is not necessarily an constant value.
 //! - [PhiNode] ~ [RecursionNode] : Models mutual recursion. Similarly to function nodes in uses _context-variables_ to import state that is used internally. _Recursion-Variables_ are used to represent in-and output exclusive to the recursion border.
 //! - [OmegaNode] ~ [TranslationUnit] : Represents the whole translation unit. Based on the internal region we can identify imported and exported state.
+use std::ops::Index;
+
 use tinyvec::ArrayVec;
 
 use crate::{
+    edge::PortIndex,
     err::LegalizationError,
     region::{Port, TypedPort},
     RegionRef,
@@ -27,7 +30,9 @@ use crate::{
 /// For the RVSDG the in and out edges are the most interesting aspects.
 pub trait LangNode {
     fn inputs(&self) -> &[Port];
+    fn inputs_mut(&mut self) -> &mut [Port];
     fn outputs(&self) -> &[Port];
+    fn outputs_mut(&mut self) -> &mut [Port];
 }
 ///Different node types as outlined in section 4. of the RVSDG paper. The
 /// _Simple_ node represent your IR's instruction. All other nodes are RVSDG
@@ -55,6 +60,7 @@ pub enum Node<N: LangNode + 'static> {
 }
 
 impl<N: LangNode + 'static> Node<N> {
+    ///All registered inputs of a node. This means `input` in the original sense, which excludes context_variables and recursion_variables.
     pub fn inputs(&self) -> &[Port] {
         match &self {
             Node::Simple(node) => node.inputs(),
@@ -68,6 +74,23 @@ impl<N: LangNode + 'static> Node<N> {
             Node::Invalid => &[],
         }
     }
+
+    ///All registered inputs of a node. This means `input` in the original sense, which excludes context_variables and recursion_variables.
+    pub fn inputs_mut(&mut self) -> &mut [Port] {
+        match self {
+            Node::Simple(node) => node.inputs_mut(),
+            Node::Gamma(g) => &mut g.inputs,
+            Node::Theta(g) => &mut g.inputs,
+            Node::Lambda(g) => &mut g.inputs,
+            Node::Apply(g) => &mut g.outputs,
+            Node::Delta(g) => &mut g.inputs,
+            Node::Phi(g) => &mut g.inputs,
+            Node::Omega(g) => &mut g.inputs,
+            Node::Invalid => &mut [],
+        }
+    }
+
+    ///All registered outputs of a node. This means `outputs` in the original sense, which excludes recursion_variables.
     pub fn outputs(&self) -> &[Port] {
         match &self {
             Node::Simple(node) => node.outputs(),
@@ -79,6 +102,21 @@ impl<N: LangNode + 'static> Node<N> {
             Node::Phi(g) => core::slice::from_ref(&g.output),
             Node::Omega(g) => &g.outputs,
             Node::Invalid => &[],
+        }
+    }
+
+    ///All registered outputs of a node. This means `outputs` in the original sense, which excludes recursion_variables.
+    pub fn outputs_mut(&mut self) -> &mut [Port] {
+        match self {
+            Node::Simple(node) => node.outputs_mut(),
+            Node::Gamma(g) => &mut g.outputs,
+            Node::Theta(g) => &mut g.outputs,
+            Node::Lambda(g) => core::slice::from_mut(&mut g.output),
+            Node::Apply(g) => &mut g.outputs,
+            Node::Delta(g) => core::slice::from_mut(&mut g.output),
+            Node::Phi(g) => core::slice::from_mut(&mut g.output),
+            Node::Omega(g) => &mut g.outputs,
+            Node::Invalid => &mut [],
         }
     }
 
@@ -94,6 +132,21 @@ impl<N: LangNode + 'static> Node<N> {
             Node::Phi(g) => core::slice::from_ref(&g.body),
             Node::Omega(g) => core::slice::from_ref(&g.body),
             Node::Invalid => &[],
+        }
+    }
+
+    ///Reference to all internal regions. This will mostly have length 0/1. Only gamma nodes have >1 regions.
+    pub fn regions_mut(&mut self) -> &mut [RegionRef] {
+        match self {
+            Node::Simple(_node) => &mut [],
+            Node::Gamma(g) => &mut g.regions,
+            Node::Theta(g) => core::slice::from_mut(&mut g.loop_body),
+            Node::Lambda(g) => core::slice::from_mut(&mut g.body),
+            Node::Apply(_g) => &mut [],
+            Node::Delta(g) => core::slice::from_mut(&mut g.body),
+            Node::Phi(g) => core::slice::from_mut(&mut g.body),
+            Node::Omega(g) => core::slice::from_mut(&mut g.body),
+            Node::Invalid => &mut [],
         }
     }
 

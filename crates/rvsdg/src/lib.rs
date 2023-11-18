@@ -102,12 +102,8 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
         f(self.node_mut(n))
     }
 
-    pub fn new_edge(&mut self, edge_type: E, src: NodeRef, dst: NodeRef) -> EdgeRef {
-        self.edges.insert(Edge {
-            src,
-            dst,
-            ty: edge_type,
-        })
+    pub fn new_edge(&mut self, edge: Edge<E>) -> EdgeRef {
+        self.edges.insert(edge)
     }
 
     ///Returns reference to the edge, assuming that it exists. Panics if it does not exist.

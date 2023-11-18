@@ -14,7 +14,7 @@
 use tinyvec::ArrayVec;
 
 use crate::{
-    edge::LangEdge,
+    edge::{Edge, LangEdge, PortIndex},
     nodes::{LambdaNode, LangNode, Node},
     region::{Port, Region},
     NodeRef, RegionRef, Rvsdg,
@@ -73,10 +73,10 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> LambdaBuilder<'a, N, E> {
         self.node_ref
     }
 
-    ///Imports the node `ctx` as a context variable. This means that `import` can be evaluated within this lambda.
+    ///Imports the node `import` as a context variable. This means that `import` can be evaluated within this lambda.
     ///
     /// Returns not just the builder, but also the index of the context variable.
-    pub fn import_context(mut self, import: NodeRef) -> (Self, usize) {
+    pub fn import_context(mut self, import: NodeRef, port_index: PortIndex) -> (Self, usize) {
         //Add a cv port configuration, and connect the lambda's port to the ctx
         let p_idx = self.node.context_variables.len();
         self.node.context_variables.push(Port::default());
@@ -85,8 +85,23 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> LambdaBuilder<'a, N, E> {
             region.arguments.insert(p_idx, Port::default())
         });
 
+        let edge = Edge {
+            src: import,
+            src_index: port_index,
+            dst: self.node_ref,
+            dst_index: PortIndex::ContextVar {
+                var_index: p_idx,
+                tuple_index: 2,
+            },
+            ty: E::value_edge(),
+        };
         //now build a value-edge from `import` to the input cv
-        let edge = self.ctx.new_edge(E::value_edge(), import, self.node_ref);
+        let edge = self.ctx.new_edge(edge);
+        //Add that edge to the port of the just generated port, as well as to the import node
+        self.node.context_variables[p_idx].edge = Some(edge.clone());
+        todo!("record in input node");
+        //        self.ctx
+        //            .on_node(import, |n| n.outputs_mut()[port_index].edge = Some(edge));
 
         //Return the cv variable. This is always also the index of the cv-argument of the `body`
         (self, p_idx)
