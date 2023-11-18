@@ -55,10 +55,10 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> LambdaBuilder<'a, N, E> {
         LambdaBuilder {
             ctx,
             node: LambdaNode {
+                cv_count: 0,
                 inputs: ArrayVec::default(),
                 output: Port::default(),
                 body,
-                context_variables: ArrayVec::default(),
             },
             node_ref,
         }
@@ -73,6 +73,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> LambdaBuilder<'a, N, E> {
         self.node_ref
     }
 
+    /*
     ///Imports the node `import` as a context variable. This means that `import` can be evaluated within this lambda.
     ///
     /// Returns not just the builder, but also the index of the context variable.
@@ -106,4 +107,5 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> LambdaBuilder<'a, N, E> {
         //Return the cv variable. This is always also the index of the cv-argument of the `body`
         (self, p_idx)
     }
+    */
 }

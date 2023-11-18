@@ -14,15 +14,14 @@
 //! - [DeltaNode] ~ [GlobalVariable] : As the name implies, global data. Can have external input, so this is not necessarily an constant value.
 //! - [PhiNode] ~ [RecursionNode] : Models mutual recursion. Similarly to function nodes in uses _context-variables_ to import state that is used internally. _Recursion-Variables_ are used to represent in-and output exclusive to the recursion border.
 //! - [OmegaNode] ~ [TranslationUnit] : Represents the whole translation unit. Based on the internal region we can identify imported and exported state.
-use std::ops::Index;
 
 use tinyvec::ArrayVec;
 
 use crate::{
-    edge::PortIndex,
+    edge::{LangEdge, PortIndex},
     err::LegalizationError,
-    region::{Port, TypedPort},
-    RegionRef,
+    region::Port,
+    RegionRef, Rvsdg,
 };
 
 ///simple node of a language. The trait lets us embed such a node in our overall RVSDG graph.
@@ -60,7 +59,6 @@ pub enum Node<N: LangNode + 'static> {
 }
 
 impl<N: LangNode + 'static> Node<N> {
-    ///All registered inputs of a node. This means `input` in the original sense, which excludes context_variables and recursion_variables.
     pub fn inputs(&self) -> &[Port] {
         match &self {
             Node::Simple(node) => node.inputs(),
@@ -74,23 +72,6 @@ impl<N: LangNode + 'static> Node<N> {
             Node::Invalid => &[],
         }
     }
-
-    ///All registered inputs of a node. This means `input` in the original sense, which excludes context_variables and recursion_variables.
-    pub fn inputs_mut(&mut self) -> &mut [Port] {
-        match self {
-            Node::Simple(node) => node.inputs_mut(),
-            Node::Gamma(g) => &mut g.inputs,
-            Node::Theta(g) => &mut g.inputs,
-            Node::Lambda(g) => &mut g.inputs,
-            Node::Apply(g) => &mut g.outputs,
-            Node::Delta(g) => &mut g.inputs,
-            Node::Phi(g) => &mut g.inputs,
-            Node::Omega(g) => &mut g.inputs,
-            Node::Invalid => &mut [],
-        }
-    }
-
-    ///All registered outputs of a node. This means `outputs` in the original sense, which excludes recursion_variables.
     pub fn outputs(&self) -> &[Port] {
         match &self {
             Node::Simple(node) => node.outputs(),
@@ -99,24 +80,9 @@ impl<N: LangNode + 'static> Node<N> {
             Node::Lambda(g) => core::slice::from_ref(&g.output),
             Node::Apply(g) => &g.outputs,
             Node::Delta(g) => core::slice::from_ref(&g.output),
-            Node::Phi(g) => core::slice::from_ref(&g.output),
+            Node::Phi(g) => &g.outputs,
             Node::Omega(g) => &g.outputs,
             Node::Invalid => &[],
-        }
-    }
-
-    ///All registered outputs of a node. This means `outputs` in the original sense, which excludes recursion_variables.
-    pub fn outputs_mut(&mut self) -> &mut [Port] {
-        match self {
-            Node::Simple(node) => node.outputs_mut(),
-            Node::Gamma(g) => &mut g.outputs,
-            Node::Theta(g) => &mut g.outputs,
-            Node::Lambda(g) => core::slice::from_mut(&mut g.output),
-            Node::Apply(g) => &mut g.outputs,
-            Node::Delta(g) => core::slice::from_mut(&mut g.output),
-            Node::Phi(g) => core::slice::from_mut(&mut g.output),
-            Node::Omega(g) => &mut g.outputs,
-            Node::Invalid => &mut [],
         }
     }
 
@@ -135,21 +101,6 @@ impl<N: LangNode + 'static> Node<N> {
         }
     }
 
-    ///Reference to all internal regions. This will mostly have length 0/1. Only gamma nodes have >1 regions.
-    pub fn regions_mut(&mut self) -> &mut [RegionRef] {
-        match self {
-            Node::Simple(_node) => &mut [],
-            Node::Gamma(g) => &mut g.regions,
-            Node::Theta(g) => core::slice::from_mut(&mut g.loop_body),
-            Node::Lambda(g) => core::slice::from_mut(&mut g.body),
-            Node::Apply(_g) => &mut [],
-            Node::Delta(g) => core::slice::from_mut(&mut g.body),
-            Node::Phi(g) => core::slice::from_mut(&mut g.body),
-            Node::Omega(g) => core::slice::from_mut(&mut g.body),
-            Node::Invalid => &mut [],
-        }
-    }
-
     pub fn legalize(&mut self) -> Result<(), LegalizationError> {
         todo!("Implement legalization")
     }
@@ -162,11 +113,81 @@ pub type DecisionNode = GammaNode;
 ///
 /// All regions must have the same signature as this γ-node (excluding the predicate).
 pub struct GammaNode {
-    ///Consumer of the switch predicate.
-    pub predicate: Port,
-    pub regions: ArrayVec<[RegionRef; 3]>,
-    pub inputs: ArrayVec<[Port; 3]>,
-    pub outputs: ArrayVec<[Port; 3]>,
+    pub(crate) entry_var_count: usize,
+    pub(crate) exit_var_count: usize,
+    pub(crate) regions: ArrayVec<[RegionRef; 3]>,
+    pub(crate) inputs: ArrayVec<[Port; 3]>,
+    pub(crate) outputs: ArrayVec<[Port; 3]>,
+}
+
+impl GammaNode {
+    pub fn new() -> Self {
+        GammaNode {
+            entry_var_count: 0,
+            exit_var_count: 0,
+            regions: ArrayVec::default(),
+            inputs: ArrayVec::default(),
+            outputs: ArrayVec::default(),
+        }
+    }
+
+    ///Adds a new port for an entry variable.
+    pub fn add_entry_var<N: LangNode + 'static, E: LangEdge + 'static>(
+        &mut self,
+        ctx: &mut Rvsdg<N, E>,
+    ) -> usize {
+        let idx = self.entry_var_count;
+        self.entry_var_count += 1;
+        //NOTE: offset by one, since the first is the criteria
+        self.inputs.insert(idx + 1, Port::default());
+
+        //now add at same location to arguments of inner blocks
+        for b in self.regions {
+            ctx.on_region_mut(b, |r| r.arguments.insert(idx, Port::default()));
+        }
+
+        idx
+    }
+
+    ///Adds a new port for an exit variable.
+    pub fn add_exit_var<N: LangNode + 'static, E: LangEdge + 'static>(
+        &mut self,
+        ctx: &mut Rvsdg<N, E>,
+    ) -> usize {
+        let idx = self.exit_var_count;
+        self.exit_var_count += 1;
+        self.outputs.insert(idx, Port::default());
+
+        //now add at same location to arguments of inner blocks
+        for b in self.regions {
+            ctx.on_region_mut(b, |r| r.results.insert(idx, Port::default()));
+        }
+
+        idx
+    }
+
+    ///Adds a new decision branch / region.
+    pub fn add_region<N: LangNode + 'static, E: LangEdge + 'static>(
+        &mut self,
+        ctx: &mut Rvsdg<N, E>,
+    ) -> usize {
+        let new_region = ctx.new_region();
+        let arg_count = self.inputs.len();
+        let res_count = self.outputs.len();
+
+        //Setup region with same input/output count thats already valid
+        ctx.on_region_mut(new_region, |r| {
+            for _ in 0..arg_count {
+                r.arguments.push(Port::default());
+            }
+            for _ in 0..res_count {
+                r.results.push(Port::default());
+            }
+        });
+
+        self.regions.push(new_region);
+        self.regions.len() - 1
+    }
 }
 
 pub type LoopNode = ThetaNode;
@@ -180,19 +201,74 @@ pub type LoopNode = ThetaNode;
 /// At runtime, depending on the _predicate_ the non-predicate outputs of the block are either routed to the θ-node
 /// output (on break / loop-end), or routed back as region arguments
 pub struct ThetaNode {
-    pub loop_body: RegionRef,
-    pub inputs: ArrayVec<[Port; 3]>,
-    pub outputs: ArrayVec<[Port; 3]>,
+    pub(crate) lv_count: usize,
+    pub(crate) loop_body: RegionRef,
+    pub(crate) inputs: ArrayVec<[Port; 3]>,
+    pub(crate) outputs: ArrayVec<[Port; 3]>,
 }
 
-///Related to the [λ-Node](LambdaNode). Represents a call of some function.
+impl ThetaNode {
+    pub fn new<N: LangNode + 'static, E: LangEdge + 'static>(ctx: &mut Rvsdg<N, E>) -> Self {
+        let loop_body = ctx.new_region();
+        //add the loop criteria
+        ctx.on_region_mut(loop_body, |b| b.results.insert(0, Port::default()));
+        ThetaNode {
+            lv_count: 0,
+            loop_body,
+            inputs: ArrayVec::default(),
+            outputs: ArrayVec::default(),
+        }
+    }
+
+    pub fn add_loop_variable<N: LangNode + 'static, E: LangEdge + 'static>(
+        &mut self,
+        ctx: &mut Rvsdg<N, E>,
+    ) -> usize {
+        let lvidx = self.lv_count;
+        self.lv_count += 1;
+        self.inputs.insert(lvidx, Port::default());
+        self.outputs.insert(lvidx, Port::default());
+        ctx.on_region_mut(self.loop_body, |r| {
+            r.arguments.insert(lvidx, Port::default());
+            //offset by 1, since the first is the criteria.
+            r.results.insert(lvidx + 1, Port::default());
+        });
+
+        lvidx
+    }
+
+    //TODO do we want to allow additional inputs/outputs?
+}
+
+///Related to the [λ-Node](LambdaNode). Represents a call of some function. The first port is defined as the `caller`, which must be connected to a
+/// [LambdaNode].
 pub struct ApplyNode {
     ///Function being called, must be a edge to a lambdaNode
-    pub callee: TypedPort<LambdaNode>,
-    pub inputs: ArrayVec<[Port; 3]>,
-    pub outputs: ArrayVec<[Port; 3]>,
+    pub(crate) inputs: ArrayVec<[Port; 3]>,
+    pub(crate) outputs: ArrayVec<[Port; 3]>,
 }
 
+impl ApplyNode {
+    pub fn new() -> Self {
+        let mut inputs = ArrayVec::default();
+        //The function input to apply
+        inputs.insert(0, Port::default());
+        ApplyNode {
+            inputs,
+            outputs: ArrayVec::default(),
+        }
+    }
+
+    pub fn add_input(&mut self) -> usize {
+        self.inputs.push(Port::default());
+        self.inputs.len() - 1
+    }
+
+    pub fn add_output(&mut self) -> usize {
+        self.outputs.push(Port::default());
+        self.outputs.len() - 1
+    }
+}
 pub type FunctionNode = LambdaNode;
 ///λ-Node represents a function, characterised by an internal [Region](crate::region::Region) representing the function's body.
 /// The node has `n` inputs, and a single output. The single output represents the function **not** the function's output.
@@ -201,25 +277,62 @@ pub type FunctionNode = LambdaNode;
 ///
 /// A function is called via an [ApplyNode], where the function being called (callee), is an argument to the [ApplyNode] (referred to as Caller).
 pub struct LambdaNode {
-    pub inputs: ArrayVec<[Port; 3]>,
-    pub output: Port,
-    pub body: RegionRef,
-    ///ContextVariables basically represent functions and arguments that are used _internally_ in this λ-node/function.
-    /// For instance consider this code:
-    /// ```rust
-    /// fn max(a, b) -> int{...}
-    ///
-    /// fn f(a, b) -> int {
-    ///     println("max");
-    ///     return max(a, b);
-    /// }
-    /// ```
-    ///
-    /// In this case we need to _know_ that we import `max` from our _translation unit_, but we need to import `println`
-    /// from an external source. We also need to known that we depend on the global value `"max"`.
-    ///
-    /// For a better/more visual explanation, see Figure 3.a in the source paper.
-    pub context_variables: ArrayVec<[Port; 3]>,
+    pub(crate) cv_count: usize,
+    pub(crate) inputs: ArrayVec<[Port; 3]>,
+    pub(crate) output: Port,
+    pub(crate) body: RegionRef,
+}
+
+impl LambdaNode {
+    pub fn new<N: LangNode + 'static, E: LangEdge + 'static>(ctx: &mut Rvsdg<N, E>) -> Self {
+        LambdaNode {
+            cv_count: 0,
+            inputs: ArrayVec::default(),
+            output: Port::default(),
+            body: ctx.new_region(),
+        }
+    }
+
+    pub fn add_context_variable<N: LangNode + 'static, E: LangEdge + 'static>(
+        &mut self,
+        ctx: &mut Rvsdg<N, E>,
+    ) -> usize {
+        let idx = self.cv_count;
+        self.cv_count += 1;
+        self.inputs.insert(idx, Port::default());
+        ctx.on_region_mut(self.body, |r| r.arguments.insert(idx, Port::default()));
+
+        idx
+    }
+
+    pub fn add_input<N: LangNode + 'static, E: LangEdge + 'static>(
+        &mut self,
+        ctx: &mut Rvsdg<N, E>,
+    ) -> usize {
+        self.inputs.push(Port::default());
+        let pushed_to = self.inputs.len();
+        ctx.on_region_mut(self.body, |r| {
+            r.arguments.push(Port::default());
+            assert!(
+                r.arguments.len() == pushed_to,
+                "Detected invalid LambdaNode state, input and argument-count don't match"
+            );
+        });
+
+        pushed_to - self.cv_count - 1
+    }
+
+    ///Adds a result to the function. Note that this does NOT mean the output of this lambda function, but adding
+    /// a result to the later evaluated procedure of the body.
+    pub fn add_result<N: LangNode + 'static, E: LangEdge + 'static>(
+        &mut self,
+        ctx: &mut Rvsdg<N, E>,
+    ) -> usize {
+        ctx.on_region_mut(self.body, |r| {
+            r.results.push(Port::default());
+            r.results.len() - 1
+        })
+    }
 }
 
 pub type GlobalVariable = DeltaNode;
@@ -229,11 +342,49 @@ pub type GlobalVariable = DeltaNode;
 ///
 /// A δ-node must always provide a single output.
 pub struct DeltaNode {
-    pub inputs: ArrayVec<[Port; 3]>,
-    /// See [LambdaNode]'s `context_variable` documentation, as well as Figure 3.a in the source paper.
-    pub context_variables: ArrayVec<[Port; 3]>,
-    pub body: RegionRef,
-    pub output: Port,
+    pub(crate) cv_count: usize,
+    pub(crate) inputs: ArrayVec<[Port; 3]>,
+    pub(crate) body: RegionRef,
+    pub(crate) output: Port,
+}
+
+impl DeltaNode {
+    pub fn new<N: LangNode + 'static, E: LangEdge + 'static>(ctx: &mut Rvsdg<N, E>) -> Self {
+        DeltaNode {
+            cv_count: 0,
+            inputs: ArrayVec::default(),
+            body: ctx.new_region(),
+            output: Port::default(),
+        }
+    }
+    pub fn add_context_variable<N: LangNode + 'static, E: LangEdge + 'static>(
+        &mut self,
+        ctx: &mut Rvsdg<N, E>,
+    ) -> usize {
+        let idx = self.cv_count;
+        self.cv_count += 1;
+        self.inputs.insert(idx, Port::default());
+        ctx.on_region_mut(self.body, |r| r.arguments.insert(idx, Port::default()));
+
+        idx
+    }
+
+    pub fn add_input<N: LangNode + 'static, E: LangEdge + 'static>(
+        &mut self,
+        ctx: &mut Rvsdg<N, E>,
+    ) -> usize {
+        self.inputs.push(Port::default());
+        let pushed_to = self.inputs.len();
+        ctx.on_region_mut(self.body, |r| {
+            r.arguments.push(Port::default());
+            assert!(
+                r.arguments.len() == pushed_to,
+                "Detected invalid LambdaNode state, input and argument-count don't match"
+            );
+        });
+
+        pushed_to - self.cv_count - 1
+    }
 }
 
 pub type RecursionNode = PhiNode;
@@ -242,24 +393,68 @@ pub type RecursionNode = PhiNode;
 ///
 ///
 pub struct PhiNode {
-    pub body: RegionRef,
-    ///Context variables for λ-nodes in the φ-Node. Basically pass through of pre-defined functions, that are called from within the recursion.
-    pub context_variable: ArrayVec<[Port; 3]>,
-    ///Represent the argument stream to a recursion, as well as the output of the recursion.
-    ///
-    /// Consider the following:
-    /// ```rust
-    /// fn f(a: int) -> int{
-    ///     if a <= 1{ return; }
-    ///     return f(a - 1) + f(a - 2);
-    /// }
-    /// ```
-    ///
-    /// Then the recursion variable is made out of `a` as well as the result of `f()`.
-    pub recursion_variables: ArrayVec<[(Port, Port); 2]>,
+    pub(crate) cv_count: usize,
+    pub(crate) rv_count: usize,
+    pub(crate) body: RegionRef,
+    pub(crate) outputs: ArrayVec<[Port; 3]>,
+    pub(crate) inputs: ArrayVec<[Port; 3]>,
+}
 
-    pub output: Port,
-    pub inputs: ArrayVec<[Port; 3]>,
+impl PhiNode {
+    pub fn new<N: LangNode + 'static, E: LangEdge + 'static>(ctx: &mut Rvsdg<N, E>) -> Self {
+        PhiNode {
+            cv_count: 0,
+            rv_count: 0,
+            inputs: ArrayVec::default(),
+            body: ctx.new_region(),
+            outputs: ArrayVec::default(),
+        }
+    }
+    pub fn add_context_variable<N: LangNode + 'static, E: LangEdge + 'static>(
+        &mut self,
+        ctx: &mut Rvsdg<N, E>,
+    ) -> usize {
+        let idx = self.cv_count;
+        self.cv_count += 1;
+        self.inputs.insert(idx, Port::default());
+        ctx.on_region_mut(self.body, |r| r.arguments.insert(idx, Port::default()));
+
+        idx
+    }
+
+    ///Adds new recursion port. Returns the port index for that recursion variable.
+    pub fn add_recursion_variable<N: LangNode + 'static, E: LangEdge + 'static>(
+        &mut self,
+        ctx: &mut Rvsdg<N, E>,
+    ) -> usize {
+        let arg_idx = self.cv_count + self.rv_count;
+        let res_idx = self.rv_count;
+        self.rv_count += 1;
+        ctx.on_region_mut(self.body, |r| {
+            r.arguments.insert(arg_idx, Port::default());
+            r.results.insert(res_idx, Port::default());
+        });
+        self.outputs.insert(res_idx, Port::default());
+
+        res_idx
+    }
+
+    pub fn add_input<N: LangNode + 'static, E: LangEdge + 'static>(
+        &mut self,
+        ctx: &mut Rvsdg<N, E>,
+    ) -> usize {
+        self.inputs.push(Port::default());
+        let pushed_to = self.inputs.len();
+        ctx.on_region_mut(self.body, |r| {
+            r.arguments.push(Port::default());
+            assert!(
+                r.arguments.len() == pushed_to,
+                "Detected invalid LambdaNode state, input and argument-count don't match"
+            );
+        });
+
+        pushed_to - self.cv_count - 1
+    }
 }
 
 pub type TranslationUnit = OmegaNode;
@@ -267,7 +462,50 @@ pub type TranslationUnit = OmegaNode;
 ///ω-node models a translation unit. It therefore has no inputs or outputs. It contains exactly one region, which in/outputs model
 /// external dependencies to the translation unit.
 pub struct OmegaNode {
-    pub body: RegionRef,
-    pub inputs: ArrayVec<[Port; 3]>,
-    pub outputs: ArrayVec<[Port; 3]>,
+    pub(crate) body: RegionRef,
+    pub(crate) inputs: ArrayVec<[Port; 3]>,
+    pub(crate) outputs: ArrayVec<[Port; 3]>,
+}
+impl OmegaNode {
+    pub fn new<N: LangNode + 'static, E: LangEdge + 'static>(ctx: &mut Rvsdg<N, E>) -> Self {
+        OmegaNode {
+            inputs: ArrayVec::default(),
+            body: ctx.new_region(),
+            outputs: ArrayVec::default(),
+        }
+    }
+
+    pub fn add_input<N: LangNode + 'static, E: LangEdge + 'static>(
+        &mut self,
+        ctx: &mut Rvsdg<N, E>,
+    ) -> usize {
+        self.inputs.push(Port::default());
+        let pushed_to = self.inputs.len();
+        ctx.on_region_mut(self.body, |r| {
+            r.arguments.push(Port::default());
+            assert!(
+                r.arguments.len() == pushed_to,
+                "Detected invalid OmegaNode state, input and argument-count don't match"
+            );
+        });
+
+        pushed_to - 1
+    }
+
+    pub fn add_output<N: LangNode + 'static, E: LangEdge + 'static>(
+        &mut self,
+        ctx: &mut Rvsdg<N, E>,
+    ) -> usize {
+        self.outputs.push(Port::default());
+        let pushed_to = self.outputs.len();
+        ctx.on_region_mut(self.body, |r| {
+            r.results.push(Port::default());
+            assert!(
+                r.results.len() == pushed_to,
+                "Detected invalid Omega state, output and result-count don't match"
+            );
+        });
+
+        pushed_to - 1
+    }
 }

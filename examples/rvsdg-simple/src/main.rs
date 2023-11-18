@@ -26,6 +26,13 @@ impl LangNode for LNode {
     fn outputs(&self) -> &[Port] {
         &self.outputs
     }
+    fn inputs_mut(&mut self) -> &mut [Port] {
+        &mut self.inputs
+    }
+    fn outputs_mut(&mut self) -> &mut [Port] {
+        &mut self.outputs
+    }
+
 }
 
 impl View for LNode{

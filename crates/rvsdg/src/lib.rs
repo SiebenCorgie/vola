@@ -98,8 +98,8 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
         self.nodes.get_mut(nref).unwrap()
     }
 
-    pub fn on_node<T: 'static>(&mut self, n: NodeRef, f: impl FnOnce(&mut Node<N>) -> T) -> T {
-        f(self.node_mut(n))
+    pub fn on_node<T: 'static>(&self, n: NodeRef, f: impl FnOnce(&Node<N>) -> T) -> T {
+        f(self.node(n))
     }
 
     pub fn new_edge(&mut self, edge: Edge<E>) -> EdgeRef {
@@ -130,7 +130,15 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
         self.regions.get_mut(rref).unwrap()
     }
 
-    pub fn on_region<T: 'static>(&mut self, r: RegionRef, f: impl FnOnce(&mut Region) -> T) -> T {
+    pub fn on_region<T: 'static>(&self, r: RegionRef, f: impl FnOnce(&Region) -> T) -> T {
+        f(self.region(r))
+    }
+
+    pub fn on_region_mut<T: 'static>(
+        &mut self,
+        r: RegionRef,
+        f: impl FnOnce(&mut Region) -> T,
+    ) -> T {
         f(self.region_mut(r))
     }
 }
