@@ -72,6 +72,19 @@ impl<N: LangNode + 'static> Node<N> {
             Node::Invalid => &[],
         }
     }
+    pub fn inputs_mut(&mut self) -> &mut [Port] {
+        match self {
+            Node::Simple(node) => node.inputs_mut(),
+            Node::Gamma(g) => &mut g.inputs,
+            Node::Theta(g) => &mut g.inputs,
+            Node::Lambda(g) => &mut g.inputs,
+            Node::Apply(g) => &mut g.outputs,
+            Node::Delta(g) => &mut g.inputs,
+            Node::Phi(g) => &mut g.inputs,
+            Node::Omega(g) => &mut g.inputs,
+            Node::Invalid => &mut [],
+        }
+    }
     pub fn outputs(&self) -> &[Port] {
         match &self {
             Node::Simple(node) => node.outputs(),
@@ -83,6 +96,20 @@ impl<N: LangNode + 'static> Node<N> {
             Node::Phi(g) => &g.outputs,
             Node::Omega(g) => &g.outputs,
             Node::Invalid => &[],
+        }
+    }
+
+    pub fn outputs_mut(&mut self) -> &mut [Port] {
+        match self {
+            Node::Simple(node) => node.outputs_mut(),
+            Node::Gamma(g) => &mut g.outputs,
+            Node::Theta(g) => &mut g.outputs,
+            Node::Lambda(g) => core::slice::from_mut(&mut g.output),
+            Node::Apply(g) => &mut g.outputs,
+            Node::Delta(g) => core::slice::from_mut(&mut g.output),
+            Node::Phi(g) => &mut g.outputs,
+            Node::Omega(g) => &mut g.outputs,
+            Node::Invalid => &mut [],
         }
     }
 

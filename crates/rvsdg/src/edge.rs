@@ -8,11 +8,12 @@ use crate::{
 ///
 /// On a lower level we copy the exact addressing scheme of the source paper. Some port indices can overlab, for instance
 /// on a loop node `Input(1)` might also be `EntryVar(var_index = 0, tuple_index=None)`.
+#[derive(Debug, Clone)]
 pub enum PortIndex {
     Input(usize),
     Output(usize),
     ///Represents the context_variable `var_index`, and the `tuple_index`-th element of the ContexVar tuple defined in _Definition 4, 6, 7_
-    /// of the source paper.
+    /// of the source paper. The tuple is (INPUT=0, ARGUMENT=1).
     ///
     /// # Understanding context variables
     ///
@@ -113,6 +114,7 @@ pub enum PortIndex {
 
 ///Lowerlevel routing location of some [PortIndex]. You should usually not have to build that yourself.
 //TODO: Encapsulate and make crate private
+#[derive(Debug, Clone)]
 pub enum PortLocation {
     Inputs(usize),
     Outputs(usize),
@@ -120,16 +122,14 @@ pub enum PortLocation {
     Results { subregion: usize, arg_idx: usize },
 }
 
+//TODO: there are multiple invariants we could check here. bound checking and legalisation (lambda can only have one output, apply has always at least one input etc.)
 impl PortIndex {
     ///Calculates the addressed port based on the node type and the input or output array length. The calculation results
     /// from the papers definitions 1-8.
     ///
     /// Returns None if the port (or port type) does not exist. This can happen for instance if you try to index a SimpleNode with an
     /// ContextVar.
-    pub fn into_location<N: LangNode + 'static, E: LangEdge + 'static>(
-        &self,
-        node: &Node<N>,
-    ) -> Option<PortLocation> {
+    pub fn into_location<N: LangNode + 'static>(&self, node: &Node<N>) -> Option<PortLocation> {
         match &self {
             PortIndex::Input(i) => Some(PortLocation::Inputs(*i)),
             PortIndex::Output(o) => Some(PortLocation::Outputs(*o)),

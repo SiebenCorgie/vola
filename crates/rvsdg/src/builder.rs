@@ -73,39 +73,42 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> LambdaBuilder<'a, N, E> {
         self.node_ref
     }
 
-    /*
     ///Imports the node `import` as a context variable. This means that `import` can be evaluated within this lambda.
     ///
-    /// Returns not just the builder, but also the index of the context variable.
+    /// Returns not just the builder, but also the index of the context variable in this lambda's body.
     pub fn import_context(mut self, import: NodeRef, port_index: PortIndex) -> (Self, usize) {
-        //Add a cv port configuration, and connect the lambda's port to the ctx
-        let p_idx = self.node.context_variables.len();
-        self.node.context_variables.push(Port::default());
-        //insert a port at p_idx, aka, after all already registered cv-ports, but before any arguments.
-        self.ctx.on_region(self.node.body, |region| {
-            region.arguments.insert(p_idx, Port::default())
-        });
-
-        let edge = Edge {
+        //Add new cv var
+        let cv_idx = self.node.add_context_variable(self.ctx);
+        // create edge to source
+        let edge_ref = self.ctx.new_edge(Edge {
             src: import,
-            src_index: port_index,
+            src_index: port_index.clone(),
             dst: self.node_ref,
             dst_index: PortIndex::ContextVar {
-                var_index: p_idx,
-                tuple_index: 2,
+                var_index: cv_idx,
+                tuple_index: 0,
             },
             ty: E::value_edge(),
-        };
-        //now build a value-edge from `import` to the input cv
-        let edge = self.ctx.new_edge(edge);
-        //Add that edge to the port of the just generated port, as well as to the import node
-        self.node.context_variables[p_idx].edge = Some(edge.clone());
-        todo!("record in input node");
-        //        self.ctx
-        //            .on_node(import, |n| n.outputs_mut()[port_index].edge = Some(edge));
+        });
+        //TODO could already legalize that the source node is a lambda node...
 
-        //Return the cv variable. This is always also the index of the cv-argument of the `body`
-        (self, p_idx)
+        //setup edge on both ports
+        debug_assert!(self
+            .ctx
+            .port(import, port_index.clone())
+            .unwrap()
+            .edge
+            .is_none());
+        self.ctx.port_mut(import, port_index).unwrap().edge = Some(edge_ref);
+
+        assert!(self.node.inputs[cv_idx].edge.is_none());
+        self.node.inputs[cv_idx].edge = Some(edge_ref);
+
+        (self, cv_idx)
     }
-    */
+
+    pub fn add_argument(mut self) -> (Self, usize) {
+        let idx = self.node.add_input(self.ctx);
+        (self, idx)
+    }
 }

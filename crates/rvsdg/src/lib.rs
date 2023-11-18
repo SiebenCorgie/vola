@@ -12,9 +12,9 @@
 //! a generic type system for nodes and edges as well builder for common constructs like loops, if-else nodes and function
 //! calls. Those things reside in the [common] module.
 use builder::LambdaBuilder;
-use edge::{Edge, LangEdge};
+use edge::{Edge, LangEdge, PortIndex, PortLocation};
 use nodes::{LangNode, Node, OmegaNode};
-use region::Region;
+use region::{Port, Region};
 use slotmap::{new_key_type, SlotMap};
 use tinyvec::ArrayVec;
 
@@ -100,6 +100,80 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
 
     pub fn on_node<T: 'static>(&self, n: NodeRef, f: impl FnOnce(&Node<N>) -> T) -> T {
         f(self.node(n))
+    }
+
+    pub fn on_node_mut<T: 'static>(&mut self, n: NodeRef, f: impl FnOnce(&mut Node<N>) -> T) -> T {
+        f(self.node_mut(n))
+    }
+
+    ///Tries to access the port with the given PortIndex on `node`
+    pub fn port(&self, node: NodeRef, port: PortIndex) -> Option<&Port> {
+        let mapping = port.into_location::<N>(self.node(node));
+        if let Some(mapping) = mapping {
+            match mapping {
+                PortLocation::Inputs(idx) => self.node(node).inputs().get(idx),
+                PortLocation::Arguments { subregion, arg_idx } => {
+                    if let Some(subreg) = self.node(node).regions().get(subregion) {
+                        if let Some(reg) = self.regions.get(*subreg) {
+                            reg.arguments.get(arg_idx)
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    }
+                }
+                PortLocation::Results { subregion, arg_idx } => {
+                    if let Some(subreg) = self.node(node).regions().get(subregion) {
+                        if let Some(reg) = self.regions.get(*subreg) {
+                            reg.results.get(arg_idx)
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    }
+                }
+                PortLocation::Outputs(idx) => self.node(node).outputs().get(idx),
+            }
+        } else {
+            None
+        }
+    }
+
+    ///Tries to access the port with the given PortIndex on `node`
+    pub fn port_mut(&mut self, node: NodeRef, port: PortIndex) -> Option<&mut Port> {
+        let mapping = port.into_location::<N>(self.node(node));
+        if let Some(mapping) = mapping {
+            match mapping {
+                PortLocation::Inputs(idx) => self.node_mut(node).inputs_mut().get_mut(idx),
+                PortLocation::Arguments { subregion, arg_idx } => {
+                    if let Some(subreg) = self.node(node).regions().get(subregion) {
+                        if let Some(reg) = self.regions.get_mut(*subreg) {
+                            reg.arguments.get_mut(arg_idx)
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    }
+                }
+                PortLocation::Results { subregion, arg_idx } => {
+                    if let Some(subreg) = self.node(node).regions().get(subregion) {
+                        if let Some(reg) = self.regions.get_mut(*subreg) {
+                            reg.results.get_mut(arg_idx)
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    }
+                }
+                PortLocation::Outputs(idx) => self.node_mut(node).outputs_mut().get_mut(idx),
+            }
+        } else {
+            None
+        }
     }
 
     pub fn new_edge(&mut self, edge: Edge<E>) -> EdgeRef {
