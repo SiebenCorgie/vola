@@ -112,16 +112,6 @@ pub enum PortIndex {
     StdOutput(usize),
 }
 
-///Lowerlevel routing location of some [PortIndex]. You should usually not have to build that yourself.
-//TODO: Encapsulate and make crate private
-#[derive(Debug, Clone)]
-pub enum PortLocation {
-    Inputs(usize),
-    Outputs(usize),
-    Arguments { subregion: usize, arg_idx: usize },
-    Results { subregion: usize, arg_idx: usize },
-}
-
 //TODO: there are multiple invariants we could check here. bound checking and legalisation (lambda can only have one output, apply has always at least one input etc.)
 impl PortIndex {
     ///Calculates the addressed port based on the node type and the input or output array length. The calculation results
@@ -400,6 +390,53 @@ impl PortIndex {
                 Node::Omega(_g) => Some(PortLocation::Outputs(*out)),
                 Node::Invalid => None,
             },
+        }
+    }
+}
+
+///Lowerlevel routing location of some [PortIndex]. You should usually not have to build that yourself.
+//TODO: Encapsulate and make crate private
+#[derive(Debug, Clone)]
+pub enum PortLocation {
+    Inputs(usize),
+    Outputs(usize),
+    Arguments { subregion: usize, arg_idx: usize },
+    Results { subregion: usize, arg_idx: usize },
+}
+
+impl PortLocation {
+    ///Assumes that this is an input location, unwrapping into the index of the input array.
+    pub fn unwrap_input(&self) -> usize {
+        if let PortLocation::Inputs(i) = self {
+            *i
+        } else {
+            panic!("Was not PortLocation::Input");
+        }
+    }
+    ///Assumes that this is an output location, unwrapping into the index of the output array.
+    pub fn unwrap_output(&self) -> usize {
+        if let PortLocation::Outputs(o) = self {
+            *o
+        } else {
+            panic!("Was not PortLocation::Output");
+        }
+    }
+
+    ///Assumes that this is the argument to some sub region of a node. Unwraps into `(region_index, region's argument index)`.
+    pub fn unwrap_region_argument(&self) -> (usize, usize) {
+        if let PortLocation::Arguments { subregion, arg_idx } = self {
+            (*subregion, *arg_idx)
+        } else {
+            panic!("Was not PortLocation::Arguments")
+        }
+    }
+
+    ///Assumes that this is the result to some sub region of a node. Unwraps into `(region_index, region's result index)`.
+    pub fn unwrap_region_result(&self) -> (usize, usize) {
+        if let PortLocation::Results { subregion, arg_idx } = self {
+            (*subregion, *arg_idx)
+        } else {
+            panic!("Was not PortLocation::Results")
         }
     }
 }

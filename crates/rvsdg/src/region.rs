@@ -7,20 +7,23 @@ use crate::{EdgeRef, NodeRef};
 
 ///A port allows us to partially define a edge. They are used to represent partially setup
 /// interprocedural nodes (All nodes except _simple_ nodes).
+#[derive(Debug, Clone)]
 pub struct Port {
-    ///The edge reference for this node
-    pub edge: Option<EdgeRef>,
+    pub edges: ArrayVec<[EdgeRef; 2]>,
 }
 
 impl Default for Port {
     fn default() -> Self {
-        Port { edge: None }
+        Port {
+            edges: ArrayVec::default(),
+        }
     }
 }
 
 ///Region as defined in 4.0 in the source paper.
 ///
-/// A region R = (A, N, E, R) is characterized through a set of arguments A, its internal nodes N and edges E, and a result tuple R.
+/// A region R = (A, N, E, R) is characterised through a set of arguments A, its internal nodes N and edges E, and a result tuple R.
+#[derive(Debug, Clone)]
 pub struct Region {
     pub arguments: ArrayVec<[Port; 3]>,
     pub results: ArrayVec<[Port; 3]>,

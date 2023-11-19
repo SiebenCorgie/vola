@@ -17,12 +17,7 @@
 
 use tinyvec::ArrayVec;
 
-use crate::{
-    edge::{LangEdge, PortIndex},
-    err::LegalizationError,
-    region::Port,
-    RegionRef, Rvsdg,
-};
+use crate::{edge::LangEdge, err::LegalizationError, region::Port, RegionRef, Rvsdg};
 
 ///simple node of a language. The trait lets us embed such a node in our overall RVSDG graph.
 ///
@@ -36,6 +31,7 @@ pub trait LangNode {
 ///Different node types as outlined in section 4. of the RVSDG paper. The
 /// _Simple_ node represent your IR's instruction. All other nodes are RVSDG
 /// specific architectural nodes.
+#[derive(Debug, Clone)]
 pub enum Node<N: LangNode + 'static> {
     ///Simple input/output sequential node
     Simple(N),
@@ -139,6 +135,7 @@ pub type DecisionNode = GammaNode;
 /// It has at least a predicate edge that maps to 0..n, as well as n regions.
 ///
 /// All regions must have the same signature as this γ-node (excluding the predicate).
+#[derive(Debug, Clone)]
 pub struct GammaNode {
     pub(crate) entry_var_count: usize,
     pub(crate) exit_var_count: usize,
@@ -227,6 +224,7 @@ pub type LoopNode = ThetaNode;
 ///
 /// At runtime, depending on the _predicate_ the non-predicate outputs of the block are either routed to the θ-node
 /// output (on break / loop-end), or routed back as region arguments
+#[derive(Debug, Clone)]
 pub struct ThetaNode {
     pub(crate) lv_count: usize,
     pub(crate) loop_body: RegionRef,
@@ -269,6 +267,7 @@ impl ThetaNode {
 
 ///Related to the [λ-Node](LambdaNode). Represents a call of some function. The first port is defined as the `caller`, which must be connected to a
 /// [LambdaNode].
+#[derive(Debug, Clone)]
 pub struct ApplyNode {
     ///Function being called, must be a edge to a lambdaNode
     pub(crate) inputs: ArrayVec<[Port; 3]>,
@@ -303,6 +302,7 @@ pub type FunctionNode = LambdaNode;
 /// The output is mapped at call time (represented by the [ApplyNode]) to the output of the calling node.
 ///
 /// A function is called via an [ApplyNode], where the function being called (callee), is an argument to the [ApplyNode] (referred to as Caller).
+#[derive(Debug, Clone)]
 pub struct LambdaNode {
     pub(crate) cv_count: usize,
     pub(crate) inputs: ArrayVec<[Port; 3]>,
@@ -368,6 +368,7 @@ pub type GlobalVariable = DeltaNode;
 /// context-variables can import inner, dependent state, like λ-Nodes or other arguments.
 ///
 /// A δ-node must always provide a single output.
+#[derive(Debug, Clone)]
 pub struct DeltaNode {
     pub(crate) cv_count: usize,
     pub(crate) inputs: ArrayVec<[Port; 3]>,
@@ -419,6 +420,7 @@ pub type RecursionNode = PhiNode;
 ///ϕ-Nodes represent a environment for mutual recursion, i.e `fn f(){... return f();}`.
 ///
 ///
+#[derive(Debug, Clone)]
 pub struct PhiNode {
     pub(crate) cv_count: usize,
     pub(crate) rv_count: usize,
@@ -488,6 +490,7 @@ pub type TranslationUnit = OmegaNode;
 
 ///ω-node models a translation unit. It therefore has no inputs or outputs. It contains exactly one region, which in/outputs model
 /// external dependencies to the translation unit.
+#[derive(Debug, Clone)]
 pub struct OmegaNode {
     pub(crate) body: RegionRef,
     pub(crate) inputs: ArrayVec<[Port; 3]>,
