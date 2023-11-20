@@ -1,14 +1,12 @@
 //! privately declares all inter-procedural nodes, which are lambda, delta, phi and omega nodes.
-use tinyvec::ArrayVec;
 
 use crate::{
     edge::{Edge, LangEdge, PortIndex},
     nodes::{LambdaNode, LangNode, Node},
-    region::Port,
     NodeRef, Rvsdg,
 };
 
-///[λ-region](crate::nodes::LambdaNode) builder.
+///[λ-node](crate::nodes::LambdaNode) (function declaration) builder.
 pub struct LambdaBuilder<'a, N: LangNode + 'static, E: LangEdge + 'static> {
     ctx: &'a mut Rvsdg<N, E>,
     ///The node that is being build
@@ -32,9 +30,15 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> LambdaBuilder<'a, N, E> {
     pub fn build(self) -> NodeRef {
         //TODO: do some legalization already, or wait for a legalization pass?
 
+        let LambdaBuilder {
+            ctx,
+            node,
+            node_ref,
+        } = self;
+
         //Replace node_ref with actual *valid* lambda node
-        *self.ctx.node_mut(self.node_ref) = Node::Lambda(self.node);
-        self.node_ref
+        *ctx.node_mut(node_ref) = Node::Lambda(node);
+        node_ref
     }
 
     ///Imports the node `import` as a context variable. This means that `import` can be evaluated within this lambda.

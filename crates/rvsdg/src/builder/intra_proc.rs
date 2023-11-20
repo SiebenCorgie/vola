@@ -1,15 +1,13 @@
 //! private mod declaring intra procedural node builder.
 //! Those are simple nodes, gamma nodes, and theta nodes.
 
-use tinyvec::ArrayVec;
-
 use crate::{
-    edge::{Edge, LangEdge, PortIndex},
-    nodes::{GammaNode, LangNode, Node},
+    edge::{Edge, LangEdge, PortIndex, PortLocation},
+    nodes::{GammaNode, LangNode, Node, ThetaNode},
     NodeRef, Rvsdg,
 };
 
-///[γ-region](crate::nodes::GammaNode) builder.
+///[γ-node](crate::nodes::GammaNode) (if-then-else) builder.
 pub struct GammaBuilder<'a, N: LangNode + 'static, E: LangEdge + 'static> {
     ctx: &'a mut Rvsdg<N, E>,
     ///The node that is being build
@@ -20,13 +18,23 @@ pub struct GammaBuilder<'a, N: LangNode + 'static, E: LangEdge + 'static> {
 
 impl<'a, N: LangNode + 'static, E: LangEdge + 'static> GammaBuilder<'a, N, E> {
     pub fn new(ctx: &'a mut Rvsdg<N, E>) -> Self {
-        let body = ctx.new_region();
         let node_ref = ctx.new_node(Node::Invalid);
         GammaBuilder {
             ctx,
             node: GammaNode::new(),
             node_ref,
         }
+    }
+
+    ///Inserts this node into the graph, returning the reference it is safed at.
+    pub fn build(self) -> NodeRef {
+        let GammaBuilder {
+            ctx,
+            node,
+            node_ref,
+        } = self;
+        *ctx.node_mut(node_ref) = Node::Gamma(node);
+        node_ref
     }
 
     ///Creates a new branch for this decision point.
@@ -125,6 +133,108 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> GammaBuilder<'a, N, E> {
             .edges
             .push(edge);
 
+        self
+    }
+}
+
+///[θ-node](crate::nodes::ThetaNode) (loop) builder.
+pub struct ThetaBuilder<'a, N: LangNode + 'static, E: LangEdge + 'static> {
+    ctx: &'a mut Rvsdg<N, E>,
+    ///The node that is being build
+    node: ThetaNode,
+    ///Preallocated invalid node ref
+    node_ref: NodeRef,
+}
+
+impl<'a, N: LangNode + 'static, E: LangEdge + 'static> ThetaBuilder<'a, N, E> {
+    pub fn new(ctx: &'a mut Rvsdg<N, E>) -> Self {
+        let node_ref = ctx.new_node(Node::Invalid);
+        let node = ThetaNode::new(ctx);
+        ThetaBuilder {
+            ctx,
+            node,
+            node_ref,
+        }
+    }
+
+    ///Inserts this node into the graph, returning the reference it is safed at.
+    pub fn build(self) -> NodeRef {
+        let ThetaBuilder {
+            ctx,
+            node,
+            node_ref,
+        } = self;
+        *ctx.node_mut(node_ref) = Node::Theta(node);
+        node_ref
+    }
+
+    ///Adds a new loop variable. This are variables that are an input, and/or an output to a single iteration of the loop.
+    ///Returns the loop variable index it is created on.
+    pub fn add_loop_variable(mut self) -> (Self, usize) {
+        let created_at_idx = self.node.add_loop_variable(self.ctx);
+        (self, created_at_idx)
+    }
+
+    ///Connects the `port_index` of `src` to the `lv`-th loop variable of this loop.
+    pub fn connect_loop_variable(mut self, src: NodeRef, port_index: PortIndex, lv: usize) -> Self {
+        let lv_port = PortIndex::LoopVar {
+            var_index: lv,
+            tuple_index: 0,
+        };
+
+        let lv_input_index = if let PortLocation::Inputs(i) = lv_port
+            .into_location(&Node::Theta::<N>(self.node.clone()))
+            .unwrap()
+        {
+            i
+        } else {
+            panic!("LoopVar must point to input!");
+        };
+
+        let edge = self.ctx.new_edge(Edge {
+            src,
+            src_index: port_index.clone(),
+            dst: self.node_ref,
+            dst_index: lv_port,
+            ty: E::value_edge(),
+        });
+
+        self.ctx.port_mut(src, port_index).unwrap().edges.push(edge);
+        self.node
+            .inputs
+            .get_mut(lv_input_index)
+            .unwrap()
+            .edges
+            .push(edge);
+        self
+    }
+
+    /// Connects the predicate port of the loop to `src`'s `port-index`.
+    ///
+    /// # Validity
+    /// This port must only be connected to a value available in the ThetaNode's body. So either an argument to the loop-body, or
+    /// a value produced within the body.
+    pub fn connect_predicate(self, src: NodeRef, port_index: PortIndex) -> Self {
+        let pred_index = PortIndex::Predicate;
+        let edge = self.ctx.new_edge(Edge {
+            src,
+            src_index: port_index.clone(),
+            dst: self.node_ref,
+            dst_index: pred_index,
+            ty: E::value_edge(),
+        });
+
+        //Connect the result
+        self.ctx
+            .region_mut(self.node.loop_body)
+            .results
+            .get_mut(0) //per definition this is always the first port
+            .unwrap()
+            .edges
+            .push(edge);
+
+        //notify the src node
+        self.ctx.port_mut(src, port_index).unwrap().edges.push(edge);
         self
     }
 }
