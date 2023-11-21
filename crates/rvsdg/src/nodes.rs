@@ -417,9 +417,30 @@ impl DeltaNode {
 
 pub type RecursionNode = PhiNode;
 
-///ϕ-Nodes represent a environment for mutual recursion, i.e `fn f(){... return f();}`.
+/// ϕ-Nodes represent a environment for mutual recursion, i.e `fn f(){... return f();}`.
+///
+/// In essence this is similar to the idea of a [λ-Node](LambdaNode). However, it allows you to not only declare the function (what a LambdaNode does via its single output),
+/// but also use that function in that deceleration. This is done by not only setting an output (again, like the LambdaNode), but also having an argument, that
+/// is the deceleration defined by the output.
 ///
 ///
+/// An added concept, next to the already known context_variables are recursion_variables. Their concept is similar to loop_variables. They are
+/// the variables needed by the recursive [ApplyNode] to represent a variable that is taken, and returned at each recursion level.
+/// Have a look at the [ϕ-Builder](crate::builder::PhiBuilder::add_recursion_variable) for an example.
+///
+///
+/// By definition the PhiNode has only an internal [λ-Node](LambdaNode), where the first context variable is an import of itself. This models the recursion.
+/// It follows all other context-variables (imported from outside the ϕ-Node), the recursion-variable (modelling recursive data flow), and finally all non recursive
+/// arguments.
+///
+///
+/// # Disclaimer
+///
+/// The PhiNode is currently not completely sound. You can set it up _the right way_, but it is currently way to easy to do it _the wrong way_.
+/// > I still have to find a nicer way to model this API-wise. Currently unsolved is:
+/// >  - Do we have to allow non recursion/context variables?
+/// >  - Should we always implicitly model the internal semi-hidden λ-Node, or should we let the user have access to it?
+/// >  -
 #[derive(Debug, Clone)]
 pub struct PhiNode {
     pub(crate) cv_count: usize,
@@ -439,6 +460,7 @@ impl PhiNode {
             outputs: ArrayVec::default(),
         }
     }
+
     pub fn add_context_variable<N: LangNode + 'static, E: LangEdge + 'static>(
         &mut self,
         ctx: &mut Rvsdg<N, E>,
@@ -505,37 +527,25 @@ impl OmegaNode {
         }
     }
 
-    pub fn add_input<N: LangNode + 'static, E: LangEdge + 'static>(
+    pub fn add_import<N: LangNode + 'static, E: LangEdge + 'static>(
         &mut self,
         ctx: &mut Rvsdg<N, E>,
     ) -> usize {
-        self.inputs.push(Port::default());
-        let pushed_to = self.inputs.len();
         ctx.on_region_mut(self.body, |r| {
+            let pushed_to = r.arguments.len();
             r.arguments.push(Port::default());
-            assert!(
-                r.arguments.len() == pushed_to,
-                "Detected invalid OmegaNode state, input and argument-count don't match"
-            );
-        });
-
-        pushed_to - 1
+            pushed_to
+        })
     }
 
-    pub fn add_output<N: LangNode + 'static, E: LangEdge + 'static>(
+    pub fn add_export<N: LangNode + 'static, E: LangEdge + 'static>(
         &mut self,
         ctx: &mut Rvsdg<N, E>,
     ) -> usize {
-        self.outputs.push(Port::default());
-        let pushed_to = self.outputs.len();
         ctx.on_region_mut(self.body, |r| {
+            let pushed_to = r.results.len();
             r.results.push(Port::default());
-            assert!(
-                r.results.len() == pushed_to,
-                "Detected invalid Omega state, output and result-count don't match"
-            );
-        });
-
-        pushed_to - 1
+            pushed_to
+        })
     }
 }

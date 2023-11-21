@@ -80,10 +80,10 @@ pub enum PortIndex {
         region_index: Option<usize>,
     },
 
-    /// The predicate of a [γ-Node](crates::nodes::GammaNode) or an [θ-Node][crate::nodes::ThetaNode].
+    /// The predicate of a [γ-Node](crate::nodes::GammaNode) or an [θ-Node][crate::nodes::ThetaNode].
     Predicate,
 
-    ///Represents the LoopVariable of a [θ-Node](crate:node::ThetaNode) as described in _Definition 3_ of the source paper.
+    ///Represents the LoopVariable of a [θ-Node](crate::nodes::ThetaNode) as described in _Definition 3_ of the source paper.
     ///
     /// We address the `var_index`-th loop variable, where `tuple_index` corresponds to the tuple
     /// (input=0, argument=1, result=2, output=3) described in the paper.

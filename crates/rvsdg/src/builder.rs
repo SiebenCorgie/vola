@@ -14,7 +14,7 @@
 mod inter_proc;
 mod intra_proc;
 use crate::{edge::LangEdge, nodes::LangNode, region::Region, RegionRef, Rvsdg};
-pub use inter_proc::LambdaBuilder;
+pub use inter_proc::{DeltaBuilder, LambdaBuilder, OmegaBuilder, PhiBuilder};
 pub use intra_proc::{GammaBuilder, ThetaBuilder};
 
 ///Probably the most used builder. Represents a simple [Region](crate::region::Region) within one of the higher level nodes.
