@@ -2,6 +2,7 @@
 
 use crate::{
     edge::{Edge, LangEdge, PortIndex},
+    label::LabelLoc,
     nodes::{DeltaNode, LambdaNode, LangNode, Node, OmegaNode, PhiNode},
     NodeRef, Rvsdg,
 };
@@ -287,10 +288,19 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> OmegaBuilder<'a, N, E> {
 
     ///Adds an import port with the given label. The label will used for the import of the function or value.
     /// Returns the argument_index of the port allocated.
-    pub fn import(mut self, label: &str) -> (Self, usize) {
+    pub fn import(mut self, label: impl Into<String>) -> (Self, usize) {
         let idx = self.node.add_import(self.ctx);
         //annotate the port with the given label
-        todo!("annotate port");
+        self.ctx.push_label(
+            LabelLoc::Port {
+                node: self.node_ref,
+                port: PortIndex::StdArg {
+                    subregion: 0,
+                    arg_idx: idx,
+                },
+            },
+            label.into(),
+        );
         (self, idx)
     }
 
@@ -299,7 +309,17 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> OmegaBuilder<'a, N, E> {
     pub fn export(mut self, label: &str) -> (Self, usize) {
         let idx = self.node.add_export(self.ctx);
         //annotate the port with the given label
-        todo!("annotate port");
+        self.ctx.push_label(
+            LabelLoc::Port {
+                node: self.node_ref,
+                port: PortIndex::StdResult {
+                    subregion: 0,
+                    arg_idx: idx,
+                },
+            },
+            label.into(),
+        );
+
         (self, idx)
     }
 }

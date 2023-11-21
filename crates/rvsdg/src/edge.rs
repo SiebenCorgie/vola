@@ -8,7 +8,7 @@ use crate::{
 ///
 /// On a lower level we copy the exact addressing scheme of the source paper. Some port indices can overlab, for instance
 /// on a loop node `Input(1)` might also be `EntryVar(var_index = 0, tuple_index=None)`.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub enum PortIndex {
     Input(usize),
     Output(usize),
@@ -396,7 +396,7 @@ impl PortIndex {
 
 ///Lowerlevel routing location of some [PortIndex]. You should usually not have to build that yourself.
 //TODO: Encapsulate and make crate private
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub enum PortLocation {
     Inputs(usize),
     Outputs(usize),

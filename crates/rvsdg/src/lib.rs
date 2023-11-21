@@ -11,17 +11,20 @@
 //! We expose some helper types and functions to get up to speed easily for *normal* languages. This includes
 //! a generic type system for nodes and edges as well builder for common constructs like loops, if-else nodes and function
 //! calls. Those things reside in the [common] module.
+use ahash::AHashMap;
 use builder::LambdaBuilder;
 use edge::{Edge, LangEdge, PortIndex, PortLocation};
+use label::LabelLoc;
 use nodes::{LangNode, Node, OmegaNode};
 use region::{Port, Region};
 use slotmap::{new_key_type, SlotMap};
-use tinyvec::ArrayVec;
+use tinyvec::{array_vec, ArrayVec};
 
 pub mod builder;
 pub mod common;
 pub mod edge;
 pub mod err;
+pub mod label;
 pub mod nodes;
 pub mod region;
 
@@ -42,6 +45,8 @@ pub struct Rvsdg<N: LangNode + 'static, E: LangEdge + 'static> {
     pub(crate) nodes: SlotMap<NodeRef, Node<N>>,
     pub(crate) edges: SlotMap<EdgeRef, Edge<E>>,
 
+    pub(crate) labels: AHashMap<LabelLoc, ArrayVec<[String; 1]>>,
+
     ///Entrypoint of this translation unit.
     pub(crate) omega: NodeRef,
 }
@@ -59,6 +64,7 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
 
         Rvsdg {
             edges: SlotMap::default(),
+            labels: AHashMap::default(),
             regions,
             nodes,
             omega,
@@ -91,6 +97,24 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
     ///Returns reference to the node, assuming that it exists. Panics if it does not exist.
     pub fn node(&self, nref: NodeRef) -> &Node<N> {
         self.nodes.get(nref).as_ref().unwrap()
+    }
+
+    pub fn push_label(&mut self, label: LabelLoc, value: String) {
+        if let Some(vals) = self.labels.get_mut(&label) {
+            vals.push(value);
+        } else {
+            let mut new_vec = ArrayVec::default();
+            new_vec.push(value);
+            self.labels.insert(label, new_vec);
+        }
+    }
+
+    pub fn labels(&self, label: &LabelLoc) -> Option<&ArrayVec<[String; 1]>> {
+        self.labels.get(label)
+    }
+
+    pub fn labels_mut(&mut self, label: &LabelLoc) -> Option<&mut ArrayVec<[String; 1]>> {
+        self.labels.get_mut(label)
     }
 
     ///Returns reference to the node, assuming that it exists. Panics if it does not exist.
