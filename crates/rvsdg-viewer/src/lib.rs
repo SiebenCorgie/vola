@@ -15,6 +15,11 @@
 //! }
 //! ```
 
+mod primitives;
+mod printer;
+
+use std::path::Path;
+
 ///The color of a node or edge.
 pub use macroquad::color::Color;
 pub use macroquad;
@@ -74,6 +79,14 @@ impl<N: View + LangNode + 'static> View for rvsdg::nodes::Node<N>{
     }
 }
 
+
+///Saves the rvsdg graph as an SVG image at `svg_path`.
+pub fn into_svg<N: View + LangNode + 'static, E: View + LangEdge + 'static>(rvsdg: Rvsdg<N, E>, svg_path: impl AsRef<Path>){
+    todo!("Implement intoSvg");
+}
+
+
+///Uses [macroquad](macroquad) to display the graph in an interactive window.
 pub async fn view<N: View + LangNode + 'static, E: View + LangEdge + 'static>(rvsdg: Rvsdg<N, E>) {
     loop {
         clear_background(BLUE);

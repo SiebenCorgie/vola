@@ -90,6 +90,11 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
         self
     }
 
+    ///Returns the reference to the translation unit / [ω-Node](crate::nodes::OmegaNode).
+    pub fn entry_node(&self) -> &NodeRef {
+        &self.omega
+    }
+
     pub fn new_node(&mut self, node: Node<N>) -> NodeRef {
         self.nodes.insert(node)
     }

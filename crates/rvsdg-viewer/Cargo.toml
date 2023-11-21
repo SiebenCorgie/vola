@@ -8,3 +8,4 @@ edition = "2021"
 [dependencies]
 rvsdg = {path = "../rvsdg"}
 macroquad = "0.4.4"
+ahash.workspace = true

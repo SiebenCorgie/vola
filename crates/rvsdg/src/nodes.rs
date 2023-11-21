@@ -440,7 +440,6 @@ pub type RecursionNode = PhiNode;
 /// > I still have to find a nicer way to model this API-wise. Currently unsolved is:
 /// >  - Do we have to allow non recursion/context variables?
 /// >  - Should we always implicitly model the internal semi-hidden λ-Node, or should we let the user have access to it?
-/// >  -
 #[derive(Debug, Clone)]
 pub struct PhiNode {
     pub(crate) cv_count: usize,
