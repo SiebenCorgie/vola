@@ -285,6 +285,22 @@ impl ApplyNode {
         }
     }
 
+    ///Creates a call that has the signature needed for the given lambda node
+    pub fn new_for_lambda<N: LangNode + 'static, E: LangEdge + 'static>(
+        ctx: &Rvsdg<N, E>,
+        node: &LambdaNode,
+    ) -> Self {
+        let node_body = ctx.region(node.body);
+        ApplyNode {
+            inputs: node_body
+                .arguments
+                .iter()
+                .map(|_p| Port::default())
+                .collect(),
+            outputs: node_body.results.iter().map(|_p| Port::default()).collect(),
+        }
+    }
+
     pub fn add_input(&mut self) -> usize {
         self.inputs.push(Port::default());
         self.inputs.len() - 1
@@ -332,21 +348,18 @@ impl LambdaNode {
         idx
     }
 
-    pub fn add_input<N: LangNode + 'static, E: LangEdge + 'static>(
+    ///Adds an argument to the lambda's body. Returns the argument's index.
+    pub fn add_argument<N: LangNode + 'static, E: LangEdge + 'static>(
         &mut self,
         ctx: &mut Rvsdg<N, E>,
     ) -> usize {
-        self.inputs.push(Port::default());
-        let pushed_to = self.inputs.len();
-        ctx.on_region_mut(self.body, |r| {
-            r.arguments.push(Port::default());
-            assert!(
-                r.arguments.len() == pushed_to,
-                "Detected invalid LambdaNode state, input and argument-count don't match"
-            );
+        let cv_count = self.cv_count;
+        let args = ctx.on_region_mut(self.body, |reg| {
+            reg.arguments.push(Port::default());
+            reg.arguments.len()
         });
 
-        pushed_to - self.cv_count - 1
+        args - cv_count
     }
 
     ///Adds a result to the function. Note that this does NOT mean the output of this lambda function, but adding

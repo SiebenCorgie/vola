@@ -28,6 +28,7 @@ use macroquad::{
     text::draw_text,
     window::{clear_background, next_frame},
 };
+use printer::Printer;
 use rvsdg::{nodes::{LangNode, Node}, Rvsdg, common::VSEdge, edge::LangEdge};
 
 pub trait View {
@@ -81,13 +82,21 @@ impl<N: View + LangNode + 'static> View for rvsdg::nodes::Node<N>{
 
 
 ///Saves the rvsdg graph as an SVG image at `svg_path`.
-pub fn into_svg<N: View + LangNode + 'static, E: View + LangEdge + 'static>(rvsdg: Rvsdg<N, E>, svg_path: impl AsRef<Path>){
-    todo!("Implement intoSvg");
+pub fn into_svg<N: View + LangNode + 'static, E: View + LangEdge + 'static>(rvsdg: &Rvsdg<N, E>, svg_path: impl AsRef<Path>){
+    let printer = Printer::new(rvsdg);
+
+    //Now build the svg from the printer
+    let mut svg = svg::Document::new();
+    for rect in printer.rects.iter().rev(){
+        svg = svg.add(rect.into_svg());
+    }
+
+    svg::save(svg_path, &svg).unwrap();
 }
 
 
 ///Uses [macroquad](macroquad) to display the graph in an interactive window.
-pub async fn view<N: View + LangNode + 'static, E: View + LangEdge + 'static>(rvsdg: Rvsdg<N, E>) {
+pub async fn view<N: View + LangNode + 'static, E: View + LangEdge + 'static>(rvsdg: &Rvsdg<N, E>) {
     loop {
         clear_background(BLUE);
 

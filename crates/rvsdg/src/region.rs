@@ -5,8 +5,10 @@ use tinyvec::ArrayVec;
 
 use crate::{EdgeRef, NodeRef};
 
-///A port allows us to partially define a edge. They are used to represent partially setup
+///A out port allows us to define multiple destination edges. They are used to represent partially setup
 /// interprocedural nodes (All nodes except _simple_ nodes).
+///
+///
 #[derive(Debug, Clone)]
 pub struct Port {
     pub edges: ArrayVec<[EdgeRef; 2]>,
@@ -17,6 +19,18 @@ impl Default for Port {
         Port {
             edges: ArrayVec::default(),
         }
+    }
+}
+
+///A in port allows us to define at most a single src edge.
+#[derive(Debug, Clone)]
+pub struct Inport {
+    pub edges: Option<EdgeRef>,
+}
+
+impl Default for Inport {
+    fn default() -> Self {
+        Inport { edges: None }
     }
 }
 

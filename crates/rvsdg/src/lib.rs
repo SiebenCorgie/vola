@@ -11,15 +11,19 @@
 //! We expose some helper types and functions to get up to speed easily for *normal* languages. This includes
 //! a generic type system for nodes and edges as well builder for common constructs like loops, if-else nodes and function
 //! calls. Those things reside in the [common] module.
+use std::fmt::Display;
+
 use ahash::AHashMap;
-use builder::LambdaBuilder;
+use builder::{LambdaBuilder, OmegaBuilder};
 use edge::{Edge, LangEdge, PortIndex, PortLocation};
+use err::GraphError;
 use label::LabelLoc;
 use nodes::{LangNode, Node, OmegaNode};
 use region::{Port, Region};
 use slotmap::{new_key_type, SlotMap};
 use tinyvec::{array_vec, ArrayVec};
 
+pub mod analyze;
 pub mod builder;
 pub mod common;
 pub mod edge;
@@ -29,8 +33,35 @@ pub mod nodes;
 pub mod region;
 
 new_key_type! {pub struct NodeRef;}
+impl Display for NodeRef {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "NodeRef({:?})", self.0)
+    }
+}
+
 new_key_type! {pub struct EdgeRef;}
+impl Display for EdgeRef {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "EdgeRef({:?})", self.0)
+    }
+}
+
+impl EdgeRef {
+    ///removes this edge from the graph (if possible). See [Rvsdg::disconnect] for further documentation.
+    pub fn disconnect<N: LangNode + 'static, E: LangEdge + 'static>(
+        self,
+        ctx: &mut Rvsdg<N, E>,
+    ) -> Result<(), GraphError> {
+        ctx.disconnect(self)
+    }
+}
+
 new_key_type! {pub struct RegionRef;}
+impl Display for RegionRef {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "RegionRef({:?})", self.0)
+    }
+}
 
 ///The RVSDG state. Contains the actual nodes as well as edge definitions.
 ///
@@ -71,23 +102,37 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
         }
     }
 
-    ///Creates a new top-level lambda node for the graph. If `export` is set, the function will be exported from the
-    /// RVSDG. Otherwise it can only be used within the RVSDV.
-    pub fn new_lambda(
-        mut self,
-        export: bool,
-        building: impl FnOnce(LambdaBuilder<N, E>) -> LambdaBuilder<N, E>,
-    ) -> Self {
-        let fnref = {
-            let builder = LambdaBuilder::new(&mut self);
-            building(builder).build()
+    ///Allows you to modify the graph from its entry point, the [ω-Node](crate::nodes::OmegaNode).
+    pub fn on_omega_node(&mut self, f: impl FnOnce(OmegaBuilder<N, E>) -> OmegaBuilder<N, E>) {
+        //we do this by replacing the actual omega node, setup the builder, call it,
+        // and then substituding it again.
+        let omega_ref = self.omega;
+        let omega_node = if let Node::Omega(on) = {
+            let mut node = Node::Invalid;
+            let dummy = self.node_mut(self.omega);
+            std::mem::swap(dummy, &mut node);
+            node
+        } {
+            on
+        } else {
+            panic!("Failed to unwrap temporary omgea node");
         };
 
-        if export {
-            todo!("Register lambda {:?} in Omega node {:?}", fnref, self.omega);
-        }
+        let builder = OmegaBuilder {
+            ctx: self,
+            node: omega_node,
+            node_ref: omega_ref,
+        };
 
-        self
+        //call the user closure
+        let OmegaBuilder {
+            ctx,
+            node,
+            node_ref,
+        } = f(builder);
+
+        //now re substitude
+        *ctx.node_mut(node_ref) = Node::Omega(node);
     }
 
     ///Returns the reference to the translation unit / [ω-Node](crate::nodes::OmegaNode).
@@ -217,6 +262,42 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
     ///Returns reference to the edge, assuming that it exists. Panics if it does not exist.
     pub fn edge_mut(&mut self, eref: EdgeRef) -> &mut Edge<E> {
         self.edges.get_mut(eref).unwrap()
+    }
+
+    ///Deletes the `edge` from the graph. Note that any further access to `edge` becomes invalid after that.
+    ///
+    /// Returns Ok if the disconnect was successful. Otherwise an error describing what went wrong. In general the disconnect will be
+    /// executed as good as possible. Meaning, if one of the two nodes is invalid, the other one will be notified of the disconnect regardless.
+    /// However, you should consider your graph unstable regardless after an failed disconnect.
+    pub fn disconnect(&mut self, edge: EdgeRef) -> Result<(), GraphError> {
+        if let Some(edge_val) = self.edges.remove(edge) {
+            let mut err = None;
+            let Edge {
+                src,
+                src_index,
+                dst,
+                dst_index,
+                ty: _,
+            } = edge_val;
+
+            //Notify src
+            if let Some(port) = self.port_mut(src, src_index) {
+                port.edges.retain(|e| *e != edge);
+            } else {
+                err = Some(Err(GraphError::InvalidNode(src)));
+            }
+
+            //Notify dst
+            if let Some(port) = self.port_mut(dst, dst_index) {
+                port.edges.retain(|e| *e != edge);
+            } else {
+                err = Some(Err(GraphError::InvalidNode(src)));
+            }
+
+            err.unwrap_or(Ok(()))
+        } else {
+            Err(GraphError::InvalidEdge(edge))
+        }
     }
 
     pub fn new_region(&mut self) -> RegionRef {

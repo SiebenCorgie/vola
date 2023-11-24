@@ -7,6 +7,8 @@ use crate::{
     NodeRef, Rvsdg,
 };
 
+use super::RegionBuilder;
+
 ///[γ-node](crate::nodes::GammaNode) (if-then-else) builder.
 pub struct GammaBuilder<'a, N: LangNode + 'static, E: LangEdge + 'static> {
     ctx: &'a mut Rvsdg<N, E>,
@@ -38,28 +40,31 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> GammaBuilder<'a, N, E> {
     }
 
     ///Creates a new branch for this decision point.
-    pub fn new_branch(mut self) -> (Self, usize) {
+    pub fn new_branch(&mut self, branch_builder: impl FnOnce(&mut RegionBuilder<N, E>)) -> usize {
         self.node.add_region(self.ctx);
         let idx = self.node.regions.len() - 1;
-        (self, idx)
+        let mut builder = RegionBuilder::new(self.ctx, self.node.regions[idx], self.node_ref);
+        branch_builder(&mut builder);
+
+        idx
     }
 
     ///Adds a new variable that is used as an argument to all branches.
-    pub fn add_entry_variable(mut self) -> (Self, usize) {
+    pub fn add_entry_variable(&mut self) -> usize {
         self.node.add_entry_var(self.ctx);
         let idx = self.node.entry_var_count - 1;
-        (self, idx)
+        idx
     }
 
     ///Adds a new variable that is used as a result of all branches.
-    pub fn add_exit_variable(mut self) -> (Self, usize) {
+    pub fn add_exit_variable(&mut self) -> usize {
         self.node.add_exit_var(self.ctx);
         let idx = self.node.exit_var_count - 1;
-        (self, idx)
+        idx
     }
 
     ///Connects the gamma nodes predicate port to `predicate`'s `port_index`.
-    pub fn connect_criteria(mut self, predicate: NodeRef, port_index: PortIndex) -> Self {
+    pub fn connect_predicate(&mut self, predicate: NodeRef, port_index: PortIndex) {
         let edge = self.ctx.new_edge(Edge {
             src: predicate,
             src_index: port_index.clone(),
@@ -74,8 +79,6 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> GammaBuilder<'a, N, E> {
             .edges
             .push(edge);
         self.node.inputs[0].edges.push(edge);
-
-        self
     }
 
     ///Connects the `src`'nodes `port_index` to the `entry`-th entry variable of this node.

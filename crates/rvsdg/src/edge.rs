@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use crate::{
     nodes::{LangNode, Node},
     NodeRef,
@@ -12,6 +14,16 @@ use crate::{
 pub enum PortIndex {
     Input(usize),
     Output(usize),
+    Arg {
+        ///Sould be 0 whenever the referenced node is not a [γ-Node](crate::nodes::GammaNode).
+        subregion: usize,
+        arg_idx: usize,
+    },
+    Result {
+        ///Sould be 0 whenever the referenced node is not a [γ-Node](crate::nodes::GammaNode).
+        subregion: usize,
+        arg_idx: usize,
+    },
     ///Represents the context_variable `var_index`, and the `tuple_index`-th element of the ContexVar tuple defined in _Definition 4, 6, 7_
     /// of the source paper. The tuple is (INPUT=0, ARGUMENT=1).
     ///
@@ -93,23 +105,31 @@ pub enum PortIndex {
         tuple_index: usize,
     },
 
-    ///This port type is not directly described in the paper, but means any _normal_ input, that is not part of a variable. So in the case of GammaNode for instance everything
+    ///This port means any _normal_ input, that is not part of a variable. So in the case of GammaNode for instance everything
     /// after EntryVars and the predicate.
     StdInput(usize),
-    ///This port type is not directly described in the paper, but means any _normal_ argument to some nodes body/inner-region, that is not part of a variable. So in the case of a [λ-Node](crate::nodes::LambdaNode), any argument to
+    ///This port type means any _normal_ argument to some nodes body/inner-region, that is not part of a variable. So in the case of a [λ-Node](crate::nodes::LambdaNode), any argument to
     /// that function's body that is not an context variable.
     StdArg {
+        ///Sould be 0 whenever the referenced node is not a [γ-Node](crate::nodes::GammaNode).
         subregion: usize,
         arg_idx: usize,
     },
-    ///This port type is not directly described in the paper, but means any _normal_ result of some nodes body/inner-region, that is not part of a variable. So in the case of a [λ-Node](crate::nodes::LambdaNode), any result of the node's body.
+    ///This port type means any _normal_ result of some nodes body/inner-region, that is not part of a variable. So in the case of a [λ-Node](crate::nodes::LambdaNode), any result of the node's body.
     StdResult {
+        ///Sould be 0 whenever the referenced node is not a [γ-Node](crate::nodes::GammaNode).
         subregion: usize,
         arg_idx: usize,
     },
     ///This port type is not directly described in the paper, but means any _normal_ output of some node, that is not part of a variable. There are only two cases where this can happen: Any output of a _SimpleNode_, _ApplyNode_ or _OmegaNode_.
     /// All other nodes use their output as part of some kind of variable.
     StdOutput(usize),
+}
+
+impl Default for PortIndex {
+    fn default() -> Self {
+        PortIndex::Input(0)
+    }
 }
 
 //TODO: there are multiple invariants we could check here. bound checking and legalisation (lambda can only have one output, apply has always at least one input etc.)
@@ -123,6 +143,14 @@ impl PortIndex {
         match &self {
             PortIndex::Input(i) => Some(PortLocation::Inputs(*i)),
             PortIndex::Output(o) => Some(PortLocation::Outputs(*o)),
+            PortIndex::Arg { subregion, arg_idx } => Some(PortLocation::Arguments {
+                subregion: *subregion,
+                arg_idx: *arg_idx,
+            }),
+            PortIndex::Result { subregion, arg_idx } => Some(PortLocation::Results {
+                subregion: *subregion,
+                arg_idx: *arg_idx,
+            }),
             PortIndex::ContextVar {
                 var_index,
                 tuple_index,
@@ -394,6 +422,74 @@ impl PortIndex {
     }
 }
 
+impl Display for PortIndex {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            PortIndex::Arg { subregion, arg_idx } => {
+                write!(f, "Argument(region: {subregion}, argument: {arg_idx})")
+            }
+            PortIndex::ContextVar {
+                var_index,
+                tuple_index,
+            } => write!(
+                f,
+                "ContextVariable(var: {var_index}, tuple_item: {tuple_index})"
+            ),
+            PortIndex::EntryVar {
+                var_index,
+                region_index,
+            } => write!(
+                f,
+                "EntryVar(var: {}, region: {})",
+                var_index,
+                if let Some(reg) = region_index {
+                    format!("region({reg})")
+                } else {
+                    format!("Input")
+                }
+            ),
+            PortIndex::ExitVar {
+                var_index,
+                region_index,
+            } => write!(
+                f,
+                "ExitVar(var: {}, region: {})",
+                var_index,
+                if let Some(reg) = region_index {
+                    format!("region({reg})")
+                } else {
+                    format!("Input")
+                }
+            ),
+            PortIndex::Input(i) => write!(f, "Input({i})"),
+            PortIndex::LoopVar {
+                var_index,
+                tuple_index,
+            } => write!(f, "LoopVar(var: {var_index}, tuple_item: {tuple_index})"),
+            PortIndex::Output(o) => write!(f, "Output({o})"),
+            PortIndex::Predicate => write!(f, "Predicate"),
+            PortIndex::RecursionVar {
+                var_index,
+                tuple_index,
+            } => write!(
+                f,
+                "RecursionVar(var: {var_index}, tuple_item: {tuple_index})"
+            ),
+            PortIndex::Result { subregion, arg_idx } => {
+                write!(f, "ResultVar(arg: {arg_idx}, region: {subregion})")
+            }
+            PortIndex::StdArg { subregion, arg_idx } => {
+                write!(f, "StdArg(arg: {arg_idx}, region: {subregion})")
+            }
+            PortIndex::StdInput(i) => write!(f, "StdInput({i})"),
+            PortIndex::StdOutput(o) => write!(f, "StdOutput({o})"),
+            PortIndex::StdResult { subregion, arg_idx } => {
+                write!(f, "StdResult(arg: {arg_idx}, region: {subregion})")
+            }
+        }
+    }
+}
+
 ///Lowerlevel routing location of some [PortIndex]. You should usually not have to build that yourself.
 //TODO: Encapsulate and make crate private
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
@@ -402,6 +498,21 @@ pub enum PortLocation {
     Outputs(usize),
     Arguments { subregion: usize, arg_idx: usize },
     Results { subregion: usize, arg_idx: usize },
+}
+
+impl Display for PortLocation {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Arguments { subregion, arg_idx } => {
+                write!(f, "Node Region({subregion}) - Argument({arg_idx})")
+            }
+            Self::Inputs(i) => write!(f, "Node Input({i})"),
+            Self::Outputs(o) => write!(f, "Node Output({o})"),
+            Self::Results { subregion, arg_idx } => {
+                write!(f, "Node Region({subregion}) - Result({arg_idx})")
+            }
+        }
+    }
 }
 
 impl PortLocation {

@@ -58,7 +58,9 @@ For more examples either have a look at the syntax [test corpus](crates/tree-sit
 ## Techstack / Packages
 
 - [Treesitter](https://github.com/tree-sitter/tree-sitter) based grammar + parser
-- [MLIR](https://mlir.llvm.org/) based compilation to SPIR-V
+- ~[MLIR](https://mlir.llvm.org/) based compilation to SPIR-V~
+- [Cranelift](https://cranelift.dev/) based CPU targeting
+- [SPIR-T](https://github.com/EmbarkStudios/spirt) based SPIR-V / GPU targeting
 - [SPV-Patcher](https://gitlab.com/tendsinmende/spv-patcher) for runtime shader code patching
 
 Note: The techstack is not set in stone. We might switch to a hand written parser, or introduce custom non-MLIR compiler steps if needed.
@@ -121,8 +123,8 @@ If you are interested in the runtime SPIR-V patching, have a look at [spv-patche
 **Milestone 0**: MVP
 
 - [x] Simple grammar to get started
-- [ ] Parser to MLIR (Melior) binding
-- [ ] Simple MLIR -> SPIR-V path (no optimisations, just transforming)
+- [ ] Simple middle end pass (static-dispatch, type resolving etc.)
+- [ ] middle-end => SPIR-T pass for gpu code emission. 
 - [ ] SPIR-V test app (`dry-run`) that tests the whole text-file -> SPIR-V chain
 - [ ] Vulkan test app (`runtime-patch`) that tests runtime patching of actually executed shaders.
 
