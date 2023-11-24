@@ -14,14 +14,14 @@
 use std::fmt::Display;
 
 use ahash::AHashMap;
-use builder::{LambdaBuilder, OmegaBuilder};
+use builder::OmegaBuilder;
 use edge::{Edge, LangEdge, PortIndex, PortLocation};
 use err::GraphError;
 use label::LabelLoc;
 use nodes::{LangNode, Node, OmegaNode};
 use region::{Port, Region};
 use slotmap::{new_key_type, SlotMap};
-use tinyvec::{array_vec, ArrayVec};
+use tinyvec::ArrayVec;
 
 pub mod analyze;
 pub mod builder;
@@ -56,13 +56,6 @@ impl EdgeRef {
     }
 }
 
-new_key_type! {pub struct RegionRef;}
-impl Display for RegionRef {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "RegionRef({:?})", self.0)
-    }
-}
-
 ///The RVSDG state. Contains the actual nodes as well as edge definitions.
 ///
 /// `N`: being your language's Nodes, and `E` being the edges. Note that RVSDGs usually have at least two
@@ -72,7 +65,6 @@ impl Display for RegionRef {
 ///
 /// For ease of use you can always type N as `Box<dyn SomeNodeTrait + 'static>`.
 pub struct Rvsdg<N: LangNode + 'static, E: LangEdge + 'static> {
-    pub(crate) regions: SlotMap<RegionRef, Region>,
     pub(crate) nodes: SlotMap<NodeRef, Node<N>>,
     pub(crate) edges: SlotMap<EdgeRef, Edge<E>>,
 
@@ -86,9 +78,8 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
     pub fn new() -> Self {
         //Pre-create the omega node we use to track imports/exports
         let mut nodes = SlotMap::default();
-        let mut regions = SlotMap::default();
         let omega = nodes.insert(Node::Omega(OmegaNode {
-            body: regions.insert(Region::new()),
+            body: Region::new(),
             outputs: ArrayVec::default(),
             inputs: ArrayVec::default(),
         }));
@@ -96,7 +87,6 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
         Rvsdg {
             edges: SlotMap::default(),
             labels: AHashMap::default(),
-            regions,
             nodes,
             omega,
         }
@@ -188,22 +178,14 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
                 PortLocation::Inputs(idx) => self.node(node).inputs().get(idx),
                 PortLocation::Arguments { subregion, arg_idx } => {
                     if let Some(subreg) = self.node(node).regions().get(subregion) {
-                        if let Some(reg) = self.regions.get(*subreg) {
-                            reg.arguments.get(arg_idx)
-                        } else {
-                            None
-                        }
+                        subreg.arguments.get(arg_idx)
                     } else {
                         None
                     }
                 }
                 PortLocation::Results { subregion, arg_idx } => {
                     if let Some(subreg) = self.node(node).regions().get(subregion) {
-                        if let Some(reg) = self.regions.get(*subreg) {
-                            reg.results.get(arg_idx)
-                        } else {
-                            None
-                        }
+                        subreg.results.get(arg_idx)
                     } else {
                         None
                     }
@@ -222,23 +204,15 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
             match mapping {
                 PortLocation::Inputs(idx) => self.node_mut(node).inputs_mut().get_mut(idx),
                 PortLocation::Arguments { subregion, arg_idx } => {
-                    if let Some(subreg) = self.node(node).regions().get(subregion) {
-                        if let Some(reg) = self.regions.get_mut(*subreg) {
-                            reg.arguments.get_mut(arg_idx)
-                        } else {
-                            None
-                        }
+                    if let Some(subreg) = self.node_mut(node).regions_mut().get_mut(subregion) {
+                        subreg.arguments.get_mut(arg_idx)
                     } else {
                         None
                     }
                 }
                 PortLocation::Results { subregion, arg_idx } => {
-                    if let Some(subreg) = self.node(node).regions().get(subregion) {
-                        if let Some(reg) = self.regions.get_mut(*subreg) {
-                            reg.results.get_mut(arg_idx)
-                        } else {
-                            None
-                        }
+                    if let Some(subreg) = self.node_mut(node).regions_mut().get_mut(subregion) {
+                        subreg.results.get_mut(arg_idx)
                     } else {
                         None
                     }
@@ -298,31 +272,5 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
         } else {
             Err(GraphError::InvalidEdge(edge))
         }
-    }
-
-    pub fn new_region(&mut self) -> RegionRef {
-        self.regions.insert(Region::new())
-    }
-
-    ///Returns reference to the region, assuming that it exists. Panics if it does not exist.
-    pub fn region(&self, rref: RegionRef) -> &Region {
-        self.regions.get(rref).as_ref().unwrap()
-    }
-
-    ///Returns reference to the region, assuming that it exists. Panics if it does not exist.
-    pub fn region_mut(&mut self, rref: RegionRef) -> &mut Region {
-        self.regions.get_mut(rref).unwrap()
-    }
-
-    pub fn on_region<T: 'static>(&self, r: RegionRef, f: impl FnOnce(&Region) -> T) -> T {
-        f(self.region(r))
-    }
-
-    pub fn on_region_mut<T: 'static>(
-        &mut self,
-        r: RegionRef,
-        f: impl FnOnce(&mut Region) -> T,
-    ) -> T {
-        f(self.region_mut(r))
     }
 }

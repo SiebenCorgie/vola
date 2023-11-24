@@ -17,7 +17,8 @@ use crate::{
     edge::{Edge, LangEdge, PortIndex, PortLocation},
     err::{BuilderError, GraphError},
     nodes::{ApplyNode, LangNode, Node},
-    EdgeRef, NodeRef, RegionRef, Rvsdg,
+    region::Region,
+    EdgeRef, NodeRef, Rvsdg,
 };
 pub use inter_proc::{DeltaBuilder, LambdaBuilder, OmegaBuilder, PhiBuilder};
 pub use intra_proc::{GammaBuilder, ThetaBuilder};
@@ -26,12 +27,12 @@ use tinyvec::ArrayVec;
 ///Probably the most used builder. Represents a simple [Region](crate::region::Region) within one of the higher level nodes.
 pub struct RegionBuilder<'a, N: LangNode + 'static, E: LangEdge + 'static> {
     ctx: &'a mut Rvsdg<N, E>,
-    region_ref: RegionRef,
+    region_ref: &'a mut Region,
     parent_node: NodeRef,
 }
 
 impl<'a, N: LangNode + 'static, E: LangEdge + 'static> RegionBuilder<'a, N, E> {
-    pub fn new(ctx: &'a mut Rvsdg<N, E>, rref: RegionRef, parent_node: NodeRef) -> Self {
+    pub fn new(ctx: &'a mut Rvsdg<N, E>, rref: &'a mut Region, parent_node: NodeRef) -> Self {
         RegionBuilder {
             ctx,
             region_ref: rref,
@@ -50,7 +51,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> RegionBuilder<'a, N, E> {
     ///Adds `node` to this region, returns the ref it was registered as
     pub fn insert_node(&mut self, node: N) -> NodeRef {
         let nref = self.ctx.new_node(Node::Simple(node));
-        self.ctx.region_mut(self.region_ref).nodes.insert(nref);
+        self.region_ref.nodes.insert(nref);
 
         nref
     }
@@ -69,10 +70,10 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> RegionBuilder<'a, N, E> {
         edge_type: E,
     ) -> Result<EdgeRef, BuilderError> {
         //Check that its legal to connect the nodes
-        if !self.ctx.region(self.region_ref).nodes.contains(&src) || src != self.parent() {
+        if !self.region_ref.nodes.contains(&src) || src != self.parent() {
             return Err(BuilderError::NodeNotInRegion(src));
         }
-        if !self.ctx.region(self.region_ref).nodes.contains(&dst) || dst != self.parent() {
+        if !self.region_ref.nodes.contains(&dst) || dst != self.parent() {
             return Err(BuilderError::NodeNotInRegion(dst));
         }
 
@@ -143,7 +144,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> RegionBuilder<'a, N, E> {
             builder.build()
         };
         //add to our region
-        self.ctx.region_mut(self.region_ref).nodes.insert(created);
+        self.region_ref.nodes.insert(created);
         created
     }
 
@@ -155,7 +156,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> RegionBuilder<'a, N, E> {
             builder.build()
         };
         //add to our region
-        self.ctx.region_mut(self.region_ref).nodes.insert(created);
+        self.region_ref.nodes.insert(created);
         created
     }
 
@@ -167,7 +168,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> RegionBuilder<'a, N, E> {
             builder.build()
         };
         //add to our region
-        self.ctx.region_mut(self.region_ref).nodes.insert(created);
+        self.region_ref.nodes.insert(created);
         created
     }
 
@@ -182,7 +183,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> RegionBuilder<'a, N, E> {
             builder.build()
         };
         //add to our region
-        self.ctx.region_mut(self.region_ref).nodes.insert(created);
+        self.region_ref.nodes.insert(created);
         created
     }
 
@@ -194,7 +195,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> RegionBuilder<'a, N, E> {
             builder.build()
         };
         //add to our region
-        self.ctx.region_mut(self.region_ref).nodes.insert(created);
+        self.region_ref.nodes.insert(created);
         created
     }
 
@@ -211,7 +212,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> RegionBuilder<'a, N, E> {
         let apply_node =
             if let Some(funct_def) = self.ctx.find_callabel_def(function, src_port.clone()) {
                 if let Node::Lambda(l) = self.ctx.node(funct_def) {
-                    ApplyNode::new_for_lambda(self.ctx, l)
+                    ApplyNode::new_for_lambda(l)
                 } else {
                     return Err(GraphError::NotCallable(function));
                 }
@@ -222,7 +223,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> RegionBuilder<'a, N, E> {
         //insert into graph
         let node_ref = self.ctx.new_node(Node::Apply(apply_node));
         //add to block
-        self.ctx.region_mut(self.region_ref).nodes.insert(node_ref);
+        self.region_ref.nodes.insert(node_ref);
 
         //connect function input
         self.connect(

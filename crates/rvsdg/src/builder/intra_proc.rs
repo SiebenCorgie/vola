@@ -41,9 +41,9 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> GammaBuilder<'a, N, E> {
 
     ///Creates a new branch for this decision point.
     pub fn new_branch(&mut self, branch_builder: impl FnOnce(&mut RegionBuilder<N, E>)) -> usize {
-        self.node.add_region(self.ctx);
+        self.node.add_region();
         let idx = self.node.regions.len() - 1;
-        let mut builder = RegionBuilder::new(self.ctx, self.node.regions[idx], self.node_ref);
+        let mut builder = RegionBuilder::new(self.ctx, &mut self.node.regions[idx], self.node_ref);
         branch_builder(&mut builder);
 
         idx
@@ -51,14 +51,14 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> GammaBuilder<'a, N, E> {
 
     ///Adds a new variable that is used as an argument to all branches.
     pub fn add_entry_variable(&mut self) -> usize {
-        self.node.add_entry_var(self.ctx);
+        self.node.add_entry_var();
         let idx = self.node.entry_var_count - 1;
         idx
     }
 
     ///Adds a new variable that is used as a result of all branches.
     pub fn add_exit_variable(&mut self) -> usize {
-        self.node.add_exit_var(self.ctx);
+        self.node.add_exit_var();
         let idx = self.node.exit_var_count - 1;
         idx
     }
@@ -152,7 +152,7 @@ pub struct ThetaBuilder<'a, N: LangNode + 'static, E: LangEdge + 'static> {
 impl<'a, N: LangNode + 'static, E: LangEdge + 'static> ThetaBuilder<'a, N, E> {
     pub fn new(ctx: &'a mut Rvsdg<N, E>) -> Self {
         let node_ref = ctx.new_node(Node::Invalid);
-        let node = ThetaNode::new(ctx);
+        let node = ThetaNode::new();
         ThetaBuilder {
             ctx,
             node,
@@ -174,7 +174,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> ThetaBuilder<'a, N, E> {
     ///Adds a new loop variable. This are variables that are an input, and/or an output to a single iteration of the loop.
     ///Returns the loop variable index it is created on.
     pub fn add_loop_variable(mut self) -> (Self, usize) {
-        let created_at_idx = self.node.add_loop_variable(self.ctx);
+        let created_at_idx = self.node.add_loop_variable();
         (self, created_at_idx)
     }
 
@@ -217,7 +217,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> ThetaBuilder<'a, N, E> {
     /// # Validity
     /// This port must only be connected to a value available in the ThetaNode's body. So either an argument to the loop-body, or
     /// a value produced within the body.
-    pub fn connect_predicate(self, src: NodeRef, port_index: PortIndex) -> Self {
+    pub fn connect_predicate(mut self, src: NodeRef, port_index: PortIndex) -> Self {
         let pred_index = PortIndex::Predicate;
         let edge = self.ctx.new_edge(Edge {
             src,
@@ -228,8 +228,8 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> ThetaBuilder<'a, N, E> {
         });
 
         //Connect the result
-        self.ctx
-            .region_mut(self.node.loop_body)
+        self.node
+            .loop_body
             .results
             .get_mut(0) //per definition this is always the first port
             .unwrap()

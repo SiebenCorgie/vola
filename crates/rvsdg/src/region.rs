@@ -55,3 +55,9 @@ impl Region {
         }
     }
 }
+
+impl Default for Region {
+    fn default() -> Self {
+        Region::new()
+    }
+}

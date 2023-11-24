@@ -1,6 +1,6 @@
 use thiserror::Error;
 
-use crate::{edge::PortIndex, EdgeRef, NodeRef, RegionRef};
+use crate::{edge::PortIndex, EdgeRef, NodeRef};
 
 #[derive(Error, Debug)]
 pub enum LegalizationError {}
@@ -26,8 +26,6 @@ pub enum GraphError {
     InvalidEdge(EdgeRef),
     #[error("The node {0} is invalid. It might have been deleted since its creation.")]
     InvalidNode(NodeRef),
-    #[error("The region {0} is invalid. It might have been deleted since its creation.")]
-    InvalidRegion(RegionRef),
 
     #[error("The definition of {0} is not a callable node.")]
     NotCallable(NodeRef),

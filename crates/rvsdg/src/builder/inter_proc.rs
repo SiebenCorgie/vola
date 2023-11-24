@@ -1,5 +1,5 @@
 //! privately declares all inter-procedural nodes, which are lambda, delta, phi and omega nodes.
-
+//!
 use crate::{
     edge::{Edge, LangEdge, PortIndex},
     label::LabelLoc,
@@ -21,7 +21,7 @@ pub struct LambdaBuilder<'a, N: LangNode + 'static, E: LangEdge + 'static> {
 impl<'a, N: LangNode + 'static, E: LangEdge + 'static> LambdaBuilder<'a, N, E> {
     pub fn new(ctx: &'a mut Rvsdg<N, E>) -> Self {
         let node_ref = ctx.new_node(Node::Invalid);
-        let node = LambdaNode::new(ctx);
+        let node = LambdaNode::new();
         LambdaBuilder {
             ctx,
             node,
@@ -49,7 +49,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> LambdaBuilder<'a, N, E> {
     /// Returns not just the builder, but also the index of the context variable in this lambda's body.
     pub fn import_context(&mut self, import: NodeRef, port_index: PortIndex) -> usize {
         //Add new cv var
-        let cv_idx = self.node.add_context_variable(self.ctx);
+        let cv_idx = self.node.add_context_variable();
         // create edge to source
         let edge_ref = self.ctx.new_edge(Edge {
             src: import,
@@ -77,7 +77,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> LambdaBuilder<'a, N, E> {
 
     ///Adds an argument to the lambda node, and its inner region. Returns the argument index of the lambda's internal region.
     pub fn add_argument(&mut self) -> PortIndex {
-        let idx = self.node.add_argument(self.ctx);
+        let idx = self.node.add_argument();
         PortIndex::Arg {
             subregion: 0,
             arg_idx: idx,
@@ -86,7 +86,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> LambdaBuilder<'a, N, E> {
 
     ///Adds an result port the the function body. Returns the created result_port of the lambda's internal region.
     pub fn add_result(&mut self) -> PortIndex {
-        let idx = self.node.add_result(self.ctx);
+        let idx = self.node.add_result();
         PortIndex::Result {
             subregion: 0,
             arg_idx: idx,
@@ -101,7 +101,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> LambdaBuilder<'a, N, E> {
     ///lets you change the behaviour of this node.
     pub fn on_region(&mut self, f: impl FnOnce(&mut RegionBuilder<N, E>)) {
         //setup the builder for the region
-        let mut builder = RegionBuilder::new(self.ctx, self.node.body, self.node_ref);
+        let mut builder = RegionBuilder::new(self.ctx, &mut self.node.body, self.node_ref);
         f(&mut builder);
     }
 }
@@ -118,7 +118,7 @@ pub struct DeltaBuilder<'a, N: LangNode + 'static, E: LangEdge + 'static> {
 impl<'a, N: LangNode + 'static, E: LangEdge + 'static> DeltaBuilder<'a, N, E> {
     pub fn new(ctx: &'a mut Rvsdg<N, E>) -> Self {
         let node_ref = ctx.new_node(Node::Invalid);
-        let node = DeltaNode::new(ctx);
+        let node = DeltaNode::new();
         DeltaBuilder {
             ctx,
             node,
@@ -143,7 +143,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> DeltaBuilder<'a, N, E> {
     /// Returns the index of the context variable in this delta's body.
     pub fn import_context(&mut self, import: NodeRef, port_index: PortIndex) -> usize {
         //Add new cv var
-        let cv_idx = self.node.add_context_variable(self.ctx);
+        let cv_idx = self.node.add_context_variable();
         // create edge to source
         let edge_ref = self.ctx.new_edge(Edge {
             src: import,
@@ -172,7 +172,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> DeltaBuilder<'a, N, E> {
     ///lets you change the behaviour of this node.
     pub fn on_region(&mut self, f: impl FnOnce(&mut RegionBuilder<N, E>)) {
         //setup the builder for the region
-        let mut builder = RegionBuilder::new(self.ctx, self.node.body, self.node_ref);
+        let mut builder = RegionBuilder::new(self.ctx, &mut self.node.body, self.node_ref);
         f(&mut builder);
     }
 
@@ -205,7 +205,7 @@ pub struct PhiBuilder<'a, N: LangNode + 'static, E: LangEdge + 'static> {
 impl<'a, N: LangNode + 'static, E: LangEdge + 'static> PhiBuilder<'a, N, E> {
     pub fn new(ctx: &'a mut Rvsdg<N, E>) -> Self {
         let node_ref = ctx.new_node(Node::Invalid);
-        let node = PhiNode::new(ctx);
+        let node = PhiNode::new();
         PhiBuilder {
             ctx,
             node,
@@ -230,7 +230,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> PhiBuilder<'a, N, E> {
     /// Returns the index of the context variable in this phi's body.
     pub fn import_context(&mut self, import: NodeRef, port_index: PortIndex) -> usize {
         //Add new cv var
-        let cv_idx = self.node.add_context_variable(self.ctx);
+        let cv_idx = self.node.add_context_variable();
         // create edge to source
         let edge_ref = self.ctx.new_edge(Edge {
             src: import,
@@ -275,7 +275,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> PhiBuilder<'a, N, E> {
     /// The function returns the recursion variable index. When calling the ϕ-Node later via an apply node, this will be the `n-th` argument on that phi node.
     //TODO: Find a better way to explain that?
     pub fn add_recursion_variable(&mut self) -> usize {
-        let idx = self.node.add_recursion_variable(self.ctx);
+        let idx = self.node.add_recursion_variable();
         idx
     }
 }
@@ -317,7 +317,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> OmegaBuilder<'a, N, E> {
     ///Adds an import port with the given label. The label will used for the import of the function or value.
     /// Returns the argument_index of the port allocated.
     pub fn import(&mut self, label: impl Into<String>) -> PortIndex {
-        let idx = self.node.add_import(self.ctx);
+        let idx = self.node.add_import();
         //annotate the port with the given label
         self.ctx.push_label(
             LabelLoc::Port {
@@ -338,7 +338,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> OmegaBuilder<'a, N, E> {
     ///Adds an export port with the given label. The label will used for the export of the function or value (read C-FFI style).
     /// Returns the argument_index of the port allocated.
     pub fn export(&mut self, label: &str) -> PortIndex {
-        let idx = self.node.add_export(self.ctx);
+        let idx = self.node.add_export();
         //annotate the port with the given label
         self.ctx.push_label(
             LabelLoc::Port {
@@ -368,7 +368,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> OmegaBuilder<'a, N, E> {
         };
 
         //add the created node to our region
-        self.ctx.region_mut(self.node.body).nodes.insert(created);
+        self.node.body.nodes.insert(created);
         created
     }
 
@@ -383,7 +383,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> OmegaBuilder<'a, N, E> {
         };
 
         //add the created node to our region
-        self.ctx.region_mut(self.node.body).nodes.insert(created);
+        self.node.body.nodes.insert(created);
         created
     }
 }

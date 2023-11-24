@@ -6,7 +6,8 @@ use rvsdg::{
     edge::LangEdge,
     label::LabelLoc,
     nodes::{LangNode, Node},
-    NodeRef, RegionRef, Rvsdg,
+    region::Region,
+    NodeRef, Rvsdg,
 };
 
 use crate::{
@@ -65,14 +66,13 @@ impl Printer {
     fn rect_region_collector<N: View + LangNode + 'static, E: View + LangEdge + 'static>(
         &mut self,
         rvsdg: &Rvsdg<N, E>,
-        reg: RegionRef,
+        region: &Region,
     ) -> Range<usize> {
         //We build the regions nodes by stepping in parallel from all outputs, up the node chain, till we finished each tree.
         // at this point we assume that a region always consists of a tree. However, since the viewer will be used as a debugging
         // tool, we still check that criteria via the visited list.
         //
         // All in all the node location/exploration thingy is kinda a breadth-first bottom-up style algorithm.
-        let region = rvsdg.region(reg);
         let mut visited = AHashSet::default();
 
         //Init with all src nodes of all result ports. So all nodes that are connected to a result
@@ -156,7 +156,7 @@ impl Printer {
         let mut max_height = 0.0f32;
         let mut hor_offset = 0.0;
         for reg in regions {
-            let range = self.rect_region_collector(rvsdg, *reg);
+            let range = self.rect_region_collector(rvsdg, reg);
             if hor_offset != 0.0 {
                 //If offset region to the right.
                 self.offset_rect(range.clone(), Point::new(hor_offset, 0.0));
