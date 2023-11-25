@@ -21,7 +21,7 @@ use label::LabelLoc;
 use nodes::{LangNode, Node, OmegaNode};
 use region::Region;
 use slotmap::{new_key_type, SlotMap};
-use tinyvec::ArrayVec;
+use tinyvec::TinyVec;
 
 pub mod analyze;
 pub mod builder;
@@ -83,7 +83,7 @@ pub struct Rvsdg<N: LangNode + 'static, E: LangEdge + 'static> {
     pub(crate) nodes: SlotMap<NodeRef, Node<N>>,
     pub(crate) edges: SlotMap<EdgeRef, Edge<E>>,
 
-    pub(crate) labels: AHashMap<LabelLoc, ArrayVec<[String; 1]>>,
+    pub(crate) labels: AHashMap<LabelLoc, TinyVec<[String; 1]>>,
 
     ///Entrypoint of this translation unit.
     pub(crate) omega: NodeRef,
@@ -156,17 +156,17 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
         if let Some(vals) = self.labels.get_mut(&label) {
             vals.push(value);
         } else {
-            let mut new_vec = ArrayVec::default();
+            let mut new_vec = TinyVec::default();
             new_vec.push(value);
             self.labels.insert(label, new_vec);
         }
     }
 
-    pub fn labels(&self, label: &LabelLoc) -> Option<&ArrayVec<[String; 1]>> {
+    pub fn labels(&self, label: &LabelLoc) -> Option<&TinyVec<[String; 1]>> {
         self.labels.get(label)
     }
 
-    pub fn labels_mut(&mut self, label: &LabelLoc) -> Option<&mut ArrayVec<[String; 1]>> {
+    pub fn labels_mut(&mut self, label: &LabelLoc) -> Option<&mut TinyVec<[String; 1]>> {
         self.labels.get_mut(label)
     }
 

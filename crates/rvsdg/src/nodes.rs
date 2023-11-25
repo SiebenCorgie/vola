@@ -15,7 +15,7 @@
 //! - [PhiNode] ~ [RecursionNode] : Models mutual recursion. Similarly to function nodes in uses _context-variables_ to import state that is used internally. _Recursion-Variables_ are used to represent in-and output exclusive to the recursion border.
 //! - [OmegaNode] ~ [TranslationUnit] : Represents the whole translation unit. Based on the internal region we can identify imported and exported state.
 
-use tinyvec::ArrayVec;
+use tinyvec::TinyVec;
 
 use crate::{
     edge::{InputType, OutputType},
@@ -425,21 +425,21 @@ pub type DecisionNode = GammaNode;
 pub struct GammaNode {
     pub(crate) entry_var_count: usize,
     pub(crate) exit_var_count: usize,
-    pub(crate) regions: ArrayVec<[Region; 3]>,
-    pub(crate) inputs: ArrayVec<[Input; 3]>,
-    pub(crate) outputs: ArrayVec<[Output; 3]>,
+    pub(crate) regions: TinyVec<[Region; 3]>,
+    pub(crate) inputs: TinyVec<[Input; 3]>,
+    pub(crate) outputs: TinyVec<[Output; 3]>,
 }
 
 impl GammaNode {
     pub fn new() -> Self {
-        let mut inputs = ArrayVec::default();
+        let mut inputs = TinyVec::default();
         inputs.push(Input::default());
         GammaNode {
             entry_var_count: 0,
             exit_var_count: 0,
-            regions: ArrayVec::default(),
+            regions: TinyVec::default(),
             inputs,
-            outputs: ArrayVec::default(),
+            outputs: TinyVec::default(),
         }
     }
 
@@ -570,8 +570,8 @@ pub type LoopNode = ThetaNode;
 pub struct ThetaNode {
     pub(crate) lv_count: usize,
     pub(crate) loop_body: Region,
-    pub(crate) inputs: ArrayVec<[Input; 3]>,
-    pub(crate) outputs: ArrayVec<[Output; 3]>,
+    pub(crate) inputs: TinyVec<[Input; 3]>,
+    pub(crate) outputs: TinyVec<[Output; 3]>,
 }
 
 impl ThetaNode {
@@ -582,8 +582,8 @@ impl ThetaNode {
         ThetaNode {
             lv_count: 0,
             loop_body,
-            inputs: ArrayVec::default(),
-            outputs: ArrayVec::default(),
+            inputs: TinyVec::default(),
+            outputs: TinyVec::default(),
         }
     }
 
@@ -653,18 +653,18 @@ impl ThetaNode {
 #[derive(Debug, Clone)]
 pub struct ApplyNode {
     ///Function being called, must be a edge to a lambdaNode
-    pub(crate) inputs: ArrayVec<[Input; 3]>,
-    pub(crate) outputs: ArrayVec<[Output; 3]>,
+    pub(crate) inputs: TinyVec<[Input; 3]>,
+    pub(crate) outputs: TinyVec<[Output; 3]>,
 }
 
 impl ApplyNode {
     pub fn new() -> Self {
-        let mut inputs = ArrayVec::default();
+        let mut inputs = TinyVec::default();
         //The function input to apply
         inputs.insert(0, Input::default());
         ApplyNode {
             inputs,
-            outputs: ArrayVec::default(),
+            outputs: TinyVec::default(),
         }
     }
 
@@ -735,7 +735,7 @@ pub type FunctionNode = LambdaNode;
 #[derive(Debug, Clone)]
 pub struct LambdaNode {
     pub(crate) cv_count: usize,
-    pub(crate) inputs: ArrayVec<[Input; 3]>,
+    pub(crate) inputs: TinyVec<[Input; 3]>,
     pub(crate) output: Output,
     pub(crate) body: Region,
 }
@@ -744,7 +744,7 @@ impl LambdaNode {
     pub fn new() -> Self {
         LambdaNode {
             cv_count: 0,
-            inputs: ArrayVec::default(),
+            inputs: TinyVec::default(),
             output: Output::default(),
             body: Region::new(),
         }
@@ -842,7 +842,7 @@ pub type GlobalVariable = DeltaNode;
 pub struct DeltaNode {
     pub(crate) cv_count: usize,
     ///All inputs of a delta node are context variables.
-    pub(crate) inputs: ArrayVec<[Input; 3]>,
+    pub(crate) inputs: TinyVec<[Input; 3]>,
     pub(crate) body: Region,
     pub(crate) output: Output,
 }
@@ -851,7 +851,7 @@ impl DeltaNode {
     pub fn new() -> Self {
         DeltaNode {
             cv_count: 0,
-            inputs: ArrayVec::default(),
+            inputs: TinyVec::default(),
             body: Region::new(),
             output: Output::default(),
         }
@@ -933,8 +933,8 @@ pub struct PhiNode {
     pub(crate) cv_count: usize,
     pub(crate) rv_count: usize,
     pub(crate) body: Region,
-    pub(crate) outputs: ArrayVec<[Output; 3]>,
-    pub(crate) inputs: ArrayVec<[Input; 3]>,
+    pub(crate) outputs: TinyVec<[Output; 3]>,
+    pub(crate) inputs: TinyVec<[Input; 3]>,
 }
 
 impl PhiNode {
@@ -942,9 +942,9 @@ impl PhiNode {
         PhiNode {
             cv_count: 0,
             rv_count: 0,
-            inputs: ArrayVec::default(),
+            inputs: TinyVec::default(),
             body: Region::new(),
-            outputs: ArrayVec::default(),
+            outputs: TinyVec::default(),
         }
     }
 

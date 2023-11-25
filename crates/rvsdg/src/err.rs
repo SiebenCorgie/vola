@@ -1,6 +1,9 @@
 use thiserror::Error;
 
-use crate::{EdgeRef, NodeRef};
+use crate::{
+    edge::{InportLocation, OutportLocation},
+    EdgeRef, NodeRef,
+};
 
 #[derive(Error, Debug)]
 pub enum LegalizationError {}
@@ -12,6 +15,10 @@ pub enum BuilderError {
     NodeNotInRegion(NodeRef),
     #[error("Overwrote connection {0} for input, this might not be desired.")]
     EdgeOverwrite(EdgeRef),
+    #[error("No input {0:?} on node")]
+    ExpectedInport(InportLocation),
+    #[error("No output {0:?} on node")]
+    ExpectedOutport(OutportLocation),
 }
 
 ///Errors that happen when operating on the graph directly. For instance, when trying to delete an

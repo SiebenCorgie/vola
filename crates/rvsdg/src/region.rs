@@ -1,5 +1,5 @@
 use ahash::AHashSet;
-use tinyvec::ArrayVec;
+use tinyvec::TinyVec;
 
 use crate::{
     builder::RegionBuilder,
@@ -12,13 +12,13 @@ use crate::{
 ///A Outport allows us to define multiple destination edges. It is the base type for [Output] and [Argument].
 #[derive(Debug, Clone)]
 pub struct Outport {
-    pub edges: ArrayVec<[EdgeRef; 2]>,
+    pub edges: TinyVec<[EdgeRef; 2]>,
 }
 
 impl Default for Outport {
     fn default() -> Self {
         Outport {
-            edges: ArrayVec::default(),
+            edges: TinyVec::default(),
         }
     }
 }
@@ -45,8 +45,8 @@ pub type RegResult = Inport;
 /// A region R = (A, N, E, R) is characterised through a set of arguments A, its internal nodes N and edges E, and a result tuple R.
 #[derive(Debug, Clone)]
 pub struct Region {
-    pub arguments: ArrayVec<[Argument; 3]>,
-    pub results: ArrayVec<[RegResult; 3]>,
+    pub arguments: TinyVec<[Argument; 3]>,
+    pub results: TinyVec<[RegResult; 3]>,
     pub nodes: AHashSet<NodeRef>,
     pub edges: AHashSet<EdgeRef>,
 }
@@ -56,8 +56,8 @@ impl Region {
         Region {
             nodes: AHashSet::default(),
             edges: AHashSet::default(),
-            arguments: ArrayVec::default(),
-            results: ArrayVec::default(),
+            arguments: TinyVec::default(),
+            results: TinyVec::default(),
         }
     }
 

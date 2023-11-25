@@ -22,7 +22,7 @@ use crate::{
 };
 pub use inter_proc::{DeltaBuilder, LambdaBuilder, OmegaBuilder, PhiBuilder};
 pub use intra_proc::{GammaBuilder, ThetaBuilder};
-use tinyvec::ArrayVec;
+use tinyvec::TinyVec;
 
 ///Probably the most used builder. Represents a simple [Region](crate::region::Region) within one of the higher level nodes.
 pub struct RegionBuilder<'a, N: LangNode + 'static, E: LangEdge + 'static> {
@@ -83,7 +83,13 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> RegionBuilder<'a, N, E> {
             return Err(BuilderError::NodeNotInRegion(dst.node));
         }
 
-        //TODO: check that the port_types are okay? Currently can't think of an invariant.
+        //make sure that the ports exist
+        if let None = self.ctx.node(src.node).outport(&src.output) {
+            return Err(BuilderError::ExpectedOutport(src));
+        }
+        if let None = self.ctx.node(dst.node).inport(&dst.input) {
+            return Err(BuilderError::ExpectedInport(dst));
+        }
 
         //all right, hookup
         let edge = self.ctx.new_edge(Edge {
@@ -102,18 +108,19 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> RegionBuilder<'a, N, E> {
 
         //If an input was already set, notify the old input of the disconnect.
         let mut was_replaced = None;
-        if let Some(old_edge) = self.ctx.node(dst.node).inport(&dst.input).unwrap().edge {
-            self.ctx.disconnect(old_edge);
+        if let Some(Some(old_edge)) = self.ctx.node(dst.node).inport(&dst.input).map(|i| i.edge) {
+            self.ctx.disconnect(old_edge).unwrap();
             was_replaced = Some(BuilderError::EdgeOverwrite(old_edge));
         }
 
+        //dbgassert that the inport is currently unused, since the disconnect above should have taken
+        // care of that.
         debug_assert!(
-            self.ctx
-                .node(dst.node)
-                .inport(&dst.input)
-                .unwrap()
-                .edge
-                .is_none(),
+            if let Some(inport) = self.ctx.node(dst.node).inport(&dst.input) {
+                inport.edge.is_none()
+            } else {
+                true
+            },
             "No edge should be connected to input at this point!"
         );
         self.ctx
@@ -135,9 +142,9 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> RegionBuilder<'a, N, E> {
         &mut self,
         node: N,
         src: &[OutportLocation],
-    ) -> Result<(NodeRef, ArrayVec<[EdgeRef; 3]>), BuilderError> {
+    ) -> Result<(NodeRef, TinyVec<[EdgeRef; 3]>), BuilderError> {
         let created_node = self.insert_node(node);
-        let mut edges = ArrayVec::default();
+        let mut edges = TinyVec::default();
         for (dst_idx, src) in src.into_iter().enumerate() {
             edges.push(self.connect(
                 src.clone(),
@@ -223,7 +230,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> RegionBuilder<'a, N, E> {
         &mut self,
         function_src: OutportLocation,
         arguments: &[OutportLocation],
-    ) -> Result<(NodeRef, ArrayVec<[EdgeRef; 3]>), GraphError> {
+    ) -> Result<(NodeRef, TinyVec<[EdgeRef; 3]>), GraphError> {
         let apply_node = if let Some(funct_def) = self.ctx.find_callabel_def(function_src.clone()) {
             if let Node::Lambda(l) = self.ctx.node(funct_def) {
                 ApplyNode::new_for_lambda(l)
@@ -241,7 +248,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> RegionBuilder<'a, N, E> {
 
         //connect function input and arguments, collect created edges
 
-        let mut arg_edges = ArrayVec::default();
+        let mut arg_edges = TinyVec::default();
         let call_edge = self
             .connect(
                 function_src,
