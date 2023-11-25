@@ -76,10 +76,10 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> RegionBuilder<'a, N, E> {
         edge_type: E,
     ) -> Result<EdgeRef, BuilderError> {
         //Check that its legal to connect the nodes
-        if !self.region_ref.nodes.contains(&src.node) || src.node != self.parent() {
+        if !(self.region_ref.nodes.contains(&src.node) || src.node == self.parent()) {
             return Err(BuilderError::NodeNotInRegion(src.node));
         }
-        if !self.region_ref.nodes.contains(&dst.node) || dst.node != self.parent() {
+        if !(self.region_ref.nodes.contains(&dst.node) || dst.node == self.parent()) {
             return Err(BuilderError::NodeNotInRegion(dst.node));
         }
 

@@ -16,7 +16,7 @@ enum MyNodes {
     Store,
     ImmI32(i32),
     ImmChar(char),
-    AryConst,
+    AryConst(usize),
     Lt,
     Gt,
     Mul,
@@ -31,10 +31,24 @@ struct LNode {
 
 impl LNode {
     fn new(ty: MyNodes) -> Self {
+        //configure inputs/outputs
+        let (n_inputs, n_outputs) = match ty {
+            MyNodes::Load => (2, 2),
+            MyNodes::Store => (3, 1),
+            MyNodes::ImmChar(_) => (0, 1),
+            MyNodes::ImmI32(_) => (0, 1),
+            //For the sake of this example
+            MyNodes::AryConst(size) => (size, 1),
+            MyNodes::Lt => (2, 1),
+            MyNodes::Gt => (2, 1),
+            MyNodes::Mul => (2, 1),
+            MyNodes::Add => (2, 1),
+        };
+
         LNode {
             node: ty,
-            inputs: Vec::new(),
-            outputs: Vec::new(),
+            inputs: vec![Input::default(); n_inputs],
+            outputs: vec![Output::default(); n_outputs],
         }
     }
 }
@@ -87,9 +101,10 @@ fn main() {
                 let const_a = reg.insert_node(LNode::new(MyNodes::ImmChar('a')));
                 let const_x = reg.insert_node(LNode::new(MyNodes::ImmChar('x')));
                 let const_term = reg.insert_node(LNode::new(MyNodes::ImmChar('\0')));
+                println!("C_M: {const_m}, C_A: {const_a}, C_X: {const_x}, C_TERM: {const_term}");
                 let (const_arr, _edges) = reg
                     .connect_node(
-                        LNode::new(MyNodes::AryConst),
+                        LNode::new(MyNodes::AryConst(4)),
                         &[
                             const_m.as_outport_location(OutputType::Output(0)),
                             const_a.as_outport_location(OutputType::Output(0)),
@@ -174,8 +189,14 @@ fn main() {
                     });
                 });
                 reg.connect(
+                    gt_node.as_outport_location(OutputType::Output(0)),
+                    gamma_node.as_inport_location(InputType::GammaPredicate),
+                    VSEdge::Value,
+                )
+                .unwrap();
+                reg.connect(
                     gamma_node.as_outport_location(OutputType::Output(0)),
-                    reg.parent().as_inport_location(InputType::Result(0)),
+                    res_max,
                     VSEdge::Value,
                 )
                 .unwrap();
