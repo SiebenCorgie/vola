@@ -79,7 +79,7 @@ impl Printer {
         let mut visit_list: Vec<NodeRef> = region
             .results
             .iter()
-            .map(|port| port.edges.iter().map(|edge| rvsdg.edge(*edge).src))
+            .map(|port| port.edge.iter().map(|edge| rvsdg.edge(*edge).src.node))
             .flatten()
             .collect();
 

@@ -5,6 +5,7 @@ use crate::{
     NodeRef,
 };
 
+/*
 ///Port index references a certain type of port on a node. Note that
 /// [Node](crate::nodes::Node) implements `Index`/`IndexMut` for that type, as well as `get()`, `get_mut`, `try_get()`, `try_get_mut()`.
 ///
@@ -490,17 +491,35 @@ impl Display for PortIndex {
     }
 }
 
-///Lowerlevel routing location of some [PortIndex]. You should usually not have to build that yourself.
+
+
+///Declares how an index is offset.
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+pub enum PortOffset {
+    Standard,
+    ContextVariable,
+    RecursiveVariable,
+}
+
+///Declares a unique port of some `node`. This implements the adressing scheme of the paper for context_variable, recursive_variables, entry_variable etc.
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+pub struct PortLocation {
+    pub node: NodeRef,
+    pub offset: PortOffset,
+    pub ty: PortType,
+}
+
+///Lowerlevel routing location of some [PortLocation]. You should usually not have to build that yourself.
 //TODO: Encapsulate and make crate private
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
-pub enum PortLocation {
+pub enum PortType {
     Inputs(usize),
     Outputs(usize),
     Arguments { subregion: usize, arg_idx: usize },
     Results { subregion: usize, arg_idx: usize },
 }
 
-impl Display for PortLocation {
+impl Display for PortType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Arguments { subregion, arg_idx } => {
@@ -515,10 +534,10 @@ impl Display for PortLocation {
     }
 }
 
-impl PortLocation {
+impl PortType {
     ///Assumes that this is an input location, unwrapping into the index of the input array.
     pub fn unwrap_input(&self) -> usize {
-        if let PortLocation::Inputs(i) = self {
+        if let PortType::Inputs(i) = self {
             *i
         } else {
             panic!("Was not PortLocation::Input");
@@ -526,7 +545,7 @@ impl PortLocation {
     }
     ///Assumes that this is an output location, unwrapping into the index of the output array.
     pub fn unwrap_output(&self) -> usize {
-        if let PortLocation::Outputs(o) = self {
+        if let PortType::Outputs(o) = self {
             *o
         } else {
             panic!("Was not PortLocation::Output");
@@ -535,7 +554,7 @@ impl PortLocation {
 
     ///Assumes that this is the argument to some sub region of a node. Unwraps into `(region_index, region's argument index)`.
     pub fn unwrap_region_argument(&self) -> (usize, usize) {
-        if let PortLocation::Arguments { subregion, arg_idx } = self {
+        if let PortType::Arguments { subregion, arg_idx } = self {
             (*subregion, *arg_idx)
         } else {
             panic!("Was not PortLocation::Arguments")
@@ -544,34 +563,70 @@ impl PortLocation {
 
     ///Assumes that this is the result to some sub region of a node. Unwraps into `(region_index, region's result index)`.
     pub fn unwrap_region_result(&self) -> (usize, usize) {
-        if let PortLocation::Results { subregion, arg_idx } = self {
+        if let PortType::Results { subregion, arg_idx } = self {
             (*subregion, *arg_idx)
         } else {
             panic!("Was not PortLocation::Results")
         }
     }
 }
+*/
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+pub enum InputType {
+    ///Any input to the node. Could also be a exit variable etc.
+    Input(usize),
+
+    ///Any result to the node's body that is not a special argument like _recusion_variable_ or _predicate_.
+    Result(usize),
+    ///Predicate to a gamma node, which is always the first input to the gamma node.
+    GammaPredicate,
+    ///Predicate to a theta node, which is always the first result of the theta nodes body.
+    ThetaPredicate,
+    ExitVariableResult {
+        branch: usize,
+        exit_variable: usize,
+    },
+    EntryVariableInput(usize),
+    RecursionVariableResult(usize),
+    ContextVariable(usize),
+}
+
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+pub struct InportLocation {
+    pub node: NodeRef,
+    pub input: InputType,
+}
+
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+pub enum OutputType {
+    ///Any output of the node. Could be a lambda definition, or a exit-variable output.
+    Output(usize),
+    ///Any argument to the node's body that is not a special argument like _recusion_variable_ or _context_variable_.
+    Argument(usize),
+    LambdaDecleration,
+    DeltaDecleration,
+    RecursionVariableOutput(usize),
+    RecursionVariableArgument(usize),
+    EntryVariableArgument {
+        branch: usize,
+        entry_variable: usize,
+    },
+    ExitVariableOutput(usize),
+    ContextVariableArgument(usize),
+}
+
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+pub struct OutportLocation {
+    pub node: NodeRef,
+    pub output: OutputType,
+}
 
 ///An edge in a RVSDG is always a directed edge from `src` to `dst`. It contains a language specific
 /// edge-type `E`, that represent the dependency type. In general there are at least `State` and `Value` edges, but a
 /// language is free to represent more sophisticated dependencies through those types.
-///
-/// # Rational behind the src-index / dst-index.
-///
-/// On a surface level it's kinda shaky to store some _port-index_ on a node that can, potentially change its output configuration while being
-/// build.
-/// However, in practice the only type of port that frequently changes are context-, loop-, and recursion-variables, those variables are, however only ever
-/// appended, never inserted. The input/output configuration is stable.
-/// For instance a loop only has a single _real_ input, the loop-criteria. Or a hypothetical _simple_ `LoadOp` will always have
-/// one input (the load address), and two outputs (load_value, and load_state). So when we reference the loaded value via index 0, this will
-/// stay stable. Similarly, if we use input 0 of a loop and assume that it is the loop-criteria, this ought to be right.
 pub struct Edge<E: LangEdge + 'static> {
-    pub src: NodeRef,
-    ///Index into the `src`-nodes output array.
-    pub src_index: PortIndex,
-    pub dst: NodeRef,
-    ///Index into the `dst`-node input array.
-    pub dst_index: PortIndex,
+    pub src: OutportLocation,
+    pub dst: InportLocation,
     pub ty: E,
 }
 

@@ -1,7 +1,7 @@
 //! privately declares all inter-procedural nodes, which are lambda, delta, phi and omega nodes.
 //!
 use crate::{
-    edge::{Edge, LangEdge, PortIndex},
+    edge::{InportLocation, InputType, LangEdge, OutportLocation, OutputType},
     label::LabelLoc,
     nodes::{DeltaNode, LambdaNode, LangNode, Node, OmegaNode, PhiNode},
     NodeRef, Rvsdg,
@@ -44,52 +44,26 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> LambdaBuilder<'a, N, E> {
         node_ref
     }
 
-    ///Imports the node `import` as a context variable. This means that `import` can be evaluated within this lambda.
-    ///
-    /// Returns not just the builder, but also the index of the context variable in this lambda's body.
-    pub fn import_context(&mut self, import: NodeRef, port_index: PortIndex) -> usize {
-        //Add new cv var
-        let cv_idx = self.node.add_context_variable();
-        // create edge to source
-        let edge_ref = self.ctx.new_edge(Edge {
-            src: import,
-            src_index: port_index.clone(),
-            dst: self.node_ref,
-            dst_index: PortIndex::ContextVar {
-                var_index: cv_idx,
-                tuple_index: 0,
-            },
-            ty: E::value_edge(),
-        });
-
-        //setup edge on both ports
-        self.ctx
-            .port_mut(import, port_index)
-            .unwrap()
-            .edges
-            .push(edge_ref);
-
-        assert!(self.node.inputs[cv_idx].edges.is_empty());
-        self.node.inputs[cv_idx].edges.push(edge_ref);
-
-        cv_idx
+    ///Adds a context variable to the LambdaNode's signature and body
+    pub fn add_context_variable(&mut self) -> usize {
+        self.node.add_context_variable()
     }
 
-    ///Adds an argument to the lambda node, and its inner region. Returns the argument index of the lambda's internal region.
-    pub fn add_argument(&mut self) -> PortIndex {
+    ///Adds an argument to the lambda node's body. Returns the argument index it was added at.
+    pub fn add_argument(&mut self) -> OutportLocation {
         let idx = self.node.add_argument();
-        PortIndex::Arg {
-            subregion: 0,
-            arg_idx: idx,
+        OutportLocation {
+            node: self.node_ref,
+            output: OutputType::Argument(idx),
         }
     }
 
-    ///Adds an result port the the function body. Returns the created result_port of the lambda's internal region.
-    pub fn add_result(&mut self) -> PortIndex {
+    ///Adds an result port the the function's body. Returns the created result_port of the lambda's internal region.
+    pub fn add_result(&mut self) -> InportLocation {
         let idx = self.node.add_result();
-        PortIndex::Result {
-            subregion: 0,
-            arg_idx: idx,
+        InportLocation {
+            node: self.node_ref,
+            input: InputType::Result(idx),
         }
     }
 
@@ -138,35 +112,9 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> DeltaBuilder<'a, N, E> {
         node_ref
     }
 
-    ///Imports the node `import` as a context variable. This means that `import` can be evaluated or used within this delta.
-    ///
-    /// Returns the index of the context variable in this delta's body.
-    pub fn import_context(&mut self, import: NodeRef, port_index: PortIndex) -> usize {
-        //Add new cv var
-        let cv_idx = self.node.add_context_variable();
-        // create edge to source
-        let edge_ref = self.ctx.new_edge(Edge {
-            src: import,
-            src_index: port_index.clone(),
-            dst: self.node_ref,
-            dst_index: PortIndex::ContextVar {
-                var_index: cv_idx,
-                tuple_index: 0,
-            },
-            ty: E::value_edge(),
-        });
-
-        //setup edge on both ports
-        self.ctx
-            .port_mut(import, port_index)
-            .unwrap()
-            .edges
-            .push(edge_ref);
-
-        assert!(self.node.inputs[cv_idx].edges.is_empty());
-        self.node.inputs[cv_idx].edges.push(edge_ref);
-
-        cv_idx
+    ///Adds a context variable to the DeltaNode's signature and body
+    pub fn add_context_variable(&mut self) -> usize {
+        self.node.add_context_variable()
     }
 
     ///lets you change the behaviour of this node.
@@ -174,19 +122,6 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> DeltaBuilder<'a, N, E> {
         //setup the builder for the region
         let mut builder = RegionBuilder::new(self.ctx, &mut self.node.body, self.node_ref);
         f(&mut builder);
-    }
-
-    ///Connects `dst`'s `port` to the output of this delta node.
-    pub fn connect_output(&mut self, dst: NodeRef, port: PortIndex) {
-        let edge = self.ctx.new_edge(Edge {
-            src: self.node_ref,
-            src_index: PortIndex::Output(0),
-            dst,
-            dst_index: port.clone(),
-            ty: E::value_edge(),
-        });
-        self.node.output.edges.push(edge);
-        self.ctx.port_mut(dst, port).unwrap().edges.push(edge);
     }
 }
 
@@ -225,35 +160,9 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> PhiBuilder<'a, N, E> {
         node_ref
     }
 
-    ///Imports the node `import` as a context variable. This means that `import` can be evaluated or used within this PhiNode.
-    ///
-    /// Returns the index of the context variable in this phi's body.
-    pub fn import_context(&mut self, import: NodeRef, port_index: PortIndex) -> usize {
-        //Add new cv var
-        let cv_idx = self.node.add_context_variable();
-        // create edge to source
-        let edge_ref = self.ctx.new_edge(Edge {
-            src: import,
-            src_index: port_index.clone(),
-            dst: self.node_ref,
-            dst_index: PortIndex::ContextVar {
-                var_index: cv_idx,
-                tuple_index: 0,
-            },
-            ty: E::value_edge(),
-        });
-
-        //setup edge on both ports
-        self.ctx
-            .port_mut(import, port_index)
-            .unwrap()
-            .edges
-            .push(edge_ref);
-
-        assert!(self.node.inputs[cv_idx].edges.is_empty());
-        self.node.inputs[cv_idx].edges.push(edge_ref);
-
-        cv_idx
+    ///Adds a context variable to the PhiNode's signature and body
+    pub fn add_context_variable(&mut self) -> usize {
+        self.node.add_context_variable()
     }
 
     ///Declares a recursion variable to the inner recursion of some lambda. This are usually the values that change per recursion level.
@@ -275,8 +184,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> PhiBuilder<'a, N, E> {
     /// The function returns the recursion variable index. When calling the ϕ-Node later via an apply node, this will be the `n-th` argument on that phi node.
     //TODO: Find a better way to explain that?
     pub fn add_recursion_variable(&mut self) -> usize {
-        let idx = self.node.add_recursion_variable();
-        idx
+        self.node.add_recursion_variable()
     }
 }
 
@@ -316,45 +224,30 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> OmegaBuilder<'a, N, E> {
     */
     ///Adds an import port with the given label. The label will used for the import of the function or value.
     /// Returns the argument_index of the port allocated.
-    pub fn import(&mut self, label: impl Into<String>) -> PortIndex {
+    pub fn import(&mut self, label: impl Into<String>) -> OutportLocation {
         let idx = self.node.add_import();
+        let portloc = OutportLocation {
+            node: self.node_ref,
+            output: OutputType::Argument(idx),
+        };
         //annotate the port with the given label
-        self.ctx.push_label(
-            LabelLoc::Port {
-                node: self.node_ref,
-                port: PortIndex::StdArg {
-                    subregion: 0,
-                    arg_idx: idx,
-                },
-            },
-            label.into(),
-        );
-        PortIndex::StdArg {
-            subregion: 0,
-            arg_idx: idx,
-        }
+        self.ctx
+            .push_label(LabelLoc::OutPort(portloc.clone()), label.into());
+        portloc
     }
 
     ///Adds an export port with the given label. The label will used for the export of the function or value (read C-FFI style).
     /// Returns the argument_index of the port allocated.
-    pub fn export(&mut self, label: &str) -> PortIndex {
+    pub fn export(&mut self, label: String) -> InportLocation {
         let idx = self.node.add_export();
+        let portloc = InportLocation {
+            node: self.node_ref,
+            input: InputType::Result(idx),
+        };
         //annotate the port with the given label
-        self.ctx.push_label(
-            LabelLoc::Port {
-                node: self.node_ref,
-                port: PortIndex::StdResult {
-                    subregion: 0,
-                    arg_idx: idx,
-                },
-            },
-            label.into(),
-        );
-
-        PortIndex::StdResult {
-            subregion: 0,
-            arg_idx: idx,
-        }
+        self.ctx
+            .push_label(LabelLoc::InPort(portloc.clone()), label.into());
+        portloc
     }
 
     ///Allows you to add a global value ([δ-Node](crate::nodes::DeltaNode)) to the translation unit.
@@ -374,8 +267,14 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> OmegaBuilder<'a, N, E> {
 
     ///Allows you to add a function ([λ-Node](crate::nodes::LambdaNode)) to the translation unit.
     ///
+    /// If `export` is `Some(label)`, it will be added to the exported functions of the translation unit under the name of `label`.
+    ///
     /// Returns the node reference to the created value.
-    pub fn new_function(&mut self, f: impl FnOnce(&mut LambdaBuilder<N, E>)) -> NodeRef {
+    pub fn new_function(
+        &mut self,
+        export: Option<String>,
+        f: impl FnOnce(&mut LambdaBuilder<N, E>),
+    ) -> NodeRef {
         let created = {
             let mut builder = LambdaBuilder::new(self.ctx);
             f(&mut builder);
@@ -384,6 +283,31 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> OmegaBuilder<'a, N, E> {
 
         //add the created node to our region
         self.node.body.nodes.insert(created);
+
+        if let Some(explabel) = export {
+            let export_port = self.export(explabel);
+            //add a connection to the label
+            self.node
+                .body
+                .connect(
+                    self.node_ref,
+                    self.ctx,
+                    OutportLocation {
+                        node: created,
+                        output: OutputType::LambdaDecleration,
+                    },
+                    export_port,
+                    E::value_edge(),
+                )
+                .unwrap();
+        }
         created
+    }
+
+    ///lets you change the behaviour of this node.
+    pub fn on_region(&mut self, f: impl FnOnce(&mut RegionBuilder<N, E>)) {
+        //setup the builder for the region
+        let mut builder = RegionBuilder::new(self.ctx, &mut self.node.body, self.node_ref);
+        f(&mut builder);
     }
 }

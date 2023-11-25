@@ -1,6 +1,6 @@
 use thiserror::Error;
 
-use crate::{edge::PortIndex, EdgeRef, NodeRef};
+use crate::{EdgeRef, NodeRef};
 
 #[derive(Error, Debug)]
 pub enum LegalizationError {}
@@ -10,12 +10,8 @@ pub enum LegalizationError {}
 pub enum BuilderError {
     #[error("The Node {0} is not part of the region it is used in. consider importing it as argument or context variable.")]
     NodeNotInRegion(NodeRef),
-    #[error("Unexpected PortIndex {node} : {port}: {additional_info}")]
-    UnexpectedPortIndex {
-        node: NodeRef,
-        port: PortIndex,
-        additional_info: String,
-    },
+    #[error("Overwrote connection {0} for input, this might not be desired.")]
+    EdgeOverwrite(EdgeRef),
 }
 
 ///Errors that happen when operating on the graph directly. For instance, when trying to delete an

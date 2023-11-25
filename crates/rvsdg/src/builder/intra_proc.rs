@@ -2,7 +2,7 @@
 //! Those are simple nodes, gamma nodes, and theta nodes.
 
 use crate::{
-    edge::{Edge, LangEdge, PortIndex, PortLocation},
+    edge::LangEdge,
     nodes::{GammaNode, LangNode, Node, ThetaNode},
     NodeRef, Rvsdg,
 };
@@ -62,82 +62,6 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> GammaBuilder<'a, N, E> {
         let idx = self.node.exit_var_count - 1;
         idx
     }
-
-    ///Connects the gamma nodes predicate port to `predicate`'s `port_index`.
-    pub fn connect_predicate(&mut self, predicate: NodeRef, port_index: PortIndex) {
-        let edge = self.ctx.new_edge(Edge {
-            src: predicate,
-            src_index: port_index.clone(),
-            dst: self.node_ref,
-            dst_index: PortIndex::Predicate,
-            ty: E::value_edge(),
-        });
-
-        self.ctx
-            .port_mut(predicate, port_index)
-            .unwrap()
-            .edges
-            .push(edge);
-        self.node.inputs[0].edges.push(edge);
-    }
-
-    ///Connects the `src`'nodes `port_index` to the `entry`-th entry variable of this node.
-    pub fn connect_entry(mut self, src: NodeRef, port_index: PortIndex, entry: usize) -> Self {
-        let entry_index = PortIndex::EntryVar {
-            var_index: entry,
-            region_index: None,
-        };
-        let my_input_location = entry_index
-            .into_location(&Node::Gamma::<N>(self.node.clone()))
-            .unwrap();
-        let edge = self.ctx.new_edge(Edge {
-            src,
-            src_index: port_index.clone(),
-            dst: self.node_ref,
-            dst_index: entry_index,
-            //FIXME: is this always right, or could state also be a edge. Intuitively not, since we'd have to assure that state is resolved before
-            // the branch is reached. However, we could also build some really nice "resolve state if(xy), otherwise, take you time"-style scheduling.
-            ty: E::value_edge(),
-        });
-
-        //Notify both nodes
-        self.ctx.port_mut(src, port_index).unwrap().edges.push(edge);
-
-        self.node.inputs[my_input_location.unwrap_input()]
-            .edges
-            .push(edge);
-
-        self
-    }
-
-    ///Connects the `src`'nodes `port_index` to the `exit`-th exit variable of this node.
-    pub fn connect_exit(mut self, dst: NodeRef, port_index: PortIndex, exit: usize) -> Self {
-        let exit_index = PortIndex::ExitVar {
-            var_index: exit,
-            region_index: None,
-        };
-        let my_output_location = exit_index
-            .into_location(&Node::Gamma::<N>(self.node.clone()))
-            .unwrap();
-        let edge = self.ctx.new_edge(Edge {
-            src: self.node_ref,
-            src_index: exit_index.clone(),
-            dst,
-            dst_index: port_index.clone(),
-            //FIXME: is this always right, or could state also be a edge. Intuitively not, since we'd have to assure that state is resolved before
-            // the branch is reached. However, we could also build some really nice "resolve state if(xy), otherwise, take you time"-style scheduling.
-            ty: E::value_edge(),
-        });
-
-        //Notify both nodes
-        self.ctx.port_mut(dst, port_index).unwrap().edges.push(edge);
-
-        self.node.outputs[my_output_location.unwrap_output()]
-            .edges
-            .push(edge);
-
-        self
-    }
 }
 
 ///[θ-node](crate::nodes::ThetaNode) (loop) builder.
@@ -176,68 +100,5 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> ThetaBuilder<'a, N, E> {
     pub fn add_loop_variable(mut self) -> (Self, usize) {
         let created_at_idx = self.node.add_loop_variable();
         (self, created_at_idx)
-    }
-
-    ///Connects the `port_index` of `src` to the `lv`-th loop variable of this loop.
-    pub fn connect_loop_variable(mut self, src: NodeRef, port_index: PortIndex, lv: usize) -> Self {
-        let lv_port = PortIndex::LoopVar {
-            var_index: lv,
-            tuple_index: 0,
-        };
-
-        let lv_input_index = if let PortLocation::Inputs(i) = lv_port
-            .into_location(&Node::Theta::<N>(self.node.clone()))
-            .unwrap()
-        {
-            i
-        } else {
-            panic!("LoopVar must point to input!");
-        };
-
-        let edge = self.ctx.new_edge(Edge {
-            src,
-            src_index: port_index.clone(),
-            dst: self.node_ref,
-            dst_index: lv_port,
-            ty: E::value_edge(),
-        });
-
-        self.ctx.port_mut(src, port_index).unwrap().edges.push(edge);
-        self.node
-            .inputs
-            .get_mut(lv_input_index)
-            .unwrap()
-            .edges
-            .push(edge);
-        self
-    }
-
-    /// Connects the predicate port of the loop to `src`'s `port-index`.
-    ///
-    /// # Validity
-    /// This port must only be connected to a value available in the ThetaNode's body. So either an argument to the loop-body, or
-    /// a value produced within the body.
-    pub fn connect_predicate(mut self, src: NodeRef, port_index: PortIndex) -> Self {
-        let pred_index = PortIndex::Predicate;
-        let edge = self.ctx.new_edge(Edge {
-            src,
-            src_index: port_index.clone(),
-            dst: self.node_ref,
-            dst_index: pred_index,
-            ty: E::value_edge(),
-        });
-
-        //Connect the result
-        self.node
-            .loop_body
-            .results
-            .get_mut(0) //per definition this is always the first port
-            .unwrap()
-            .edges
-            .push(edge);
-
-        //notify the src node
-        self.ctx.port_mut(src, port_index).unwrap().edges.push(edge);
-        self
     }
 }

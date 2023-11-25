@@ -15,11 +15,11 @@ use std::fmt::Display;
 
 use ahash::AHashMap;
 use builder::OmegaBuilder;
-use edge::{Edge, LangEdge, PortIndex, PortLocation};
+use edge::{Edge, InportLocation, InputType, LangEdge, OutportLocation, OutputType};
 use err::GraphError;
 use label::LabelLoc;
 use nodes::{LangNode, Node, OmegaNode};
-use region::{Port, Region};
+use region::Region;
 use slotmap::{new_key_type, SlotMap};
 use tinyvec::ArrayVec;
 
@@ -36,6 +36,21 @@ new_key_type! {pub struct NodeRef;}
 impl Display for NodeRef {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "NodeRef({:?})", self.0)
+    }
+}
+
+impl NodeRef {
+    pub fn as_inport_location(self, port_type: InputType) -> InportLocation {
+        InportLocation {
+            node: self,
+            input: port_type,
+        }
+    }
+    pub fn as_outport_location(self, port_type: OutputType) -> OutportLocation {
+        OutportLocation {
+            node: self,
+            output: port_type,
+        }
     }
 }
 
@@ -80,8 +95,6 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
         let mut nodes = SlotMap::default();
         let omega = nodes.insert(Node::Omega(OmegaNode {
             body: Region::new(),
-            outputs: ArrayVec::default(),
-            inputs: ArrayVec::default(),
         }));
 
         Rvsdg {
@@ -169,61 +182,61 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
     pub fn on_node_mut<T: 'static>(&mut self, n: NodeRef, f: impl FnOnce(&mut Node<N>) -> T) -> T {
         f(self.node_mut(n))
     }
-
-    ///Tries to access the port with the given PortIndex on `node`
-    pub fn port(&self, node: NodeRef, port: PortIndex) -> Option<&Port> {
-        let mapping = port.into_location::<N>(self.node(node));
-        if let Some(mapping) = mapping {
-            match mapping {
-                PortLocation::Inputs(idx) => self.node(node).inputs().get(idx),
-                PortLocation::Arguments { subregion, arg_idx } => {
-                    if let Some(subreg) = self.node(node).regions().get(subregion) {
-                        subreg.arguments.get(arg_idx)
-                    } else {
-                        None
+    /*
+        ///Tries to access the port with the given PortIndex on `node`
+        pub fn port(&self, node: NodeRef, port: PortIndex) -> Option<&Port> {
+            let mapping = port.into_location::<N>(self.node(node));
+            if let Some(mapping) = mapping {
+                match mapping {
+                    PortLocation::Inputs(idx) => self.node(node).inputs().get(idx),
+                    PortLocation::Arguments { subregion, arg_idx } => {
+                        if let Some(subreg) = self.node(node).regions().get(subregion) {
+                            subreg.arguments.get(arg_idx)
+                        } else {
+                            None
+                        }
                     }
-                }
-                PortLocation::Results { subregion, arg_idx } => {
-                    if let Some(subreg) = self.node(node).regions().get(subregion) {
-                        subreg.results.get(arg_idx)
-                    } else {
-                        None
+                    PortLocation::Results { subregion, arg_idx } => {
+                        if let Some(subreg) = self.node(node).regions().get(subregion) {
+                            subreg.results.get(arg_idx)
+                        } else {
+                            None
+                        }
                     }
+                    PortLocation::Outputs(idx) => self.node(node).outputs().get(idx),
                 }
-                PortLocation::Outputs(idx) => self.node(node).outputs().get(idx),
+            } else {
+                None
             }
-        } else {
-            None
         }
-    }
 
-    ///Tries to access the port with the given PortIndex on `node`
-    pub fn port_mut(&mut self, node: NodeRef, port: PortIndex) -> Option<&mut Port> {
-        let mapping = port.into_location::<N>(self.node(node));
-        if let Some(mapping) = mapping {
-            match mapping {
-                PortLocation::Inputs(idx) => self.node_mut(node).inputs_mut().get_mut(idx),
-                PortLocation::Arguments { subregion, arg_idx } => {
-                    if let Some(subreg) = self.node_mut(node).regions_mut().get_mut(subregion) {
-                        subreg.arguments.get_mut(arg_idx)
-                    } else {
-                        None
+        ///Tries to access the port with the given PortIndex on `node`
+        pub fn port_mut(&mut self, node: NodeRef, port: PortIndex) -> Option<&mut Port> {
+            let mapping = port.into_location::<N>(self.node(node));
+            if let Some(mapping) = mapping {
+                match mapping {
+                    PortLocation::Inputs(idx) => self.node_mut(node).inputs_mut().get_mut(idx),
+                    PortLocation::Arguments { subregion, arg_idx } => {
+                        if let Some(subreg) = self.node_mut(node).regions_mut().get_mut(subregion) {
+                            subreg.arguments.get_mut(arg_idx)
+                        } else {
+                            None
+                        }
                     }
-                }
-                PortLocation::Results { subregion, arg_idx } => {
-                    if let Some(subreg) = self.node_mut(node).regions_mut().get_mut(subregion) {
-                        subreg.results.get_mut(arg_idx)
-                    } else {
-                        None
+                    PortLocation::Results { subregion, arg_idx } => {
+                        if let Some(subreg) = self.node_mut(node).regions_mut().get_mut(subregion) {
+                            subreg.results.get_mut(arg_idx)
+                        } else {
+                            None
+                        }
                     }
+                    PortLocation::Outputs(idx) => self.node_mut(node).outputs_mut().get_mut(idx),
                 }
-                PortLocation::Outputs(idx) => self.node_mut(node).outputs_mut().get_mut(idx),
+            } else {
+                None
             }
-        } else {
-            None
         }
-    }
-
+    */
     pub fn new_edge(&mut self, edge: Edge<E>) -> EdgeRef {
         self.edges.insert(edge)
     }
@@ -245,30 +258,28 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
     /// However, you should consider your graph unstable regardless after an failed disconnect.
     pub fn disconnect(&mut self, edge: EdgeRef) -> Result<(), GraphError> {
         if let Some(edge_val) = self.edges.remove(edge) {
+            let Edge { src, dst, ty: _ } = edge_val;
+
             let mut err = None;
-            let Edge {
-                src,
-                src_index,
-                dst,
-                dst_index,
-                ty: _,
-            } = edge_val;
-
             //Notify src
-            if let Some(port) = self.port_mut(src, src_index) {
+            if let Some(port) = self.node_mut(src.node).outport_mut(&src.output) {
                 port.edges.retain(|e| *e != edge);
             } else {
-                err = Some(Err(GraphError::InvalidNode(src)));
+                err = Some(GraphError::InvalidNode(src.node));
             }
 
-            //Notify dst
-            if let Some(port) = self.port_mut(dst, dst_index) {
-                port.edges.retain(|e| *e != edge);
+            if let Some(port) = self.node_mut(dst.node).inport_mut(&dst.input) {
+                //Mark as unconnected
+                port.edge = None;
             } else {
-                err = Some(Err(GraphError::InvalidNode(src)));
+                err = Some(GraphError::InvalidNode(dst.node));
             }
 
-            err.unwrap_or(Ok(()))
+            if let Some(e) = err {
+                Err(e)
+            } else {
+                Ok(())
+            }
         } else {
             Err(GraphError::InvalidEdge(edge))
         }
