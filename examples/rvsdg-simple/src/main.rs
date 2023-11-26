@@ -284,14 +284,14 @@ fn main() {
             tureg
                 .connect(
                     function_max.as_outport_location(OutputType::LambdaDecleration),
-                    funktion_f.as_inport_location(InputType::ContextVariable(0)),
+                    funktion_f.as_inport_location(InputType::ContextVariableInput(0)),
                     VSEdge::Value,
                 )
                 .unwrap();
             tureg
                 .connect(
                     puts_import,
-                    funktion_f.as_inport_location(InputType::ContextVariable(1)),
+                    funktion_f.as_inport_location(InputType::ContextVariableInput(1)),
                     VSEdge::Value,
                 )
                 .unwrap();
@@ -299,7 +299,7 @@ fn main() {
             tureg
                 .connect(
                     global_string_max.as_outport_location(OutputType::DeltaDecleration),
-                    funktion_f.as_inport_location(InputType::ContextVariable(2)),
+                    funktion_f.as_inport_location(InputType::ContextVariableInput(2)),
                     VSEdge::Value,
                 )
                 .unwrap();

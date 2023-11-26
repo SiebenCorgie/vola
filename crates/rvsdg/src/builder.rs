@@ -28,15 +28,15 @@ use tinyvec::TinyVec;
 pub struct RegionBuilder<'a, N: LangNode + 'static, E: LangEdge + 'static> {
     ctx: &'a mut Rvsdg<N, E>,
     region_ref: &'a mut Region,
-    parent_node: NodeRef,
+    parent_ref: NodeRef,
 }
 
 impl<'a, N: LangNode + 'static, E: LangEdge + 'static> RegionBuilder<'a, N, E> {
-    pub fn new(ctx: &'a mut Rvsdg<N, E>, rref: &'a mut Region, parent_node: NodeRef) -> Self {
+    pub fn new(ctx: &'a mut Rvsdg<N, E>, rref: &'a mut Region, parent: NodeRef) -> Self {
         RegionBuilder {
             ctx,
             region_ref: rref,
-            parent_node,
+            parent_ref: parent,
         }
     }
 
@@ -46,14 +46,6 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> RegionBuilder<'a, N, E> {
 
     pub fn ctx_mut(&mut self) -> &mut Rvsdg<N, E> {
         self.ctx
-    }
-
-    ///Returns the parent node of this region. Note that we might not be the only region of that node.
-    ///
-    /// The parent also might not (yet) be hooked up completely in the graph, as specially when calling this from
-    /// a nested builder context.
-    pub fn parent(&self) -> NodeRef {
-        self.parent_node
     }
 
     ///Adds `node` to this region, returns the ref it was registered as
@@ -76,10 +68,10 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> RegionBuilder<'a, N, E> {
         edge_type: E,
     ) -> Result<EdgeRef, BuilderError> {
         //Check that its legal to connect the nodes
-        if !(self.region_ref.nodes.contains(&src.node) || src.node == self.parent()) {
+        if !(self.region_ref.nodes.contains(&src.node)) {
             return Err(BuilderError::NodeNotInRegion(src.node));
         }
-        if !(self.region_ref.nodes.contains(&dst.node) || dst.node == self.parent()) {
+        if !(self.region_ref.nodes.contains(&dst.node)) {
             return Err(BuilderError::NodeNotInRegion(dst.node));
         }
 
@@ -226,19 +218,20 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> RegionBuilder<'a, N, E> {
     /// adds all `arguments` to the call. Those should/must match up with the signature of the `function`.
     ///
     /// The resulting apply node will have the amount of output-ports the `function` declaration has as results.
-    pub fn call_function(
+    pub fn call(
         &mut self,
-        function_src: OutportLocation,
+        callable_src: OutportLocation,
         arguments: &[OutportLocation],
     ) -> Result<(NodeRef, TinyVec<[EdgeRef; 3]>), GraphError> {
-        let apply_node = if let Some(funct_def) = self.ctx.find_callabel_def(function_src.clone()) {
+        let apply_node = if let Some(funct_def) = self.ctx.find_callabel_def(callable_src.clone()) {
             if let Node::Lambda(l) = self.ctx.node(funct_def) {
                 ApplyNode::new_for_lambda(l)
             } else {
-                return Err(GraphError::NotCallable(function_src.node));
+                println!("Callable for phi not implemented!");
+                return Err(GraphError::NotCallable(callable_src.node));
             }
         } else {
-            return Err(GraphError::NotCallable(function_src.node));
+            return Err(GraphError::NotCallable(callable_src.node));
         };
 
         //insert into graph
@@ -251,7 +244,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> RegionBuilder<'a, N, E> {
         let mut arg_edges = TinyVec::default();
         let call_edge = self
             .connect(
-                function_src,
+                callable_src,
                 InportLocation {
                     node: node_ref,
                     input: InputType::Input(0),

@@ -16,6 +16,7 @@
 //! - [OmegaNode] ~ [TranslationUnit] : Represents the whole translation unit. Based on the internal region we can identify imported and exported state.
 
 use tinyvec::TinyVec;
+pub mod relations;
 
 use crate::{
     edge::{InputType, OutputType},
@@ -72,6 +73,7 @@ impl<N: LangNode + 'static> Node<N> {
             Node::Invalid => &[],
         }
     }
+
     pub fn inputs_mut(&mut self) -> &mut [Input] {
         match self {
             Node::Simple(node) => node.inputs_mut(),
@@ -344,7 +346,7 @@ impl<N: LangNode + 'static> Node<N> {
                     None
                 }
             }
-            InputType::ContextVariable(n) => match self {
+            InputType::ContextVariableInput(n) => match self {
                 Node::Lambda(l) => l.cv_input(*n),
                 Node::Phi(p) => p.cv_input(*n),
                 Node::Delta(d) => d.cv_input(*n),
@@ -405,7 +407,7 @@ impl<N: LangNode + 'static> Node<N> {
                     None
                 }
             }
-            InputType::ContextVariable(n) => match self {
+            InputType::ContextVariableInput(n) => match self {
                 Node::Lambda(l) => l.cv_input_mut(*n),
                 Node::Phi(p) => p.cv_input_mut(*n),
                 Node::Delta(d) => d.cv_input_mut(*n),

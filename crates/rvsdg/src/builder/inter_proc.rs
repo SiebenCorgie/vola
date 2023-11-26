@@ -67,11 +67,6 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> LambdaBuilder<'a, N, E> {
         }
     }
 
-    ///Returns the node reference this builder's final node will be inserted as.
-    /// Allows you to already connect the node's ports while building.
-    pub fn get_node_ref(&self) -> NodeRef {
-        self.node_ref
-    }
     ///lets you change the behaviour of this node.
     pub fn on_region(&mut self, f: impl FnOnce(&mut RegionBuilder<N, E>)) {
         //setup the builder for the region
@@ -199,29 +194,6 @@ pub struct OmegaBuilder<'a, N: LangNode + 'static, E: LangEdge + 'static> {
 }
 
 impl<'a, N: LangNode + 'static, E: LangEdge + 'static> OmegaBuilder<'a, N, E> {
-    /*
-        pub fn new(ctx: &'a mut Rvsdg<N, E>) -> Self {
-            let node_ref = ctx.new_node(Node::Invalid);
-            let node = OmegaNode::new(ctx);
-            OmegaBuilder {
-                ctx,
-                node,
-                node_ref,
-            }
-        }
-
-        ///Builds the Lambda node for the borrowed context.
-        pub fn build(self) -> NodeRef {
-            let OmegaBuilder {
-                ctx,
-                node,
-                node_ref,
-            } = self;
-
-            *ctx.node_mut(node_ref) = Node::Omega(node);
-            node_ref
-        }
-    */
     ///Adds an import port with the given label. The label will used for the import of the function or value.
     /// Returns the argument_index of the port allocated.
     pub fn import(&mut self, label: impl Into<String>) -> OutportLocation {

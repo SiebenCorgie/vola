@@ -32,4 +32,16 @@ pub enum GraphError {
 
     #[error("The definition of {0} is not a callable node.")]
     NotCallable(NodeRef),
+
+    #[error("{0} is not connected to any region's output, or input")]
+    NotConnectedInRegion(NodeRef),
+    #[error("Source and destination port are not in the same region {src} != {dst}")]
+    NodesNotInSameRegion { src: NodeRef, dst: NodeRef },
+
+    #[error("{0:?} is already in use")]
+    InportInUse(InportLocation),
+    #[error("{0:?} does not exist (on node)")]
+    InvalidInport(InportLocation),
+    #[error("{0:?} does not exist (on node)")]
+    InvalidOutport(OutportLocation),
 }

@@ -182,61 +182,7 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
     pub fn on_node_mut<T: 'static>(&mut self, n: NodeRef, f: impl FnOnce(&mut Node<N>) -> T) -> T {
         f(self.node_mut(n))
     }
-    /*
-        ///Tries to access the port with the given PortIndex on `node`
-        pub fn port(&self, node: NodeRef, port: PortIndex) -> Option<&Port> {
-            let mapping = port.into_location::<N>(self.node(node));
-            if let Some(mapping) = mapping {
-                match mapping {
-                    PortLocation::Inputs(idx) => self.node(node).inputs().get(idx),
-                    PortLocation::Arguments { subregion, arg_idx } => {
-                        if let Some(subreg) = self.node(node).regions().get(subregion) {
-                            subreg.arguments.get(arg_idx)
-                        } else {
-                            None
-                        }
-                    }
-                    PortLocation::Results { subregion, arg_idx } => {
-                        if let Some(subreg) = self.node(node).regions().get(subregion) {
-                            subreg.results.get(arg_idx)
-                        } else {
-                            None
-                        }
-                    }
-                    PortLocation::Outputs(idx) => self.node(node).outputs().get(idx),
-                }
-            } else {
-                None
-            }
-        }
 
-        ///Tries to access the port with the given PortIndex on `node`
-        pub fn port_mut(&mut self, node: NodeRef, port: PortIndex) -> Option<&mut Port> {
-            let mapping = port.into_location::<N>(self.node(node));
-            if let Some(mapping) = mapping {
-                match mapping {
-                    PortLocation::Inputs(idx) => self.node_mut(node).inputs_mut().get_mut(idx),
-                    PortLocation::Arguments { subregion, arg_idx } => {
-                        if let Some(subreg) = self.node_mut(node).regions_mut().get_mut(subregion) {
-                            subreg.arguments.get_mut(arg_idx)
-                        } else {
-                            None
-                        }
-                    }
-                    PortLocation::Results { subregion, arg_idx } => {
-                        if let Some(subreg) = self.node_mut(node).regions_mut().get_mut(subregion) {
-                            subreg.results.get_mut(arg_idx)
-                        } else {
-                            None
-                        }
-                    }
-                    PortLocation::Outputs(idx) => self.node_mut(node).outputs_mut().get_mut(idx),
-                }
-            } else {
-                None
-            }
-        }
-    */
     pub fn new_edge(&mut self, edge: Edge<E>) -> EdgeRef {
         self.edges.insert(edge)
     }
@@ -283,5 +229,60 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
         } else {
             Err(GraphError::InvalidEdge(edge))
         }
+    }
+
+    ///Connects the output `src` to the input `dst`. Note that both ports must be in the same region,
+    /// otherwise the connection will fail.
+    ///
+    /// _"In the same region"_ formally means:
+    ///
+    /// - `src` is either an `Argument` of the region, or a output port of one of the region's nodes
+    /// - `dst` is either a `Result` of the region, or an input port of one of the region's nodes
+    pub fn connect(
+        &mut self,
+        src: OutportLocation,
+        dst: InportLocation,
+        ty: E,
+    ) -> Result<EdgeRef, GraphError> {
+        //Find the region this port is defined in.
+        let src_region = if let OutputType::Argument(_) = src.output {
+            src.node
+        } else {
+            self.find_parent(src.node)
+                .ok_or(GraphError::NotConnectedInRegion(src.node))?
+        };
+
+        let dst_region = if let InputType::Result(_) = dst.input {
+            dst.node
+        } else {
+            self.find_parent(dst.node)
+                .ok_or(GraphError::NotConnectedInRegion(dst.node))?
+        };
+
+        if src_region != dst_region {
+            return Err(GraphError::NodesNotInSameRegion {
+                src: src_region,
+                dst: dst_region,
+            });
+        }
+
+        //check that outport exists
+        if self.node(src.node).outport(&src.output).is_none() {
+            return Err(GraphError::InvalidOutport(src));
+        }
+
+        //check that the inport is unused, and exists
+        if let Some(port) = self.node(dst.node).inport(&dst.input) {
+            if port.edge.is_some() {
+                return Err(GraphError::InportInUse(dst));
+            }
+        } else {
+            return Err(GraphError::InvalidInport(dst));
+        }
+
+        //are in same region, so we can safely connect
+        let edge = self.new_edge(Edge { src, dst, ty });
+
+        Ok(edge)
     }
 }
