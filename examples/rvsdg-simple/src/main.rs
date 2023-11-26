@@ -117,15 +117,17 @@ fn main() {
                     .unwrap();
 
                 //Connect to output
-                reg.connect(
-                    const_arr.as_outport_location(OutputType::Output(0)),
-                    InportLocation {
-                        node: reg.parent(),
-                        input: InputType::Result(0),
-                    },
-                    VSEdge::Value,
-                )
-                .unwrap();
+                let parent = reg.parent();
+                reg.ctx_mut()
+                    .connect(
+                        const_arr.as_outport_location(OutputType::Output(0)),
+                        InportLocation {
+                            node: parent,
+                            input: InputType::Result(0),
+                        },
+                        VSEdge::Value,
+                    )
+                    .unwrap();
             });
         });
 
@@ -145,19 +147,22 @@ fn main() {
                     let ev0 = gamma.add_entry_variable();
                     let ev1 = gamma.add_entry_variable();
                     let ex0 = gamma.add_exit_variable();
+
                     //branch 0 maps x to the exit variable
                     let _bx = gamma.new_branch(|branch_x| {
+                        let parent = branch_x.parent();
                         branch_x
+                            .ctx_mut()
                             .connect(
                                 OutportLocation {
-                                    node: branch_x.parent(),
+                                    node: parent,
                                     output: OutputType::EntryVariableArgument {
                                         branch: 0,
                                         entry_variable: ev0,
                                     },
                                 },
                                 InportLocation {
-                                    node: branch_x.parent(),
+                                    node: parent,
                                     input: InputType::ExitVariableResult {
                                         branch: 0,
                                         exit_variable: ex0,
@@ -169,17 +174,19 @@ fn main() {
                     });
                     //branch 1 maps y to the exit variable
                     let _by = gamma.new_branch(|branch_y| {
+                        let parent = branch_y.parent();
                         branch_y
+                            .ctx_mut()
                             .connect(
                                 OutportLocation {
-                                    node: branch_y.parent(),
+                                    node: parent,
                                     output: OutputType::EntryVariableArgument {
                                         branch: 1,
                                         entry_variable: ev1,
                                     },
                                 },
                                 InportLocation {
-                                    node: branch_y.parent(),
+                                    node: parent,
                                     input: InputType::ExitVariableResult {
                                         branch: 1,
                                         exit_variable: ex0,
@@ -192,12 +199,13 @@ fn main() {
                 });
 
                 //connect gt-simple-node output to gamma predicate.
-                reg.connect(
-                    gt_node.as_outport_location(OutputType::Output(0)),
-                    gamma_node.as_inport_location(InputType::GammaPredicate),
-                    VSEdge::Value,
-                )
-                .unwrap();
+                reg.ctx_mut()
+                    .connect(
+                        gt_node.as_outport_location(OutputType::Output(0)),
+                        gamma_node.as_inport_location(InputType::GammaPredicate),
+                        VSEdge::Value,
+                    )
+                    .unwrap();
 
                 println!(
                     "{:?} has {} outputs",
@@ -206,12 +214,13 @@ fn main() {
                 );
 
                 //Connect the gamma nodes exit variable to the
-                reg.connect(
-                    gamma_node.as_outport_location(OutputType::ExitVariableOutput(0)),
-                    res_max,
-                    VSEdge::Value,
-                )
-                .unwrap();
+                reg.ctx_mut()
+                    .connect(
+                        gamma_node.as_outport_location(OutputType::ExitVariableOutput(0)),
+                        res_max,
+                        VSEdge::Value,
+                    )
+                    .unwrap();
             });
         });
 
@@ -264,27 +273,29 @@ fn main() {
                 //now connect call outputs to the λ result
 
                 //max to output
-                reg.connect(
-                    OutportLocation {
-                        node: apply_max,
-                        output: OutputType::Output(0),
-                    },
-                    f_res,
-                    VSEdge::Value,
-                )
-                .unwrap();
+                reg.ctx_mut()
+                    .connect(
+                        OutportLocation {
+                            node: apply_max,
+                            output: OutputType::Output(0),
+                        },
+                        f_res,
+                        VSEdge::Value,
+                    )
+                    .unwrap();
 
                 //post_puts_state to output
 
-                reg.connect(
-                    OutportLocation {
-                        node: apply_puts,
-                        output: OutputType::Output(0),
-                    },
-                    f_ctr_res,
-                    VSEdge::State,
-                )
-                .unwrap();
+                reg.ctx_mut()
+                    .connect(
+                        OutportLocation {
+                            node: apply_puts,
+                            output: OutputType::Output(0),
+                        },
+                        f_ctr_res,
+                        VSEdge::State,
+                    )
+                    .unwrap();
             });
         });
         //finally wire the lambda and delta nodes
@@ -293,6 +304,7 @@ fn main() {
 
         tu.on_region(|tureg| {
             tureg
+                .ctx_mut()
                 .connect(
                     function_max.as_outport_location(OutputType::LambdaDecleration),
                     funktion_f.as_inport_location(InputType::ContextVariableInput(0)),
@@ -300,6 +312,7 @@ fn main() {
                 )
                 .unwrap();
             tureg
+                .ctx_mut()
                 .connect(
                     puts_import,
                     funktion_f.as_inport_location(InputType::ContextVariableInput(1)),
@@ -308,6 +321,7 @@ fn main() {
                 .unwrap();
 
             tureg
+                .ctx_mut()
                 .connect(
                     global_string_max.as_outport_location(OutputType::DeltaDecleration),
                     funktion_f.as_inport_location(InputType::ContextVariableInput(2)),

@@ -62,7 +62,6 @@ impl<N: View + LangNode + 'static> View for rvsdg::nodes::Node<N>{
             Node::Phi(_) => ORANGE,
             Node::Simple(n) => n.color(),
             Node::Theta(_) => RED,
-            Node::Invalid => BLACK
         }
     }
     fn name(&self) -> &str {
@@ -75,7 +74,6 @@ impl<N: View + LangNode + 'static> View for rvsdg::nodes::Node<N>{
             Node::Phi(_) => "Phi",
             Node::Simple(n) => n.name(),
             Node::Theta(_) => "Theta",
-            Node::Invalid => "Invalid"
         }
     }
 }

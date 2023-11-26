@@ -110,32 +110,13 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
         //we do this by replacing the actual omega node, setup the builder, call it,
         // and then substituding it again.
         let omega_ref = self.omega;
-        let omega_node = if let Node::Omega(on) = {
-            let mut node = Node::Invalid;
-            let dummy = self.node_mut(self.omega);
-            std::mem::swap(dummy, &mut node);
-            node
-        } {
-            on
-        } else {
-            panic!("Failed to unwrap temporary omgea node");
-        };
-
         let builder = OmegaBuilder {
             ctx: self,
-            node: omega_node,
             node_ref: omega_ref,
         };
 
         //call the user closure
-        let OmegaBuilder {
-            ctx,
-            node,
-            node_ref,
-        } = f(builder);
-
-        //now re substitude
-        *ctx.node_mut(node_ref) = Node::Omega(node);
+        let OmegaBuilder { .. } = f(builder);
     }
 
     ///Returns the reference to the translation unit / [ω-Node](crate::nodes::OmegaNode).
@@ -248,6 +229,7 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
         let src_region = if let OutputType::Argument(_) = src.output {
             src.node
         } else {
+            //TODO if not found, move into region
             self.find_parent(src.node)
                 .ok_or(GraphError::NotConnectedInRegion(src.node))?
         };
@@ -255,6 +237,7 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
         let dst_region = if let InputType::Result(_) = dst.input {
             dst.node
         } else {
+            //TODO if not found, move into region
             self.find_parent(dst.node)
                 .ok_or(GraphError::NotConnectedInRegion(dst.node))?
         };

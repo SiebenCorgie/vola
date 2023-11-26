@@ -66,8 +66,6 @@ pub enum Node<N: LangNode + 'static> {
     Phi(PhiNode),
     ///Represents the top-node of the RVSDG. This allows us to clearly define import and exported values.
     Omega(OmegaNode),
-    ///Represents an invalid node. Mostly used to either allocate node keys, or represent invalid graph state
-    Invalid,
 }
 
 impl<N: LangNode + 'static> Node<N> {
@@ -81,7 +79,6 @@ impl<N: LangNode + 'static> Node<N> {
             Node::Delta(g) => &g.inputs,
             Node::Phi(g) => &g.inputs,
             Node::Omega(_g) => &[],
-            Node::Invalid => &[],
         }
     }
 
@@ -95,7 +92,6 @@ impl<N: LangNode + 'static> Node<N> {
             Node::Delta(g) => &mut g.inputs,
             Node::Phi(g) => &mut g.inputs,
             Node::Omega(_g) => &mut [],
-            Node::Invalid => &mut [],
         }
     }
     pub fn outputs(&self) -> &[Output] {
@@ -108,7 +104,6 @@ impl<N: LangNode + 'static> Node<N> {
             Node::Delta(g) => core::slice::from_ref(&g.output),
             Node::Phi(g) => &g.outputs,
             Node::Omega(_g) => &[],
-            Node::Invalid => &[],
         }
     }
 
@@ -122,7 +117,6 @@ impl<N: LangNode + 'static> Node<N> {
             Node::Delta(g) => core::slice::from_mut(&mut g.output),
             Node::Phi(g) => &mut g.outputs,
             Node::Omega(_g) => &mut [],
-            Node::Invalid => &mut [],
         }
     }
 
@@ -137,7 +131,6 @@ impl<N: LangNode + 'static> Node<N> {
             Node::Delta(g) => core::slice::from_ref(&g.body),
             Node::Phi(g) => core::slice::from_ref(&g.body),
             Node::Omega(g) => core::slice::from_ref(&g.body),
-            Node::Invalid => &[],
         }
     }
     ///Reference to all internal regions. This will mostly have length 0/1. Only gamma nodes have >1 regions.
@@ -151,7 +144,6 @@ impl<N: LangNode + 'static> Node<N> {
             Node::Delta(g) => core::slice::from_mut(&mut g.body),
             Node::Phi(g) => core::slice::from_mut(&mut g.body),
             Node::Omega(g) => core::slice::from_mut(&mut g.body),
-            Node::Invalid => &mut [],
         }
     }
 
@@ -172,7 +164,6 @@ impl<N: LangNode + 'static> Node<N> {
                 Node::Delta(_g) => None,
                 Node::Phi(g) => g.body.arguments.get(*n + g.cv_count + g.rv_count),
                 Node::Omega(g) => g.body.arguments.get(*n),
-                Node::Invalid => None,
             },
             OutputType::LambdaDecleration => {
                 if let Node::Lambda(l) = self {
@@ -245,7 +236,6 @@ impl<N: LangNode + 'static> Node<N> {
                 Node::Delta(_g) => None,
                 Node::Phi(g) => g.body.arguments.get_mut(*n + g.cv_count + g.rv_count),
                 Node::Omega(g) => g.body.arguments.get_mut(*n),
-                Node::Invalid => None,
             },
             OutputType::LambdaDecleration => {
                 if let Node::Lambda(l) = self {
@@ -317,7 +307,6 @@ impl<N: LangNode + 'static> Node<N> {
                 Node::Delta(g) => g.body.results.get(*n),
                 Node::Phi(g) => g.body.results.get(*n + g.rv_count),
                 Node::Omega(g) => g.body.results.get(*n),
-                Node::Invalid => None,
             },
             InputType::GammaPredicate => {
                 if let Node::Gamma(g) = self {
@@ -378,7 +367,6 @@ impl<N: LangNode + 'static> Node<N> {
                 Node::Delta(g) => g.body.results.get_mut(*n),
                 Node::Phi(g) => g.body.results.get_mut(*n + g.rv_count),
                 Node::Omega(g) => g.body.results.get_mut(*n),
-                Node::Invalid => None,
             },
             InputType::GammaPredicate => {
                 if let Node::Gamma(g) = self {

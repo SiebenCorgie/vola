@@ -12,46 +12,47 @@ use super::RegionBuilder;
 ///[λ-node](crate::nodes::LambdaNode) (function declaration) builder.
 pub struct LambdaBuilder<'a, N: LangNode + 'static, E: LangEdge + 'static> {
     ctx: &'a mut Rvsdg<N, E>,
-    ///The node that is being build
-    node: LambdaNode,
     ///Preallocated invalid node ref
     node_ref: NodeRef,
 }
 
 impl<'a, N: LangNode + 'static, E: LangEdge + 'static> LambdaBuilder<'a, N, E> {
     pub fn new(ctx: &'a mut Rvsdg<N, E>) -> Self {
-        let node_ref = ctx.new_node(Node::Invalid);
-        let node = LambdaNode::new();
-        LambdaBuilder {
-            ctx,
-            node,
-            node_ref,
+        let node_ref = ctx.new_node(Node::Lambda(LambdaNode::new()));
+        LambdaBuilder { ctx, node_ref }
+    }
+
+    pub fn node(&self) -> &LambdaNode {
+        if let Node::Lambda(l) = self.ctx.node(self.node_ref) {
+            l
+        } else {
+            panic!("not lambda!")
+        }
+    }
+
+    pub fn node_mut(&mut self) -> &mut LambdaNode {
+        if let Node::Lambda(l) = self.ctx.node_mut(self.node_ref) {
+            l
+        } else {
+            panic!("not lambda!")
         }
     }
 
     ///Builds the Lambda node for the borrowed context.
     pub fn build(self) -> NodeRef {
         //TODO: do some legalization already, or wait for a legalization pass?
-
-        let LambdaBuilder {
-            ctx,
-            node,
-            node_ref,
-        } = self;
-
-        //Replace node_ref with actual *valid* lambda node
-        *ctx.node_mut(node_ref) = Node::Lambda(node);
+        let LambdaBuilder { ctx, node_ref } = self;
         node_ref
     }
 
     ///Adds a context variable to the LambdaNode's signature and body
     pub fn add_context_variable(&mut self) -> usize {
-        self.node.add_context_variable()
+        self.node_mut().add_context_variable()
     }
 
     ///Adds an argument to the lambda node's body. Returns the argument index it was added at.
     pub fn add_argument(&mut self) -> OutportLocation {
-        let idx = self.node.add_argument();
+        let idx = self.node_mut().add_argument();
         OutportLocation {
             node: self.node_ref,
             output: OutputType::Argument(idx),
@@ -60,7 +61,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> LambdaBuilder<'a, N, E> {
 
     ///Adds an result port the the function's body. Returns the created result_port of the lambda's internal region.
     pub fn add_result(&mut self) -> InportLocation {
-        let idx = self.node.add_result();
+        let idx = self.node_mut().add_result();
         InportLocation {
             node: self.node_ref,
             input: InputType::Result(idx),
@@ -70,7 +71,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> LambdaBuilder<'a, N, E> {
     ///lets you change the behaviour of this node.
     pub fn on_region(&mut self, f: impl FnOnce(&mut RegionBuilder<N, E, LambdaNode>)) {
         //setup the builder for the region
-        let mut builder = RegionBuilder::new(self.ctx, &mut self.node, 0, self.node_ref);
+        let mut builder = RegionBuilder::new(self.ctx, 0, self.node_ref);
         f(&mut builder);
     }
 }
@@ -78,44 +79,47 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> LambdaBuilder<'a, N, E> {
 ///[δ-node](crate::nodes::DeltaNode) (global variable) builder.
 pub struct DeltaBuilder<'a, N: LangNode + 'static, E: LangEdge + 'static> {
     ctx: &'a mut Rvsdg<N, E>,
-    ///The node that is being build
-    node: DeltaNode,
     ///Preallocated invalid node ref
     node_ref: NodeRef,
 }
 
 impl<'a, N: LangNode + 'static, E: LangEdge + 'static> DeltaBuilder<'a, N, E> {
     pub fn new(ctx: &'a mut Rvsdg<N, E>) -> Self {
-        let node_ref = ctx.new_node(Node::Invalid);
-        let node = DeltaNode::new();
-        DeltaBuilder {
-            ctx,
-            node,
-            node_ref,
-        }
+        let node_ref = ctx.new_node(Node::Delta(DeltaNode::new()));
+        DeltaBuilder { ctx, node_ref }
     }
 
     ///Builds the Lambda node for the borrowed context.
     pub fn build(self) -> NodeRef {
-        let DeltaBuilder {
-            ctx,
-            node,
-            node_ref,
-        } = self;
-
-        *ctx.node_mut(node_ref) = Node::Delta(node);
+        let DeltaBuilder { ctx, node_ref } = self;
         node_ref
+    }
+
+    pub fn node(&self) -> &DeltaNode {
+        if let Node::Delta(d) = self.ctx.node(self.node_ref) {
+            d
+        } else {
+            panic!("not delta!")
+        }
+    }
+
+    pub fn node_mut(&mut self) -> &mut DeltaNode {
+        if let Node::Delta(d) = self.ctx.node_mut(self.node_ref) {
+            d
+        } else {
+            panic!("not delta!")
+        }
     }
 
     ///Adds a context variable to the DeltaNode's signature and body
     pub fn add_context_variable(&mut self) -> usize {
-        self.node.add_context_variable()
+        self.node_mut().add_context_variable()
     }
 
     ///lets you change the behaviour of this node.
     pub fn on_region(&mut self, f: impl FnOnce(&mut RegionBuilder<N, E, DeltaNode>)) {
         //setup the builder for the region
-        let mut builder = RegionBuilder::new(self.ctx, &mut self.node, 0, self.node_ref);
+        let mut builder = RegionBuilder::new(self.ctx, 0, self.node_ref);
         f(&mut builder);
     }
 }
@@ -126,38 +130,42 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> DeltaBuilder<'a, N, E> {
 /// The Phi node is currently not sound (I think), please have a look at [ϕ-Node](crate::nodes::PhiNode) documentation.
 pub struct PhiBuilder<'a, N: LangNode + 'static, E: LangEdge + 'static> {
     ctx: &'a mut Rvsdg<N, E>,
-    ///The node that is being build
-    node: PhiNode,
     ///Preallocated invalid node ref
     node_ref: NodeRef,
 }
 
 impl<'a, N: LangNode + 'static, E: LangEdge + 'static> PhiBuilder<'a, N, E> {
     pub fn new(ctx: &'a mut Rvsdg<N, E>) -> Self {
-        let node_ref = ctx.new_node(Node::Invalid);
-        let node = PhiNode::new();
-        PhiBuilder {
-            ctx,
-            node,
-            node_ref,
-        }
+        let node_ref = ctx.new_node(Node::Phi(PhiNode::new()));
+        PhiBuilder { ctx, node_ref }
     }
 
     ///Builds the Lambda node for the borrowed context.
     pub fn build(self) -> NodeRef {
-        let PhiBuilder {
-            ctx,
-            node,
-            node_ref,
-        } = self;
+        let PhiBuilder { ctx, node_ref } = self;
 
-        *ctx.node_mut(node_ref) = Node::Phi(node);
         node_ref
+    }
+
+    pub fn node(&self) -> &PhiNode {
+        if let Node::Phi(p) = self.ctx.node(self.node_ref) {
+            p
+        } else {
+            panic!("not phi!")
+        }
+    }
+
+    pub fn node_mut(&mut self) -> &mut PhiNode {
+        if let Node::Phi(p) = self.ctx.node_mut(self.node_ref) {
+            p
+        } else {
+            panic!("not phi!")
+        }
     }
 
     ///Adds a context variable to the PhiNode's signature and body
     pub fn add_context_variable(&mut self) -> usize {
-        self.node.add_context_variable()
+        self.node_mut().add_context_variable()
     }
 
     ///Declares a recursion variable to the inner recursion of some lambda. This are usually the values that change per recursion level.
@@ -179,7 +187,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> PhiBuilder<'a, N, E> {
     /// The function returns the recursion variable index. When calling the ϕ-Node later via an apply node, this will be the `n-th` argument on that phi node.
     //TODO: Find a better way to explain that?
     pub fn add_recursion_variable(&mut self) -> usize {
-        self.node.add_recursion_variable()
+        self.node_mut().add_recursion_variable()
     }
 }
 
@@ -187,17 +195,31 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> PhiBuilder<'a, N, E> {
 /// the [RVSDG's](crate::Rvsdg) [on_omega_node](crate::Rvsdg::on_omega_node) helper.
 pub struct OmegaBuilder<'a, N: LangNode + 'static, E: LangEdge + 'static> {
     pub(crate) ctx: &'a mut Rvsdg<N, E>,
-    ///The node that is being build
-    pub(crate) node: OmegaNode,
     ///Preallocated invalid node ref
     pub(crate) node_ref: NodeRef,
 }
 
 impl<'a, N: LangNode + 'static, E: LangEdge + 'static> OmegaBuilder<'a, N, E> {
+    pub fn node(&self) -> &OmegaNode {
+        if let Node::Omega(o) = self.ctx.node(self.node_ref) {
+            o
+        } else {
+            panic!("not omega!")
+        }
+    }
+
+    pub fn node_mut(&mut self) -> &mut OmegaNode {
+        if let Node::Omega(o) = self.ctx.node_mut(self.node_ref) {
+            o
+        } else {
+            panic!("not omeg!")
+        }
+    }
+
     ///Adds an import port with the given label. The label will used for the import of the function or value.
     /// Returns the argument_index of the port allocated.
     pub fn import(&mut self, label: impl Into<String>) -> OutportLocation {
-        let idx = self.node.add_import();
+        let idx = self.node_mut().add_import();
         let portloc = OutportLocation {
             node: self.node_ref,
             output: OutputType::Argument(idx),
@@ -211,7 +233,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> OmegaBuilder<'a, N, E> {
     ///Adds an export port with the given label. The label will used for the export of the function or value (read C-FFI style).
     /// Returns the argument_index of the port allocated.
     pub fn export(&mut self, label: String) -> InportLocation {
-        let idx = self.node.add_export();
+        let idx = self.node_mut().add_export();
         let portloc = InportLocation {
             node: self.node_ref,
             input: InputType::Result(idx),
@@ -233,7 +255,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> OmegaBuilder<'a, N, E> {
         };
 
         //add the created node to our region
-        self.node.body.nodes.insert(created);
+        self.node_mut().body.nodes.insert(created);
         created
     }
 
@@ -254,25 +276,20 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> OmegaBuilder<'a, N, E> {
         };
 
         //add the created node to our region
-        self.node.body.nodes.insert(created);
+        self.node_mut().body.nodes.insert(created);
 
         if let Some(explabel) = export {
             let export_port = self.export(explabel);
-            //add a connection to the label
-            // NOTE: we use the Region builder here, since self.node_ref is not
-            // yet pushed into the Rvsdg.
-            {
-                RegionBuilder::new(self.ctx, &mut self.node, 0, self.node_ref)
-                    .connect(
-                        OutportLocation {
-                            node: created,
-                            output: OutputType::LambdaDecleration,
-                        },
-                        export_port,
-                        E::value_edge(),
-                    )
-                    .unwrap();
-            }
+            self.ctx
+                .connect(
+                    OutportLocation {
+                        node: created,
+                        output: OutputType::LambdaDecleration,
+                    },
+                    export_port,
+                    E::value_edge(),
+                )
+                .unwrap();
         }
         created
     }
@@ -280,7 +297,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> OmegaBuilder<'a, N, E> {
     ///lets you change the behaviour of this node.
     pub fn on_region(&mut self, f: impl FnOnce(&mut RegionBuilder<N, E, OmegaNode>)) {
         //setup the builder for the region
-        let mut builder = RegionBuilder::new(self.ctx, &mut self.node, 0, self.node_ref);
+        let mut builder = RegionBuilder::new(self.ctx, 0, self.node_ref);
         f(&mut builder);
     }
 }
