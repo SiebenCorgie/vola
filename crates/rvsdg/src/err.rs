@@ -19,6 +19,8 @@ pub enum BuilderError {
     ExpectedInport(InportLocation),
     #[error("No output {0:?} on node")]
     ExpectedOutport(OutportLocation),
+    #[error("{0}")]
+    Other(String),
 }
 
 ///Errors that happen when operating on the graph directly. For instance, when trying to delete an

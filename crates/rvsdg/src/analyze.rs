@@ -140,7 +140,10 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
                             return None;
                         }
                     } else {
-                        panic!("Invalid hop: node hat CVArgument({cv}), but not a CVInput({cv})");
+                        panic!(
+                            "Invalid hop: node {:?} hat CVArgument({cv}), but not a CVInput({cv})",
+                            next_port.node
+                        );
                     }
                 }
                 OutputType::EntryVariableArgument {
@@ -164,7 +167,7 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
                             return None;
                         }
                     } else {
-                        panic!("Invalid hop: node has EVArgument({entry_variable}), but not a CVInput({entry_variable})");
+                        panic!("Invalid hop: node {:?} has EVArgument({entry_variable}), but not a EVInput({entry_variable})", next_port.node);
                     }
                 }
                 //Any other case, return the the node
@@ -192,7 +195,6 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
         //If the found node is λ/ϕ, we return.
 
         let producer = self.find_producer_out(src)?;
-
         match self.node(producer) {
             Node::Lambda(_) | Node::Phi(_) => Some(producer),
             _ => None,

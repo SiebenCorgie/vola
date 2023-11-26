@@ -1,13 +1,7 @@
 use ahash::AHashSet;
 use tinyvec::TinyVec;
 
-use crate::{
-    builder::RegionBuilder,
-    edge::{InportLocation, LangEdge, OutportLocation},
-    err::BuilderError,
-    nodes::LangNode,
-    EdgeRef, NodeRef, Rvsdg,
-};
+use crate::{EdgeRef, NodeRef};
 
 ///A Outport allows us to define multiple destination edges. It is the base type for [Output] and [Argument].
 #[derive(Debug, Clone)]
@@ -59,18 +53,6 @@ impl Region {
             arguments: TinyVec::default(),
             results: TinyVec::default(),
         }
-    }
-
-    ///Tries to connect `src` to `dst` within this context.
-    pub fn connect<N: LangNode + 'static, E: LangEdge + 'static>(
-        &mut self,
-        parent: NodeRef,
-        ctx: &mut Rvsdg<N, E>,
-        src: OutportLocation,
-        dst: InportLocation,
-        edge_ty: E,
-    ) -> Result<EdgeRef, BuilderError> {
-        RegionBuilder::new(ctx, self, parent).connect(src, dst, edge_ty)
     }
 }
 

@@ -68,9 +68,9 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> LambdaBuilder<'a, N, E> {
     }
 
     ///lets you change the behaviour of this node.
-    pub fn on_region(&mut self, f: impl FnOnce(&mut RegionBuilder<N, E>)) {
+    pub fn on_region(&mut self, f: impl FnOnce(&mut RegionBuilder<N, E, LambdaNode>)) {
         //setup the builder for the region
-        let mut builder = RegionBuilder::new(self.ctx, &mut self.node.body, self.node_ref);
+        let mut builder = RegionBuilder::new(self.ctx, &mut self.node, 0, self.node_ref);
         f(&mut builder);
     }
 }
@@ -113,9 +113,9 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> DeltaBuilder<'a, N, E> {
     }
 
     ///lets you change the behaviour of this node.
-    pub fn on_region(&mut self, f: impl FnOnce(&mut RegionBuilder<N, E>)) {
+    pub fn on_region(&mut self, f: impl FnOnce(&mut RegionBuilder<N, E, DeltaNode>)) {
         //setup the builder for the region
-        let mut builder = RegionBuilder::new(self.ctx, &mut self.node.body, self.node_ref);
+        let mut builder = RegionBuilder::new(self.ctx, &mut self.node, 0, self.node_ref);
         f(&mut builder);
     }
 }
@@ -259,27 +259,28 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> OmegaBuilder<'a, N, E> {
         if let Some(explabel) = export {
             let export_port = self.export(explabel);
             //add a connection to the label
-            self.node
-                .body
-                .connect(
-                    self.node_ref,
-                    self.ctx,
-                    OutportLocation {
-                        node: created,
-                        output: OutputType::LambdaDecleration,
-                    },
-                    export_port,
-                    E::value_edge(),
-                )
-                .unwrap();
+            // NOTE: we use the Region builder here, since self.node_ref is not
+            // yet pushed into the Rvsdg.
+            {
+                RegionBuilder::new(self.ctx, &mut self.node, 0, self.node_ref)
+                    .connect(
+                        OutportLocation {
+                            node: created,
+                            output: OutputType::LambdaDecleration,
+                        },
+                        export_port,
+                        E::value_edge(),
+                    )
+                    .unwrap();
+            }
         }
         created
     }
 
     ///lets you change the behaviour of this node.
-    pub fn on_region(&mut self, f: impl FnOnce(&mut RegionBuilder<N, E>)) {
+    pub fn on_region(&mut self, f: impl FnOnce(&mut RegionBuilder<N, E, OmegaNode>)) {
         //setup the builder for the region
-        let mut builder = RegionBuilder::new(self.ctx, &mut self.node.body, self.node_ref);
+        let mut builder = RegionBuilder::new(self.ctx, &mut self.node, 0, self.node_ref);
         f(&mut builder);
     }
 }

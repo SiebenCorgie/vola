@@ -14,9 +14,9 @@
 mod inter_proc;
 mod intra_proc;
 use crate::{
-    edge::{Edge, InportLocation, InputType, LangEdge, OutportLocation},
+    edge::{Edge, InportLocation, InputType, LangEdge, OutportLocation, OutputType},
     err::{BuilderError, GraphError},
-    nodes::{ApplyNode, LangNode, Node},
+    nodes::{ApplyNode, LangNode, Node, StructuralNode},
     region::Region,
     EdgeRef, NodeRef, Rvsdg,
 };
@@ -25,18 +25,27 @@ pub use intra_proc::{GammaBuilder, ThetaBuilder};
 use tinyvec::TinyVec;
 
 ///Probably the most used builder. Represents a simple [Region](crate::region::Region) within one of the higher level nodes.
-pub struct RegionBuilder<'a, N: LangNode + 'static, E: LangEdge + 'static> {
+pub struct RegionBuilder<'a, N: LangNode + 'static, E: LangEdge + 'static, PARENT: StructuralNode> {
     ctx: &'a mut Rvsdg<N, E>,
-    region_ref: &'a mut Region,
+    parent_region_index: usize,
     parent_ref: NodeRef,
+    parent: &'a mut PARENT,
 }
 
-impl<'a, N: LangNode + 'static, E: LangEdge + 'static> RegionBuilder<'a, N, E> {
-    pub fn new(ctx: &'a mut Rvsdg<N, E>, rref: &'a mut Region, parent: NodeRef) -> Self {
+impl<'a, N: LangNode + 'static, E: LangEdge + 'static, PARENT: StructuralNode>
+    RegionBuilder<'a, N, E, PARENT>
+{
+    pub fn new(
+        ctx: &'a mut Rvsdg<N, E>,
+        parent: &'a mut PARENT,
+        parent_region_index: usize,
+        parent_ref: NodeRef,
+    ) -> Self {
         RegionBuilder {
             ctx,
-            region_ref: rref,
-            parent_ref: parent,
+            parent,
+            parent_region_index,
+            parent_ref,
         }
     }
 
@@ -48,12 +57,24 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> RegionBuilder<'a, N, E> {
         self.ctx
     }
 
+    pub fn region(&self) -> &Region {
+        &self.parent.regions()[self.parent_region_index]
+    }
+
+    pub fn region_mut(&mut self) -> &mut Region {
+        &mut self.parent.regions_mut()[self.parent_region_index]
+    }
+
     ///Adds `node` to this region, returns the ref it was registered as
     pub fn insert_node(&mut self, node: N) -> NodeRef {
         let nref = self.ctx.new_node(Node::Simple(node));
-        self.region_ref.nodes.insert(nref);
+        self.region_mut().nodes.insert(nref);
 
         nref
+    }
+
+    pub fn parent(&self) -> NodeRef {
+        self.parent_ref
     }
 
     ///Connects two nodes. Fails if either the port types don't match up, or the nodes are not part of this region.
@@ -67,20 +88,42 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> RegionBuilder<'a, N, E> {
         dst: InportLocation,
         edge_type: E,
     ) -> Result<EdgeRef, BuilderError> {
-        //Check that its legal to connect the nodes
-        if !(self.region_ref.nodes.contains(&src.node)) {
-            return Err(BuilderError::NodeNotInRegion(src.node));
-        }
-        if !(self.region_ref.nodes.contains(&dst.node)) {
-            return Err(BuilderError::NodeNotInRegion(dst.node));
+        //NOTE: This is a different connect compared to Rvsdg<N,E>::connect, since
+        // self.parent() is usually not yet inserted into its parent.
+        //
+        // we therefore skip some checks the OG function does, at the expense of possibly invalid edges, which
+        // would be detected later
+        // TODO: fix that // find all invariant and make it sound?
+
+        //Check if its either a reference to our parent (which should be an argument or result)
+        // or, if not, if its within the region
+        if src.node != self.parent() {
+            if !self.region().nodes.contains(&src.node) {
+                return Err(BuilderError::NodeNotInRegion(src.node));
+            }
+
+            //is in region, so check if the port itself exists
+            if let None = self.ctx.node(src.node).outport(&src.output) {
+                return Err(BuilderError::ExpectedOutport(src));
+            }
+        } else {
+            if let OutputType::Output(_) = src.output {
+                return Err(BuilderError::Other("If connecting to the parent node, Output is not a valid port, since its outside of the region".to_owned()));
+            }
         }
 
-        //make sure that the ports exist
-        if let None = self.ctx.node(src.node).outport(&src.output) {
-            return Err(BuilderError::ExpectedOutport(src));
-        }
-        if let None = self.ctx.node(dst.node).inport(&dst.input) {
-            return Err(BuilderError::ExpectedInport(dst));
+        if dst.node != self.parent() {
+            if !self.region().nodes.contains(&dst.node) {
+                return Err(BuilderError::NodeNotInRegion(dst.node));
+            }
+
+            if let None = self.ctx.node(dst.node).inport(&dst.input) {
+                return Err(BuilderError::ExpectedInport(dst));
+            }
+        } else {
+            if let InputType::Input(_) = dst.input {
+                return Err(BuilderError::Other("If connecting to the parent node, Input is not a valid port, since its outside of the region".to_owned()));
+            }
         }
 
         //all right, hookup
@@ -90,42 +133,53 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> RegionBuilder<'a, N, E> {
             ty: edge_type,
         });
 
-        //Notify ports of connection
-        self.ctx
-            .node_mut(src.node)
-            .outport_mut(&src.output)
-            .unwrap()
-            .edges
-            .push(edge);
-
-        //If an input was already set, notify the old input of the disconnect.
-        let mut was_replaced = None;
-        if let Some(Some(old_edge)) = self.ctx.node(dst.node).inport(&dst.input).map(|i| i.edge) {
-            self.ctx.disconnect(old_edge).unwrap();
-            was_replaced = Some(BuilderError::EdgeOverwrite(old_edge));
-        }
-
-        //dbgassert that the inport is currently unused, since the disconnect above should have taken
-        // care of that.
-        debug_assert!(
-            if let Some(inport) = self.ctx.node(dst.node).inport(&dst.input) {
-                inport.edge.is_none()
-            } else {
-                true
-            },
-            "No edge should be connected to input at this point!"
-        );
-        self.ctx
-            .node_mut(dst.node)
-            .inport_mut(&dst.input)
-            .unwrap()
-            .edge = Some(edge);
-
-        if let Some(err) = was_replaced {
-            return Err(err);
+        //Notify ports of connection. This is the spicy part thats wildly different to the OG connect function.
+        // Since we can't be sure that the node already exists in the nodes map of the Rvsdg. So we have to check
+        // where to we are connecting exactly, and use the appropriate access
+        if src.node != self.parent() {
+            //normal write
+            self.ctx
+                .node_mut(src.node)
+                .outport_mut(&src.output)
+                .unwrap()
+                .edges
+                .push(edge);
         } else {
-            Ok(edge)
+            //writing to our self. we can be sure though that this is not an output port (which was checked earlier)
+            if let Some(port) = self.parent.outport_mut(&src.output) {
+                port.edges.push(edge)
+            }
         }
+
+        if dst.node != self.parent() {
+            debug_assert!(
+                self.ctx
+                    .node_mut(dst.node)
+                    .inport_mut(&dst.input)
+                    .unwrap()
+                    .edge
+                    .is_none(),
+                "the input should not be connected already"
+            );
+
+            //normal write
+            self.ctx
+                .node_mut(dst.node)
+                .inport_mut(&dst.input)
+                .unwrap()
+                .edge = Some(edge);
+        } else {
+            //writing to our self. we can be sure though that this is not an output port (which was checked earlier)
+            if let Some(port) = self.parent.inport_mut(&dst.input) {
+                debug_assert!(
+                    port.edge.is_none(),
+                    "the input should not be connected already!"
+                );
+                port.edge = Some(edge);
+            }
+        }
+
+        Ok(edge)
     }
 
     ///Creates a new `node`, creates enough inputs to connect all `src` list entries to the node.
@@ -159,7 +213,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> RegionBuilder<'a, N, E> {
             builder.build()
         };
         //add to our region
-        self.region_ref.nodes.insert(created);
+        self.region_mut().nodes.insert(created);
         created
     }
 
@@ -171,7 +225,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> RegionBuilder<'a, N, E> {
             builder.build()
         };
         //add to our region
-        self.region_ref.nodes.insert(created);
+        self.region_mut().nodes.insert(created);
         created
     }
 
@@ -183,7 +237,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> RegionBuilder<'a, N, E> {
             builder.build()
         };
         //add to our region
-        self.region_ref.nodes.insert(created);
+        self.region_mut().nodes.insert(created);
         created
     }
 
@@ -198,7 +252,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> RegionBuilder<'a, N, E> {
             builder.build()
         };
         //add to our region
-        self.region_ref.nodes.insert(created);
+        self.region_mut().nodes.insert(created);
         created
     }
 
@@ -210,7 +264,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> RegionBuilder<'a, N, E> {
             builder.build()
         };
         //add to our region
-        self.region_ref.nodes.insert(created);
+        self.region_mut().nodes.insert(created);
         created
     }
 
@@ -237,7 +291,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> RegionBuilder<'a, N, E> {
         //insert into graph
         let node_ref = self.ctx.new_node(Node::Apply(apply_node));
         //add to block
-        self.region_ref.nodes.insert(node_ref);
+        self.region_mut().nodes.insert(node_ref);
 
         //connect function input and arguments, collect created edges
 

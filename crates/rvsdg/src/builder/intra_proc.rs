@@ -40,10 +40,13 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> GammaBuilder<'a, N, E> {
     }
 
     ///Creates a new branch for this decision point.
-    pub fn new_branch(&mut self, branch_builder: impl FnOnce(&mut RegionBuilder<N, E>)) -> usize {
+    pub fn new_branch(
+        &mut self,
+        branch_builder: impl FnOnce(&mut RegionBuilder<N, E, GammaNode>),
+    ) -> usize {
         self.node.add_region();
         let idx = self.node.regions.len() - 1;
-        let mut builder = RegionBuilder::new(self.ctx, &mut self.node.regions[idx], self.node_ref);
+        let mut builder = RegionBuilder::new(self.ctx, &mut self.node, idx, self.node_ref);
         branch_builder(&mut builder);
 
         idx
@@ -93,6 +96,13 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> ThetaBuilder<'a, N, E> {
         } = self;
         *ctx.node_mut(node_ref) = Node::Theta(node);
         node_ref
+    }
+
+    ///lets you change the behaviour of this node.
+    pub fn on_loop(&mut self, f: impl FnOnce(&mut RegionBuilder<N, E, ThetaNode>)) {
+        //setup the builder for the region
+        let mut builder = RegionBuilder::new(self.ctx, &mut self.node, 0, self.node_ref);
+        f(&mut builder);
     }
 
     ///Adds a new loop variable. This are variables that are an input, and/or an output to a single iteration of the loop.

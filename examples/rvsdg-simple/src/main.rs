@@ -9,8 +9,9 @@ use rvsdg_viewer::{
     macroquad::{main, prelude::BLUE},
     view, View,
 };
-///Builds the simple rvsdg structures presented in figure 2 of the RVSDG paper.
 
+///Builds the simple rvsdg structures presented in figure 2 of the RVSDG paper.
+#[derive(Clone, Debug)]
 enum MyNodes {
     Load,
     Store,
@@ -23,6 +24,7 @@ enum MyNodes {
     Add,
 }
 
+#[derive(Clone, Debug)]
 struct LNode {
     node: MyNodes,
     inputs: Vec<Input>,
@@ -142,23 +144,23 @@ fn main() {
                 let gamma_node = reg.new_decission(|gamma| {
                     let ev0 = gamma.add_entry_variable();
                     let ev1 = gamma.add_entry_variable();
-                    let ex0 = gamma.add_entry_variable();
+                    let ex0 = gamma.add_exit_variable();
                     //branch 0 maps x to the exit variable
-                    let bx = gamma.new_branch(|branch_x| {
+                    let _bx = gamma.new_branch(|branch_x| {
                         branch_x
                             .connect(
                                 OutportLocation {
                                     node: branch_x.parent(),
                                     output: OutputType::EntryVariableArgument {
                                         branch: 0,
-                                        entry_variable: 0,
+                                        entry_variable: ev0,
                                     },
                                 },
                                 InportLocation {
                                     node: branch_x.parent(),
                                     input: InputType::ExitVariableResult {
                                         branch: 0,
-                                        exit_variable: 0,
+                                        exit_variable: ex0,
                                     },
                                 },
                                 VSEdge::Value,
@@ -166,21 +168,21 @@ fn main() {
                             .unwrap();
                     });
                     //branch 1 maps y to the exit variable
-                    let by = gamma.new_branch(|branch_y| {
+                    let _by = gamma.new_branch(|branch_y| {
                         branch_y
                             .connect(
                                 OutportLocation {
                                     node: branch_y.parent(),
                                     output: OutputType::EntryVariableArgument {
                                         branch: 1,
-                                        entry_variable: 1,
+                                        entry_variable: ev1,
                                     },
                                 },
                                 InportLocation {
                                     node: branch_y.parent(),
                                     input: InputType::ExitVariableResult {
                                         branch: 1,
-                                        exit_variable: 0,
+                                        exit_variable: ex0,
                                     },
                                 },
                                 VSEdge::Value,
@@ -188,14 +190,24 @@ fn main() {
                             .unwrap();
                     });
                 });
+
+                //connect gt-simple-node output to gamma predicate.
                 reg.connect(
                     gt_node.as_outport_location(OutputType::Output(0)),
                     gamma_node.as_inport_location(InputType::GammaPredicate),
                     VSEdge::Value,
                 )
                 .unwrap();
+
+                println!(
+                    "{:?} has {} outputs",
+                    reg.ctx().node(gamma_node),
+                    reg.ctx().node(gamma_node).outputs().len()
+                );
+
+                //Connect the gamma nodes exit variable to the
                 reg.connect(
-                    gamma_node.as_outport_location(OutputType::Output(0)),
+                    gamma_node.as_outport_location(OutputType::ExitVariableOutput(0)),
                     res_max,
                     VSEdge::Value,
                 )
@@ -218,18 +230,17 @@ fn main() {
             //      IMO this dose not guarantees that puts() is ordered _before_ max. In controll flow this is okay, since max()
             //      does not output anything though. For the sake of comparability I'll leave it as it is.
 
-            let function_node = func.get_node_ref();
             func.on_region(|reg| {
                 //call puts("max");
                 let (apply_puts, call_edges) = reg
-                    .call_function(
+                    .call(
                         OutportLocation {
-                            node: function_node,
+                            node: reg.parent(),
                             output: OutputType::ContextVariableArgument(cv_fputs),
                         },
                         &[
                             OutportLocation {
-                                node: function_node,
+                                node: reg.parent(),
                                 output: OutputType::ContextVariableArgument(cv_str_max),
                             },
                             arg_ctrl,
@@ -241,9 +252,9 @@ fn main() {
 
                 //call max(a, b);
                 let (apply_max, _) = reg
-                    .call_function(
+                    .call(
                         OutportLocation {
-                            node: function_node,
+                            node: reg.parent(),
                             output: OutputType::ContextVariableArgument(cv_fmax),
                         },
                         &[arg_a, arg_b],
