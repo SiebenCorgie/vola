@@ -1,7 +1,7 @@
 use rvsdg::{
     common::{CommonRvsdg, VSEdge},
     edge::{InportLocation, InputType, OutportLocation, OutputType},
-    nodes::LangNode,
+    nodes::{LangNode, Node},
     region::{Input, Output},
 };
 pub use rvsdg_viewer::macroquad;
@@ -137,6 +137,11 @@ fn main() {
             let arg_y = func.add_argument();
             let res_max = func.add_result();
 
+            println!(
+                "argx: {}, argy: {}, res: {}",
+                arg_x.node, arg_y.node, res_max.node
+            );
+
             func.on_region(|reg| {
                 let (gt_node, _edges) = reg
                     .connect_node(LNode::new(MyNodes::Gt), &[arg_x, arg_y])
@@ -147,6 +152,8 @@ fn main() {
                     let ev0 = gamma.add_entry_variable();
                     let ev1 = gamma.add_entry_variable();
                     let ex0 = gamma.add_exit_variable();
+
+                    println!("ev0: {}, ev1: {}, ex0: {}", ev0, ev1, ex0);
 
                     //branch 0 maps x to the exit variable
                     let _bx = gamma.new_branch(|branch_x| {
@@ -207,12 +214,6 @@ fn main() {
                     )
                     .unwrap();
 
-                println!(
-                    "{:?} has {} outputs",
-                    reg.ctx().node(gamma_node),
-                    reg.ctx().node(gamma_node).outputs().len()
-                );
-
                 //Connect the gamma nodes exit variable to the
                 reg.ctx_mut()
                     .connect(
@@ -234,6 +235,7 @@ fn main() {
             let arg_ctrl = func.add_argument();
             let f_res = func.add_result();
             let f_ctr_res = func.add_result();
+
             //NOTE: on state edges. I think the original paper has a error in the state edge for the puts function.
             //      The state edge should go args -> λ(puts) -> λ(max) -> result. Instead it goes args -> λ(puts) -> result.
             //      IMO this dose not guarantees that puts() is ordered _before_ max. In controll flow this is okay, since max()
@@ -269,6 +271,17 @@ fn main() {
                         &[arg_a, arg_b],
                     )
                     .unwrap();
+
+                //We have to add the results to apply_max and apply_puts our selfs, since puts is imported, and
+                // max is currently undefined.
+                //
+                // We could also do the omega-level interconnect before entering this function, for the def to be defined correctly.
+                if let Node::Apply(apputs) = reg.ctx_mut().node_mut(apply_puts) {
+                    assert!(apputs.add_output() == 0);
+                }
+                if let Node::Apply(app_max) = reg.ctx_mut().node_mut(apply_max) {
+                    assert!(app_max.add_output() == 0);
+                }
 
                 //now connect call outputs to the λ result
 

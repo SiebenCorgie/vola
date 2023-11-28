@@ -4,7 +4,7 @@ use tinyvec::TinyVec;
 
 use crate::{
     edge::{InputType, OutputType},
-    region::{Argument, Input, Output, Region},
+    region::{Argument, Input, Output, RegResult, Region},
 };
 
 use super::StructuralNode;
@@ -77,10 +77,13 @@ impl StructuralNode for DeltaNode {
 
 impl DeltaNode {
     pub fn new() -> Self {
+        let mut region = Region::new();
+        //Add the default region output for the default output of the node
+        region.results.push(RegResult::default());
         DeltaNode {
             cv_count: 0,
             inputs: TinyVec::default(),
-            body: Region::new(),
+            body: region,
             output: Output::default(),
         }
     }

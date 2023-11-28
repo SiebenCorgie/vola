@@ -230,4 +230,19 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
         //Otherwise, this is not connected to a region
         None
     }
+
+    ///Does an exhaustive search for `node` in all known regions of the Rvsdg.
+    ///
+    /// Shouldn't be used to often, since this becomes really slow for bigger graphs.
+    //TODO: Remove, once we have NodeRef<->Region mapping
+    pub fn search_node_def(&self, node: NodeRef) -> Option<(NodeRef, usize)> {
+        for (key, rnode) in &self.nodes {
+            for (regidx, reg) in rnode.regions().iter().enumerate() {
+                if reg.nodes.contains(&node) {
+                    return Some((key, regidx));
+                }
+            }
+        }
+        None
+    }
 }

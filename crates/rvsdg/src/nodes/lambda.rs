@@ -180,9 +180,9 @@ impl LambdaNode {
     pub fn add_argument(&mut self) -> usize {
         let cv_count = self.cv_count;
         self.body.arguments.push(Argument::default());
-        let args = self.body.arguments.len();
+        let this_args_idx = self.body.arguments.len() - 1;
 
-        args - cv_count
+        this_args_idx - cv_count
     }
 
     ///Adds a result to the function. Note that this does NOT mean the output of this lambda function, but adding

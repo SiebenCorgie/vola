@@ -273,26 +273,30 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static, PARENT: StructuralNode>
     /// adds all `arguments` to the call. Those should/must match up with the signature of the `function`.
     ///
     /// The resulting apply node will have the amount of output-ports the `function` declaration has as results.
+    ///
+    /// Will fail if the `callable_src` has a producer (connected node), but that producer is not an callabale node (λ|ϕ).
+    /// In case of an defined producer, the call will also fail, if the argument count does not match.
     pub fn call(
         &mut self,
         callable_src: OutportLocation,
         arguments: &[OutportLocation],
     ) -> Result<(NodeRef, TinyVec<[EdgeRef; 3]>), GraphError> {
-        let apply_node = if let Some(funct_def) = self.ctx.find_callabel_def(callable_src.clone()) {
-            if let Node::Lambda(l) = self.ctx.node(funct_def) {
-                ApplyNode::new_for_lambda(l)
+        let (apply_node, is_defined) =
+            if let Some(funct_def) = self.ctx.find_callabel_def(callable_src.clone()) {
+                if let Node::Lambda(l) = self.ctx.node(funct_def) {
+                    (ApplyNode::new_for_lambda(l), true)
+                } else {
+                    println!("Callable for phi not implemented!");
+                    return Err(GraphError::NotCallable(callable_src.node));
+                }
             } else {
-                println!("Callable for phi not implemented!");
-                return Err(GraphError::NotCallable(callable_src.node));
-            }
-        } else {
-            return Err(GraphError::NotCallable(callable_src.node));
-        };
+                (ApplyNode::new(), false)
+            };
 
         //insert into graph
-        let node_ref = self.ctx.new_node(Node::Apply(apply_node));
+        let apply_node_ref = self.ctx.new_node(Node::Apply(apply_node));
         //add to block
-        self.region_mut().nodes.insert(node_ref);
+        self.region_mut().nodes.insert(apply_node_ref);
 
         //connect function input and arguments, collect created edges
 
@@ -302,7 +306,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static, PARENT: StructuralNode>
             .connect(
                 callable_src,
                 InportLocation {
-                    node: node_ref,
+                    node: apply_node_ref,
                     input: InputType::Input(0),
                 },
                 E::value_edge(),
@@ -312,12 +316,22 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static, PARENT: StructuralNode>
 
         //connect function argument.
         for (idx, arg_src) in arguments.iter().enumerate() {
+            //If producer is not defined, push all args we connect to.
+            if !is_defined {
+                if let Node::Apply(an) = self.ctx.node_mut(apply_node_ref) {
+                    let at = an.add_input();
+                    assert!(idx == at - 1, "argument count missmatch");
+                } else {
+                    panic!("Undefined apply node ref");
+                }
+            }
+
             let edg = self
                 .ctx_mut()
                 .connect(
                     arg_src.clone(),
                     InportLocation {
-                        node: node_ref,
+                        node: apply_node_ref,
                         input: InputType::Input(1 + idx),
                     },
                     E::value_edge(),
@@ -326,6 +340,6 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static, PARENT: StructuralNode>
             arg_edges.push(edg);
         }
 
-        Ok((node_ref, arg_edges))
+        Ok((apply_node_ref, arg_edges))
     }
 }
