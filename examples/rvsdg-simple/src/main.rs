@@ -345,6 +345,16 @@ fn main() {
 
         tu
     });
+
+    println!(
+        "Reachable from omega: {:?}!",
+        graph.node(graph.entry_node()).regions()[0].results
+    );
+    for n in graph.walk_reachable() {
+        println!("{n}");
+    }
+
+    rvsdg_viewer::into_svg(&graph, "MyFirstPrint.svg");
 }
 
 /*

@@ -97,6 +97,89 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> Iterator for SuccWalker<'
     }
 }
 
+///An iterator that emits all reachable nodes for the entrypoint of a graph. The iterator is breadth-first and top down style.
+///
+/// _Reachable_ is defined as any node, that can be reached from any of the exported nodes _upwards_ the graph (consumer -> producer direction).
+///
+/// _Breadth-First_ means, that, for any node n first all directly connected nodes are traversed, before any 1st-degree indirectly connected nodes are traversed, then the 2nd-degree etc..
+///
+/// _Top-Down_ means, that first all nodes of a region are traversed breadth first, before any discovered sub-regions (of structural nodes) are traversed.
+pub struct ReachableWalker<'a, N: LangNode + 'static, E: LangEdge + 'static> {
+    ctx: &'a Rvsdg<N, E>,
+    ///All nodes we have already seen (for the first time)
+    walked: AHashSet<NodeRef>,
+    ///Waiting sub regions (models the top-down way)
+    waiting_regions: VecDeque<(NodeRef, usize)>,
+    ///Waiting nodes, modeling the breadth-first traversal
+    waiting_nodes: VecDeque<NodeRef>,
+}
+
+impl<'a, N: LangNode + 'static, E: LangEdge + 'static> Iterator for ReachableWalker<'a, N, E> {
+    type Item = NodeRef;
+    fn next(&mut self) -> Option<Self::Item> {
+        //shortcut for empty iterators
+        if self.waiting_nodes.is_empty() && self.waiting_regions.is_empty() {
+            return None;
+        }
+
+        //Check if we have to pop a region to get the next node
+        if self.waiting_nodes.is_empty() {
+            //no nodes left, try to pop a new region, and init the waiting_nodes with that regions first-degree reachable
+            // nodes. We do that in a loops, since a region could have no connected nodes
+            while self.waiting_nodes.is_empty() && !self.waiting_regions.is_empty() {
+                if let Some((region_owner, regidx)) = self.waiting_regions.pop_back() {
+                    let reg = &self.ctx.node(region_owner).regions()[regidx];
+                    for regres in reg.results.iter() {
+                        if let Some(edg) = regres.edge {
+                            //if an edge is connected to result, push that on the formerly empty waiting_nodes stack
+                            let edge = self.ctx.edge(edg);
+                            if !self.walked.contains(&edge.src.node) {
+                                self.walked.insert(edge.src.node);
+                                self.waiting_nodes.push_front(edge.src.node);
+                            }
+                        }
+                    }
+                }
+            }
+
+            //This is the case that we poped all regions above, but still didn't find anything
+            if self.waiting_nodes.is_empty() && self.waiting_regions.is_empty() {
+                return None;
+            }
+        }
+
+        debug_assert!(
+            !self.waiting_nodes.is_empty(),
+            "node stack shouldn't be empty at this point"
+        );
+
+        //Try to pop the next node from the stack
+        if let Some(next_node) = self.waiting_nodes.pop_back() {
+            //if we've found a new node, check if it has any regions. If so push them on the regions stack. Then collect all not-yet-visited connected nodes.
+            // then return
+            for (reg_idx, _) in self.ctx.node(next_node).regions().iter().enumerate() {
+                //for each region, push our self as the region owner, as well as the region index.
+                self.waiting_regions.push_front((next_node, reg_idx));
+            }
+
+            //push all inputs we haven't seen yet.
+            for inp in self.ctx.node(next_node).inputs() {
+                if let Some(edg) = inp.edge {
+                    let edge = self.ctx.edge(edg);
+                    if !self.walked.contains(&edge.src.node) {
+                        self.walked.insert(edge.src.node);
+                        self.waiting_nodes.push_front(edge.src.node);
+                    }
+                }
+            }
+
+            Some(next_node)
+        } else {
+            panic!("Invalid ReachableIterator state!");
+        }
+    }
+}
+
 impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
     ///Traverses context-variable boundaries of inter-procedural nodes as well as entry-variable boundaries
     /// of γ-Nodes, until it finds the producing port of `input`.
@@ -229,6 +312,37 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
         }
         //Otherwise, this is not connected to a region
         None
+    }
+
+    ///Builds an iterator that emits all reachable nodes for the entrypoint of this graph. The iterator is breadth-first and top down style.
+    ///
+    /// _Reachable_ is defined as any node, that can be reached from any of the exported nodes.
+    ///
+    /// _Breadth-First_ means, that, for any node n first all directly connected nodes are traversed, before any n-th-degree indirectly connected nodes are traversed.
+    ///
+    /// _Top-Down_ means, that first all nodes of a region are traversed breadth first, before any discovered sub-regions (of structural nodes) are traversed.
+    pub fn walk_reachable<'a>(&'a self) -> ReachableWalker<'a, N, E> {
+        //init waiting nodes with all exported nodes
+        let ep = self.entry_node();
+
+        let mut waiting_nodes = VecDeque::new();
+        let mut walked = AHashSet::new();
+        for res in self.node(ep).regions()[0].results.iter() {
+            if let Some(edg) = res.edge {
+                let node_ref = self.edge(edg).src.node;
+                if !walked.contains(&node_ref) {
+                    waiting_nodes.push_front(node_ref);
+                    walked.insert(node_ref);
+                }
+            }
+        }
+
+        ReachableWalker {
+            ctx: self,
+            waiting_nodes,
+            walked,
+            waiting_regions: VecDeque::new(),
+        }
     }
 
     ///Does an exhaustive search for `node` in all known regions of the Rvsdg.

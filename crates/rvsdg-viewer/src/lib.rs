@@ -17,6 +17,7 @@
 
 mod primitives;
 mod printer;
+mod svg;
 
 use std::path::Path;
 
@@ -30,6 +31,7 @@ use macroquad::{
 };
 use printer::Printer;
 use rvsdg::{nodes::{LangNode, Node}, Rvsdg, common::VSEdge, edge::LangEdge};
+use svg::SVGWriter;
 
 pub trait View {
     fn name(&self) -> &str;
@@ -83,13 +85,18 @@ impl<N: View + LangNode + 'static> View for rvsdg::nodes::Node<N>{
 pub fn into_svg<N: View + LangNode + 'static, E: View + LangEdge + 'static>(rvsdg: &Rvsdg<N, E>, svg_path: impl AsRef<Path>){
     let printer = Printer::new(rvsdg);
 
-    //Now build the svg from the printer
-    let mut svg = svg::Document::new();
-    for rect in printer.rects.iter().rev(){
-        svg = svg.add(rect.into_svg());
+    if svg_path.as_ref().exists(){
+        std::fs::remove_file(svg_path.as_ref()).unwrap()
     }
 
-    svg::save(svg_path, &svg).unwrap();
+    let mut svg_writer = SVGWriter::start();
+    for rect in printer.rects.iter(){
+        svg_writer.push_rect(rect);
+    }
+
+
+    std::fs::write(svg_path.as_ref(), svg_writer.build()).unwrap();
+
 }
 
 

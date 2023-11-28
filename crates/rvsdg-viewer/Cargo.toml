@@ -9,4 +9,3 @@ edition = "2021"
 rvsdg = {path = "../rvsdg"}
 macroquad = "0.4.4"
 ahash.workspace = true
-svg = "0.4"

@@ -68,6 +68,7 @@ impl Printer {
         rvsdg: &Rvsdg<N, E>,
         region: &Region,
     ) -> Range<usize> {
+        println!("Region!");
         //We build the regions nodes by stepping in parallel from all outputs, up the node chain, till we finished each tree.
         // at this point we assume that a region always consists of a tree. However, since the viewer will be used as a debugging
         // tool, we still check that criteria via the visited list.
@@ -150,6 +151,7 @@ impl Printer {
     ) -> Range<usize> {
         //We draw nodes by first letting the inner region(s) draw them selfs
         // then drawing the node around those (+ a little padding for readablity)
+        println!("Node!");
 
         let rect_start = self.rects.len();
         let regions = rvsdg.node(node).regions();
@@ -173,7 +175,11 @@ impl Printer {
         //Offset all children by half the padding
         self.offset_rect(sub_regions_range.clone(), Point::splat(Self::PADDING / 2.0));
         //Build the we want to color based on the node
-        let sub_area = self.get_rect_area(sub_regions_range);
+        let sub_area = self.get_rect_area(sub_regions_range.clone());
+        println!(
+            "{} for {:?}, {}..{}",
+            node, sub_area, sub_regions_range.start, sub_regions_range.end
+        );
         let sub_ext = sub_area.1 - sub_area.0;
 
         let node_rect = Rect {
@@ -214,7 +220,9 @@ impl Printer {
         };
 
         //collect all boxes and build location mapping
-        let _gamma_range = printer.rect_node_collector(graph, *graph.entry_node());
+        let _gamma_range = printer.rect_node_collector(graph, graph.entry_node());
+
+        println!("Collected: {} rects", printer.rects.len());
 
         printer
     }

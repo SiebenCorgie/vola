@@ -120,8 +120,8 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
     }
 
     ///Returns the reference to the translation unit / [ω-Node](crate::nodes::OmegaNode).
-    pub fn entry_node(&self) -> &NodeRef {
-        &self.omega
+    pub fn entry_node(&self) -> NodeRef {
+        self.omega
     }
 
     pub fn new_node(&mut self, node: Node<N>) -> NodeRef {
@@ -288,7 +288,19 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
         }
 
         //are in same region, so we can safely connect
-        let edge = self.new_edge(Edge { src, dst, ty });
+        let edge = self.new_edge(Edge {
+            src: src.clone(),
+            dst: dst.clone(),
+            ty,
+        });
+
+        //notify both ports
+        self.node_mut(src.node)
+            .outport_mut(&src.output)
+            .unwrap()
+            .edges
+            .push(edge);
+        self.node_mut(dst.node).inport_mut(&dst.input).unwrap().edge = Some(edge);
 
         Ok(edge)
     }

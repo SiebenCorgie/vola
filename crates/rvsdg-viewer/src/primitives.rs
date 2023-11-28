@@ -7,24 +7,6 @@ pub struct Rect {
     pub to: Point,
     pub color: Color,
 }
-impl Rect {
-    pub fn into_svg(&self) -> svg::node::element::Rectangle {
-        let width = self.to.x - self.from.x;
-        let height = self.to.y - self.from.y;
-        svg::node::element::Rectangle::new()
-            .set("width", width)
-            .set("height", height)
-            .set("x", self.from.x)
-            .set("y", self.from.y)
-            .set(
-                "style",
-                format!(
-                    "fill:rgb({}, {}, {})",
-                    self.color.r, self.color.g, self.color.b
-                ),
-            )
-    }
-}
 
 pub struct Line {
     pub from: Point,
