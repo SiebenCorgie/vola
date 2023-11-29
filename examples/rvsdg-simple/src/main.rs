@@ -76,7 +76,17 @@ impl View for LNode {
     }
 
     fn name(&self) -> &str {
-        "LNODE"
+        match self.node {
+            MyNodes::Add => "add",
+            MyNodes::AryConst(_) => "ArrayConst",
+            MyNodes::Gt => "gt",
+            MyNodes::ImmChar(_) => "ImmChar",
+            MyNodes::ImmI32(_) => "ImmI32",
+            MyNodes::Load => "Load",
+            MyNodes::Lt => "lt",
+            MyNodes::Mul => "mul",
+            MyNodes::Store => "store",
+        }
     }
 }
 
@@ -104,7 +114,7 @@ fn main() {
                 let const_x = reg.insert_node(LNode::new(MyNodes::ImmChar('x')));
                 let const_term = reg.insert_node(LNode::new(MyNodes::ImmChar('\0')));
                 println!("C_M: {const_m}, C_A: {const_a}, C_X: {const_x}, C_TERM: {const_term}");
-                let (const_arr, _edges) = reg
+                let (const_arr, edges) = reg
                     .connect_node(
                         LNode::new(MyNodes::AryConst(4)),
                         &[
@@ -115,6 +125,8 @@ fn main() {
                         ],
                     )
                     .unwrap();
+
+                assert!(edges.len() == 4);
 
                 //Connect to output
                 let parent = reg.parent();
@@ -345,14 +357,6 @@ fn main() {
 
         tu
     });
-
-    println!(
-        "Reachable from omega: {:?}!",
-        graph.node(graph.entry_node()).regions()[0].results
-    );
-    for n in graph.walk_reachable() {
-        println!("{n}");
-    }
 
     rvsdg_viewer::into_svg(&graph, "MyFirstPrint.svg");
 }

@@ -16,6 +16,11 @@
 //! - [OmegaNode] ~ [TranslationUnit] : Represents the whole translation unit. Based on the internal region we can identify imported and exported state.
 
 mod delta;
+use std::{
+    borrow::Borrow,
+    fmt::{write, Debug, Display},
+};
+
 pub use delta::{DeltaNode, GlobalVariable};
 mod gamma;
 pub use gamma::{DecisionNode, GammaNode};
@@ -412,6 +417,38 @@ impl<N: LangNode + 'static> Node<N> {
                 Node::Delta(d) => d.cv_input_mut(*n),
                 _ => None,
             },
+        }
+    }
+}
+
+impl<N: LangNode + Debug + 'static> Display for Node<N> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Node::Apply(a) => write!(f, "Apply"),
+            Node::Delta(d) => write!(f, "Delta({} cv, {} nodes)", d.cv_count, d.body.nodes.len()),
+            Node::Gamma(g) => write!(
+                f,
+                "Gamma({} branches, {} entry-vars, {} exit-vars)",
+                g.regions.len(),
+                g.entry_var_count,
+                g.exit_var_count
+            ),
+            Node::Lambda(l) => write!(
+                f,
+                "Lambda({} arguments, {} results)",
+                l.body.arguments.len(),
+                l.body.results.len()
+            ),
+            Node::Omega(o) => write!(
+                f,
+                "Omega({} imports, {} exports, {} top-level nodes)",
+                o.body.arguments.len(),
+                o.body.results.len(),
+                o.body.nodes.len()
+            ),
+            Node::Phi(p) => write!(f, "Phi({} rv, {} cv)", p.rv_count, p.cv_count),
+            Node::Simple(s) => write!(f, "Simple({:?})", s),
+            Node::Theta(t) => write!(f, "Theta({} lv)", t.lv_count),
         }
     }
 }

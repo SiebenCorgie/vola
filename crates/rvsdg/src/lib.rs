@@ -52,6 +52,9 @@ impl NodeRef {
             output: port_type,
         }
     }
+    pub fn as_ffi(&self) -> u64 {
+        self.0.as_ffi()
+    }
 }
 
 new_key_type! {pub struct EdgeRef;}
@@ -68,6 +71,10 @@ impl EdgeRef {
         ctx: &mut Rvsdg<N, E>,
     ) -> Result<(), GraphError> {
         ctx.disconnect(self)
+    }
+
+    pub fn as_ffi(&self) -> u64 {
+        self.0.as_ffi()
     }
 }
 

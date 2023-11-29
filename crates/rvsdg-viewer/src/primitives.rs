@@ -1,11 +1,33 @@
 use macroquad::prelude::{Color, Vec2};
 
 pub type Point = Vec2;
-
+#[derive(Debug, Clone)]
 pub struct Rect {
     pub from: Point,
     pub to: Point,
     pub color: Color,
+}
+
+pub fn color_styling(color: &Color) -> String {
+    format!(
+        "rgb({}, {}, {})",
+        ((color.r * 255.0).clamp(0.0, 255.0) as u8),
+        ((color.g * 255.0).clamp(0.0, 255.0) as u8),
+        ((color.b * 255.0).clamp(0.0, 255.0) as u8),
+    )
+}
+
+impl Rect {
+    pub fn extend(&self) -> Vec2 {
+        self.to - self.from
+    }
+    pub fn empty(color: Color) -> Self {
+        Rect {
+            from: Vec2::ZERO,
+            to: Vec2::ZERO,
+            color,
+        }
+    }
 }
 
 pub struct Line {

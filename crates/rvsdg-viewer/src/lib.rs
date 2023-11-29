@@ -19,7 +19,7 @@ mod primitives;
 mod printer;
 mod svg;
 
-use std::path::Path;
+use std::{path::Path, fmt::Debug};
 
 ///The color of a node or edge.
 pub use macroquad::color::Color;
@@ -82,20 +82,21 @@ impl<N: View + LangNode + 'static> View for rvsdg::nodes::Node<N>{
 
 
 ///Saves the rvsdg graph as an SVG image at `svg_path`.
-pub fn into_svg<N: View + LangNode + 'static, E: View + LangEdge + 'static>(rvsdg: &Rvsdg<N, E>, svg_path: impl AsRef<Path>){
-    let printer = Printer::new(rvsdg);
+pub fn into_svg<N: View + LangNode + Debug + 'static, E: View + LangEdge + 'static>(rvsdg: &Rvsdg<N, E>, svg_path: impl AsRef<Path>){
+    let mut printer = Printer::new(rvsdg);
+    printer.layout(rvsdg);
+
+
+
 
     if svg_path.as_ref().exists(){
         std::fs::remove_file(svg_path.as_ref()).unwrap()
     }
 
-    let mut svg_writer = SVGWriter::start();
-    for rect in printer.rects.iter(){
-        svg_writer.push_rect(rect);
-    }
+    let buffer = printer.emit_svg();
 
+    std::fs::write(svg_path.as_ref(), buffer).unwrap();
 
-    std::fs::write(svg_path.as_ref(), svg_writer.build()).unwrap();
 
 }
 

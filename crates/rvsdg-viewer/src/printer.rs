@@ -1,19 +1,164 @@
-use std::ops::Range;
-
-use ahash::{AHashMap, AHashSet};
-use macroquad::prelude::{Color, WHITE};
-use rvsdg::{
-    edge::LangEdge,
-    label::LabelLoc,
-    nodes::{LangNode, Node},
-    region::Region,
-    NodeRef, Rvsdg,
-};
+use ahash::AHashSet;
+use macroquad::prelude::{Vec2, WHITE};
+use rvsdg::{edge::LangEdge, nodes::LangNode, region::Region, NodeRef, Rvsdg};
+use std::collections::VecDeque;
+use std::fmt::Debug;
 
 use crate::{
-    primitives::{Line, Point, Rect, Text},
+    primitives::{color_styling, Rect},
     View,
 };
+
+#[derive(Debug, Clone)]
+struct BodyNode {
+    //Relative location in the parent
+    location: Vec2,
+    node: AnyNode,
+}
+
+impl BodyNode {
+    ///Emits this, and all subnodes into the buffer.
+    pub fn emit_svg(&self, buffer: &mut Vec<String>) {
+        buffer.push(format!(
+            "<g id=\"{}\" transform=\"translate({}, {})\">",
+            format!("OffsetFor({})", self.node.nref),
+            self.location.x,
+            self.location.y
+        ));
+
+        self.node.emit_svg(buffer);
+
+        buffer.push("</g>".to_string());
+    }
+}
+
+///The nodes in a region.
+/// there are lines of nodes in this body
+#[derive(Debug, Clone)]
+struct BodyRegion {
+    area: Rect,
+    nodes: Vec<Vec<BodyNode>>,
+}
+
+impl BodyRegion {
+    ///Emits this, and all subnodes into the buffer.
+    pub fn emit_svg(&self, buffer: &mut Vec<String>) {
+        buffer.push(format!(
+            "<rect width=\"{}\" height=\"{}\" style=\"fill:{}\" />",
+            self.area.extend().x,
+            self.area.extend().y,
+            color_styling(&self.area.color)
+        ));
+
+        for line in &self.nodes {
+            for node in line {
+                node.emit_svg(buffer);
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct AnyNode {
+    nref: NodeRef,
+    name: String,
+    ///Body defined by `AnyNodes`, a x-index, and a y-index indicating their position
+    regions: Vec<BodyRegion>,
+    node_region: Rect,
+}
+
+impl AnyNode {
+    pub const PADDING: f32 = 10.0;
+    pub const FONT_SIZE: f32 = Self::PADDING - 1.0;
+    ///Layouts the nodes within this node
+    pub fn build_layout<N: LangNode + View + 'static, E: LangEdge + 'static>(
+        &mut self,
+        ctx: &Rvsdg<N, E>,
+    ) -> Vec2 {
+        //build the body region
+        let mut reg_xoff = Self::PADDING;
+        let mut reg_max_height = Self::PADDING;
+        for region in self.regions.iter_mut() {
+            //Iterate over all nodes of that region _in order_
+            let mut yoff = Self::PADDING;
+            let mut max_x = Self::PADDING;
+            for line in region.nodes.iter_mut() {
+                //reset the x_offset
+                let mut xoff = Self::PADDING;
+                let mut line_height = 0.0f32;
+                for node in line.iter_mut() {
+                    //for each node on this line, let it calculate its inner
+                    // extend, then use that to
+                    // - set the node location
+                    // - advance the offset appropriately
+                    // - update the region's body extend (y always updates, x might, if we overflow).
+                    let sub_ext = node.node.build_layout(ctx);
+                    node.location = Vec2::new(xoff, yoff);
+                    line_height = line_height.max(sub_ext.y);
+                    xoff += sub_ext.x + Self::PADDING;
+                }
+                max_x = max_x.max(xoff);
+                //add to the y offset for the next line
+                yoff += line_height + Self::PADDING;
+            }
+
+            //set the x offset
+            region.area = Rect::empty(WHITE);
+            region.area.from = Vec2::new(reg_xoff, Self::PADDING);
+            region.area.to = region.area.from + Vec2::new(max_x, yoff + Self::PADDING);
+            reg_max_height = reg_max_height.max(region.area.extend().y + Self::PADDING);
+            //now update the offset
+            reg_xoff += region.area.extend().x + Self::PADDING;
+        }
+
+        let min_region = self.min_size();
+        self.node_region = Rect::empty(ctx.node(self.nref).color());
+        self.node_region.to = Vec2::new(
+            reg_xoff.max(min_region.x),
+            reg_max_height.max(min_region.y) + Self::PADDING,
+        );
+        self.node_region.color = ctx.node(self.nref).color();
+        self.node_region.extend()
+    }
+
+    ///Emits this, and all subnodes into the buffer.
+    pub fn emit_svg(&self, buffer: &mut Vec<String>) {
+        //emit the rect that fills that node
+        buffer.push(format!(
+            "<rect id=\"{}\" x=\"0\" y=\"0\" width=\"{}\" height=\"{}\" style=\"fill:{}\" />",
+            format!("{} - {}", self.name, self.nref),
+            self.node_region.extend().x,
+            self.node_region.extend().y,
+            color_styling(&self.node_region.color)
+        ));
+
+        buffer.push(format!(
+            "<text x=\"{}\" y=\"{}\" font-size=\"{}\" font-family=\"monospace\">{}</text>",
+            Self::FONT_SIZE / 2.0,
+            Self::FONT_SIZE - 1.0,
+            Self::FONT_SIZE,
+            self.name
+        ));
+
+        for region in &self.regions {
+            buffer.push(format!(
+                "<g id=\"{}\" transform=\"translate({}, {})\">",
+                format!("AnyNode({})", self.nref),
+                region.area.from.x,
+                region.area.from.y
+            ));
+
+            region.emit_svg(buffer);
+
+            buffer.push("</g>".to_string());
+        }
+    }
+
+    fn min_size(&self) -> Vec2 {
+        let num_chars = self.name.chars().count();
+        Vec2::new(num_chars as f32 * Self::FONT_SIZE, Self::FONT_SIZE)
+    }
+}
 
 ///The printer works in three passes.
 /// 1. Bottom up build list of blocks. This allocates space for regions, ports etc.
@@ -31,199 +176,129 @@ use crate::{
 /// We assume that a region/node, when build always originates at 0.0, which is the nodes lower-left corner
 /// The positive quadrand is top-right.
 pub struct Printer {
-    ///Location mapping for nodes, regions and ports. We abuse the label loc for now to reference any box or port.
-    pub rect_mapping: AHashMap<LabelLoc, usize>,
-    pub rects: Vec<Rect>,
-    pub lines: Vec<Line>,
-    pub label: Vec<Text>,
+    pub root: AnyNode,
 }
 
 impl Printer {
-    pub const PADDING: f32 = 10.0;
-
-    fn get_rect_area(&self, range: Range<usize>) -> (Point, Point) {
-        let mut min = Point::splat(f32::INFINITY);
-        let mut max = Point::splat(f32::NEG_INFINITY);
-
-        for rect in &self.rects[range] {
-            min = min.min(rect.from);
-            max = max.max(rect.to);
-        }
-        (min, max)
-    }
-
-    ///Offsets all nodes in `range` for `offset`
-    fn offset_rect(&mut self, range: Range<usize>, offset: Point) {
-        for i in range {
-            let rect = &mut self.rects[i];
-            rect.from += offset;
-            rect.to += offset;
-        }
-    }
-
-    ///Collects all nodes in that region. Also does the layouting of those nodes.
-    /// Returns the range in `collection` that belongs to this region.
-    fn rect_region_collector<N: View + LangNode + 'static, E: View + LangEdge + 'static>(
-        &mut self,
-        rvsdg: &Rvsdg<N, E>,
+    fn collect_region_nodes<N: View + LangNode + Debug + 'static, E: View + LangEdge + 'static>(
+        ctx: &Rvsdg<N, E>,
         region: &Region,
-    ) -> Range<usize> {
-        println!("Region!");
-        //We build the regions nodes by stepping in parallel from all outputs, up the node chain, till we finished each tree.
-        // at this point we assume that a region always consists of a tree. However, since the viewer will be used as a debugging
-        // tool, we still check that criteria via the visited list.
-        //
-        // All in all the node location/exploration thingy is kinda a breadth-first bottom-up style algorithm.
-        let mut visited = AHashSet::default();
+        parent: NodeRef,
+    ) -> BodyRegion {
+        let mut nodes = Vec::new();
 
-        //Init with all src nodes of all result ports. So all nodes that are connected to a result
-        let mut visit_list: Vec<NodeRef> = region
-            .results
-            .iter()
-            .map(|port| port.edge.iter().map(|edge| rvsdg.edge(*edge).src.node))
-            .flatten()
-            .collect();
-
-        let rect_start = self.rects.len();
-
-        //Vertical offest of the nodes being placed
-        let mut ver_offset = 0.0;
-        let mut max_hor = 0.0f32;
-
-        'explorer: loop {
-            //work on this level of nodes, swap out the visit list, and start a new one for the coming level
-            let mut work_list = Vec::new();
-            std::mem::swap(&mut work_list, &mut visit_list);
-
-            //Right now, we just position all new nodes of this level next to each other.
-            let mut hor_offest = 0.0f32;
-            //track level nodes max width and heigh.
-            let mut max_height = 0.0f32;
-            //If visit list is empty, we found the last node
-            if work_list.len() == 0 {
-                break 'explorer;
-            }
-
-            //traverse full visit list, and build new visit list
-            for to_visit in work_list.into_iter() {
-                //Do not revisit if already visited
-                if visited.contains(&to_visit) {
+        let mut seen_nodes = AHashSet::new();
+        let mut waiting_nodes = VecDeque::new();
+        //init deque
+        for res in region.results.iter() {
+            if let Some(edg) = res.edge {
+                let node_ref = ctx.edge(edg).src.node;
+                if node_ref == parent {
                     continue;
                 }
-
-                //add this node to (being) visited.
-                visited.insert(to_visit);
-
-                //found an node we have to touch, therefore let this node do its own allocation,
-                // then use that area information to schedule this level's area.
-                let node_indices = self.rect_node_collector(rvsdg, to_visit);
-                let node_area = self.get_rect_area(node_indices.clone());
-                let ext = node_area.1 - node_area.0;
-                //move nodes to this slot's offset
-                self.offset_rect(node_indices, Point::new(hor_offest, ver_offset));
-                //now add the horizontal offset, and update max height
-                hor_offest += ext.x;
-                max_height = max_height.max(ext.y);
+                waiting_nodes.push_front(node_ref);
+                seen_nodes.insert(node_ref);
+                //TODO collect edge as well
             }
-            max_hor = max_hor.max(hor_offest);
-            //add horizontal offset
-            ver_offset += max_height;
         }
 
-        //After setting up all sub nodes, move them by half the padding, and add a white box, enclosing those
-        let sub_regions = rect_start..self.rects.len();
-        let sub_ext = (max_hor, ver_offset);
-        self.offset_rect(sub_regions, Point::splat(Self::PADDING));
-        self.rects.push(Rect {
-            from: Point::ZERO,
-            to: Point::new(sub_ext.0, sub_ext.1),
-            color: WHITE,
-        });
+        //now do bfs until we found all
 
-        rect_start..self.rects.len()
+        while !waiting_nodes.is_empty() {
+            let mut level = Vec::new();
+            let mut nodes_on_level = VecDeque::new();
+            std::mem::swap(&mut nodes_on_level, &mut waiting_nodes);
+
+            while let Some(node) = nodes_on_level.pop_back() {
+                //first check all inputs, then check if we need to recurse, finally
+                // push self on level collector;
+
+                for inp in ctx.node(node).inputs() {
+                    if let Some(edg) = inp.edge {
+                        let node_ref = ctx.edge(edg).src.node;
+                        if !seen_nodes.contains(&node_ref) && node_ref != parent {
+                            waiting_nodes.push_front(node_ref);
+                            seen_nodes.insert(node_ref);
+                        }
+                    }
+                }
+
+                //check node for recursion
+                let anynode = if ctx.node(node).regions().len() > 0 {
+                    Self::tree_builder(ctx, node)
+                } else {
+                    let color = ctx.node(node).color();
+                    let name = ctx.node(node).name().to_owned();
+                    AnyNode {
+                        nref: node,
+                        name,
+                        regions: Vec::with_capacity(0),
+                        node_region: Rect::empty(color),
+                    }
+                };
+
+                //push node into level
+                level.push(BodyNode {
+                    location: Vec2::ZERO,
+                    node: anynode,
+                });
+            }
+
+            nodes.push(level);
+        }
+
+        BodyRegion {
+            area: Rect::empty(WHITE),
+            nodes,
+        }
     }
 
-    ///Layouts sub regions / nodes of this node, then places self starting at the center.
-    fn rect_node_collector<N: View + LangNode + 'static, E: View + LangEdge + 'static>(
-        &mut self,
-        rvsdg: &Rvsdg<N, E>,
+    fn tree_builder<N: View + LangNode + Debug + 'static, E: View + LangEdge + 'static>(
+        ctx: &Rvsdg<N, E>,
         node: NodeRef,
-    ) -> Range<usize> {
-        //We draw nodes by first letting the inner region(s) draw them selfs
-        // then drawing the node around those (+ a little padding for readablity)
-        println!("Node!");
-
-        let rect_start = self.rects.len();
-        let regions = rvsdg.node(node).regions();
-        let mut max_height = 0.0f32;
-        let mut hor_offset = 0.0;
-        for reg in regions {
-            let range = self.rect_region_collector(rvsdg, reg);
-            if hor_offset != 0.0 {
-                //If offset region to the right.
-                self.offset_rect(range.clone(), Point::new(hor_offset, 0.0));
-            }
-
-            let area = self.get_rect_area(range);
-            let ext = area.1 - area.0;
-            max_height = max_height.max(ext.y);
-            hor_offset += ext.x;
+    ) -> AnyNode {
+        //iterate all reachables // _connected-to-result_ nodes in a breadth-first manor.
+        // If a node is structural,
+        let mut regions = Vec::with_capacity(0);
+        for region in ctx.node(node).regions() {
+            //explore all nodes in that region, collecting the body in the process
+            regions.push(Self::collect_region_nodes(ctx, region, node));
         }
 
-        //All boxes of the sub region
-        let sub_regions_range = rect_start..self.rects.len();
-        //Offset all children by half the padding
-        self.offset_rect(sub_regions_range.clone(), Point::splat(Self::PADDING / 2.0));
-        //Build the we want to color based on the node
-        let sub_area = self.get_rect_area(sub_regions_range.clone());
-        println!(
-            "{} for {:?}, {}..{}",
-            node, sub_area, sub_regions_range.start, sub_regions_range.end
-        );
-        let sub_ext = sub_area.1 - sub_area.0;
-
-        let node_rect = Rect {
-            from: Point::ZERO,
-            to: sub_ext + Point::splat(Self::PADDING),
-            color: rvsdg.node(node).color(),
-        };
-        self.rects.push(node_rect);
-
-        /*
-        //register nodes input and output ports. Regions should already be done
-        let node = rvsdg.node(node);
-        let inp_count = node.inputs().len();
-        for (i, inp) in node.inputs().iter().enumerate() {
-            //
+        AnyNode {
+            name: ctx.node(node).name().to_owned(),
+            nref: node,
+            regions,
+            node_region: Rect::empty(WHITE),
         }
-
-        let out_count = node.outputs().len();
-        for (i, out) in node.outputs().iter().enumerate() {
-            //calc port location
-            //register location
-            //emit rect
-        }
-        */
-
-        rect_start..self.rects.len()
     }
 
     ///Creates a printer for the `graph`.
-    pub fn new<N: View + LangNode + 'static, E: View + LangEdge + 'static>(
+    pub fn new<N: View + LangNode + Debug + 'static, E: View + LangEdge + 'static>(
         graph: &Rvsdg<N, E>,
     ) -> Self {
-        let mut printer = Printer {
-            rect_mapping: AHashMap::default(),
-            rects: Vec::with_capacity(100),
-            lines: Vec::with_capacity(100),
-            label: Vec::with_capacity(100),
-        };
+        let rootnode = graph.entry_node();
+        Self {
+            root: Self::tree_builder(graph, rootnode),
+        }
+    }
 
-        //collect all boxes and build location mapping
-        let _gamma_range = printer.rect_node_collector(graph, graph.entry_node());
+    pub fn layout<N: View + LangNode + Debug + 'static, E: View + LangEdge + 'static>(
+        &mut self,
+        ctx: &Rvsdg<N, E>,
+    ) {
+        self.root.build_layout(ctx);
+    }
 
-        println!("Collected: {} rects", printer.rects.len());
+    pub fn emit_svg(&self) -> String {
+        let mut line_buffer = Vec::new();
 
-        printer
+        self.root.emit_svg(&mut line_buffer);
+        let mut svg = String::from("<svg>\n");
+        for line in line_buffer {
+            svg.push_str(&format!("{}\n", line));
+        }
+        svg.push_str("</svg>\n");
+        svg
     }
 }
