@@ -18,7 +18,7 @@ pub fn color_styling(color: &Color) -> String {
 }
 
 impl Rect {
-    pub fn extend(&self) -> Vec2 {
+    pub fn extent(&self) -> Vec2 {
         self.to - self.from
     }
     pub fn empty(color: Color) -> Self {
@@ -33,8 +33,8 @@ impl Rect {
         format!(
             "<rect id=\"{}\" x=\"0\" y=\"0\" width=\"{}\" height=\"{}\" style=\"fill:{}\" />",
             id,
-            self.extend().x,
-            self.extend().y,
+            self.extent().x,
+            self.extent().y,
             color_styling(&self.color)
         )
     }

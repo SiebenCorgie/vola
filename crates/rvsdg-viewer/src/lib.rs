@@ -84,8 +84,9 @@ impl<N: View + LangNode + 'static> View for rvsdg::nodes::Node<N>{
 ///Saves the rvsdg graph as an SVG image at `svg_path`.
 pub fn into_svg<N: View + LangNode + Debug + 'static, E: View + LangEdge + 'static>(rvsdg: &Rvsdg<N, E>, svg_path: impl AsRef<Path>){
     let mut printer = Printer::new(rvsdg);
-    printer.layout(rvsdg);
 
+    printer.layout(rvsdg);
+    printer.root.flip_y();
 
 
 

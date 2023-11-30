@@ -17,6 +17,11 @@ struct BodyNode {
 }
 
 impl BodyNode {
+    pub fn flip_y(&mut self, parent_extent: Vec2) {
+        self.location.y = parent_extent.y - self.location.y - self.node.node_region.extent().y;
+        self.node.flip_y();
+    }
+
     ///Emits this, and all subnodes into the buffer.
     pub fn emit_svg(&self, buffer: &mut Vec<String>) {
         buffer.push(format!(
@@ -43,6 +48,15 @@ struct BodyRegion {
 }
 
 impl BodyRegion {
+    pub fn flip_y(&mut self) {
+        let ext = self.area.extent();
+        for line in self.nodes.iter_mut() {
+            for node in line {
+                node.flip_y(ext);
+            }
+        }
+    }
+
     ///Emits this, and all subnodes into the buffer.
     pub fn emit_svg(&self, buffer: &mut Vec<String>) {
         buffer.push(self.area.emit_svg("".to_owned()));
@@ -70,7 +84,7 @@ impl AnyNode {
     pub const PADDING: f32 = 10.0;
     pub const FONT_SIZE: f32 = Self::PADDING - 1.0;
 
-    ///Builds the recursive layout for this region, return the Extend of that region
+    ///Builds the recursive layout for this region, return the Extent of that region
     pub fn build_region_layout<N: LangNode + View + 'static, E: LangEdge + 'static>(
         &mut self,
         ctx: &Rvsdg<N, E>,
@@ -85,10 +99,10 @@ impl AnyNode {
             let mut line_height = 0.0f32;
             for node in line.iter_mut() {
                 //for each node on this line, let it calculate its inner
-                // extend, then use that to
+                // extent, then use that to
                 // - set the node location
                 // - advance the offset appropriately
-                // - update the region's body extend (y always updates, x might, if we overflow).
+                // - update the region's body extent (y always updates, x might, if we overflow).
                 let sub_ext = node.node.build_layout(ctx);
                 node.location = Vec2::new(xoff, yoff);
                 line_height = line_height.max(sub_ext.y);
@@ -138,7 +152,13 @@ impl AnyNode {
             reg_max_height.max(min_region.y) + Self::PADDING,
         );
         self.node_region.color = ctx.node(self.nref).color();
-        self.node_region.extend()
+        self.node_region.extent()
+    }
+
+    pub fn flip_y(&mut self) {
+        for reg in self.regions.iter_mut() {
+            reg.flip_y()
+        }
     }
 
     ///Emits this, and all subnodes into the buffer.
@@ -343,10 +363,11 @@ impl Printer {
         self.root.build_layout(ctx);
     }
 
-    pub fn emit_svg(&self) -> String {
+    pub fn emit_svg(&mut self) -> String {
         let mut line_buffer = Vec::new();
 
         self.root.emit_svg(&mut line_buffer);
+
         let mut svg = String::from("<svg>\n");
         for line in line_buffer {
             svg.push_str(&format!("{}\n", line));
