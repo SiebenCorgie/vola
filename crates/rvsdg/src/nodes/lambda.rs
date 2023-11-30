@@ -155,6 +155,22 @@ impl StructuralNode for LambdaNode {
             _ => None,
         }
     }
+
+    fn inputs(&self) -> &[Input] {
+        &self.inputs
+    }
+    fn inputs_mut(&mut self) -> &mut [Input] {
+        &mut self.inputs
+    }
+    fn outputs(&self) -> &[Output] {
+        slice::from_ref(&self.output)
+    }
+    fn outputs_mut(&mut self) -> &mut [Output] {
+        slice::from_mut(&mut self.output)
+    }
+    fn context_variable_count(&self) -> usize {
+        self.cv_count
+    }
 }
 
 impl LambdaNode {

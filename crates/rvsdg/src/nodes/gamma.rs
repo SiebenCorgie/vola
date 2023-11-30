@@ -85,6 +85,19 @@ impl StructuralNode for GammaNode {
             _ => None,
         }
     }
+
+    fn inputs(&self) -> &[Input] {
+        &self.inputs
+    }
+    fn inputs_mut(&mut self) -> &mut [Input] {
+        &mut self.inputs
+    }
+    fn outputs(&self) -> &[Output] {
+        &self.outputs
+    }
+    fn outputs_mut(&mut self) -> &mut [Output] {
+        &mut self.outputs
+    }
 }
 
 impl GammaNode {

@@ -91,6 +91,25 @@ impl StructuralNode for PhiNode {
             _ => None,
         }
     }
+
+    fn inputs(&self) -> &[Input] {
+        &self.inputs
+    }
+    fn inputs_mut(&mut self) -> &mut [Input] {
+        &mut self.inputs
+    }
+    fn outputs(&self) -> &[Output] {
+        &self.outputs
+    }
+    fn outputs_mut(&mut self) -> &mut [Output] {
+        &mut self.outputs
+    }
+    fn context_variable_count(&self) -> usize {
+        self.cv_count
+    }
+    fn recursion_variable_count(&self) -> usize {
+        self.rv_count
+    }
 }
 
 impl PhiNode {

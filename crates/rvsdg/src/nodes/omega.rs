@@ -47,6 +47,19 @@ impl StructuralNode for OmegaNode {
             _ => None,
         }
     }
+
+    fn inputs(&self) -> &[Input] {
+        &[]
+    }
+    fn inputs_mut(&mut self) -> &mut [Input] {
+        &mut []
+    }
+    fn outputs(&self) -> &[Output] {
+        &[]
+    }
+    fn outputs_mut(&mut self) -> &mut [Output] {
+        &mut []
+    }
 }
 
 impl OmegaNode {

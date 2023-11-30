@@ -16,10 +16,7 @@
 //! - [OmegaNode] ~ [TranslationUnit] : Represents the whole translation unit. Based on the internal region we can identify imported and exported state.
 
 mod delta;
-use std::{
-    borrow::Borrow,
-    fmt::{write, Debug, Display},
-};
+use std::fmt::{Debug, Display};
 
 pub use delta::{DeltaNode, GlobalVariable};
 mod gamma;
@@ -77,37 +74,37 @@ impl<N: LangNode + 'static> Node<N> {
     pub fn inputs(&self) -> &[Input] {
         match &self {
             Node::Simple(node) => node.inputs(),
-            Node::Gamma(g) => &g.inputs,
-            Node::Theta(g) => &g.inputs,
-            Node::Lambda(g) => &g.inputs,
+            Node::Gamma(g) => g.inputs(),
+            Node::Theta(g) => &g.inputs(),
+            Node::Lambda(g) => &g.inputs(),
             Node::Apply(g) => &g.inputs,
-            Node::Delta(g) => &g.inputs,
-            Node::Phi(g) => &g.inputs,
-            Node::Omega(_g) => &[],
+            Node::Delta(g) => &g.inputs(),
+            Node::Phi(g) => &g.inputs(),
+            Node::Omega(g) => &g.inputs(),
         }
     }
 
     pub fn inputs_mut(&mut self) -> &mut [Input] {
         match self {
             Node::Simple(node) => node.inputs_mut(),
-            Node::Gamma(g) => &mut g.inputs,
-            Node::Theta(g) => &mut g.inputs,
-            Node::Lambda(g) => &mut g.inputs,
+            Node::Gamma(g) => g.inputs_mut(),
+            Node::Theta(g) => g.inputs_mut(),
+            Node::Lambda(g) => g.inputs_mut(),
             Node::Apply(g) => &mut g.inputs,
-            Node::Delta(g) => &mut g.inputs,
-            Node::Phi(g) => &mut g.inputs,
+            Node::Delta(g) => g.inputs_mut(),
+            Node::Phi(g) => g.inputs_mut(),
             Node::Omega(_g) => &mut [],
         }
     }
     pub fn outputs(&self) -> &[Output] {
         match &self {
             Node::Simple(node) => node.outputs(),
-            Node::Gamma(g) => &g.outputs,
-            Node::Theta(g) => &g.outputs,
-            Node::Lambda(g) => core::slice::from_ref(&g.output),
+            Node::Gamma(g) => g.outputs(),
+            Node::Theta(g) => g.outputs(),
+            Node::Lambda(g) => g.outputs(),
             Node::Apply(g) => &g.outputs,
-            Node::Delta(g) => core::slice::from_ref(&g.output),
-            Node::Phi(g) => &g.outputs,
+            Node::Delta(g) => g.outputs(),
+            Node::Phi(g) => g.outputs(),
             Node::Omega(_g) => &[],
         }
     }
@@ -115,12 +112,12 @@ impl<N: LangNode + 'static> Node<N> {
     pub fn outputs_mut(&mut self) -> &mut [Output] {
         match self {
             Node::Simple(node) => node.outputs_mut(),
-            Node::Gamma(g) => &mut g.outputs,
-            Node::Theta(g) => &mut g.outputs,
-            Node::Lambda(g) => core::slice::from_mut(&mut g.output),
+            Node::Gamma(g) => g.outputs_mut(),
+            Node::Theta(g) => g.outputs_mut(),
+            Node::Lambda(g) => g.outputs_mut(),
             Node::Apply(g) => &mut g.outputs,
-            Node::Delta(g) => core::slice::from_mut(&mut g.output),
-            Node::Phi(g) => &mut g.outputs,
+            Node::Delta(g) => g.outputs_mut(),
+            Node::Phi(g) => g.outputs_mut(),
             Node::Omega(_g) => &mut [],
         }
     }
@@ -129,26 +126,26 @@ impl<N: LangNode + 'static> Node<N> {
     pub fn regions(&self) -> &[Region] {
         match &self {
             Node::Simple(_node) => &[],
-            Node::Gamma(g) => &g.regions,
-            Node::Theta(g) => core::slice::from_ref(&g.loop_body),
-            Node::Lambda(g) => core::slice::from_ref(&g.body),
+            Node::Gamma(g) => g.regions(),
+            Node::Theta(g) => g.regions(),
+            Node::Lambda(g) => g.regions(),
             Node::Apply(_g) => &[],
-            Node::Delta(g) => core::slice::from_ref(&g.body),
-            Node::Phi(g) => core::slice::from_ref(&g.body),
-            Node::Omega(g) => core::slice::from_ref(&g.body),
+            Node::Delta(g) => g.regions(),
+            Node::Phi(g) => g.regions(),
+            Node::Omega(g) => g.regions(),
         }
     }
     ///Reference to all internal regions. This will mostly have length 0/1. Only gamma nodes have >1 regions.
     pub fn regions_mut(&mut self) -> &mut [Region] {
         match self {
             Node::Simple(_node) => &mut [],
-            Node::Gamma(g) => &mut g.regions,
-            Node::Theta(g) => core::slice::from_mut(&mut g.loop_body),
-            Node::Lambda(g) => core::slice::from_mut(&mut g.body),
+            Node::Gamma(g) => g.regions_mut(),
+            Node::Theta(g) => g.regions_mut(),
+            Node::Lambda(g) => g.regions_mut(),
             Node::Apply(_g) => &mut [],
-            Node::Delta(g) => core::slice::from_mut(&mut g.body),
-            Node::Phi(g) => core::slice::from_mut(&mut g.body),
-            Node::Omega(g) => core::slice::from_mut(&mut g.body),
+            Node::Delta(g) => g.regions_mut(),
+            Node::Phi(g) => g.regions_mut(),
+            Node::Omega(g) => g.regions_mut(),
         }
     }
 
@@ -159,263 +156,61 @@ impl<N: LangNode + 'static> Node<N> {
     ///Tries to translate the `port` into a valid port.
     pub fn outport(&self, port_ty: &OutputType) -> Option<&Outport> {
         match port_ty {
-            OutputType::Output(n) => self.outputs().get(*n),
-            OutputType::Argument(n) => match self {
-                Node::Simple(_node) => None,
-                Node::Gamma(_g) => None,
-                Node::Theta(g) => g.loop_body.arguments.get(*n),
-                Node::Lambda(g) => g.body.arguments.get(*n + g.cv_count),
-                Node::Apply(_g) => None,
-                Node::Delta(_g) => None,
-                Node::Phi(g) => g.body.arguments.get(*n + g.cv_count + g.rv_count),
-                Node::Omega(g) => g.body.arguments.get(*n),
+            OutputType::Output(p) => self.outputs().get(*p),
+            _ => match self {
+                Node::Simple(_) | Node::Apply(_) => None,
+                Node::Theta(g) => g.outport(port_ty),
+                Node::Lambda(g) => g.outport(port_ty),
+                Node::Delta(g) => g.outport(port_ty),
+                Node::Phi(g) => g.outport(port_ty),
+                Node::Omega(g) => g.outport(port_ty),
+                Node::Gamma(g) => g.outport(port_ty),
             },
-            OutputType::LambdaDecleration => {
-                if let Node::Lambda(l) = self {
-                    Some(&l.output)
-                } else {
-                    None
-                }
-            }
-            OutputType::DeltaDecleration => {
-                if let Node::Delta(d) = self {
-                    Some(&d.output)
-                } else {
-                    None
-                }
-            }
-            OutputType::RecursionVariableOutput(n) => {
-                if let Node::Phi(p) = self {
-                    p.rv_output(*n)
-                } else {
-                    None
-                }
-            }
-            OutputType::RecursionVariableArgument(n) => {
-                if let Node::Phi(p) = self {
-                    p.rv_argument(*n)
-                } else {
-                    None
-                }
-            }
-            OutputType::EntryVariableArgument {
-                branch,
-                entry_variable,
-            } => {
-                if let Node::Gamma(g) = self {
-                    if let Some(reg) = g.regions.get(*branch) {
-                        reg.arguments.get(*entry_variable)
-                    } else {
-                        None
-                    }
-                } else {
-                    None
-                }
-            }
-            OutputType::ContextVariableArgument(n) => match self {
-                Node::Lambda(l) => l.cv_argument(*n),
-                Node::Phi(p) => p.cv_argument(*n),
-                Node::Delta(d) => d.cv_argument(*n),
-                _ => None,
-            },
-            OutputType::ExitVariableOutput(n) => {
-                if let Node::Gamma(g) = self {
-                    g.exit_var_output(*n)
-                } else {
-                    None
-                }
-            }
         }
     }
 
     ///Tries to translate the `port` into a valid port.
     pub fn outport_mut(&mut self, port_ty: &OutputType) -> Option<&mut Outport> {
         match port_ty {
-            OutputType::Output(n) => self.outputs_mut().get_mut(*n),
-            OutputType::Argument(n) => match self {
-                Node::Simple(_node) => None,
-                Node::Gamma(_g) => None,
-                Node::Theta(g) => g.loop_body.arguments.get_mut(*n),
-                Node::Lambda(g) => g.body.arguments.get_mut(*n + g.cv_count),
-                Node::Apply(_g) => None,
-                Node::Delta(_g) => None,
-                Node::Phi(g) => g.body.arguments.get_mut(*n + g.cv_count + g.rv_count),
-                Node::Omega(g) => g.body.arguments.get_mut(*n),
+            OutputType::Output(p) => self.outputs_mut().get_mut(*p),
+            _ => match self {
+                Node::Simple(_) | Node::Apply(_) => None,
+                Node::Theta(g) => g.outport_mut(port_ty),
+                Node::Lambda(g) => g.outport_mut(port_ty),
+                Node::Delta(g) => g.outport_mut(port_ty),
+                Node::Phi(g) => g.outport_mut(port_ty),
+                Node::Omega(g) => g.outport_mut(port_ty),
+                Node::Gamma(g) => g.outport_mut(port_ty),
             },
-            OutputType::LambdaDecleration => {
-                if let Node::Lambda(l) = self {
-                    Some(&mut l.output)
-                } else {
-                    None
-                }
-            }
-            OutputType::DeltaDecleration => {
-                if let Node::Delta(d) = self {
-                    Some(&mut d.output)
-                } else {
-                    None
-                }
-            }
-            OutputType::RecursionVariableOutput(n) => {
-                if let Node::Phi(p) = self {
-                    p.rv_output_mut(*n)
-                } else {
-                    None
-                }
-            }
-            OutputType::RecursionVariableArgument(n) => {
-                if let Node::Phi(p) = self {
-                    p.rv_argument_mut(*n)
-                } else {
-                    None
-                }
-            }
-            OutputType::EntryVariableArgument {
-                branch,
-                entry_variable,
-            } => {
-                if let Node::Gamma(g) = self {
-                    if let Some(reg) = g.regions.get_mut(*branch) {
-                        reg.arguments.get_mut(*entry_variable)
-                    } else {
-                        None
-                    }
-                } else {
-                    None
-                }
-            }
-            OutputType::ContextVariableArgument(n) => match self {
-                Node::Lambda(l) => l.cv_argument_mut(*n),
-                Node::Phi(p) => p.cv_argument_mut(*n),
-                Node::Delta(d) => d.cv_argument_mut(*n),
-                _ => None,
-            },
-            OutputType::ExitVariableOutput(n) => {
-                if let Node::Gamma(g) = self {
-                    g.exit_var_output_mut(*n)
-                } else {
-                    None
-                }
-            }
         }
     }
 
     pub fn inport(&self, port_ty: &InputType) -> Option<&Inport> {
         match port_ty {
-            InputType::Input(u) => self.inputs().get(*u),
-            InputType::Result(n) => match self {
-                Node::Simple(_node) => None,
-                Node::Gamma(_g) => None,
-                Node::Theta(g) => g.loop_body.results.get(*n + 1),
-                Node::Lambda(g) => g.body.results.get(*n),
-                Node::Apply(_g) => None,
-                Node::Delta(g) => g.body.results.get(*n),
-                Node::Phi(g) => g.body.results.get(*n + g.rv_count),
-                Node::Omega(g) => g.body.results.get(*n),
-            },
-            InputType::GammaPredicate => {
-                if let Node::Gamma(g) = self {
-                    Some(g.predicate())
-                } else {
-                    None
-                }
-            }
-            InputType::ThetaPredicate => {
-                if let Node::Theta(t) = self {
-                    Some(t.loop_predicate())
-                } else {
-                    None
-                }
-            }
-            InputType::ExitVariableResult {
-                branch,
-                exit_variable,
-            } => {
-                if let Node::Gamma(g) = self {
-                    g.exit_var_result(*exit_variable, *branch)
-                } else {
-                    None
-                }
-            }
-            InputType::EntryVariableInput(i) => {
-                if let Node::Gamma(g) = self {
-                    g.entry_var_input(*i)
-                } else {
-                    None
-                }
-            }
-            InputType::RecursionVariableResult(r) => {
-                if let Node::Phi(p) = self {
-                    p.rv_result(*r)
-                } else {
-                    None
-                }
-            }
-            InputType::ContextVariableInput(n) => match self {
-                Node::Lambda(l) => l.cv_input(*n),
-                Node::Phi(p) => p.cv_input(*n),
-                Node::Delta(d) => d.cv_input(*n),
-                _ => None,
+            InputType::Input(i) => self.inputs().get(*i),
+            _ => match self {
+                Node::Simple(_) | Node::Apply(_) => None,
+                Node::Theta(g) => g.inport(port_ty),
+                Node::Lambda(g) => g.inport(port_ty),
+                Node::Delta(g) => g.inport(port_ty),
+                Node::Phi(g) => g.inport(port_ty),
+                Node::Omega(g) => g.inport(port_ty),
+                Node::Gamma(g) => g.inport(port_ty),
             },
         }
     }
 
     pub fn inport_mut(&mut self, port_ty: &InputType) -> Option<&mut Inport> {
         match port_ty {
-            InputType::Input(u) => self.inputs_mut().get_mut(*u),
-            InputType::Result(n) => match self {
-                Node::Simple(_node) => None,
-                Node::Gamma(_g) => None,
-                Node::Theta(g) => g.loop_body.results.get_mut(*n + 1),
-                Node::Lambda(g) => g.body.results.get_mut(*n),
-                Node::Apply(_g) => None,
-                Node::Delta(g) => g.body.results.get_mut(*n),
-                Node::Phi(g) => g.body.results.get_mut(*n + g.rv_count),
-                Node::Omega(g) => g.body.results.get_mut(*n),
-            },
-            InputType::GammaPredicate => {
-                if let Node::Gamma(g) = self {
-                    Some(g.predicate_mut())
-                } else {
-                    None
-                }
-            }
-            InputType::ThetaPredicate => {
-                if let Node::Theta(t) = self {
-                    Some(t.loop_predicate_mut())
-                } else {
-                    None
-                }
-            }
-            InputType::ExitVariableResult {
-                branch,
-                exit_variable,
-            } => {
-                if let Node::Gamma(g) = self {
-                    g.exit_var_result_mut(*exit_variable, *branch)
-                } else {
-                    None
-                }
-            }
-            InputType::EntryVariableInput(i) => {
-                if let Node::Gamma(g) = self {
-                    g.entry_var_input_mut(*i)
-                } else {
-                    None
-                }
-            }
-            InputType::RecursionVariableResult(r) => {
-                if let Node::Phi(p) = self {
-                    p.rv_result_mut(*r)
-                } else {
-                    None
-                }
-            }
-            InputType::ContextVariableInput(n) => match self {
-                Node::Lambda(l) => l.cv_input_mut(*n),
-                Node::Phi(p) => p.cv_input_mut(*n),
-                Node::Delta(d) => d.cv_input_mut(*n),
-                _ => None,
+            InputType::Input(i) => self.inputs_mut().get_mut(*i),
+            _ => match self {
+                Node::Simple(_) | Node::Apply(_) => None,
+                Node::Theta(g) => g.inport_mut(port_ty),
+                Node::Lambda(g) => g.inport_mut(port_ty),
+                Node::Delta(g) => g.inport_mut(port_ty),
+                Node::Phi(g) => g.inport_mut(port_ty),
+                Node::Omega(g) => g.inport_mut(port_ty),
+                Node::Gamma(g) => g.inport_mut(port_ty),
             },
         }
     }
@@ -424,7 +219,7 @@ impl<N: LangNode + 'static> Node<N> {
 impl<N: LangNode + Debug + 'static> Display for Node<N> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Node::Apply(a) => write!(f, "Apply"),
+            Node::Apply(_a) => write!(f, "Apply"),
             Node::Delta(d) => write!(f, "Delta({} cv, {} nodes)", d.cv_count, d.body.nodes.len()),
             Node::Gamma(g) => write!(
                 f,
@@ -462,4 +257,22 @@ pub trait StructuralNode {
     fn outport_mut(&mut self, ty: &OutputType) -> Option<&mut Output>;
     fn inport(&self, ty: &InputType) -> Option<&Input>;
     fn inport_mut(&mut self, ty: &InputType) -> Option<&mut Input>;
+    ///Returns all inputs to a node
+    fn inputs(&self) -> &[Input];
+    ///Returns all inputs to a node
+    fn inputs_mut(&mut self) -> &mut [Input];
+    ///Returns all outputs to a node
+    fn outputs(&self) -> &[Output];
+    ///Returns all outputs to a node
+    fn outputs_mut(&mut self) -> &mut [Output];
+    fn context_variable_count(&self) -> usize {
+        0
+    }
+    fn recursion_variable_count(&self) -> usize {
+        0
+    }
+    ///Returns how many inputs this node has, that are not context- or recursion-variables.
+    fn std_input_count(&self) -> usize {
+        self.inputs().len() - self.context_variable_count() - self.recursion_variable_count()
+    }
 }
