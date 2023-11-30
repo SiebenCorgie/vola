@@ -132,14 +132,12 @@ impl GammaNode {
     ///Adds a new decision branch / region.
     pub fn add_region(&mut self) -> usize {
         let mut r = Region::new();
-        let arg_count = self.inputs.len();
-        let res_count = self.outputs.len();
 
         //Setup region with same input/output count thats already valid
-        for _ in 0..arg_count {
+        for _ in 0..self.entry_var_count {
             r.arguments.push(Argument::default());
         }
-        for _ in 0..res_count {
+        for _ in 0..self.exit_var_count {
             r.results.push(RegResult::default());
         }
 

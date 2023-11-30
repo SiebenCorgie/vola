@@ -52,6 +52,17 @@ impl BodyRegion {
                 node.flip_y(ext);
             }
         }
+
+        //also flip the arg/res ports.
+        for arg in &mut self.arg_ports {
+            arg.from.y = 0.0;
+            arg.to.y = AnyNode::PORT_HEIGHT;
+        }
+
+        for res in &mut self.res_ports {
+            res.from.y = ext.y - AnyNode::PORT_HEIGHT;
+            res.to.y = ext.y;
+        }
     }
 
     ///Emits this, and all subnodes into the buffer.
@@ -148,7 +159,14 @@ impl AnyNode {
             res_x_off += Self::PORT_PADDING;
         }
 
-        ext
+        region.area.to.x = region
+            .area
+            .to
+            .x
+            .max(res_x_off + Self::PORT_WIDTH)
+            .max(arg_x_off + Self::PORT_WIDTH);
+
+        region.area.extent()
     }
 
     ///Layouts the nodes within this node
@@ -208,6 +226,17 @@ impl AnyNode {
     pub fn flip_y(&mut self) {
         for reg in self.regions.iter_mut() {
             reg.flip_y()
+        }
+        //also flip the input/output regs.
+        for inp in &mut self.in_ports {
+            inp.from.y = -Self::PORT_HEIGHT;
+            inp.to.y = 0.0;
+        }
+
+        let ext = self.node_region.extent();
+        for out in &mut self.out_ports {
+            out.from.y = ext.y;
+            out.to.y = ext.y + Self::PORT_HEIGHT;
         }
     }
 
