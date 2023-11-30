@@ -113,7 +113,6 @@ fn main() {
                 let const_a = reg.insert_node(LNode::new(MyNodes::ImmChar('a')));
                 let const_x = reg.insert_node(LNode::new(MyNodes::ImmChar('x')));
                 let const_term = reg.insert_node(LNode::new(MyNodes::ImmChar('\0')));
-                println!("C_M: {const_m}, C_A: {const_a}, C_X: {const_x}, C_TERM: {const_term}");
                 let (const_arr, edges) = reg
                     .connect_node(
                         LNode::new(MyNodes::AryConst(4)),
@@ -149,11 +148,6 @@ fn main() {
             let arg_y = func.add_argument();
             let res_max = func.add_result();
 
-            println!(
-                "argx: {}, argy: {}, res: {}",
-                arg_x.node, arg_y.node, res_max.node
-            );
-
             func.on_region(|reg| {
                 let (gt_node, _edges) = reg
                     .connect_node(LNode::new(MyNodes::Gt), &[arg_x, arg_y])
@@ -164,8 +158,6 @@ fn main() {
                     let ev0 = gamma.add_entry_variable();
                     let ev1 = gamma.add_entry_variable();
                     let ex0 = gamma.add_exit_variable();
-
-                    println!("ev0: {}, ev1: {}, ex0: {}", ev0, ev1, ex0);
 
                     //branch 0 maps x to the exit variable
                     let _bx = gamma.new_branch(|branch_x| {

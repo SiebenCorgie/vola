@@ -1,5 +1,5 @@
 use ahash::AHashSet;
-use macroquad::prelude::{Vec2, WHITE};
+use macroquad::prelude::{Vec2, BLACK, WHITE};
 use rvsdg::{edge::LangEdge, nodes::LangNode, region::Region, NodeRef, Rvsdg};
 use std::collections::VecDeque;
 use std::fmt::Debug;
@@ -38,18 +38,14 @@ impl BodyNode {
 struct BodyRegion {
     area: Rect,
     nodes: Vec<Vec<BodyNode>>,
+    arg_ports: Vec<Rect>,
+    res_ports: Vec<Rect>,
 }
 
 impl BodyRegion {
     ///Emits this, and all subnodes into the buffer.
     pub fn emit_svg(&self, buffer: &mut Vec<String>) {
-        buffer.push(format!(
-            "<rect width=\"{}\" height=\"{}\" style=\"fill:{}\" />",
-            self.area.extend().x,
-            self.area.extend().y,
-            color_styling(&self.area.color)
-        ));
-
+        buffer.push(self.area.emit_svg("".to_owned()));
         for line in &self.nodes {
             for node in line {
                 node.emit_svg(buffer);
@@ -65,11 +61,53 @@ pub struct AnyNode {
     ///Body defined by `AnyNodes`, a x-index, and a y-index indicating their position
     regions: Vec<BodyRegion>,
     node_region: Rect,
+    //input / output ports
+    in_ports: Vec<Rect>,
+    out_ports: Vec<Rect>,
 }
 
 impl AnyNode {
     pub const PADDING: f32 = 10.0;
     pub const FONT_SIZE: f32 = Self::PADDING - 1.0;
+
+    ///Builds the recursive layout for this region, return the Extend of that region
+    pub fn build_region_layout<N: LangNode + View + 'static, E: LangEdge + 'static>(
+        &mut self,
+        ctx: &Rvsdg<N, E>,
+        region: usize,
+    ) -> Vec2 {
+        let region = &mut self.regions[region];
+        let mut yoff = Self::PADDING;
+        let mut max_x = Self::PADDING;
+        for line in region.nodes.iter_mut() {
+            //reset the x_offset
+            let mut xoff = Self::PADDING;
+            let mut line_height = 0.0f32;
+            for node in line.iter_mut() {
+                //for each node on this line, let it calculate its inner
+                // extend, then use that to
+                // - set the node location
+                // - advance the offset appropriately
+                // - update the region's body extend (y always updates, x might, if we overflow).
+                let sub_ext = node.node.build_layout(ctx);
+                node.location = Vec2::new(xoff, yoff);
+                line_height = line_height.max(sub_ext.y);
+                xoff += sub_ext.x + Self::PADDING;
+            }
+            max_x = max_x.max(xoff);
+            //add to the y offset for the next line
+            yoff += line_height + Self::PADDING;
+        }
+
+        //set the x offset
+        region.area = Rect::empty(WHITE);
+
+        let ext = Vec2::new(max_x + Self::PADDING, yoff + Self::PADDING);
+
+        region.area.to = ext;
+        ext
+    }
+
     ///Layouts the nodes within this node
     pub fn build_layout<N: LangNode + View + 'static, E: LangEdge + 'static>(
         &mut self,
@@ -78,39 +116,21 @@ impl AnyNode {
         //build the body region
         let mut reg_xoff = Self::PADDING;
         let mut reg_max_height = Self::PADDING;
-        for region in self.regions.iter_mut() {
-            //Iterate over all nodes of that region _in order_
-            let mut yoff = Self::PADDING;
-            let mut max_x = Self::PADDING;
-            for line in region.nodes.iter_mut() {
-                //reset the x_offset
-                let mut xoff = Self::PADDING;
-                let mut line_height = 0.0f32;
-                for node in line.iter_mut() {
-                    //for each node on this line, let it calculate its inner
-                    // extend, then use that to
-                    // - set the node location
-                    // - advance the offset appropriately
-                    // - update the region's body extend (y always updates, x might, if we overflow).
-                    let sub_ext = node.node.build_layout(ctx);
-                    node.location = Vec2::new(xoff, yoff);
-                    line_height = line_height.max(sub_ext.y);
-                    xoff += sub_ext.x + Self::PADDING;
-                }
-                max_x = max_x.max(xoff);
-                //add to the y offset for the next line
-                yoff += line_height + Self::PADDING;
-            }
 
-            //set the x offset
-            region.area = Rect::empty(WHITE);
-            region.area.from = Vec2::new(reg_xoff, Self::PADDING);
-            region.area.to = region.area.from + Vec2::new(max_x, yoff + Self::PADDING);
-            reg_max_height = reg_max_height.max(region.area.extend().y + Self::PADDING);
-            //now update the offset
-            reg_xoff += region.area.extend().x + Self::PADDING;
+        for region in 0..self.regions.len() {
+            let ext = self.build_region_layout(ctx, region);
+
+            let local_offset = Vec2::new(reg_xoff, Self::PADDING);
+            //now offset that region to its location and update the min/maxes
+            self.regions[region].area.from += local_offset;
+            self.regions[region].area.to += local_offset;
+            reg_xoff += ext.x + Self::PADDING;
+            reg_max_height = reg_max_height.max(ext.y + Self::PADDING);
         }
 
+        //Now calculate how much space this node needs to occupy. Incorporate
+        // - Text size,
+        // - sub region size (if any)
         let min_region = self.min_size();
         self.node_region = Rect::empty(ctx.node(self.nref).color());
         self.node_region.to = Vec2::new(
@@ -124,13 +144,10 @@ impl AnyNode {
     ///Emits this, and all subnodes into the buffer.
     pub fn emit_svg(&self, buffer: &mut Vec<String>) {
         //emit the rect that fills that node
-        buffer.push(format!(
-            "<rect id=\"{}\" x=\"0\" y=\"0\" width=\"{}\" height=\"{}\" style=\"fill:{}\" />",
-            format!("{} - {}", self.name, self.nref),
-            self.node_region.extend().x,
-            self.node_region.extend().y,
-            color_styling(&self.node_region.color)
-        ));
+        buffer.push(
+            self.node_region
+                .emit_svg(format!("{} - {}", self.name, self.nref)),
+        );
 
         buffer.push(format!(
             "<text x=\"{}\" y=\"{}\" font-size=\"{}\" font-family=\"monospace\">{}</text>",
@@ -229,9 +246,23 @@ impl Printer {
                 } else {
                     let color = ctx.node(node).color();
                     let name = ctx.node(node).name().to_owned();
+                    let in_ports = ctx
+                        .node(node)
+                        .inputs()
+                        .iter()
+                        .map(|_p| Rect::empty(BLACK))
+                        .collect();
+                    let out_ports = ctx
+                        .node(node)
+                        .outputs()
+                        .iter()
+                        .map(|_p| Rect::empty(BLACK))
+                        .collect();
                     AnyNode {
                         nref: node,
                         name,
+                        in_ports,
+                        out_ports,
                         regions: Vec::with_capacity(0),
                         node_region: Rect::empty(color),
                     }
@@ -247,8 +278,16 @@ impl Printer {
             nodes.push(level);
         }
 
+        let arg_ports = region
+            .arguments
+            .iter()
+            .map(|_p| Rect::empty(BLACK))
+            .collect();
+        let res_ports = region.results.iter().map(|_p| Rect::empty(BLACK)).collect();
         BodyRegion {
             area: Rect::empty(WHITE),
+            arg_ports,
+            res_ports,
             nodes,
         }
     }
@@ -264,8 +303,22 @@ impl Printer {
             //explore all nodes in that region, collecting the body in the process
             regions.push(Self::collect_region_nodes(ctx, region, node));
         }
+        let in_ports = ctx
+            .node(node)
+            .inputs()
+            .iter()
+            .map(|_p| Rect::empty(BLACK))
+            .collect();
+        let out_ports = ctx
+            .node(node)
+            .outputs()
+            .iter()
+            .map(|_p| Rect::empty(BLACK))
+            .collect();
 
         AnyNode {
+            in_ports,
+            out_ports,
             name: ctx.node(node).name().to_owned(),
             nref: node,
             regions,

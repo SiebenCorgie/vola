@@ -28,6 +28,16 @@ impl Rect {
             color,
         }
     }
+
+    pub fn emit_svg(&self, id: String) -> String {
+        format!(
+            "<rect id=\"{}\" x=\"0\" y=\"0\" width=\"{}\" height=\"{}\" style=\"fill:{}\" />",
+            id,
+            self.extend().x,
+            self.extend().y,
+            color_styling(&self.color)
+        )
+    }
 }
 
 pub struct Line {
