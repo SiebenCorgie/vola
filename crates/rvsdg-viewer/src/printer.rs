@@ -4,10 +4,7 @@ use rvsdg::{edge::LangEdge, nodes::LangNode, region::Region, NodeRef, Rvsdg};
 use std::collections::VecDeque;
 use std::fmt::Debug;
 
-use crate::{
-    primitives::{color_styling, Rect},
-    View,
-};
+use crate::{primitives::Rect, View};
 
 #[derive(Debug, Clone)]
 struct BodyNode {
@@ -59,12 +56,26 @@ impl BodyRegion {
 
     ///Emits this, and all subnodes into the buffer.
     pub fn emit_svg(&self, buffer: &mut Vec<String>) {
-        buffer.push(self.area.emit_svg("".to_owned()));
+        buffer.push(self.area.emit_svg("REGION".to_owned()));
+
+        buffer.push(format!(
+            "<g transform=\"translate({}, {})\">",
+            self.area.from.x, self.area.from.y,
+        ));
         for line in &self.nodes {
             for node in line {
                 node.emit_svg(buffer);
             }
         }
+
+        for arg in &self.arg_ports {
+            buffer.push(arg.emit_svg("ARG".to_owned()));
+        }
+        for res in &self.res_ports {
+            buffer.push(res.emit_svg("RES".to_owned()));
+        }
+
+        buffer.push(format!("</g>"));
     }
 }
 
@@ -83,6 +94,10 @@ pub struct AnyNode {
 impl AnyNode {
     pub const PADDING: f32 = 10.0;
     pub const FONT_SIZE: f32 = Self::PADDING - 1.0;
+
+    pub const PORT_WIDTH: f32 = 5.0;
+    pub const PORT_HEIGHT: f32 = 2.0;
+    pub const PORT_PADDING: f32 = 7.5;
 
     ///Builds the recursive layout for this region, return the Extent of that region
     pub fn build_region_layout<N: LangNode + View + 'static, E: LangEdge + 'static>(
@@ -115,10 +130,24 @@ impl AnyNode {
 
         //set the x offset
         region.area = Rect::empty(WHITE);
-
         let ext = Vec2::new(max_x + Self::PADDING, yoff + Self::PADDING);
-
         region.area.to = ext;
+
+        //after layouting all nodes, layout argument and result ports
+        let mut arg_x_off = Self::PORT_WIDTH;
+        for arg in &mut region.arg_ports {
+            arg.from = Vec2::new(arg_x_off, ext.y - Self::PORT_HEIGHT);
+            arg.to = Vec2::new(arg_x_off + Self::PORT_WIDTH, ext.y);
+            arg_x_off += Self::PORT_PADDING;
+        }
+
+        let mut res_x_off = Self::PORT_WIDTH;
+        for res in &mut region.res_ports {
+            res.from = Vec2::new(res_x_off, 0.0);
+            res.to = Vec2::new(res_x_off + Self::PORT_WIDTH, Self::PORT_HEIGHT);
+            res_x_off += Self::PORT_PADDING;
+        }
+
         ext
     }
 
@@ -152,7 +181,28 @@ impl AnyNode {
             reg_max_height.max(min_region.y) + Self::PADDING,
         );
         self.node_region.color = ctx.node(self.nref).color();
-        self.node_region.extent()
+
+        let ext = self.node_region.extent();
+
+        //After layouting the node itself, add the in/out ports
+        // as simple rects. Inports are at the bottom side, outports at the top.
+        let mut inport_x_off = Self::PADDING + Self::PORT_WIDTH;
+        for inp in self.in_ports.iter_mut() {
+            //TODO right now we just add x ports, and hope that it doesn't overflow. We could
+            // also center / scale the ports. But ain't nobody got time for that.
+            inp.from = Vec2::new(inport_x_off, ext.y);
+            inp.to = Vec2::new(inport_x_off + Self::PORT_WIDTH, ext.y + Self::PORT_HEIGHT);
+            inport_x_off += Self::PORT_PADDING;
+        }
+
+        let mut outport_x_off = Self::PADDING + Self::PORT_WIDTH;
+        for outp in self.out_ports.iter_mut() {
+            outp.from = Vec2::new(outport_x_off, -Self::PORT_HEIGHT);
+            outp.to = Vec2::new(outport_x_off + Self::PORT_WIDTH, 0.0);
+            outport_x_off += Self::PORT_PADDING;
+        }
+
+        ext
     }
 
     pub fn flip_y(&mut self) {
@@ -169,6 +219,15 @@ impl AnyNode {
                 .emit_svg(format!("{} - {}", self.name, self.nref)),
         );
 
+        //also emit all the ports
+        for outport in &self.out_ports {
+            buffer.push(outport.emit_svg("OUTPORT".to_string()));
+        }
+
+        for inport in &self.in_ports {
+            buffer.push(inport.emit_svg("INPORT".to_string()));
+        }
+
         buffer.push(format!(
             "<text x=\"{}\" y=\"{}\" font-size=\"{}\" font-family=\"monospace\">{}</text>",
             Self::FONT_SIZE / 2.0,
@@ -178,22 +237,19 @@ impl AnyNode {
         ));
 
         for region in &self.regions {
-            buffer.push(format!(
-                "<g id=\"{}\" transform=\"translate({}, {})\">",
-                format!("AnyNode({})", self.nref),
-                region.area.from.x,
-                region.area.from.y
-            ));
-
             region.emit_svg(buffer);
-
-            buffer.push("</g>".to_string());
         }
     }
 
     fn min_size(&self) -> Vec2 {
         let num_chars = self.name.chars().count();
-        Vec2::new(num_chars as f32 * Self::FONT_SIZE, Self::FONT_SIZE)
+        let port_width = (self.in_ports.len().max(self.out_ports.len()) as f32 * Self::PORT_WIDTH)
+            + (Self::PADDING * 2.0)
+            + (Self::PORT_WIDTH * 2.0);
+        Vec2::new(
+            (num_chars as f32 * Self::FONT_SIZE).max(port_width),
+            Self::FONT_SIZE,
+        )
     }
 }
 

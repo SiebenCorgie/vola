@@ -86,7 +86,7 @@ pub fn into_svg<N: View + LangNode + Debug + 'static, E: View + LangEdge + 'stat
     let mut printer = Printer::new(rvsdg);
 
     printer.layout(rvsdg);
-    printer.root.flip_y();
+    //printer.root.flip_y();
 
 
 
