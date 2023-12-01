@@ -1,5 +1,5 @@
 use ahash::{AHashMap, AHashSet};
-use macroquad::prelude::{Vec2, BLACK, WHITE};
+use macroquad::prelude::{Color, Vec2, BLACK, WHITE};
 use rvsdg::{
     edge::{InputType, LangEdge, OutputType},
     nodes::LangNode,
@@ -9,7 +9,10 @@ use rvsdg::{
 use std::fmt::Debug;
 use std::{collections::VecDeque, fmt::format};
 
-use crate::{primitives::Rect, View};
+use crate::{
+    primitives::{color_styling, Rect},
+    Stroke, View,
+};
 
 #[derive(Debug, Clone)]
 struct BodyNode {
@@ -55,6 +58,14 @@ enum BodyRegionPort {
     },
 }
 
+#[derive(Debug, Clone)]
+struct BodyEdge {
+    color: Color,
+    stroke: Stroke,
+    src: BodyRegionPort,
+    dst: BodyRegionPort,
+}
+
 ///The nodes in a region.
 /// there are lines of nodes in this body
 #[derive(Debug, Clone)]
@@ -63,7 +74,7 @@ struct BodyRegion {
     nodes: Vec<Vec<BodyNode>>,
     arg_ports: Vec<Rect>,
     res_ports: Vec<Rect>,
-    edges: Vec<(BodyRegionPort, BodyRegionPort)>,
+    edges: Vec<BodyEdge>,
 }
 
 impl BodyRegion {
@@ -133,12 +144,17 @@ impl BodyRegion {
             buffer.push(res.emit_svg("RES".to_owned()));
         }
 
-        for (src, dst) in &self.edges {
-            let src_loc = self.body_port_loc(src);
-            let dst_loc = self.body_port_loc(dst);
+        for edge in &self.edges {
+            let src_loc = self.body_port_loc(&edge.src);
+            let dst_loc = self.body_port_loc(&edge.dst);
             buffer.push(format!(
-                "<line x1=\"{}\" y1=\"{}\" x2=\"{}\" y2=\"{}\" style=\"stroke:rgb(0,0,0)\"/>",
-                src_loc.x, src_loc.y, dst_loc.x, dst_loc.y,
+                "<line x1=\"{}\" y1=\"{}\" x2=\"{}\" y2=\"{}\" {} style=\"stroke:{}\"/>",
+                src_loc.x,
+                src_loc.y,
+                dst_loc.x,
+                dst_loc.y,
+                edge.stroke.into_svg(),
+                color_styling(&edge.color)
             ));
         }
 
@@ -573,7 +589,12 @@ impl Printer {
                 }
             };
 
-            edges.push((src_port, dst_port));
+            edges.push(BodyEdge {
+                color: edge.ty.color(),
+                stroke: edge.ty.stroke(),
+                src: src_port,
+                dst: dst_port,
+            });
         }
 
         BodyRegion {

@@ -150,7 +150,7 @@ fn main() {
 
             func.on_region(|reg| {
                 let (gt_node, _edges) = reg
-                    .connect_node(LNode::new(MyNodes::Gt), &[arg_x, arg_y])
+                    .connect_node(LNode::new(MyNodes::Gt), &[arg_x.clone(), arg_y.clone()])
                     .unwrap();
 
                 //setup the max_gamma branches and connect gt on them
@@ -223,6 +223,21 @@ fn main() {
                     .connect(
                         gamma_node.as_outport_location(OutputType::ExitVariableOutput(0)),
                         res_max,
+                        VSEdge::Value,
+                    )
+                    .unwrap();
+                //Connect a and b to gamma entry variables
+                reg.ctx_mut()
+                    .connect(
+                        arg_x,
+                        gamma_node.as_inport_location(InputType::EntryVariableInput(0)),
+                        VSEdge::Value,
+                    )
+                    .unwrap();
+                reg.ctx_mut()
+                    .connect(
+                        arg_y,
+                        gamma_node.as_inport_location(InputType::EntryVariableInput(1)),
                         VSEdge::Value,
                     )
                     .unwrap();

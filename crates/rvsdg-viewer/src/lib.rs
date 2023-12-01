@@ -35,6 +35,26 @@ use rvsdg::{nodes::{LangNode, Node}, Rvsdg, common::VSEdge, edge::LangEdge};
 pub trait View {
     fn name(&self) -> &str;
     fn color(&self) -> macroquad::color::Color;
+    fn stroke(&self) -> Stroke{
+        Stroke::Line
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum Stroke{
+    Line,
+    Dashs,
+    Dots
+}
+
+impl Stroke{
+    pub fn into_svg(&self) -> String{
+        match self{
+            Stroke::Line => String::with_capacity(0),
+            Stroke::Dots => "stroke-dasharray=\"5,5\"".to_owned(),
+            Stroke::Dashs => "stroke-dasharray=\"10,10\"".to_owned()
+        }
+    }
 }
 
 impl View for rvsdg::common::VSEdge{
@@ -48,6 +68,12 @@ impl View for rvsdg::common::VSEdge{
         match self {
             VSEdge::State { .. } => RED,
             VSEdge::Value { .. } => BLACK
+        }
+    }
+    fn stroke(&self) -> Stroke{
+        match self{
+            VSEdge::State{..} => Stroke::Dots,
+            VSEdge::Value{..} => Stroke::Line,
         }
     }
 }
