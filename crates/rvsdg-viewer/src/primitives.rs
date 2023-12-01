@@ -21,6 +21,9 @@ impl Rect {
     pub fn extent(&self) -> Vec2 {
         self.to - self.from
     }
+    pub fn center(&self) -> Vec2 {
+        self.from + (self.extent() / 2.0)
+    }
     pub fn empty(color: Color) -> Self {
         Rect {
             from: Vec2::ZERO,

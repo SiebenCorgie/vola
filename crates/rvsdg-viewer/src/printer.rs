@@ -6,8 +6,8 @@ use rvsdg::{
     region::Region,
     EdgeRef, NodeRef, Rvsdg,
 };
-use std::collections::VecDeque;
 use std::fmt::Debug;
+use std::{collections::VecDeque, fmt::format};
 
 use crate::{primitives::Rect, View};
 
@@ -87,6 +87,31 @@ impl BodyRegion {
         }
     }
 
+    fn body_port_loc(&self, port: &BodyRegionPort) -> Vec2 {
+        match port {
+            BodyRegionPort::Arg(i) => self.arg_ports[*i].center(),
+            BodyRegionPort::Res(i) => self.res_ports[*i].center(),
+            BodyRegionPort::Inp {
+                line,
+                column,
+                input,
+            } => {
+                let node = &self.nodes[*line][*column].node;
+                let local_port = node.in_ports[*input].center();
+                local_port + self.nodes[*line][*column].location
+            }
+            BodyRegionPort::Out {
+                line,
+                column,
+                output,
+            } => {
+                let node = &self.nodes[*line][*column].node;
+                let local_port = node.out_ports[*output].center();
+                local_port + self.nodes[*line][*column].location
+            }
+        }
+    }
+
     ///Emits this, and all subnodes into the buffer.
     pub fn emit_svg(&self, buffer: &mut Vec<String>) {
         buffer.push(self.area.emit_svg("REGION".to_owned()));
@@ -106,6 +131,15 @@ impl BodyRegion {
         }
         for res in &self.res_ports {
             buffer.push(res.emit_svg("RES".to_owned()));
+        }
+
+        for (src, dst) in &self.edges {
+            let src_loc = self.body_port_loc(src);
+            let dst_loc = self.body_port_loc(dst);
+            buffer.push(format!(
+                "<line x1=\"{}\" y1=\"{}\" x2=\"{}\" y2=\"{}\" style=\"stroke:rgb(0,0,0)\"/>",
+                src_loc.x, src_loc.y, dst_loc.x, dst_loc.y,
+            ));
         }
 
         buffer.push(format!("</g>"));
@@ -541,8 +575,6 @@ impl Printer {
 
             edges.push((src_port, dst_port));
         }
-
-        println!("{} edges!", edges.len());
 
         BodyRegion {
             area: Rect::empty(WHITE),

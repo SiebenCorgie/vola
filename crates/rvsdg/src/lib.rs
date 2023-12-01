@@ -241,7 +241,6 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
                 if let Some(parent) = self.find_parent(src.node) {
                     parent
                 } else {
-                    println!("Could not find parent, try search: {:?}", src);
                     self.search_node_def(src.node)
                         .ok_or(GraphError::NotConnectedInRegion(src.node))?
                 }
@@ -255,7 +254,6 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
                 if let Some(parent) = self.find_parent(dst.node) {
                     parent
                 } else {
-                    println!("Could not find parent, try search: {:?}", dst);
                     //In this case we have go the _slow_ way, and check all regions for this node.
                     //TODO: that is not really optimal, we'd want to have some kind of node<->region mapping
                     //      that is not expressed by the edges. But we'd have to track that when moving nodes out of regions.

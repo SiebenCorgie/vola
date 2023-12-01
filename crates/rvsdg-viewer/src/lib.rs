@@ -31,6 +31,7 @@ use macroquad::{
 use printer::Printer;
 use rvsdg::{nodes::{LangNode, Node}, Rvsdg, common::VSEdge, edge::LangEdge};
 
+
 pub trait View {
     fn name(&self) -> &str;
     fn color(&self) -> macroquad::color::Color;
