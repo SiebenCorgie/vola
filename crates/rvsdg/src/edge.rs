@@ -20,6 +20,21 @@ pub enum InputType {
     ContextVariableInput(usize),
 }
 
+impl InputType {
+    ///If this is some kind of result, returns the region index.
+    /// This mostly will be 0, except for ExitVariableResult.
+    pub fn result_region_index(&self) -> Option<usize> {
+        match self {
+            Self::Result(_) | Self::RecursionVariableResult(_) => Some(0),
+            Self::ExitVariableResult {
+                branch,
+                exit_variable: _,
+            } => Some(*branch),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct InportLocation {
     pub node: NodeRef,
@@ -42,6 +57,24 @@ pub enum OutputType {
     },
     ExitVariableOutput(usize),
     ContextVariableArgument(usize),
+}
+
+impl OutputType {
+    ///If this is a argument, returns the region index this argument resides in, within its
+    /// parent node.
+    /// This mostly will be 0, except for EntryVariableArguments
+    pub fn argument_region_index(&self) -> Option<usize> {
+        match self {
+            OutputType::Argument(_)
+            | OutputType::ContextVariableArgument(_)
+            | OutputType::RecursionVariableArgument(_) => Some(0),
+            OutputType::EntryVariableArgument {
+                branch,
+                entry_variable: _,
+            } => Some(*branch),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]

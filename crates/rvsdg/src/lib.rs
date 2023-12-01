@@ -234,49 +234,43 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
     ) -> Result<EdgeRef, GraphError> {
         //Find the region this port is defined in.
         // This is always the parent port, except for argument(like) ports, that are defined _on_ the region
-        let src_region = match src.output {
-            OutputType::Argument(_)
-            | OutputType::EntryVariableArgument { .. }
-            | OutputType::ContextVariableArgument(_) => src.node,
-            _ => {
+        let (src_parent_node, src_parent_region_index) =
+            if let Some(reg_idx) = src.output.argument_region_index() {
+                (src.node, reg_idx)
+            } else {
                 if let Some(parent) = self.find_parent(src.node) {
                     parent
                 } else {
-                    let (parent_node, _subreg) = self
-                        .search_node_def(src.node)
-                        .ok_or(GraphError::NotConnectedInRegion(src.node))?;
-
-                    parent_node
+                    println!("Could not find parent, try search: {:?}", src);
+                    self.search_node_def(src.node)
+                        .ok_or(GraphError::NotConnectedInRegion(src.node))?
                 }
-            }
-        };
+            };
 
         //Similarly, all result-like outputs are defined on their source region, all others are defined in their parent's region.
-        let dst_region = match dst.input {
-            InputType::Result(_)
-            | InputType::ExitVariableResult { .. }
-            | InputType::RecursionVariableResult(_) => dst.node,
-            _ => {
-                //TODO if not found, move into region
+        let (dst_parent_node, dst_parent_region_index) =
+            if let Some(reg_idx) = dst.input.result_region_index() {
+                (dst.node, reg_idx)
+            } else {
                 if let Some(parent) = self.find_parent(dst.node) {
                     parent
                 } else {
+                    println!("Could not find parent, try search: {:?}", dst);
                     //In this case we have go the _slow_ way, and check all regions for this node.
                     //TODO: that is not really optimal, we'd want to have some kind of node<->region mapping
                     //      that is not expressed by the edges. But we'd have to track that when moving nodes out of regions.
-                    let (parent_node, _subreg) = self
-                        .search_node_def(dst.node)
-                        .ok_or(GraphError::NotConnectedInRegion(dst.node))?;
-
-                    parent_node
+                    self.search_node_def(dst.node)
+                        .ok_or(GraphError::NotConnectedInRegion(dst.node))?
                 }
-            }
-        };
+            };
 
-        if src_region != dst_region {
+        if src_parent_node != dst_parent_node || src_parent_region_index != dst_parent_region_index
+        {
             return Err(GraphError::NodesNotInSameRegion {
-                src: src_region,
-                dst: dst_region,
+                src: src_parent_node,
+                src_reg_idx: src_parent_region_index,
+                dst: dst_parent_node,
+                dst_reg_idx: dst_parent_region_index,
             });
         }
 
@@ -308,6 +302,14 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
             .edges
             .push(edge);
         self.node_mut(dst.node).inport_mut(&dst.input).unwrap().edge = Some(edge);
+
+        //now notify the region of this new edge
+        self.node_mut(src_parent_node)
+            .regions_mut()
+            .get_mut(src_parent_region_index)
+            .expect("Expected region to exist!")
+            .edges
+            .insert(edge);
 
         Ok(edge)
     }

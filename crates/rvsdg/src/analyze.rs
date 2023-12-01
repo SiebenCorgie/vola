@@ -296,18 +296,34 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
 
     ///Explores the region from this node, trying to find its parent node. Returns none, if the node is not connected to any
     /// region's result, or argument via any reference.
-    pub fn find_parent(&self, node: NodeRef) -> Option<NodeRef> {
+    ///
+    /// Otherwise returns the parent node, and region index of of this node's region in the parent node.
+    pub fn find_parent(&self, node: NodeRef) -> Option<(NodeRef, usize)> {
         //First, check if we can find a source argument
         for pred in self.walk_predecessors(node) {
-            if let OutputType::Argument(_) = pred.output {
-                return Some(pred.node);
+            match pred.output {
+                OutputType::Argument(_)
+                | OutputType::ContextVariableArgument(_)
+                | OutputType::RecursionVariableArgument(_) => return Some((pred.node, 0)),
+                OutputType::EntryVariableArgument {
+                    branch,
+                    entry_variable: _,
+                } => return Some((pred.node, branch)),
+                _ => {}
             }
         }
 
         //if that didn't work, try the same for an result
         for succ in self.walk_successors(node) {
-            if let InputType::Result(_) = succ.input {
-                return Some(succ.node);
+            match succ.input {
+                InputType::Result(_) | InputType::RecursionVariableResult(_) => {
+                    return Some((succ.node, 0))
+                }
+                InputType::ExitVariableResult {
+                    branch,
+                    exit_variable: _,
+                } => return Some((succ.node, branch)),
+                _ => {}
             }
         }
         //Otherwise, this is not connected to a region

@@ -1,6 +1,11 @@
-use ahash::AHashSet;
+use ahash::{AHashMap, AHashSet};
 use macroquad::prelude::{Vec2, BLACK, WHITE};
-use rvsdg::{edge::LangEdge, nodes::LangNode, region::Region, NodeRef, Rvsdg};
+use rvsdg::{
+    edge::{InputType, LangEdge, OutputType},
+    nodes::LangNode,
+    region::Region,
+    EdgeRef, NodeRef, Rvsdg,
+};
 use std::collections::VecDeque;
 use std::fmt::Debug;
 
@@ -34,6 +39,22 @@ impl BodyNode {
     }
 }
 
+#[derive(Debug, Clone)]
+enum BodyRegionPort {
+    Arg(usize),
+    Res(usize),
+    Inp {
+        line: usize,
+        column: usize,
+        input: usize,
+    },
+    Out {
+        line: usize,
+        column: usize,
+        output: usize,
+    },
+}
+
 ///The nodes in a region.
 /// there are lines of nodes in this body
 #[derive(Debug, Clone)]
@@ -42,6 +63,7 @@ struct BodyRegion {
     nodes: Vec<Vec<BodyNode>>,
     arg_ports: Vec<Rect>,
     res_ports: Vec<Rect>,
+    edges: Vec<(BodyRegionPort, BodyRegionPort)>,
 }
 
 impl BodyRegion {
@@ -311,9 +333,17 @@ impl Printer {
 
         let mut seen_nodes = AHashSet::new();
         let mut waiting_nodes = VecDeque::new();
+
+        //we also build two maps while exploring.
+        // A edge map, collecting all edges _we know_,
+        // as well as an NodeRef->usize map that lets us reference a node in the `nodes` vec by NodeRef,
+        // later, when building the edges.
+        let mut seen_edges = AHashSet::new();
+        let mut node_ref_map: AHashMap<NodeRef, (usize, usize)> = AHashMap::default();
         //init deque
         for res in region.results.iter() {
             if let Some(edg) = res.edge {
+                let _ = seen_edges.insert(edg);
                 let node_ref = ctx.edge(edg).src.node;
                 if node_ref == parent {
                     continue;
@@ -325,7 +355,6 @@ impl Printer {
         }
 
         //now do bfs until we found all
-
         while !waiting_nodes.is_empty() {
             let mut level = Vec::new();
             let mut nodes_on_level = VecDeque::new();
@@ -337,6 +366,7 @@ impl Printer {
 
                 for inp in ctx.node(node).inputs() {
                     if let Some(edg) = inp.edge {
+                        let _ = seen_edges.insert(edg);
                         let node_ref = ctx.edge(edg).src.node;
                         if !seen_nodes.contains(&node_ref) && node_ref != parent {
                             waiting_nodes.push_front(node_ref);
@@ -373,6 +403,7 @@ impl Printer {
                     }
                 };
 
+                node_ref_map.insert(anynode.nref, (nodes.len(), level.len()));
                 //push node into level
                 level.push(BodyNode {
                     location: Vec2::ZERO,
@@ -383,14 +414,139 @@ impl Printer {
             nodes.push(level);
         }
 
+        //Collect argument and result ports
         let arg_ports = region
             .arguments
             .iter()
             .map(|_p| Rect::empty(BLACK))
             .collect();
+
         let res_ports = region.results.iter().map(|_p| Rect::empty(BLACK)).collect();
+
+        //TODO: The edge builder is currenly a little ugly.
+        // Basically we iterate all known edges of the region.
+        // We distinguish 4 connection cases
+        // 1. arg - node: iterate all args, find the source port, then lookup
+        // 2. arg - res: iterate all args, find the source port, then do the same for all res ports
+        // 3. node - node: easy lookup
+        // 4. node - res: lookup node, then iterate all res ports, searching for the dst port
+        //
+        // Technically there is a 5-th case: Invalid-edge. But we ignore that for now.
+
+        let lookup_arg = |search_edge: &EdgeRef| {
+            let mut found_arg = None;
+            for (arg_idx, arg) in region.arguments.iter().enumerate() {
+                if arg.edges.contains(search_edge) {
+                    found_arg = Some(arg_idx);
+                    break;
+                }
+            }
+            found_arg
+        };
+
+        let lookup_res = |search_edge: &EdgeRef| {
+            let mut found_res = None;
+            for (res_idx, res) in region.results.iter().enumerate() {
+                if res.edge == Some(*search_edge) {
+                    found_res = Some(res_idx);
+                    break;
+                }
+            }
+            found_res
+        };
+
+        let lookup_output = |search_edge: &EdgeRef, node: NodeRef| {
+            let mut found_out = None;
+            for (port_idx, output) in ctx.node(node).outputs().iter().enumerate() {
+                if output.edges.contains(search_edge) {
+                    found_out = Some(port_idx);
+                    break;
+                }
+            }
+            found_out
+        };
+
+        let lookup_input = |search_edge: &EdgeRef, node: NodeRef| {
+            let mut found_inp = None;
+            for (port_idx, input) in ctx.node(node).inputs().iter().enumerate() {
+                if input.edge == Some(*search_edge) {
+                    found_inp = Some(port_idx);
+                    break;
+                }
+            }
+            found_inp
+        };
+
+        let mut edges = Vec::new();
+        for edg in &region.edges {
+            let edge = ctx.edge(*edg);
+            //resolve both ports, then insert
+            let src_port = match edge.src.output {
+                OutputType::Argument(_)
+                | OutputType::EntryVariableArgument { .. }
+                | OutputType::ContextVariableArgument(_)
+                | OutputType::RecursionVariableArgument(_) => {
+                    if let Some(arg_idx) = lookup_arg(edg) {
+                        BodyRegionPort::Arg(arg_idx)
+                    } else {
+                        println!("ERROR: Could not find ArgIdx for output");
+                        continue;
+                    }
+                }
+                _ => {
+                    if let Some(node_output) = lookup_output(edg, edge.src.node) {
+                        let (line, column) = node_ref_map
+                            .get(&edge.src.node)
+                            .cloned()
+                            .expect("Node was not in lookup map!");
+                        BodyRegionPort::Out {
+                            line,
+                            column,
+                            output: node_output,
+                        }
+                    } else {
+                        println!("ERROR: Could not find node output for edge!");
+                        continue;
+                    }
+                }
+            };
+            let dst_port = match edge.dst.input {
+                InputType::Result(_)
+                | InputType::RecursionVariableResult(_)
+                | InputType::ExitVariableResult { .. } => {
+                    if let Some(res_idx) = lookup_res(edg) {
+                        BodyRegionPort::Res(res_idx)
+                    } else {
+                        println!("ERROR: Could not find ResIdx for input");
+                        continue;
+                    }
+                }
+                _ => {
+                    if let Some(input_idx) = lookup_input(edg, edge.dst.node) {
+                        let (line, column) = node_ref_map
+                            .get(&edge.dst.node)
+                            .cloned()
+                            .expect("Node was not in lookup map!");
+                        BodyRegionPort::Inp {
+                            line,
+                            column,
+                            input: input_idx,
+                        }
+                    } else {
+                        println!("ERROR: Could not find node input for edge!");
+                        continue;
+                    }
+                }
+            };
+
+            edges.push((src_port, dst_port));
+        }
+
+        println!("{} edges!", edges.len());
+
         BodyRegion {
             area: Rect::empty(WHITE),
+            edges,
             arg_ports,
             res_ports,
             nodes,

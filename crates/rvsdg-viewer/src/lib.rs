@@ -17,7 +17,6 @@
 
 mod primitives;
 mod printer;
-mod svg;
 
 use std::{path::Path, fmt::Debug};
 
@@ -31,7 +30,6 @@ use macroquad::{
 };
 use printer::Printer;
 use rvsdg::{nodes::{LangNode, Node}, Rvsdg, common::VSEdge, edge::LangEdge};
-use svg::SVGWriter;
 
 pub trait View {
     fn name(&self) -> &str;

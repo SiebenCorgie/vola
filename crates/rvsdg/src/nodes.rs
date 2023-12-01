@@ -275,4 +275,9 @@ pub trait StructuralNode {
     fn std_input_count(&self) -> usize {
         self.inputs().len() - self.context_variable_count() - self.recursion_variable_count()
     }
+
+    ///Returns how many outputs this node has, that are not recursion-variables.
+    fn std_output_count(&self) -> usize {
+        self.outputs().len() - self.recursion_variable_count()
+    }
 }
