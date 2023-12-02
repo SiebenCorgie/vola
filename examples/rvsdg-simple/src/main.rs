@@ -72,7 +72,7 @@ impl LangNode for LNode {
 
 impl View for LNode {
     fn color(&self) -> macroquad::color::Color {
-        BLUE
+        macroquad::prelude::Color::from_rgba(255, 255, 128, 255)
     }
 
     fn name(&self) -> &str {

@@ -81,14 +81,14 @@ impl View for rvsdg::common::VSEdge{
 impl<N: View + LangNode + 'static> View for rvsdg::nodes::Node<N>{
     fn color(&self) -> macroquad::color::Color {
         match self{
-            Node::Apply(_) => YELLOW,
-            Node::Delta(_) => Color::from_rgba(20, 30, 20, 100),
-            Node::Gamma(_) => GREEN,
-            Node::Lambda(_) => BLUE,
-            Node::Omega(_) => Color::from_rgba(50, 50, 50, 100),
-            Node::Phi(_) => ORANGE,
+            Node::Apply(_) => Color::from_rgba(255, 255, 128, 255),
+            Node::Delta(_) => Color::from_rgba(128, 128, 0, 100),
+            Node::Gamma(_) => Color::from_rgba(128, 255, 128, 255),
+            Node::Lambda(_) => Color::from_rgba(128, 180, 255, 255),
+            Node::Omega(_) => Color::from_rgba(172, 157, 147, 255),
+            Node::Phi(_) => Color::from_rgba(255, 179, 128, 255),
             Node::Simple(n) => n.color(),
-            Node::Theta(_) => RED,
+            Node::Theta(_) => Color::from_rgba(255, 128, 128, 255),
         }
     }
     fn name(&self) -> &str {
