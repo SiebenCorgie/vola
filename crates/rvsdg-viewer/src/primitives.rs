@@ -45,12 +45,15 @@ impl Rect {
     }
 }
 
+#[allow(dead_code)]
 pub struct Line {
     pub from: Point,
     pub to: Point,
     pub width: f32,
     pub color: Color,
 }
+
+#[allow(dead_code)]
 pub struct Text {
     pub string: String,
     pub color: Color,
@@ -58,6 +61,7 @@ pub struct Text {
 }
 
 ///All primitives we can draw, either in macroquad or svg
+#[allow(dead_code)]
 pub enum Prim {
     Box(Rect),
     Line(Line),

@@ -144,16 +144,19 @@ impl PhiNode {
         res_idx
     }
 
-    pub fn add_input(&mut self) -> usize {
-        self.inputs.push(Input::default());
-        let pushed_to = self.inputs.len();
+    ///Adds an argument to the phi's body. Returns the argument's index.
+    pub fn add_argument(&mut self) -> usize {
+        let offset = self.body.arguments.len() - self.rv_count - self.cv_count;
         self.body.arguments.push(Argument::default());
-        assert!(
-            self.body.arguments.len() == pushed_to,
-            "Detected invalid LambdaNode state, input and argument-count don't match"
-        );
 
-        pushed_to - self.cv_count - 1
+        offset
+    }
+
+    ///Adds a result to the phi's body. Note that this does NOT mean the output of this phi, but adding
+    /// a result to the later evaluated procedure of the body.
+    pub fn add_result(&mut self) -> usize {
+        self.body.results.push(RegResult::default());
+        self.body.results.len() - 1
     }
 
     pub fn cv_input(&self, n: usize) -> Option<&Input> {

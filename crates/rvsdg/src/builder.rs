@@ -16,8 +16,8 @@ mod intra_proc;
 use std::marker::PhantomData;
 
 use crate::{
-    edge::{Edge, InportLocation, InputType, LangEdge, OutportLocation, OutputType},
-    err::{BuilderError, GraphError},
+    edge::{InportLocation, InputType, LangEdge, OutportLocation},
+    err::GraphError,
     nodes::{ApplyNode, LangNode, Node, StructuralNode},
     region::Region,
     EdgeRef, NodeRef, Rvsdg,

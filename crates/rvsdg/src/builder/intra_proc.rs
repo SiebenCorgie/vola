@@ -40,7 +40,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> GammaBuilder<'a, N, E> {
 
     ///Inserts this node into the graph, returning the reference it is safed at.
     pub fn build(self) -> NodeRef {
-        let GammaBuilder { ctx, node_ref } = self;
+        let GammaBuilder { ctx: _, node_ref } = self;
         node_ref
     }
 
@@ -103,7 +103,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> ThetaBuilder<'a, N, E> {
 
     ///Inserts this node into the graph, returning the reference it is safed at.
     pub fn build(self) -> NodeRef {
-        let ThetaBuilder { ctx, node_ref } = self;
+        let ThetaBuilder { ctx: _, node_ref } = self;
         node_ref
     }
 

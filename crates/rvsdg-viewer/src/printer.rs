@@ -6,8 +6,8 @@ use rvsdg::{
     region::Region,
     EdgeRef, NodeRef, Rvsdg,
 };
+use std::collections::VecDeque;
 use std::fmt::Debug;
-use std::{collections::VecDeque, fmt::format};
 
 use crate::{
     primitives::{color_styling, Rect},

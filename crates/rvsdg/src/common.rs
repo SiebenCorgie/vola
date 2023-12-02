@@ -1,4 +1,4 @@
-use crate::{edge::LangEdge, NodeRef, Rvsdg};
+use crate::{edge::LangEdge, Rvsdg};
 
 pub enum VSEdge {
     ///Value Edge, representing data dependency of one node to another

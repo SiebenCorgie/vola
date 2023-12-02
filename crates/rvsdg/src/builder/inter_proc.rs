@@ -41,7 +41,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> LambdaBuilder<'a, N, E> {
     ///Builds the Lambda node for the borrowed context.
     pub fn build(self) -> NodeRef {
         //TODO: do some legalization already, or wait for a legalization pass?
-        let LambdaBuilder { ctx, node_ref } = self;
+        let LambdaBuilder { ctx: _, node_ref } = self;
         node_ref
     }
 
@@ -91,7 +91,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> DeltaBuilder<'a, N, E> {
 
     ///Builds the Lambda node for the borrowed context.
     pub fn build(self) -> NodeRef {
-        let DeltaBuilder { ctx, node_ref } = self;
+        let DeltaBuilder { ctx: _, node_ref } = self;
         node_ref
     }
 
@@ -142,7 +142,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> PhiBuilder<'a, N, E> {
 
     ///Builds the Lambda node for the borrowed context.
     pub fn build(self) -> NodeRef {
-        let PhiBuilder { ctx, node_ref } = self;
+        let PhiBuilder { ctx: _, node_ref } = self;
 
         node_ref
     }
@@ -166,6 +166,31 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> PhiBuilder<'a, N, E> {
     ///Adds a context variable to the PhiNode's signature and body
     pub fn add_context_variable(&mut self) -> usize {
         self.node_mut().add_context_variable()
+    }
+
+    ///Adds an argument to the phi-node's body. Returns the argument index it was added at.
+    pub fn add_argument(&mut self) -> OutportLocation {
+        let idx = self.node_mut().add_argument();
+        OutportLocation {
+            node: self.node_ref,
+            output: OutputType::Argument(idx),
+        }
+    }
+
+    ///Adds an result port the the phi's body. Returns the created result_port of the lambda's internal region.
+    pub fn add_result(&mut self) -> InportLocation {
+        let idx = self.node_mut().add_result();
+        InportLocation {
+            node: self.node_ref,
+            input: InputType::Result(idx),
+        }
+    }
+
+    ///lets you change the behaviour of this node.
+    pub fn on_region(&mut self, f: impl FnOnce(&mut RegionBuilder<N, E, PhiNode>)) {
+        //setup the builder for the region
+        let mut builder = RegionBuilder::new(self.ctx, 0, self.node_ref);
+        f(&mut builder);
     }
 
     ///Declares a recursion variable to the inner recursion of some lambda. This are usually the values that change per recursion level.
