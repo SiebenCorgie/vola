@@ -34,7 +34,7 @@ impl Rect {
 
     pub fn emit_svg(&self, id: String) -> String {
         format!(
-            "<rect id=\"{}\" x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\" style=\"fill:{}\" />",
+            "<rect id=\"{}\" x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\" style=\"fill:{};stroke:rgb(0,0,0);stroke-width:1\" />",
             id,
             self.from.x,
             self.from.y,

@@ -148,7 +148,7 @@ impl BodyRegion {
             let src_loc = self.body_port_loc(&edge.src);
             let dst_loc = self.body_port_loc(&edge.dst);
             buffer.push(format!(
-                "<line x1=\"{}\" y1=\"{}\" x2=\"{}\" y2=\"{}\" {} style=\"stroke:{}\"/>",
+                "<line x1=\"{}\" y1=\"{}\" x2=\"{}\" y2=\"{}\" {} style=\"stroke:{};stroke-width:0.5\"/>",
                 src_loc.x,
                 src_loc.y,
                 dst_loc.x,
