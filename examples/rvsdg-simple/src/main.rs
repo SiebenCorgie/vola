@@ -20,8 +20,10 @@ pub enum MyNodes {
     AryConst(usize),
     Lt,
     Gt,
+    UnEq,
     Mul,
     Add,
+    Sub,
 }
 
 #[derive(Clone, Debug)]
@@ -43,8 +45,10 @@ impl LNode {
             MyNodes::AryConst(size) => (size, 1),
             MyNodes::Lt => (2, 1),
             MyNodes::Gt => (2, 1),
+            MyNodes::UnEq => (2, 1),
             MyNodes::Mul => (2, 1),
             MyNodes::Add => (2, 1),
+            MyNodes::Sub => (2, 1),
         };
 
         LNode {
@@ -84,14 +88,17 @@ impl View for LNode {
             MyNodes::ImmI32(_) => "ImmI32",
             MyNodes::Load => "Load",
             MyNodes::Lt => "lt",
+            MyNodes::UnEq => "UnEq",
             MyNodes::Mul => "mul",
             MyNodes::Store => "store",
+            MyNodes::Sub => "Sub",
         }
     }
 }
 
 fn main() {
     let ex3a = ex_3a::emit();
-
     rvsdg_viewer::into_svg(&ex3a, "Example_3a.svg");
+    let ex3b = ex_3b::emit();
+    rvsdg_viewer::into_svg(&ex3b, "Example_3b.svg");
 }

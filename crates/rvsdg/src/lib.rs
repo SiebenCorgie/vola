@@ -113,17 +113,17 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
     }
 
     ///Allows you to modify the graph from its entry point, the [ω-Node](crate::nodes::OmegaNode).
-    pub fn on_omega_node(&mut self, f: impl FnOnce(OmegaBuilder<N, E>) -> OmegaBuilder<N, E>) {
+    pub fn on_omega_node(&mut self, f: impl FnOnce(&mut OmegaBuilder<N, E>)) {
         //we do this by replacing the actual omega node, setup the builder, call it,
         // and then substituding it again.
         let omega_ref = self.omega;
-        let builder = OmegaBuilder {
+        let mut builder = OmegaBuilder {
             ctx: self,
             node_ref: omega_ref,
         };
 
         //call the user closure
-        let OmegaBuilder { .. } = f(builder);
+        f(&mut builder)
     }
 
     ///Returns the reference to the translation unit / [ω-Node](crate::nodes::OmegaNode).

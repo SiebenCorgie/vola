@@ -45,9 +45,20 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> LambdaBuilder<'a, N, E> {
         node_ref
     }
 
-    ///Adds a context variable to the LambdaNode's signature and body
-    pub fn add_context_variable(&mut self) -> usize {
-        self.node_mut().add_context_variable()
+    ///Adds a context variable to the LambdaNode's signature and body. Returns (CV_Input, CV_Argument).
+    pub fn add_context_variable(&mut self) -> (InportLocation, OutportLocation) {
+        let idx = self.node_mut().add_context_variable();
+
+        (
+            InportLocation {
+                node: self.node_ref,
+                input: InputType::ContextVariableInput(idx),
+            },
+            OutportLocation {
+                node: self.node_ref,
+                output: OutputType::ContextVariableArgument(idx),
+            },
+        )
     }
 
     ///Adds an argument to the lambda node's body. Returns the argument index it was added at.
@@ -68,11 +79,11 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> LambdaBuilder<'a, N, E> {
         }
     }
 
-    ///lets you change the behaviour of this node.
-    pub fn on_region(&mut self, f: impl FnOnce(&mut RegionBuilder<N, E, LambdaNode>)) {
+    ///Lets you change the behaviour of this node. You can use `R` to export state from _inside_ the builder outside.
+    pub fn on_region<R>(&mut self, f: impl FnOnce(&mut RegionBuilder<N, E, LambdaNode>) -> R) -> R {
         //setup the builder for the region
         let mut builder = RegionBuilder::new(self.ctx, 0, self.node_ref);
-        f(&mut builder);
+        f(&mut builder)
     }
 }
 
@@ -111,16 +122,27 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> DeltaBuilder<'a, N, E> {
         }
     }
 
-    ///Adds a context variable to the DeltaNode's signature and body
-    pub fn add_context_variable(&mut self) -> usize {
-        self.node_mut().add_context_variable()
+    ///Adds a context variable to the DeltaNode's signature and body. Returns (CV_Input, CV_Argument).
+    pub fn add_context_variable(&mut self) -> (InportLocation, OutportLocation) {
+        let idx = self.node_mut().add_context_variable();
+
+        (
+            InportLocation {
+                node: self.node_ref,
+                input: InputType::ContextVariableInput(idx),
+            },
+            OutportLocation {
+                node: self.node_ref,
+                output: OutputType::ContextVariableArgument(idx),
+            },
+        )
     }
 
     ///lets you change the behaviour of this node.
-    pub fn on_region(&mut self, f: impl FnOnce(&mut RegionBuilder<N, E, DeltaNode>)) {
+    pub fn on_region<R>(&mut self, f: impl FnOnce(&mut RegionBuilder<N, E, DeltaNode>) -> R) -> R {
         //setup the builder for the region
         let mut builder = RegionBuilder::new(self.ctx, 0, self.node_ref);
-        f(&mut builder);
+        f(&mut builder)
     }
 }
 
@@ -163,11 +185,20 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> PhiBuilder<'a, N, E> {
         }
     }
 
-    ///Adds a context variable to the PhiNode's signature and body
-    pub fn add_context_variable(&mut self) -> usize {
-        self.node_mut().add_context_variable()
+    ///Adds a context variable to the PhiNode's signature and body. Returns (CV_Input, CV_Argument).
+    pub fn add_context_variable(&mut self) -> (InportLocation, OutportLocation) {
+        let idx = self.node_mut().add_context_variable();
+        (
+            InportLocation {
+                node: self.node_ref,
+                input: InputType::ContextVariableInput(idx),
+            },
+            OutportLocation {
+                node: self.node_ref,
+                output: OutputType::ContextVariableArgument(idx),
+            },
+        )
     }
-
     ///Adds an argument to the phi-node's body. Returns the argument index it was added at.
     pub fn add_argument(&mut self) -> OutportLocation {
         let idx = self.node_mut().add_argument();
@@ -187,10 +218,10 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> PhiBuilder<'a, N, E> {
     }
 
     ///lets you change the behaviour of this node.
-    pub fn on_region(&mut self, f: impl FnOnce(&mut RegionBuilder<N, E, PhiNode>)) {
+    pub fn on_region<R>(&mut self, f: impl FnOnce(&mut RegionBuilder<N, E, PhiNode>) -> R) -> R {
         //setup the builder for the region
         let mut builder = RegionBuilder::new(self.ctx, 0, self.node_ref);
-        f(&mut builder);
+        f(&mut builder)
     }
 
     ///Declares a recursion variable to the inner recursion of some lambda. This are usually the values that change per recursion level.
@@ -204,20 +235,39 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> PhiBuilder<'a, N, E> {
     ///     return 1;
     /// }
     /// ```
+    /// In that case `f()` needs to import `f()` (since we do a recursive call), and also needs to export the definition of `f()`. This is modeled by
+    /// defining `f` via the recursion variable result (element 0 of the return value). We allow f to call itself, by also defining a new argument to the Phi's region
+    /// (element 1 of the return value). This is basically a _special_ context variable that is not set from the outside via an input port, but from the inside by the former
+    /// mentioned rv_result.
     ///
-    /// In this case a recursion variable is `x` and the result of `f()`. This is a little hard to grasp. However, this means that x
-    /// is "somehow involved in the recursion", and the result of the function `f()` is based on that.
-    ///
-    ///
-    /// The function returns the recursion variable index. When calling the ϕ-Node later via an apply node, this will be the `n-th` argument on that phi node.
+    /// Finally we want to be able to call the `f()` from outside the recursion, which is why we define a new output to the PhiNode, which is the non-recursive definition of `f()`,
+    /// which can be called outside the PhiNode.
     //TODO: Find a better way to explain that?
-    pub fn add_recursion_variable(&mut self) -> usize {
-        self.node_mut().add_recursion_variable()
+    pub fn add_recursion_variable(&mut self) -> (InportLocation, OutportLocation, OutportLocation) {
+        let idx = self.node_mut().add_recursion_variable();
+
+        (
+            InportLocation {
+                node: self.node_ref,
+                input: InputType::RecursionVariableResult(idx),
+            },
+            OutportLocation {
+                node: self.node_ref,
+                output: OutputType::RecursionVariableArgument(idx),
+            },
+            OutportLocation {
+                node: self.node_ref,
+                output: OutputType::RecursionVariableOutput(idx),
+            },
+        )
     }
 }
 
 ///[ω-node](crate::nodes::OmegaNode) (translation-unit) builder. You should usually not create this node (or builder) yourself. Instead use
 /// the [RVSDG's](crate::Rvsdg) [on_omega_node](crate::Rvsdg::on_omega_node) helper.
+///
+/// Exposes some shortcuts for common operations. You can also use [OmegaBuilder::on_region] to fully customize the toplevel region of your
+/// translation unit.
 pub struct OmegaBuilder<'a, N: LangNode + 'static, E: LangEdge + 'static> {
     pub(crate) ctx: &'a mut Rvsdg<N, E>,
     ///Preallocated invalid node ref
@@ -318,11 +368,10 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> OmegaBuilder<'a, N, E> {
         }
         created
     }
-
     ///lets you change the behaviour of this node.
-    pub fn on_region(&mut self, f: impl FnOnce(&mut RegionBuilder<N, E, OmegaNode>)) {
+    pub fn on_region<R>(&mut self, f: impl FnOnce(&mut RegionBuilder<N, E, OmegaNode>) -> R) -> R {
         //setup the builder for the region
         let mut builder = RegionBuilder::new(self.ctx, 0, self.node_ref);
-        f(&mut builder);
+        f(&mut builder)
     }
 }

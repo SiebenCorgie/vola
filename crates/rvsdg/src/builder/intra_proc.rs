@@ -4,6 +4,7 @@
 use crate::{
     edge::LangEdge,
     nodes::{GammaNode, LangNode, Node, ThetaNode},
+    region::Inport,
     NodeRef, Rvsdg,
 };
 
@@ -45,16 +46,16 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> GammaBuilder<'a, N, E> {
     }
 
     ///Creates a new branch for this decision point.
-    pub fn new_branch(
+    pub fn new_branch<R>(
         &mut self,
-        branch_builder: impl FnOnce(&mut RegionBuilder<N, E, GammaNode>),
-    ) -> usize {
+        branch_builder: impl FnOnce(&mut RegionBuilder<N, E, GammaNode>) -> R,
+    ) -> (usize, R) {
         self.node_mut().add_region();
         let idx = self.node().regions.len() - 1;
         let mut builder = RegionBuilder::new(self.ctx, idx, self.node_ref);
-        branch_builder(&mut builder);
+        let res = branch_builder(&mut builder);
 
-        idx
+        (idx, res)
     }
 
     ///Adds a new variable that is used as an argument to all branches.
@@ -108,10 +109,10 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> ThetaBuilder<'a, N, E> {
     }
 
     ///lets you change the behaviour of this node.
-    pub fn on_loop(&mut self, f: impl FnOnce(&mut RegionBuilder<N, E, ThetaNode>)) {
+    pub fn on_loop<R>(&mut self, f: impl FnOnce(&mut RegionBuilder<N, E, ThetaNode>) -> R) -> R {
         //setup the builder for the region
         let mut builder = RegionBuilder::new(self.ctx, 0, self.node_ref);
-        f(&mut builder);
+        f(&mut builder)
     }
 
     ///Adds a new loop variable. This are variables that are an input, and/or an output to a single iteration of the loop.

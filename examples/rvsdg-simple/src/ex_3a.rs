@@ -10,7 +10,6 @@ use crate::{LNode, MyNodes};
 
 pub fn emit() -> Rvsdg<LNode, VSEdge> {
     let mut graph = CommonRvsdg::<LNode>::new();
-
     //We build figure 3.a from the source paper.
     // ```C
     // static int max(int x, int y){
@@ -164,9 +163,9 @@ pub fn emit() -> Rvsdg<LNode, VSEdge> {
 
         //now import global string-max and function_max to define f
         let funktion_f = tu.new_function(Some("f".to_owned()), |func| {
-            let cv_fmax = func.add_context_variable();
-            let cv_fputs = func.add_context_variable();
-            let cv_str_max = func.add_context_variable();
+            let (_cv_input_fmax, cv_arg_fmax) = func.add_context_variable();
+            let (_cv_input_fputs, cv_arg_fputs) = func.add_context_variable();
+            let (_cv_str_max_input, cv_str_max) = func.add_context_variable();
             let arg_a = func.add_argument();
             let arg_b = func.add_argument();
             let arg_ctrl = func.add_argument();
@@ -180,34 +179,13 @@ pub fn emit() -> Rvsdg<LNode, VSEdge> {
 
             func.on_region(|reg| {
                 //call puts("max");
-                let (apply_puts, call_edges) = reg
-                    .call(
-                        OutportLocation {
-                            node: reg.parent(),
-                            output: OutputType::ContextVariableArgument(cv_fputs),
-                        },
-                        &[
-                            OutportLocation {
-                                node: reg.parent(),
-                                output: OutputType::ContextVariableArgument(cv_str_max),
-                            },
-                            arg_ctrl,
-                        ],
-                    )
-                    .unwrap();
+                let (apply_puts, call_edges) =
+                    reg.call(cv_arg_fputs, &[cv_str_max, arg_ctrl]).unwrap();
                 //mutate last edge to state edge
                 reg.ctx_mut().edge_mut(call_edges[2]).ty = VSEdge::State;
 
                 //call max(a, b);
-                let (apply_max, _) = reg
-                    .call(
-                        OutportLocation {
-                            node: reg.parent(),
-                            output: OutputType::ContextVariableArgument(cv_fmax),
-                        },
-                        &[arg_a, arg_b],
-                    )
-                    .unwrap();
+                let (apply_max, _) = reg.call(cv_arg_fmax, &[arg_a, arg_b]).unwrap();
 
                 //We have to add the results to apply_max and apply_puts our selfs, since puts is imported, and
                 // max is currently undefined.
@@ -251,7 +229,6 @@ pub fn emit() -> Rvsdg<LNode, VSEdge> {
         //finally wire the lambda and delta nodes
         //we wire the f_max to cv0, the imported f_puts to cv1 and the glob_max to cv2
         // and finally the output of f to the export
-
         tu.on_region(|tureg| {
             tureg
                 .ctx_mut()
@@ -279,8 +256,6 @@ pub fn emit() -> Rvsdg<LNode, VSEdge> {
                 )
                 .unwrap();
         });
-
-        tu
     });
 
     graph
