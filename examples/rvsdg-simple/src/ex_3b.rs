@@ -17,7 +17,6 @@ pub fn emit() -> Rvsdg<LNode, VSEdge> {
      *     return 1;
      * }
      */
-
     graph.on_omega_node(|o| {
         let phi_export = o.export("f".to_string());
         o.on_region(|reg| {
@@ -56,10 +55,10 @@ pub fn emit() -> Rvsdg<LNode, VSEdge> {
 
                             let dec = lambda_reg.new_decission(|gamma| {
                                 //import of f into gamma's region
-                                let ev_f = gamma.add_entry_variable();
-                                let ev_x = gamma.add_entry_variable();
-                                let ex_res = gamma.add_exit_variable();
-                                let _litonebranch = gamma.new_branch(|lit_one_branch| {
+                                let (_ev_f_input, ev_f_idx) = gamma.add_entry_variable();
+                                let (_ev_x_input, ev_x_idx) = gamma.add_entry_variable();
+                                let (ex_res_idx, _ex_res_out) = gamma.add_exit_variable();
+                                let _litonebranch = gamma.new_branch(|lit_one_branch, bidx| {
                                     let litone =
                                         lit_one_branch.insert_node(LNode::new(MyNodes::ImmI32(1)));
                                     //Build the simple lit one branch
@@ -70,8 +69,8 @@ pub fn emit() -> Rvsdg<LNode, VSEdge> {
                                             litone.as_outport_location(OutputType::Output(0)),
                                             parent.as_inport_location(
                                                 InputType::ExitVariableResult {
-                                                    branch: 0,
-                                                    exit_variable: ex_res,
+                                                    branch: bidx,
+                                                    exit_variable: ex_res_idx,
                                                 },
                                             ),
                                             VSEdge::Value,
@@ -79,7 +78,7 @@ pub fn emit() -> Rvsdg<LNode, VSEdge> {
                                         .unwrap();
                                 });
 
-                                let _rec_call_branch = gamma.new_branch(|callbranch| {
+                                let _rec_call_branch = gamma.new_branch(|callbranch, bidx| {
                                     let parent = callbranch.parent();
                                     let litone =
                                         callbranch.insert_node(LNode::new(MyNodes::ImmI32(-1)));
@@ -89,8 +88,8 @@ pub fn emit() -> Rvsdg<LNode, VSEdge> {
                                             &[
                                                 parent.as_outport_location(
                                                     OutputType::EntryVariableArgument {
-                                                        branch: 1,
-                                                        entry_variable: ev_x,
+                                                        branch: bidx,
+                                                        entry_variable: ev_x_idx,
                                                     },
                                                 ),
                                                 litone.as_outport_location(OutputType::Output(0)),
@@ -98,13 +97,12 @@ pub fn emit() -> Rvsdg<LNode, VSEdge> {
                                         )
                                         .unwrap();
                                     //this is the recursion call
-                                    println!("Teddy!");
                                     let (call_f, _args) = callbranch
                                         .call(
                                             parent.as_outport_location(
                                                 OutputType::EntryVariableArgument {
-                                                    branch: 1,
-                                                    entry_variable: ev_f,
+                                                    branch: bidx,
+                                                    entry_variable: ev_f_idx,
                                                 },
                                             ),
                                             &[decone.as_outport_location(OutputType::Output(0))],
@@ -125,8 +123,8 @@ pub fn emit() -> Rvsdg<LNode, VSEdge> {
                                             &[
                                                 parent.as_outport_location(
                                                     OutputType::EntryVariableArgument {
-                                                        branch: 1,
-                                                        entry_variable: ev_x,
+                                                        branch: bidx,
+                                                        entry_variable: ev_x_idx,
                                                     },
                                                 ),
                                                 call_f.as_outport_location(OutputType::Output(0)),
@@ -142,7 +140,7 @@ pub fn emit() -> Rvsdg<LNode, VSEdge> {
                                             parent.as_inport_location(
                                                 InputType::ExitVariableResult {
                                                     branch: 1,
-                                                    exit_variable: ex_res,
+                                                    exit_variable: ex_res_idx,
                                                 },
                                             ),
                                             VSEdge::Value,

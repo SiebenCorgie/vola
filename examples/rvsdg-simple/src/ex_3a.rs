@@ -66,12 +66,12 @@ pub fn emit() -> Rvsdg<LNode, VSEdge> {
 
                 //setup the max_gamma branches and connect gt on them
                 let gamma_node = reg.new_decission(|gamma| {
-                    let ev0 = gamma.add_entry_variable();
-                    let ev1 = gamma.add_entry_variable();
-                    let ex0 = gamma.add_exit_variable();
+                    let (_ev0_in, ev0_idx) = gamma.add_entry_variable();
+                    let (_ev1_in, ev1_idx) = gamma.add_entry_variable();
+                    let (ex0_idx, _ex0_out) = gamma.add_exit_variable();
 
                     //branch 0 maps x to the exit variable
-                    let _bx = gamma.new_branch(|branch_x| {
+                    let _bx = gamma.new_branch(|branch_x, bidx| {
                         let parent = branch_x.parent();
                         branch_x
                             .ctx_mut()
@@ -79,15 +79,15 @@ pub fn emit() -> Rvsdg<LNode, VSEdge> {
                                 OutportLocation {
                                     node: parent,
                                     output: OutputType::EntryVariableArgument {
-                                        branch: 0,
-                                        entry_variable: ev0,
+                                        branch: bidx,
+                                        entry_variable: ev0_idx,
                                     },
                                 },
                                 InportLocation {
                                     node: parent,
                                     input: InputType::ExitVariableResult {
-                                        branch: 0,
-                                        exit_variable: ex0,
+                                        branch: bidx,
+                                        exit_variable: ex0_idx,
                                     },
                                 },
                                 VSEdge::Value,
@@ -95,7 +95,7 @@ pub fn emit() -> Rvsdg<LNode, VSEdge> {
                             .unwrap();
                     });
                     //branch 1 maps y to the exit variable
-                    let _by = gamma.new_branch(|branch_y| {
+                    let _by = gamma.new_branch(|branch_y, bidx| {
                         let parent = branch_y.parent();
                         branch_y
                             .ctx_mut()
@@ -103,15 +103,15 @@ pub fn emit() -> Rvsdg<LNode, VSEdge> {
                                 OutportLocation {
                                     node: parent,
                                     output: OutputType::EntryVariableArgument {
-                                        branch: 1,
-                                        entry_variable: ev1,
+                                        branch: bidx,
+                                        entry_variable: ev1_idx,
                                     },
                                 },
                                 InportLocation {
                                     node: parent,
                                     input: InputType::ExitVariableResult {
-                                        branch: 1,
-                                        exit_variable: ex0,
+                                        branch: bidx,
+                                        exit_variable: ex0_idx,
                                     },
                                 },
                                 VSEdge::Value,
