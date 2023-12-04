@@ -1,7 +1,7 @@
 use thiserror::Error;
 
 use crate::{
-    edge::{InportLocation, OutportLocation},
+    edge::{InportLocation, InputType, OutportLocation, OutputType},
     EdgeRef, NodeRef,
 };
 
@@ -51,4 +51,8 @@ pub enum GraphError {
     InvalidInport(InportLocation),
     #[error("{0:?} does not exist (on node)")]
     InvalidOutport(OutportLocation),
+    #[error("Expected result-like input type, got {0:?}")]
+    ExpectedResult(InputType),
+    #[error("Expected argument-like output type, got {0:?}")]
+    ExpectedArgument(OutputType),
 }

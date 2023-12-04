@@ -1,6 +1,6 @@
 use rvsdg::{
     common::{CommonRvsdg, VSEdge},
-    edge::{InportLocation, InputType, OutportLocation, OutputType},
+    edge::{InputType, OutputType},
     nodes::Node,
     Rvsdg,
 };
@@ -199,11 +199,11 @@ pub fn emit() -> Rvsdg<LNode, VSEdge> {
                             VSEdge::Value,
                         )
                         .unwrap();
-                    let parent = phi_reg.parent();
+
                     phi_reg
                         .ctx_mut()
                         .connect(
-                            parent.as_outport_location(OutputType::RecursionVariableArgument(0)),
+                            phi_arg,
                             fnode.as_inport_location(InputType::ContextVariableInput(0)),
                             VSEdge::Value,
                         )

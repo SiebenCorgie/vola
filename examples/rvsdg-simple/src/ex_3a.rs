@@ -21,7 +21,7 @@ pub fn emit() -> Rvsdg<LNode, VSEdge> {
     //     return max(a,b);
     // }
     // ```
-    graph.on_omega_node(|mut tu| {
+    graph.on_omega_node(|tu| {
         let puts_import = tu.import("puts");
         //create the global "max" value
         let global_string_max = tu.new_global(|glob| {
@@ -45,17 +45,11 @@ pub fn emit() -> Rvsdg<LNode, VSEdge> {
                 assert!(edges.len() == 4);
 
                 //Connect to output
-                let parent = reg.parent();
-                reg.ctx_mut()
-                    .connect(
-                        const_arr.as_outport_location(OutputType::Output(0)),
-                        InportLocation {
-                            node: parent,
-                            input: InputType::Result(0),
-                        },
-                        VSEdge::Value,
-                    )
-                    .unwrap();
+                reg.connect_to_result(
+                    const_arr.as_outport_location(OutputType::Output(0)),
+                    InputType::Result(0),
+                )
+                .unwrap();
             });
         });
 

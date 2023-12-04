@@ -33,6 +33,19 @@ impl InputType {
             _ => None,
         }
     }
+
+    ///Returs true if `self` is some kind of result to a region. Is true for
+    /// - Result
+    /// - ExitVariableResult
+    /// - RecursionVariableResult
+    pub fn is_result(&self) -> bool {
+        match self {
+            InputType::Result(_)
+            | InputType::RecursionVariableResult(_)
+            | InputType::ExitVariableResult { .. } => true,
+            _ => false,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
@@ -73,6 +86,21 @@ impl OutputType {
                 entry_variable: _,
             } => Some(*branch),
             _ => None,
+        }
+    }
+
+    ///Returns true if `self` is some kind of argument to a region. This is true for
+    /// - Argument
+    /// - ContextVariableArgument
+    /// - RecursionVariableArgument
+    /// - EntryVariableArgument
+    pub fn is_argument(&self) -> bool {
+        match self {
+            OutputType::Argument(_)
+            | OutputType::ContextVariableArgument(_)
+            | OutputType::RecursionVariableArgument(_)
+            | OutputType::EntryVariableArgument { .. } => true,
+            _ => false,
         }
     }
 }

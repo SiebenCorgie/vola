@@ -4,7 +4,6 @@
 use crate::{
     edge::LangEdge,
     nodes::{GammaNode, LangNode, Node, ThetaNode},
-    region::Inport,
     NodeRef, Rvsdg,
 };
 

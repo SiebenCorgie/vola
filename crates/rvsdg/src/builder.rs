@@ -16,7 +16,7 @@ mod intra_proc;
 use std::marker::PhantomData;
 
 use crate::{
-    edge::{InportLocation, InputType, LangEdge, OutportLocation},
+    edge::{InportLocation, InputType, LangEdge, OutportLocation, OutputType},
     err::GraphError,
     nodes::{ApplyNode, LangNode, Node, StructuralNode},
     region::Region,
@@ -97,6 +97,39 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static, PARENT: StructuralNode>
         }
 
         Ok((created_node, edges))
+    }
+
+    ///Connects the port `src` to this region's `dst_ty` result. `dst` must be Result, ExitVariableResult or RecursionVariableResult.
+    ///
+    /// The connection is a value edge by default.
+    pub fn connect_to_result(
+        &mut self,
+        src: OutportLocation,
+        dst_ty: InputType,
+    ) -> Result<EdgeRef, GraphError> {
+        if !dst_ty.is_result() {
+            return Err(GraphError::ExpectedResult(dst_ty));
+        }
+        let parent = self.parent();
+        self.ctx_mut()
+            .connect(src, parent.as_inport_location(dst_ty), E::value_edge())
+    }
+
+    ///Connects `src_ty` type argument of this region to the `dst` port.
+    ///
+    /// The connection is a value-edge by default.
+    pub fn connect_arg_to(
+        &mut self,
+        src_ty: OutputType,
+        dst: InportLocation,
+    ) -> Result<EdgeRef, GraphError> {
+        if !src_ty.is_argument() {
+            return Err(GraphError::ExpectedArgument(src_ty));
+        }
+
+        let parent = self.parent();
+        self.ctx_mut()
+            .connect(parent.as_outport_location(src_ty), dst, E::value_edge())
     }
 
     ///Spawn a new loop-node/[θ-Node](crate::nodes::ThetaNode) in this region. Returns the reference under which the loop is created.
