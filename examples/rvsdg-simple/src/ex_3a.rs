@@ -65,10 +65,10 @@ pub fn emit() -> Rvsdg<LNode, VSEdge> {
                     .unwrap();
 
                 //setup the max_gamma branches and connect gt on them
-                let gamma_node = reg.new_decission(|gamma| {
-                    let (_ev0_in, ev0_idx) = gamma.add_entry_variable();
-                    let (_ev1_in, ev1_idx) = gamma.add_entry_variable();
-                    let (ex0_idx, _ex0_out) = gamma.add_exit_variable();
+                let (gamma_node, (ev0_in, ev1_in, ex0_out)) = reg.new_decission(|gamma| {
+                    let (ev0_in, ev0_idx) = gamma.add_entry_variable();
+                    let (ev1_in, ev1_idx) = gamma.add_entry_variable();
+                    let (ex0_idx, ex0_out) = gamma.add_exit_variable();
 
                     //branch 0 maps x to the exit variable
                     let _bx = gamma.new_branch(|branch_x, bidx| {
@@ -118,6 +118,8 @@ pub fn emit() -> Rvsdg<LNode, VSEdge> {
                             )
                             .unwrap();
                     });
+
+                    (ev0_in, ev1_in, ex0_out)
                 });
 
                 //connect gt-simple-node output to gamma predicate.
@@ -131,27 +133,11 @@ pub fn emit() -> Rvsdg<LNode, VSEdge> {
 
                 //Connect the gamma nodes exit variable to the
                 reg.ctx_mut()
-                    .connect(
-                        gamma_node.as_outport_location(OutputType::ExitVariableOutput(0)),
-                        res_max,
-                        VSEdge::Value,
-                    )
+                    .connect(ex0_out, res_max, VSEdge::Value)
                     .unwrap();
                 //Connect a and b to gamma entry variables
-                reg.ctx_mut()
-                    .connect(
-                        arg_x,
-                        gamma_node.as_inport_location(InputType::EntryVariableInput(0)),
-                        VSEdge::Value,
-                    )
-                    .unwrap();
-                reg.ctx_mut()
-                    .connect(
-                        arg_y,
-                        gamma_node.as_inport_location(InputType::EntryVariableInput(1)),
-                        VSEdge::Value,
-                    )
-                    .unwrap();
+                reg.ctx_mut().connect(arg_x, ev0_in, VSEdge::Value).unwrap();
+                reg.ctx_mut().connect(arg_y, ev1_in, VSEdge::Value).unwrap();
             });
         });
 

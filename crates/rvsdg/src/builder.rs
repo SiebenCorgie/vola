@@ -148,43 +148,52 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static, PARENT: StructuralNode>
         (created_node, res)
     }
 
-    ///Spawns a new decision-node/[γ-Node](crate::node::GammaNode) in this region. Returns the reference under which the decision is created.
-    pub fn new_decission(&mut self, building: impl FnOnce(&mut GammaBuilder<N, E>)) -> NodeRef {
-        let created = {
-            let mut builder = GammaBuilder::new(self.ctx);
-            building(&mut builder);
-            builder.build()
-        };
-        //add to our region
-        self.region_mut().nodes.insert(created);
-        created
-    }
-
-    ///Allows you to spawn a new function-node/[λ-Node](crates::nodes::LambdaNode) in this region. Returns the reference under which the function is created.
-    pub fn new_function(&mut self, building: impl FnOnce(&mut LambdaBuilder<N, E>)) -> NodeRef {
-        let created = {
-            let mut builder = LambdaBuilder::new(self.ctx);
-            building(&mut builder);
-            builder.build()
-        };
-        //add to our region
-        self.region_mut().nodes.insert(created);
-        created
-    }
-
-    ///Allows you to spawn a new recursive-node/[ϕ-Node](crates::nodes::PhiNode) in this region. Returns the reference under which the function is created.
-    pub fn new_recursive_region(
+    ///Spawns a new decision-node/[γ-Node](crate::node::GammaNode) in this region. . Returns the reference under which the gamma-nodes is created, as well as any
+    /// result the `building` function produces.
+    pub fn new_decission<R: 'static>(
         &mut self,
-        building: impl FnOnce(&mut PhiBuilder<N, E>),
-    ) -> NodeRef {
-        let created = {
-            let mut builder = PhiBuilder::new(self.ctx);
-            building(&mut builder);
-            builder.build()
+        building: impl FnOnce(&mut GammaBuilder<N, E>) -> R,
+    ) -> (NodeRef, R) {
+        let (created, res) = {
+            let mut builder = GammaBuilder::new(self.ctx);
+            let res = building(&mut builder);
+            (builder.build(), res)
         };
         //add to our region
         self.region_mut().nodes.insert(created);
-        created
+        (created, res)
+    }
+
+    ///Allows you to spawn a new function-node/[λ-Node](crates::nodes::LambdaNode) in this region. . Returns the reference under which the function is created, as well as any
+    /// result the `building` function produces.
+    pub fn new_function<R: 'static>(
+        &mut self,
+        building: impl FnOnce(&mut LambdaBuilder<N, E>) -> R,
+    ) -> (NodeRef, R) {
+        let (created, res) = {
+            let mut builder = LambdaBuilder::new(self.ctx);
+            let res = building(&mut builder);
+            (builder.build(), res)
+        };
+        //add to our region
+        self.region_mut().nodes.insert(created);
+        (created, res)
+    }
+
+    ///Allows you to spawn a new recursive-node/[ϕ-Node](crates::nodes::PhiNode) in this region. . Returns the reference under which the phi-node is created, as well as any
+    /// result the `building` function produces.
+    pub fn new_recursive_region<R: 'static>(
+        &mut self,
+        building: impl FnOnce(&mut PhiBuilder<N, E>) -> R,
+    ) -> (NodeRef, R) {
+        let (created, res) = {
+            let mut builder = PhiBuilder::new(self.ctx);
+            let res = building(&mut builder);
+            (builder.build(), res)
+        };
+        //add to our region
+        self.region_mut().nodes.insert(created);
+        (created, res)
     }
 
     ///Allows you to spawn a new global-value/[δ-Node](crates::nodes::DeltaNode) in this region. Returns the reference under which the function is created.

@@ -1,11 +1,6 @@
 use ahash::{AHashMap, AHashSet};
 use macroquad::prelude::{Color, Vec2, BLACK, WHITE};
-use rvsdg::{
-    edge::{InputType, LangEdge, OutputType},
-    nodes::LangNode,
-    region::Region,
-    EdgeRef, NodeRef, Rvsdg,
-};
+use rvsdg::{edge::LangEdge, nodes::LangNode, region::Region, EdgeRef, NodeRef, Rvsdg};
 use std::collections::VecDeque;
 use std::fmt::Debug;
 
