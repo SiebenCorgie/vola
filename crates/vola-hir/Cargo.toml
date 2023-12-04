@@ -6,12 +6,11 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-default = ["dot"]
-dot = ["graphviz-rust"]
 
 [dependencies]
 vola-ast = {path = "../vola-ast"}
+rvsdg = {path = "../rvsdg"}
 ahash.workspace = true
 tinyvec.workspace = true
 slotmap.workspace = true
-graphviz-rust = {workspace = true, optional = true}
+thiserror.workspace = true
