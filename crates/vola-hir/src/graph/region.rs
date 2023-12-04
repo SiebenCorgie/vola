@@ -1,7 +1,7 @@
-use vola_ast::comb::OpNode;
+
 
 use crate::{
-    graph::NodeTy, AlgeOp, CombNode, Ident, ModuleBuilder, Node, NodeRef, Region, SymbolTable,
+    AlgeOp, CombNode, Ident, ModuleBuilder, Node, NodeRef, Region, SymbolTable,
 };
 
 use super::{AlgeNode, NodeRefs};
@@ -80,7 +80,7 @@ impl<'a> RegionBuilder<'a> {
         self.module().new_node(new_node)
     }
 
-    pub fn build(mut self, config: RegionConfig) -> NodeRef {
+    pub fn build(mut self, _config: RegionConfig) -> NodeRef {
         assert!(
             self.out.is_some(),
             "Out node must be set before building region!"

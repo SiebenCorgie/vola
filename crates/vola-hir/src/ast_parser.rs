@@ -314,7 +314,7 @@ pub fn parse_ast(ast: Ast, mut builder: ModuleBuilder) -> ModuleBuilder {
         });
     }
 
-    for (ident, prim) in ast.prims {
+    for (_ident, prim) in ast.prims {
         let Prim {
             src: _,
             ident,
@@ -359,7 +359,7 @@ pub fn parse_ast(ast: Ast, mut builder: ModuleBuilder) -> ModuleBuilder {
         })
     }
 
-    for (ident, field) in ast.fields {
+    for (_ident, field) in ast.fields {
         let Field {
             src: _,
             ident,

@@ -1,4 +1,4 @@
-use crate::{graph::NodeRefs, NodeRef};
+use crate::{NodeRef};
 
 #[derive(Clone, Debug, Hash, Eq, PartialEq)]
 pub struct Ident(pub String);

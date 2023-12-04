@@ -1,7 +1,7 @@
-use ahash::{AHashMap, AHashSet};
+use ahash::AHashMap;
 use graphviz_rust::{
     attributes::{dir, shape, EdgeAttributes, NodeAttributes},
-    dot_structures::{Edge, EdgeTy, Graph, Id, NodeId, Stmt, Subgraph, Vertex},
+    dot_structures::{Edge, EdgeTy, Id, NodeId, Stmt, Subgraph, Vertex},
 };
 use slotmap::Key;
 
@@ -11,6 +11,7 @@ fn node_id(node: NodeRef) -> NodeId {
     NodeId(Id::Plain(format!("NODE_{}", node.data().as_ffi())), None)
 }
 
+#[allow(dead_code)]
 fn graph_id(node: NodeRef) -> Id {
     Id::Plain(format!("GRAPH_{}", node.data().as_ffi()))
 }

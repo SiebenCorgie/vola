@@ -58,7 +58,9 @@ For more examples either have a look at the syntax [test corpus](crates/tree-sit
 ## Techstack / Packages
 
 - [Treesitter](https://github.com/tree-sitter/tree-sitter) based grammar + parser
-- [MLIR](https://mlir.llvm.org/) based compilation to SPIR-V
+- ~[MLIR](https://mlir.llvm.org/) based compilation to SPIR-V~
+- [Cranelift](https://cranelift.dev/) based CPU targeting
+- [SPIR-T](https://github.com/EmbarkStudios/spirt) based SPIR-V / GPU targeting
 - [SPV-Patcher](https://gitlab.com/tendsinmende/spv-patcher) for runtime shader code patching
 
 Note: The techstack is not set in stone. We might switch to a hand written parser, or introduce custom non-MLIR compiler steps if needed.
@@ -69,14 +71,19 @@ Note: The techstack is not set in stone. We might switch to a hand written parse
 - `vola-ast`: The Abstract-Syntax-Tree representation of any Vola program. Can either be build from a file (using `tree-sitter-vola`) or 
 by using this as a library. Servers as interface between the Vola frontend, and any middle- / backend.
 - `vola-hir`: HighLevel-Intermediate-Representation. Conceptually similar to Rust's [THIR](https://rustc-dev-guide.rust-lang.org/thir.html). Used for type resolving, and matching and building a crude data-dependency graph.
+- `rvsdg`: A generic [RVSDG](https://dl.acm.org/doi/abs/10.1145/3391902) implementation. 
 
 ## Building
-### Dependencies
+
+### non-cargo dependencies
+
 - `tree-sitter-vola`: [Treesitter](https://tree-sitter.github.io/tree-sitter/creating-parsers#dependencies) if you want to rebuild / change the parser:
   - [Trees-Sitter CLI](https://crates.io/crates/tree-sitter-cli)
   - Node.js
   - A C Compiler
 - `vola-ast`: none
+- `vola-hir`: none
+- `rvsdg`: none
 
 ## Getting started
 
@@ -100,6 +107,8 @@ cargo run --bin dry-run -- path/to/vola/file
 You can set `VOLA_BACKTRACE=1` to print a backtrace whenever an error is reported. There are `cargo test` units in place, as well as tree-sitter tests. Those should always 
 work.
 
+Some packages have a `dot` feature. This lets you create [DOT](https://en.wikipedia.org/wiki/DOT_%28graph_description_language%29) graphs that can then be rendered into SVGs or similar formats. This really helps debugging graph/tree related problems.
+
 ## Support
 
 The language's grammar is located in `crates/vola-parser/grammar.js`
@@ -114,8 +123,8 @@ If you are interested in the runtime SPIR-V patching, have a look at [spv-patche
 **Milestone 0**: MVP
 
 - [x] Simple grammar to get started
-- [ ] Parser to MLIR (Melior) binding
-- [ ] Simple MLIR -> SPIR-V path (no optimisations, just transforming)
+- [ ] Simple middle end pass (static-dispatch, type resolving etc.)
+- [ ] middle-end => SPIR-T pass for gpu code emission. 
 - [ ] SPIR-V test app (`dry-run`) that tests the whole text-file -> SPIR-V chain
 - [ ] Vulkan test app (`runtime-patch`) that tests runtime patching of actually executed shaders.
 

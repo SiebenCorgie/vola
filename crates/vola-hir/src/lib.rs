@@ -1,4 +1,4 @@
-use ahash::{AHashMap, AHashSet};
+use ahash::{AHashMap};
 use common::EntryPoint;
 use graph::{region::RegionConfig, NodeRefs, NodeTy};
 use slotmap::SlotMap;
@@ -10,7 +10,7 @@ pub use common::{EntryPointType, Ident};
 mod symbol_table;
 pub use symbol_table::SymbolTable;
 mod debug;
-use debug::Span;
+
 use vola_ast::Ast;
 
 mod ast_parser;
@@ -121,7 +121,7 @@ impl ModuleBuilder {
     pub fn dot_graph(&self) -> graphviz_rust::dot_structures::Graph {
         let mut subs = Vec::new();
 
-        let graph_id = graphviz_rust::dot_structures::Id::Plain(format!("Module"));
+        let _graph_id = graphviz_rust::dot_structures::Id::Plain(format!("Module"));
 
         for (ident, entrypoint) in &self.entry_points {
             let subgraph = self.dot_sub_graph(entrypoint.root_node);
