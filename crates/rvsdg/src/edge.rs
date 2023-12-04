@@ -15,6 +15,7 @@ pub enum InputType {
         branch: usize,
         exit_variable: usize,
     },
+    LoopVariableResult(usize),
     EntryVariableInput(usize),
     RecursionVariableResult(usize),
     ContextVariableInput(usize),
@@ -25,7 +26,10 @@ impl InputType {
     /// This mostly will be 0, except for ExitVariableResult.
     pub fn result_region_index(&self) -> Option<usize> {
         match self {
-            Self::Result(_) | Self::RecursionVariableResult(_) => Some(0),
+            Self::Result(_)
+            | Self::RecursionVariableResult(_)
+            | Self::LoopVariableResult(_)
+            | Self::ThetaPredicate => Some(0),
             Self::ExitVariableResult {
                 branch,
                 exit_variable: _,
@@ -37,11 +41,15 @@ impl InputType {
     ///Returs true if `self` is some kind of result to a region. Is true for
     /// - Result
     /// - ExitVariableResult
+    /// - ThetaPredicate
     /// - RecursionVariableResult
+    /// - LoopVariableResult
     pub fn is_result(&self) -> bool {
         match self {
             InputType::Result(_)
+            | InputType::ThetaPredicate
             | InputType::RecursionVariableResult(_)
+            | InputType::LoopVariableResult(_)
             | InputType::ExitVariableResult { .. } => true,
             _ => false,
         }

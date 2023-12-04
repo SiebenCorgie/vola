@@ -111,8 +111,8 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static, PARENT: StructuralNode>
             return Err(GraphError::ExpectedResult(dst_ty));
         }
         let parent = self.parent();
-        self.ctx_mut()
-            .connect(src, parent.as_inport_location(dst_ty), E::value_edge())
+        let inport = parent.as_inport_location(dst_ty);
+        self.ctx_mut().connect(src, inport, E::value_edge())
     }
 
     ///Connects `src_ty` type argument of this region to the `dst` port.
@@ -132,16 +132,20 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static, PARENT: StructuralNode>
             .connect(parent.as_outport_location(src_ty), dst, E::value_edge())
     }
 
-    ///Spawn a new loop-node/[θ-Node](crate::nodes::ThetaNode) in this region. Returns the reference under which the loop is created.
-    pub fn new_loop(&mut self, building: impl FnOnce(&mut ThetaBuilder<N, E>)) -> NodeRef {
-        let created = {
+    ///Spawn a new loop-node/[θ-Node](crate::nodes::ThetaNode) in this region. Returns the reference under which the loop is created, as well as any
+    /// result the `building` function produces.
+    pub fn new_loop<R: 'static>(
+        &mut self,
+        building: impl FnOnce(&mut ThetaBuilder<N, E>) -> R,
+    ) -> (NodeRef, R) {
+        let (created_node, res) = {
             let mut builder = ThetaBuilder::new(self.ctx);
-            building(&mut builder);
-            builder.build()
+            let res = building(&mut builder);
+            (builder.build(), res)
         };
         //add to our region
-        self.region_mut().nodes.insert(created);
-        created
+        self.region_mut().nodes.insert(created_node);
+        (created_node, res)
     }
 
     ///Spawns a new decision-node/[γ-Node](crate::node::GammaNode) in this region. Returns the reference under which the decision is created.

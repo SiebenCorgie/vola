@@ -5,6 +5,8 @@ use rvsdg::{
 pub use rvsdg_viewer::macroquad;
 use rvsdg_viewer::View;
 
+//Example 2.d. of the source paper
+mod ex_2d;
 //Example 3.a. of the source paper
 mod ex_3a;
 //Example 3.b. of the source paper
@@ -97,6 +99,8 @@ impl View for LNode {
 }
 
 fn main() {
+    let ex2d = ex_2d::emit();
+    rvsdg_viewer::into_svg(&ex2d, "Example_2d.svg");
     let ex3a = ex_3a::emit();
     rvsdg_viewer::into_svg(&ex3a, "Example_3a.svg");
     let ex3b = ex_3b::emit();

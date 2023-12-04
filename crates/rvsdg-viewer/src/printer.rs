@@ -395,12 +395,10 @@ impl Printer {
             if let Some(edg) = res.edge {
                 let _ = seen_edges.insert(edg);
                 let node_ref = ctx.edge(edg).src.node;
-                if node_ref == parent {
-                    continue;
+                if !seen_nodes.contains(&node_ref) && node_ref != parent {
+                    waiting_nodes.push_front(node_ref);
+                    seen_nodes.insert(node_ref);
                 }
-                waiting_nodes.push_front(node_ref);
-                seen_nodes.insert(node_ref);
-                //TODO collect edge as well
             }
         }
 
@@ -531,61 +529,51 @@ impl Printer {
         for edg in &region.edges {
             let edge = ctx.edge(*edg);
             //resolve both ports, then insert
-            let src_port = match edge.src.output {
-                OutputType::Argument(_)
-                | OutputType::EntryVariableArgument { .. }
-                | OutputType::ContextVariableArgument(_)
-                | OutputType::RecursionVariableArgument(_) => {
-                    if let Some(arg_idx) = lookup_arg(edg) {
-                        BodyRegionPort::Arg(arg_idx)
-                    } else {
-                        println!("ERROR: Could not find ArgIdx for output");
-                        continue;
-                    }
+            let src_port = if edge.src.output.is_argument() {
+                if let Some(arg_idx) = lookup_arg(edg) {
+                    BodyRegionPort::Arg(arg_idx)
+                } else {
+                    println!("ERROR: Could not find ArgIdx for output");
+                    continue;
                 }
-                _ => {
-                    if let Some(node_output) = lookup_output(edg, edge.src.node) {
-                        let (line, column) = node_ref_map
-                            .get(&edge.src.node)
-                            .cloned()
-                            .expect("Node was not in lookup map!");
-                        BodyRegionPort::Out {
-                            line,
-                            column,
-                            output: node_output,
-                        }
-                    } else {
-                        println!("ERROR: Could not find node output for edge!");
-                        continue;
+            } else {
+                if let Some(node_output) = lookup_output(edg, edge.src.node) {
+                    let (line, column) = node_ref_map
+                        .get(&edge.src.node)
+                        .cloned()
+                        .expect("Node was not in lookup map!");
+                    BodyRegionPort::Out {
+                        line,
+                        column,
+                        output: node_output,
                     }
+                } else {
+                    println!("ERROR: Could not find node output for edge!");
+                    continue;
                 }
             };
-            let dst_port = match edge.dst.input {
-                InputType::Result(_)
-                | InputType::RecursionVariableResult(_)
-                | InputType::ExitVariableResult { .. } => {
-                    if let Some(res_idx) = lookup_res(edg) {
-                        BodyRegionPort::Res(res_idx)
-                    } else {
-                        println!("ERROR: Could not find ResIdx for input");
-                        continue;
-                    }
+
+            let dst_port = if edge.dst.input.is_result() {
+                if let Some(res_idx) = lookup_res(edg) {
+                    BodyRegionPort::Res(res_idx)
+                } else {
+                    println!("ERROR: Could not find ResIdx for input");
+                    continue;
                 }
-                _ => {
-                    if let Some(input_idx) = lookup_input(edg, edge.dst.node) {
-                        let (line, column) = node_ref_map
-                            .get(&edge.dst.node)
-                            .cloned()
-                            .expect("Node was not in lookup map!");
-                        BodyRegionPort::Inp {
-                            line,
-                            column,
-                            input: input_idx,
-                        }
-                    } else {
-                        println!("ERROR: Could not find node input for edge!");
-                        continue;
+            } else {
+                if let Some(input_idx) = lookup_input(edg, edge.dst.node) {
+                    let (line, column) = node_ref_map
+                        .get(&edge.dst.node)
+                        .cloned()
+                        .expect("Node was not in lookup map!");
+                    BodyRegionPort::Inp {
+                        line,
+                        column,
+                        input: input_idx,
                     }
+                } else {
+                    println!("ERROR: Could not find node input for edge!");
+                    continue;
                 }
             };
 

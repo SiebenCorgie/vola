@@ -316,9 +316,10 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
         //if that didn't work, try the same for an result
         for succ in self.walk_successors(node) {
             match succ.input {
-                InputType::Result(_) | InputType::RecursionVariableResult(_) => {
-                    return Some((succ.node, 0))
-                }
+                InputType::Result(_)
+                | InputType::RecursionVariableResult(_)
+                | InputType::ThetaPredicate
+                | InputType::LoopVariableResult(_) => return Some((succ.node, 0)),
                 InputType::ExitVariableResult {
                     branch,
                     exit_variable: _,

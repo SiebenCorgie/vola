@@ -160,9 +160,32 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> ThetaBuilder<'a, N, E> {
     }
 
     ///Adds a new loop variable. This are variables that are an input, and/or an output to a single iteration of the loop.
-    ///Returns the loop variable index it is created on.
-    pub fn add_loop_variable(mut self) -> (Self, usize) {
+    ///Returns the tuple (Input, Argument, Result, Output) referencing this loop variable.
+    pub fn add_loop_variable(
+        &mut self,
+    ) -> (
+        InportLocation,
+        OutportLocation,
+        InportLocation,
+        OutportLocation,
+    ) {
         let created_at_idx = self.node_mut().add_loop_variable();
-        (self, created_at_idx)
+        let input = InportLocation {
+            node: self.node_ref,
+            input: InputType::Input(created_at_idx),
+        };
+        let result = InportLocation {
+            node: self.node_ref,
+            input: InputType::LoopVariableResult(created_at_idx),
+        };
+        let arg = OutportLocation {
+            node: self.node_ref,
+            output: OutputType::Argument(created_at_idx),
+        };
+        let out = OutportLocation {
+            node: self.node_ref,
+            output: OutputType::Output(created_at_idx),
+        };
+        (input, arg, result, out)
     }
 }

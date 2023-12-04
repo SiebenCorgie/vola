@@ -37,7 +37,8 @@ impl StructuralNode for ThetaNode {
     fn inport(&self, ty: &InputType) -> Option<&Input> {
         match ty {
             InputType::Input(u) => self.inputs.get(*u),
-            InputType::Result(n) => self.loop_body.results.get(*n + 1),
+            InputType::Result(n) => self.loop_body.results.get(*n),
+            InputType::LoopVariableResult(n) => self.loop_body.results.get(n + 1),
             InputType::ThetaPredicate => Some(self.loop_predicate()),
             _ => None,
         }
@@ -45,7 +46,8 @@ impl StructuralNode for ThetaNode {
     fn inport_mut(&mut self, ty: &InputType) -> Option<&mut Input> {
         match ty {
             InputType::Input(u) => self.inputs.get_mut(*u),
-            InputType::Result(n) => self.loop_body.results.get_mut(*n + 1),
+            InputType::Result(n) => self.loop_body.results.get_mut(*n),
+            InputType::LoopVariableResult(n) => self.loop_body.results.get_mut(n + 1),
             InputType::ThetaPredicate => Some(self.loop_predicate_mut()),
             _ => None,
         }
