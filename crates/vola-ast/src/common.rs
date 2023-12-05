@@ -1,9 +1,10 @@
 //! Common AST components like identifiers and types.
 
+use vola_common::Span;
+
 use crate::{
     alge::{AlgeExpr, BinOp},
     comb::OpNode,
-    diag::Span,
     parser::FromSitter,
     AstError, AstErrorTy,
 };

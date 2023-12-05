@@ -11,6 +11,7 @@ dot = ["graphviz-rust"]
 
 [dependencies]
 tree-sitter-vola = {path = "../tree-sitter-vola"}
+vola-common = {path = "../vola-common"}
 thiserror.workspace = true
 tree-sitter.workspace = true
 ahash.workspace = true
