@@ -18,5 +18,6 @@ mod ast;
 mod edge;
 mod err;
 mod ops;
+mod types;
 
 pub type VolaHir = Rvsdg<HirOp, HirEdge>;

@@ -9,6 +9,7 @@ edition = "2021"
 
 [dependencies]
 vola-ast = {path = "../vola-ast"}
+vola-common = {path = "../vola-common"}
 rvsdg = {path = "../rvsdg"}
 ahash.workspace = true
 tinyvec.workspace = true

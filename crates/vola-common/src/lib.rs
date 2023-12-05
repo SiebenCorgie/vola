@@ -1,4 +1,4 @@
-//! AST diagnosis helper. This is mostly Span of nodes, as well as AST errors and their reporting.
+//! Common diagnosis helper. This is mostly Span of nodes, as well their reporting.
 
 use std::fmt::Display;
 
