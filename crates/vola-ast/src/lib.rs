@@ -24,6 +24,7 @@
 use ahash::AHashMap;
 use diag::{AstError, AstErrorTy};
 use std::path::Path;
+use vola_common::{CommonError, ErrorReporter, Span};
 
 use common::{Alge, Field, Identifier, Op, Prim};
 pub use parser::parser;
@@ -92,70 +93,81 @@ impl Ast {
     ) -> Result<(), AstError> {
         let root_node = tree.root_node();
         let mut cursor = tree.walk();
-
-        let mut errors = Vec::new();
+        let mut reporter = ErrorReporter::new();
 
         for top_level_node in root_node.children(&mut cursor) {
             match top_level_node.kind() {
                 "alge_definition" => match Alge::parse_node(source, &top_level_node) {
                     Ok(f) => {
                         if let Some(old) = self.alges.insert(f.ident.clone(), f) {
-                            errors.push(AstError::at_node(
-                                source,
-                                &top_level_node,
-                                AstErrorTy::IdentifierAlreadyExists {
-                                    ty: "Alge".to_owned(),
-                                    ident: old.ident.imm,
-                                },
-                            ));
+                            reporter.push_error(
+                                AstError::at_node(
+                                    source,
+                                    &top_level_node,
+                                    AstErrorTy::IdentifierAlreadyExists {
+                                        ty: "Alge".to_owned(),
+                                        ident: old.ident.imm,
+                                    },
+                                )
+                                .0,
+                            );
                         }
                     }
-                    Err(e) => println!("Failed to parse Op: {e}"),
+                    Err(e) => reporter.push_error(e.0),
                 },
                 "prim_definition" => match Prim::parse_node(source, &top_level_node) {
                     Ok(f) => {
                         if let Some(old) = self.prims.insert(f.ident.clone(), f) {
-                            errors.push(AstError::at_node(
-                                source,
-                                &top_level_node,
-                                AstErrorTy::IdentifierAlreadyExists {
-                                    ty: "Prim Definition".to_owned(),
-                                    ident: old.ident.imm,
-                                },
-                            ));
+                            reporter.push_error(
+                                AstError::at_node(
+                                    source,
+                                    &top_level_node,
+                                    AstErrorTy::IdentifierAlreadyExists {
+                                        ty: "Prim Definition".to_owned(),
+                                        ident: old.ident.imm,
+                                    },
+                                )
+                                .0,
+                            );
                         }
                     }
-                    Err(e) => println!("Failed to parse Prim: {e}"),
+                    Err(e) => reporter.push_error(e.0),
                 },
                 "op_definition" => match Op::parse_node(source, &top_level_node) {
                     Ok(f) => {
                         if let Some(old) = self.ops.insert(f.ident.clone(), f) {
-                            errors.push(AstError::at_node(
-                                source,
-                                &top_level_node,
-                                AstErrorTy::IdentifierAlreadyExists {
-                                    ty: "Op Definition".to_owned(),
-                                    ident: old.ident.imm,
-                                },
-                            ));
+                            reporter.push_error(
+                                AstError::at_node(
+                                    source,
+                                    &top_level_node,
+                                    AstErrorTy::IdentifierAlreadyExists {
+                                        ty: "Op Definition".to_owned(),
+                                        ident: old.ident.imm,
+                                    },
+                                )
+                                .0,
+                            );
                         }
                     }
-                    Err(e) => println!("Failed to parse Op: {e}"),
+                    Err(e) => reporter.push_error(e.0),
                 },
                 "field_definition" => match Field::parse_node(source, &top_level_node) {
                     Ok(f) => {
                         if let Some(old) = self.fields.insert(f.ident.clone(), f) {
-                            errors.push(AstError::at_node(
-                                source,
-                                &top_level_node,
-                                AstErrorTy::IdentifierAlreadyExists {
-                                    ty: "Field Definition".to_owned(),
-                                    ident: old.ident.imm,
-                                },
-                            ));
+                            reporter.push_error(
+                                AstError::at_node(
+                                    source,
+                                    &top_level_node,
+                                    AstErrorTy::IdentifierAlreadyExists {
+                                        ty: "Field Definition".to_owned(),
+                                        ident: old.ident.imm,
+                                    },
+                                )
+                                .0,
+                            );
                         }
                     }
-                    Err(e) => println!("Failed to parse field: {e}"),
+                    Err(e) => reporter.push_error(e.0),
                 },
                 _ => {
                     println!(
@@ -166,11 +178,9 @@ impl Ast {
             }
         }
 
-        if errors.len() > 0 {
-            for err in &errors {
-                println!("{err}");
-            }
-            Err(errors.remove(0))
+        if reporter.has_errors() {
+            reporter.report_all();
+            Err(AstError(reporter.take_errors().remove(0)))
         } else {
             Ok(())
         }

@@ -1,6 +1,10 @@
-use vola_ast::Ast;
+use ahash::{AHashMap, AHashSet};
+use rvsdg::NodeRef;
+use vola_ast::{common::Identifier, Ast};
 
 use crate::{err::HirErr, VolaHir};
+
+mod alge;
 
 ///Tries to build a basic VolaHir representation from the AST.
 pub fn tranform_into_ast(ast: Ast) -> Result<VolaHir, HirErr> {
@@ -12,6 +16,26 @@ pub fn tranform_into_ast(ast: Ast) -> Result<VolaHir, HirErr> {
     // This allows us to connect all context variables in a second pass.
     //
     // At that point the basic un-typed, un-validated RVSDG of the AST should be build.
+
+    let Ast {
+        fields,
+        ops,
+        prims,
+        alges,
+    } = ast;
+
+    let mut graph = VolaHir::new();
+    //tracks how lambda identifier map to a defined node.
+    let mut lambda_map: AHashMap<Identifier, NodeRef> = AHashMap::default();
+
+    graph.on_omega_node(|omega| {
+        for (ident, alge) in alges {
+            let lambda_decl = alge::build_alge_lambda(omega, alge);
+
+            //let _ = lambda_map.insert(ident, lambda_decl);
+            todo!("continue")
+        }
+    });
 
     Err(HirErr::Any)
 }

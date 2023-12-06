@@ -11,6 +11,7 @@ edition = "2021"
 vola-ast = {path = "../vola-ast"}
 vola-common = {path = "../vola-common"}
 rvsdg = {path = "../rvsdg"}
+rvsdg-viewer = {path = "../rvsdg-viewer"}
 ahash.workspace = true
 tinyvec.workspace = true
 slotmap.workspace = true

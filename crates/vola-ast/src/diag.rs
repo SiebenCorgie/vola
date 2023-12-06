@@ -7,7 +7,7 @@ use thiserror::Error;
 use vola_common::{CommonError, Span};
 
 #[derive(Debug)]
-pub struct AstError(CommonError<AstErrorTy>);
+pub struct AstError(pub CommonError<AstErrorTy>);
 
 impl AstError {
     pub fn at_node(source_code: &[u8], node: &tree_sitter::Node, source: AstErrorTy) -> Self {
@@ -17,7 +17,7 @@ impl AstError {
             .to_owned();
 
         let span = Span::from(node);
-        AstError(CommonError::new(node_line, span, source))
+        AstError(CommonError::new(span, source))
     }
 
     ///Helper that creates an error if `node` is not of `expect_kind`.
@@ -73,16 +73,9 @@ impl From<AstErrorTy> for AstError {
     fn from(value: AstErrorTy) -> Self {
         AstError(CommonError {
             span: Span::empty(),
-            node_line: String::new(),
             source: value,
             backtrace: None,
         })
-    }
-}
-
-impl Display for AstError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.0.fmt(f)
     }
 }
 
@@ -116,4 +109,10 @@ pub enum AstErrorTy {
     Expected(String),
     #[error("Invalid node in tree, but error was not caught correctly")]
     UncaughtError,
+}
+
+impl Default for AstErrorTy {
+    fn default() -> Self {
+        AstErrorTy::UncaughtError
+    }
 }
