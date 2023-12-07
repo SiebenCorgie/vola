@@ -13,10 +13,12 @@ use tinyvec_string::TinyString;
 mod reporter;
 pub use reporter::ErrorReporter;
 
+pub type TinyErrorString = TinyString<[u8; 32]>;
+
 ///Source-Code span information.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Span {
-    pub file: TinyString<[u8; 32]>,
+    pub file: TinyErrorString,
     pub from: (usize, usize),
     pub to: (usize, usize),
 }
@@ -81,9 +83,8 @@ impl<'a, E: std::error::Error + Default> Display for ErrorPrintBundle<'a, E> {
         // attach annotation to the last line, by clamping to the first line + start offset, and last line - start offset
         let snippet = if error.span.from.0 != error.span.to.0 {
             let mut slices = Vec::with_capacity(error.span.to.0 - error.span.from.0);
-            for (slice_line, line_number) in
-                src_lines.iter().zip(error.span.from.0..=error.span.to.0)
-            {
+            for line_number in error.span.from.0..error.span.to.0 {
+                let slice_line = &src_lines[line_number];
                 let annotations = if line_number == error.span.from.0 {
                     vec![SourceAnnotation {
                         label: &error_str,
@@ -126,20 +127,20 @@ impl<'a, E: std::error::Error + Default> Display for ErrorPrintBundle<'a, E> {
             //Simple single line reporting
             Snippet {
                 title: Some(Annotation {
-                    label: Some("AST"),
+                    label: None,
                     id: None, //TODO might want to turn those into error IDs at some point
                     annotation_type: AnnotationType::Error,
                 }),
                 footer: vec![],
                 slices: vec![Slice {
-                    source: src_lines[0].as_str(),
+                    source: src_lines[error.span.from.0].as_str(),
                     line_start: error.span.from.0 + 1, //+1 since we are using indices, but want to display the line number
                     origin: None,                      //TODO carry filename at some point
                     fold: true,
                     annotations: vec![SourceAnnotation {
                         label: &error_str,
                         annotation_type: AnnotationType::Error,
-                        range: (0, error.span.to.1 - error.span.from.1),
+                        range: (error.span.from.1, error.span.to.1),
                     }],
                 }],
                 opt: FormatOptions {

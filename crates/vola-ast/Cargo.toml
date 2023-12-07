@@ -19,3 +19,4 @@ tinyvec.workspace = true
 graphviz-rust = {workspace = true, optional = true}
 backtrace.workspace = true
 annotate-snippets.workspace = true
+lazy_static = "1.4.0"

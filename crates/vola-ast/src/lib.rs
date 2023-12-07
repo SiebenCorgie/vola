@@ -22,9 +22,8 @@
 //! NOTE(tendsin): Lets see if this actually works out this way :D
 
 use ahash::AHashMap;
-use diag::{AstError, AstErrorTy};
+use diag::{print_errors, report_error, set_reporter_file_path, AstError, AstErrorTy};
 use std::path::Path;
-use vola_common::{CommonError, ErrorReporter, Span};
 
 use common::{Alge, Field, Identifier, Op, Prim};
 pub use parser::parser;
@@ -62,6 +61,8 @@ impl Ast {
     ///Tries to parse `file` using `tree-sitter-vola` into an [Ast].
     pub fn from_file(file: impl AsRef<Path>) -> Result<Self, AstError> {
         let mut parser = parser().map_err(|e| AstErrorTy::from(e))?;
+        let file_path = file.as_ref().to_str().unwrap().to_owned();
+        set_reporter_file_path(&file_path);
         let file = std::fs::read(file).map_err(|e| AstErrorTy::from(e))?;
         let syn_tree = {
             let text = core::str::from_utf8(&file).map_err(|e| AstErrorTy::from(e))?;
@@ -93,14 +94,13 @@ impl Ast {
     ) -> Result<(), AstError> {
         let root_node = tree.root_node();
         let mut cursor = tree.walk();
-        let mut reporter = ErrorReporter::new();
 
         for top_level_node in root_node.children(&mut cursor) {
             match top_level_node.kind() {
                 "alge_definition" => match Alge::parse_node(source, &top_level_node) {
                     Ok(f) => {
                         if let Some(old) = self.alges.insert(f.ident.clone(), f) {
-                            reporter.push_error(
+                            report_error(
                                 AstError::at_node(
                                     source,
                                     &top_level_node,
@@ -113,12 +113,12 @@ impl Ast {
                             );
                         }
                     }
-                    Err(e) => reporter.push_error(e.0),
+                    Err(e) => report_error(e.0),
                 },
                 "prim_definition" => match Prim::parse_node(source, &top_level_node) {
                     Ok(f) => {
                         if let Some(old) = self.prims.insert(f.ident.clone(), f) {
-                            reporter.push_error(
+                            report_error(
                                 AstError::at_node(
                                     source,
                                     &top_level_node,
@@ -131,12 +131,12 @@ impl Ast {
                             );
                         }
                     }
-                    Err(e) => reporter.push_error(e.0),
+                    Err(e) => report_error(e.0),
                 },
                 "op_definition" => match Op::parse_node(source, &top_level_node) {
                     Ok(f) => {
                         if let Some(old) = self.ops.insert(f.ident.clone(), f) {
-                            reporter.push_error(
+                            report_error(
                                 AstError::at_node(
                                     source,
                                     &top_level_node,
@@ -149,12 +149,12 @@ impl Ast {
                             );
                         }
                     }
-                    Err(e) => reporter.push_error(e.0),
+                    Err(e) => report_error(e.0),
                 },
                 "field_definition" => match Field::parse_node(source, &top_level_node) {
                     Ok(f) => {
                         if let Some(old) = self.fields.insert(f.ident.clone(), f) {
-                            reporter.push_error(
+                            report_error(
                                 AstError::at_node(
                                     source,
                                     &top_level_node,
@@ -167,7 +167,7 @@ impl Ast {
                             );
                         }
                     }
-                    Err(e) => reporter.push_error(e.0),
+                    Err(e) => report_error(e.0),
                 },
                 _ => {
                     println!(
@@ -178,11 +178,11 @@ impl Ast {
             }
         }
 
-        if reporter.has_errors() {
-            reporter.report_all();
-            Err(AstError(reporter.take_errors().remove(0)))
-        } else {
+        let mut reported_errors = print_errors();
+        if reported_errors.is_empty() {
             Ok(())
+        } else {
+            Err(AstError(reported_errors.remove(0)))
         }
     }
 

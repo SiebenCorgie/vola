@@ -1,10 +1,31 @@
 //! AST diagnosis helper. This is mostly Span of nodes, as well as AST errors and their reporting.
 
-use std::{fmt::Display, num::ParseIntError};
+use std::{num::ParseIntError, sync::Mutex};
 
+use lazy_static::lazy_static;
 use thiserror::Error;
 
-use vola_common::{CommonError, Span};
+use tinyvec::TinyVec;
+use vola_common::{CommonError, ErrorReporter, Span};
+
+lazy_static! {
+    static ref REPORTER: Mutex<ErrorReporter<AstErrorTy>> = Mutex::new(ErrorReporter::new());
+}
+
+///Sets the default file for reported errors.
+pub fn set_reporter_file_path(file_path: &str) {
+    REPORTER.lock().unwrap().set_default_file(file_path)
+}
+
+///Reports an error to the static reporter. All reported errors can be printed via
+/// [print_errors].
+pub fn report_error(error: CommonError<AstErrorTy>) {
+    REPORTER.lock().unwrap().push_error(error)
+}
+
+pub fn print_errors() -> TinyVec<[CommonError<AstErrorTy>; 10]> {
+    REPORTER.lock().unwrap().report_all()
+}
 
 #[derive(Debug)]
 pub struct AstError(pub CommonError<AstErrorTy>);

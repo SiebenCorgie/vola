@@ -10,3 +10,9 @@ pub enum HirErr {
     #[error("RVSDG builder error: {0}")]
     RvsdgBuilderError(#[from] BuilderError),
 }
+
+impl Default for HirErr {
+    fn default() -> Self {
+        HirErr::Any
+    }
+}

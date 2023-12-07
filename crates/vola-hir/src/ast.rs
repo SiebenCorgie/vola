@@ -1,13 +1,17 @@
 use ahash::{AHashMap, AHashSet};
 use rvsdg::NodeRef;
 use vola_ast::{common::Identifier, Ast};
+use vola_common::ErrorReporter;
 
 use crate::{err::HirErr, VolaHir};
 
 mod alge;
 
 ///Tries to build a basic VolaHir representation from the AST.
-pub fn tranform_into_ast(ast: Ast) -> Result<VolaHir, HirErr> {
+pub fn tranform_into_ast(
+    ast: Ast,
+    reporter: &mut ErrorReporter<HirErr>,
+) -> Result<VolaHir, HirErr> {
     //The transformer will create a lambda for each function-like
     // expression in our AST. Fields are exported, all other expressions not
     // (for now, TODO: maybe allow export for vola libraries?)
