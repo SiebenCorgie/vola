@@ -17,7 +17,7 @@ pub enum UnOp {
 }
 
 impl FromSitter for UnOp {
-    fn parse_node(source: &[u8], node: &tree_sitter::Node) -> Result<Self, AstError>
+    fn parse_node(_source: &[u8], node: &tree_sitter::Node) -> Result<Self, AstError>
     where
         Self: Sized,
     {
@@ -25,7 +25,6 @@ impl FromSitter for UnOp {
             "!" => Ok(UnOp::Not),
             "-" => Ok(UnOp::Neg),
             _ => Err(AstError::at_node(
-                source,
                 &node,
                 AstErrorTy::UnexpectedToken {
                     token: node.kind().to_owned(),
@@ -48,7 +47,7 @@ pub enum BinOp {
 impl BinOp {
     ///Tries to parse assignment op. So `+=`, `*=` etc. Returns None if its just an assignment.
     pub fn parse_assign_op(
-        source: &[u8],
+        _source: &[u8],
         node: &tree_sitter::Node,
     ) -> Result<Option<Self>, AstError> {
         match node.kind() {
@@ -59,7 +58,6 @@ impl BinOp {
             "%=" => Ok(Some(BinOp::Mod)),
             "=" => Ok(None),
             _ => Err(AstError::at_node(
-                source,
                 &node,
                 AstErrorTy::UnexpectedToken {
                     token: node.kind().to_owned(),
@@ -71,7 +69,7 @@ impl BinOp {
 }
 
 impl FromSitter for BinOp {
-    fn parse_node(source: &[u8], node: &tree_sitter::Node) -> Result<Self, AstError>
+    fn parse_node(_source: &[u8], node: &tree_sitter::Node) -> Result<Self, AstError>
     where
         Self: Sized,
     {
@@ -82,7 +80,6 @@ impl FromSitter for BinOp {
             "/" => Ok(BinOp::Div),
             "%" => Ok(BinOp::Mod),
             _ => Err(AstError::at_node(
-                source,
                 &node,
                 AstErrorTy::UnexpectedToken {
                     token: node.kind().to_owned(),
@@ -210,7 +207,6 @@ impl FromSitter for AlgeExpr {
                 Ok(AlgeExpr::List(list))
             }
             _ => Err(AstError::at_node(
-                source,
                 &node,
                 AstErrorTy::UnexpectedToken {
                     token: node.kind().to_owned(),
@@ -227,7 +223,7 @@ impl AlgeExpr {
         source: &[u8],
         call_expr: &tree_sitter::Node,
     ) -> Result<(Identifier, Vec<AlgeExpr>), AstError> {
-        AstError::kind_expected(source, call_expr, "call_expr")?;
+        AstError::kind_expected(call_expr, "call_expr")?;
 
         let mut walker = call_expr.walk();
         let mut children = call_expr.children(&mut walker);

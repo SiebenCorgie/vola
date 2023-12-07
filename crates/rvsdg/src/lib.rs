@@ -24,6 +24,7 @@ use slotmap::{new_key_type, SlotMap};
 use tinyvec::TinyVec;
 
 pub mod analyze;
+pub mod attrib;
 pub mod builder;
 pub mod common;
 pub mod edge;

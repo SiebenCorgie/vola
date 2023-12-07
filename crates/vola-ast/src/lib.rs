@@ -70,7 +70,6 @@ impl Ast {
         };
 
         let mut ast = Ast::empty();
-
         ast.try_parse_tree(&file, &syn_tree)?;
 
         Ok(ast)
@@ -102,7 +101,6 @@ impl Ast {
                         if let Some(old) = self.alges.insert(f.ident.clone(), f) {
                             report_error(
                                 AstError::at_node(
-                                    source,
                                     &top_level_node,
                                     AstErrorTy::IdentifierAlreadyExists {
                                         ty: "Alge".to_owned(),
@@ -120,7 +118,6 @@ impl Ast {
                         if let Some(old) = self.prims.insert(f.ident.clone(), f) {
                             report_error(
                                 AstError::at_node(
-                                    source,
                                     &top_level_node,
                                     AstErrorTy::IdentifierAlreadyExists {
                                         ty: "Prim Definition".to_owned(),
@@ -138,7 +135,6 @@ impl Ast {
                         if let Some(old) = self.ops.insert(f.ident.clone(), f) {
                             report_error(
                                 AstError::at_node(
-                                    source,
                                     &top_level_node,
                                     AstErrorTy::IdentifierAlreadyExists {
                                         ty: "Op Definition".to_owned(),
@@ -156,7 +152,6 @@ impl Ast {
                         if let Some(old) = self.fields.insert(f.ident.clone(), f) {
                             report_error(
                                 AstError::at_node(
-                                    source,
                                     &top_level_node,
                                     AstErrorTy::IdentifierAlreadyExists {
                                         ty: "Field Definition".to_owned(),

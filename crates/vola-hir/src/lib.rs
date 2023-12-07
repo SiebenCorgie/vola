@@ -12,12 +12,25 @@
 
 pub use edge::HirEdge;
 pub use ops::HirOp;
-use rvsdg::Rvsdg;
+use rvsdg::{attrib::AttribStore, Rvsdg};
+use types::HirTypeState;
 
 mod ast;
 mod edge;
-mod err;
+pub(crate) mod err;
 mod ops;
 mod types;
 
-pub type VolaHir = Rvsdg<HirOp, HirEdge>;
+pub struct VolaHir {
+    rvsdg: Rvsdg<HirOp, HirEdge>,
+    type_states: AttribStore<HirTypeState>,
+}
+
+impl VolaHir {
+    pub fn new() -> Self {
+        VolaHir {
+            rvsdg: Rvsdg::new(),
+            type_states: AttribStore::new(),
+        }
+    }
+}

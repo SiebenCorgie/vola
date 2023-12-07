@@ -1,7 +1,5 @@
 use tree_sitter::Parser;
-use vola_common::ErrorReporter;
-
-use crate::{diag::AstErrorTy, AstError};
+use crate::{AstError};
 
 pub trait FromSitter {
     ///Parses `Self` from some node

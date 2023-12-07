@@ -31,28 +31,18 @@ pub fn print_errors() -> TinyVec<[CommonError<AstErrorTy>; 10]> {
 pub struct AstError(pub CommonError<AstErrorTy>);
 
 impl AstError {
-    pub fn at_node(source_code: &[u8], node: &tree_sitter::Node, source: AstErrorTy) -> Self {
-        let node_line = node
-            .utf8_text(source_code)
-            .unwrap_or("CouldNotParseLine")
-            .to_owned();
-
+    pub fn at_node(node: &tree_sitter::Node, source: AstErrorTy) -> Self {
         let span = Span::from(node);
         AstError(CommonError::new(span, source))
     }
 
     ///Helper that creates an error if `node` is not of `expect_kind`.
-    pub fn kind_expected(
-        source_code: &[u8],
-        node: &tree_sitter::Node,
-        expect_kind: &str,
-    ) -> Result<(), Self> {
+    pub fn kind_expected(node: &tree_sitter::Node, expect_kind: &str) -> Result<(), Self> {
         if node.kind() == expect_kind {
             return Ok(());
         }
 
         Err(Self::at_node(
-            source_code,
             node,
             AstErrorTy::UnexpectedNodeKind {
                 actual: node.kind().to_owned(),
@@ -63,27 +53,18 @@ impl AstError {
 
     ///Helper that checks if the child iterator has ended. Reports an error if not.
     pub fn expect_end<'a>(
-        source_code: &[u8],
         iter: &mut dyn Iterator<Item = tree_sitter::Node<'a>>,
     ) -> Result<(), Self> {
         if let Some(node) = iter.next() {
-            Err(AstError::at_node(
-                source_code,
-                &node,
-                AstErrorTy::ExpectEndOfStatement,
-            ))
+            Err(AstError::at_node(&node, AstErrorTy::ExpectEndOfStatement))
         } else {
             Ok(())
         }
     }
 
-    pub fn uncaught_error(source_code: &[u8], node: &tree_sitter::Node) -> Result<(), Self> {
+    pub fn uncaught_error(node: &tree_sitter::Node) -> Result<(), Self> {
         if node.has_error() {
-            Err(AstError::at_node(
-                source_code,
-                node,
-                AstErrorTy::UncaughtError,
-            ))
+            Err(AstError::at_node(node, AstErrorTy::UncaughtError))
         } else {
             Ok(())
         }

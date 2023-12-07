@@ -1,17 +1,16 @@
 use ahash::{AHashMap, AHashSet};
-use rvsdg::NodeRef;
+use rvsdg::{NodeRef, Rvsdg};
+use tinyvec::ArrayVec;
 use vola_ast::{common::Identifier, Ast};
-use vola_common::ErrorReporter;
 
-use crate::{err::HirErr, VolaHir};
+use crate::{err::PassResult, VolaHir};
 
 mod alge;
 
+pub type TinyCollection<T> = ArrayVec<[T; 3]>;
+
 ///Tries to build a basic VolaHir representation from the AST.
-pub fn tranform_into_ast(
-    ast: Ast,
-    reporter: &mut ErrorReporter<HirErr>,
-) -> Result<VolaHir, HirErr> {
+pub fn tranform_into_ast(ast: Ast) -> PassResult<VolaHir> {
     //The transformer will create a lambda for each function-like
     // expression in our AST. Fields are exported, all other expressions not
     // (for now, TODO: maybe allow export for vola libraries?)
@@ -32,14 +31,14 @@ pub fn tranform_into_ast(
     //tracks how lambda identifier map to a defined node.
     let mut lambda_map: AHashMap<Identifier, NodeRef> = AHashMap::default();
 
-    graph.on_omega_node(|omega| {
+    graph.rvsdg.on_omega_node(|omega| {
         for (ident, alge) in alges {
-            let lambda_decl = alge::build_alge_lambda(omega, alge);
+            let lambda_decl = alge::build_alge_lambda(&mut graph.type_states, omega, alge);
 
             //let _ = lambda_map.insert(ident, lambda_decl);
             todo!("continue")
         }
     });
 
-    Err(HirErr::Any)
+    PassResult::Ok(graph)
 }
