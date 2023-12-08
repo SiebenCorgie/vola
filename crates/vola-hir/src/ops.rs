@@ -87,6 +87,29 @@ pub struct HirOp {
     pub outputs: TinyVec<[Output; 2]>,
 }
 
+impl HirOp {
+    pub fn new(span: Span, op_ty: HirOpTy) -> Self {
+        HirOp {
+            span,
+            op_ty,
+            inputs: TinyVec::default(),
+            outputs: TinyVec::default(),
+        }
+    }
+
+    ///Configures the given number of inputs / outputs
+    pub fn with_inout(mut self, input_count: usize, output_count: usize) -> Self {
+        for _ in 0..input_count {
+            self.inputs.push(Input::default());
+        }
+        for _ in 0..output_count {
+            self.outputs.push(Output::default());
+        }
+
+        self
+    }
+}
+
 impl LangNode for HirOp {
     fn inputs(&self) -> &[Input] {
         &self.inputs

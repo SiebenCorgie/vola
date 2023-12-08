@@ -4,6 +4,7 @@ use graphviz_rust::{
     printer::PrinterContext,
 };
 use vola_ast::{diag::AstError, Ast};
+use vola_hir::VolaHir;
 
 fn main() -> Result<(), AstError> {
     let file = std::env::args().nth(1).unwrap_or({
@@ -23,6 +24,10 @@ fn main() -> Result<(), AstError> {
         ],
     )
     .unwrap();
+
+    //If that worked, try to build the hir for that ast
+    let mut hir = VolaHir::new();
+    hir.intern_ast(ast).unwrap();
 
     Ok(())
 }

@@ -302,7 +302,12 @@ impl crate::common::Stmt {
 impl AlgeExpr {
     pub fn dot_node(&self, rnd: &mut usize, stmt: &mut Vec<Stmt>) -> Vertex {
         match self {
-            AlgeExpr::BinOp { op, left, right } => {
+            AlgeExpr::BinOp {
+                op,
+                left,
+                right,
+                span: _,
+            } => {
                 let id = NodeId(Id::Plain(format!("BinOp_{:?}_{rnd}", op)), None);
                 *rnd += 1;
 
@@ -325,7 +330,7 @@ impl AlgeExpr {
 
                 Vertex::N(id)
             }
-            AlgeExpr::UnaryOp { op, expr } => {
+            AlgeExpr::UnaryOp { op, expr, span: _ } => {
                 let id = NodeId(Id::Plain(format!("UnOp_{:?}_{rnd}", op)), None);
                 *rnd += 1;
 
@@ -341,7 +346,11 @@ impl AlgeExpr {
 
                 Vertex::N(id)
             }
-            AlgeExpr::Call { ident, args } => {
+            AlgeExpr::Call {
+                ident,
+                args,
+                span: _,
+            } => {
                 let id = NodeId(Id::Plain(format!("Call_{}_{rnd}", ident.imm)), None);
                 *rnd += 1;
                 stmt.push(Stmt::Node(Node {
@@ -359,7 +368,11 @@ impl AlgeExpr {
 
                 Vertex::N(id)
             }
-            AlgeExpr::PrimAccess { ident, field } => {
+            AlgeExpr::PrimAccess {
+                ident,
+                field,
+                span: _,
+            } => {
                 let id = NodeId(
                     Id::Plain(format!("PrimAccess_{}_{}_{rnd}", ident.imm, field.imm)),
                     None,
@@ -375,7 +388,7 @@ impl AlgeExpr {
                 }));
                 Vertex::N(id)
             }
-            AlgeExpr::List(list) => {
+            AlgeExpr::List { list, span: _ } => {
                 let id = NodeId(Id::Plain(format!("List_{rnd}")), None);
                 *rnd += 1;
                 stmt.push(Stmt::Node(Node {
@@ -393,7 +406,10 @@ impl AlgeExpr {
 
                 Vertex::N(id)
             }
-            AlgeExpr::Float(imm) => {
+            AlgeExpr::Float {
+                float: imm,
+                span: _,
+            } => {
                 let id = NodeId(
                     Id::Plain(format!(
                         "Float_{}_{}_{rnd}",
@@ -411,7 +427,7 @@ impl AlgeExpr {
                 }));
                 Vertex::N(id)
             }
-            AlgeExpr::Identifier(ident) => {
+            AlgeExpr::Identifier { ident, span: _ } => {
                 let id = NodeId(Id::Plain(format!("Ident_{}_{rnd}", ident.imm)), None);
                 *rnd += 1;
                 stmt.push(Stmt::Node(Node {
@@ -420,7 +436,7 @@ impl AlgeExpr {
                 }));
                 Vertex::N(id)
             }
-            AlgeExpr::Kw(kw) => {
+            AlgeExpr::Kw { kw, span: _ } => {
                 let id = NodeId(Id::Plain(format!("KW_{:?}_{rnd}", kw)), None);
                 *rnd += 1;
                 stmt.push(Stmt::Node(Node {

@@ -2,7 +2,6 @@
 //!
 use crate::{
     edge::{InportLocation, InputType, LangEdge, OutportLocation, OutputType},
-    label::LabelLoc,
     nodes::{DeltaNode, LambdaNode, LangNode, Node, OmegaNode, PhiNode},
     NodeRef, Rvsdg,
 };
@@ -291,47 +290,45 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> OmegaBuilder<'a, N, E> {
         }
     }
 
-    ///Adds an import port with the given label. The label will used for the import of the function or value.
+    ///Adds an import port.
     /// Returns the argument_index of the port allocated.
-    pub fn import(&mut self, label: impl Into<String>) -> OutportLocation {
+    pub fn import(&mut self) -> OutportLocation {
         let idx = self.node_mut().add_import();
         let portloc = OutportLocation {
             node: self.node_ref,
             output: OutputType::Argument(idx),
         };
-        //annotate the port with the given label
-        self.ctx
-            .push_label(LabelLoc::OutPort(portloc.clone()), label.into());
         portloc
     }
 
-    ///Adds an export port with the given label. The label will used for the export of the function or value (read C-FFI style).
+    ///Adds an export port.
     /// Returns the argument_index of the port allocated.
-    pub fn export(&mut self, label: String) -> InportLocation {
+    pub fn export(&mut self) -> InportLocation {
         let idx = self.node_mut().add_export();
         let portloc = InportLocation {
             node: self.node_ref,
             input: InputType::Result(idx),
         };
         //annotate the port with the given label
-        self.ctx
-            .push_label(LabelLoc::InPort(portloc.clone()), label.into());
         portloc
     }
 
     ///Allows you to add a global value ([δ-Node](crate::nodes::DeltaNode)) to the translation unit.
     ///
     /// Returns the node reference to the created value.
-    pub fn new_global(&mut self, f: impl FnOnce(&mut DeltaBuilder<N, E>)) -> NodeRef {
-        let created = {
+    pub fn new_global<R: 'static>(
+        &mut self,
+        f: impl FnOnce(&mut DeltaBuilder<N, E>) -> R,
+    ) -> (NodeRef, R) {
+        let (created, res) = {
             let mut builder = DeltaBuilder::new(self.ctx);
-            f(&mut builder);
-            builder.build()
+            let res = f(&mut builder);
+            (builder.build(), res)
         };
 
         //add the created node to our region
         self.node_mut().body.nodes.insert(created);
-        created
+        (created, res)
     }
 
     ///Allows you to add a function ([λ-Node](crate::nodes::LambdaNode)) to the translation unit.
@@ -339,22 +336,22 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> OmegaBuilder<'a, N, E> {
     /// If `export` is `Some(label)`, it will be added to the exported functions of the translation unit under the name of `label`.
     ///
     /// Returns the node reference to the created value.
-    pub fn new_function(
+    pub fn new_function<R: 'static>(
         &mut self,
-        export: Option<String>,
-        f: impl FnOnce(&mut LambdaBuilder<N, E>),
-    ) -> NodeRef {
-        let created = {
+        export: bool,
+        f: impl FnOnce(&mut LambdaBuilder<N, E>) -> R,
+    ) -> (NodeRef, R) {
+        let (created, res) = {
             let mut builder = LambdaBuilder::new(self.ctx);
-            f(&mut builder);
-            builder.build()
+            let res = f(&mut builder);
+            (builder.build(), res)
         };
 
         //add the created node to our region
         self.node_mut().body.nodes.insert(created);
 
-        if let Some(explabel) = export {
-            let export_port = self.export(explabel);
+        if export {
+            let export_port = self.export();
             self.ctx
                 .connect(
                     OutportLocation {
@@ -366,7 +363,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> OmegaBuilder<'a, N, E> {
                 )
                 .unwrap();
         }
-        created
+        (created, res)
     }
     ///lets you change the behaviour of this node.
     pub fn on_region<R>(&mut self, f: impl FnOnce(&mut RegionBuilder<N, E, OmegaNode>) -> R) -> R {

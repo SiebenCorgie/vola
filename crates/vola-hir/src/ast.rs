@@ -3,14 +3,17 @@ use rvsdg::{NodeRef, Rvsdg};
 use tinyvec::ArrayVec;
 use vola_ast::{common::Identifier, Ast};
 
-use crate::{err::PassResult, VolaHir};
+use crate::{
+    err::{HirErr, PassResult},
+    VolaHir,
+};
 
 mod alge;
 
 pub type TinyCollection<T> = ArrayVec<[T; 3]>;
 
 ///Tries to build a basic VolaHir representation from the AST.
-pub fn tranform_into_ast(ast: Ast) -> PassResult<VolaHir> {
+pub fn tranform_into_ast(ast: Ast, hir: &mut VolaHir) -> Result<(), HirErr> {
     //The transformer will create a lambda for each function-like
     // expression in our AST. Fields are exported, all other expressions not
     // (for now, TODO: maybe allow export for vola libraries?)
@@ -33,12 +36,11 @@ pub fn tranform_into_ast(ast: Ast) -> PassResult<VolaHir> {
 
     graph.rvsdg.on_omega_node(|omega| {
         for (ident, alge) in alges {
-            let lambda_decl = alge::build_alge_lambda(&mut graph.type_states, omega, alge);
+            let lambda_decl = alge::build_alge_lambda(&mut graph.querypool, omega, alge).unwrap();
 
-            //let _ = lambda_map.insert(ident, lambda_decl);
-            todo!("continue")
+            let _ = lambda_map.insert(ident, lambda_decl);
         }
     });
 
-    PassResult::Ok(graph)
+    Ok(())
 }

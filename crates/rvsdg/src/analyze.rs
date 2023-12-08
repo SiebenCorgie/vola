@@ -10,6 +10,7 @@ use ahash::AHashSet;
 use crate::{
     edge::{InportLocation, InputType, LangEdge, OutportLocation, OutputType},
     nodes::{LangNode, Node},
+    region::RegionLocation,
     NodeRef, Rvsdg,
 };
 

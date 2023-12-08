@@ -281,4 +281,14 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static, PARENT: StructuralNode>
 
         Ok((apply_node_ref, arg_edges))
     }
+
+    ///Searches for `node` in all parent regions to this region. If found, builds an import path (employing context variables)
+    /// into this region. If successful, returns the port `node` is imported on.
+    pub fn import_output(
+        &mut self,
+        src: OutportLocation,
+        dst: NodeRef,
+    ) -> Result<OutportLocation, GraphError> {
+        self.ctx_mut().import_output(src, dst)
+    }
 }

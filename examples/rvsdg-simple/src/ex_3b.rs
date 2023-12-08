@@ -18,7 +18,7 @@ pub fn emit() -> Rvsdg<LNode, VSEdge> {
      * }
      */
     graph.on_omega_node(|o| {
-        let phi_export = o.export("f".to_string());
+        let phi_export = o.export();
         o.on_region(|reg| {
             let (_phi_node, phi_out) = reg.new_recursive_region(|phi| {
                 //defines the recursion_variable  we put f() into.

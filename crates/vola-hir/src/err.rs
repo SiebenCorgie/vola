@@ -61,12 +61,21 @@ impl<T> PassResult<T> {
             Self::Ok(ok) => ok,
         }
     }
+
+    pub fn try_unwrap(mut self) -> Option<T> {
+        match self {
+            Self::Abort(_e) => None,
+            Self::Continue { result, .. } | Self::Ok(result) => Some(result),
+        }
+    }
 }
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, Clone)]
 pub enum HirErr {
     #[error("Any error occured")]
     Any,
+    #[error("Could not find lambda decleration with identifier {0}")]
+    UnknownLambda(String),
     #[error("RVSDG error: {0}")]
     GraphError(#[from] GraphError),
     #[error("RVSDG builder error: {0}")]

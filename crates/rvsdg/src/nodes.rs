@@ -214,6 +214,31 @@ impl<N: LangNode + 'static> Node<N> {
             },
         }
     }
+
+    ///Returns true if this is either a lambda, or phi node
+    pub fn is_callable(&self) -> bool {
+        if let Node::Lambda(_) | Node::Phi(_) = self {
+            true
+        } else {
+            false
+        }
+    }
+
+    ///Returns true, if any input or output port has a connection
+    pub fn is_connected(&self) -> bool {
+        for input in self.inputs().iter() {
+            if input.edge.is_some() {
+                return true;
+            }
+        }
+        for output in self.outputs().iter() {
+            if !output.edges.is_empty() {
+                return true;
+            }
+        }
+
+        false
+    }
 }
 
 impl<N: LangNode + Debug + 'static> Display for Node<N> {

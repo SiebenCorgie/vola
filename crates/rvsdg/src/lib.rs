@@ -17,11 +17,9 @@ use ahash::AHashMap;
 use builder::OmegaBuilder;
 use edge::{Edge, InportLocation, InputType, LangEdge, OutportLocation, OutputType};
 use err::GraphError;
-use label::LabelLoc;
 use nodes::{LangNode, Node, OmegaNode};
-use region::Region;
+use region::{Region, RegionLocation};
 use slotmap::{new_key_type, SlotMap};
-use tinyvec::TinyVec;
 
 pub mod analyze;
 pub mod attrib;
@@ -29,9 +27,9 @@ pub mod builder;
 pub mod common;
 pub mod edge;
 pub mod err;
-pub mod label;
 pub mod nodes;
 pub mod region;
+pub mod util;
 
 new_key_type! {pub struct NodeRef;}
 impl Display for NodeRef {
@@ -90,9 +88,6 @@ impl EdgeRef {
 pub struct Rvsdg<N: LangNode + 'static, E: LangEdge + 'static> {
     pub(crate) nodes: SlotMap<NodeRef, Node<N>>,
     pub(crate) edges: SlotMap<EdgeRef, Edge<E>>,
-
-    pub(crate) labels: AHashMap<LabelLoc, TinyVec<[String; 1]>>,
-
     ///Entrypoint of this translation unit.
     pub(crate) omega: NodeRef,
 }
@@ -107,7 +102,6 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
 
         Rvsdg {
             edges: SlotMap::default(),
-            labels: AHashMap::default(),
             nodes,
             omega,
         }
@@ -139,24 +133,6 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
     ///Returns reference to the node, assuming that it exists. Panics if it does not exist.
     pub fn node(&self, nref: NodeRef) -> &Node<N> {
         self.nodes.get(nref).as_ref().unwrap()
-    }
-
-    pub fn push_label(&mut self, label: LabelLoc, value: String) {
-        if let Some(vals) = self.labels.get_mut(&label) {
-            vals.push(value);
-        } else {
-            let mut new_vec = TinyVec::default();
-            new_vec.push(value);
-            self.labels.insert(label, new_vec);
-        }
-    }
-
-    pub fn labels(&self, label: &LabelLoc) -> Option<&TinyVec<[String; 1]>> {
-        self.labels.get(label)
-    }
-
-    pub fn labels_mut(&mut self, label: &LabelLoc) -> Option<&mut TinyVec<[String; 1]>> {
-        self.labels.get_mut(label)
     }
 
     ///Returns reference to the node, assuming that it exists. Panics if it does not exist.
@@ -300,6 +276,7 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
             .unwrap()
             .edges
             .push(edge);
+
         self.node_mut(dst.node).inport_mut(&dst.input).unwrap().edge = Some(edge);
 
         //now notify the region of this new edge

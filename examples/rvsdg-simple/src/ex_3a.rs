@@ -22,9 +22,9 @@ pub fn emit() -> Rvsdg<LNode, VSEdge> {
     // }
     // ```
     graph.on_omega_node(|tu| {
-        let puts_import = tu.import("puts");
+        let puts_import = tu.import();
         //create the global "max" value
-        let global_string_max = tu.new_global(|glob| {
+        let (global_string_max, _) = tu.new_global(|glob| {
             glob.on_region(|reg| {
                 let const_m = reg.insert_node(LNode::new(MyNodes::ImmChar('m')));
                 let const_a = reg.insert_node(LNode::new(MyNodes::ImmChar('a')));
@@ -54,7 +54,7 @@ pub fn emit() -> Rvsdg<LNode, VSEdge> {
         });
 
         //Create the max function
-        let function_max = tu.new_function(None, |func| {
+        let (function_max, _) = tu.new_function(false, |func| {
             let arg_x = func.add_argument();
             let arg_y = func.add_argument();
             let res_max = func.add_result();
@@ -142,7 +142,7 @@ pub fn emit() -> Rvsdg<LNode, VSEdge> {
         });
 
         //now import global string-max and function_max to define f
-        let funktion_f = tu.new_function(Some("f".to_owned()), |func| {
+        let (funktion_f, _) = tu.new_function(true, |func| {
             let (_cv_input_fmax, cv_arg_fmax) = func.add_context_variable();
             let (_cv_input_fputs, cv_arg_fputs) = func.add_context_variable();
             let (_cv_str_max_input, cv_str_max) = func.add_context_variable();

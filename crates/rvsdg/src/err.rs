@@ -9,7 +9,7 @@ use crate::{
 pub enum LegalizationError {}
 
 ///Errors that are returned when using the builder. Those are mostly recoverabel.
-#[derive(Error, Debug)]
+#[derive(Error, Debug, Clone)]
 pub enum BuilderError {
     #[error("The Node {0} is not part of the region it is used in. consider importing it as argument or context variable.")]
     NodeNotInRegion(NodeRef),
@@ -25,12 +25,17 @@ pub enum BuilderError {
 
 ///Errors that happen when operating on the graph directly. For instance, when trying to delete an
 /// invalid edge, accessing an non-existent node etc.
-#[derive(Error, Debug)]
+#[derive(Error, Debug, Clone)]
 pub enum GraphError {
     #[error("The edge {0} is invalid. It might have been deleted since its creation.")]
     InvalidEdge(EdgeRef),
     #[error("The node {0} is invalid. It might have been deleted since its creation.")]
     InvalidNode(NodeRef),
+
+    #[error("Unexpected node type")]
+    UnexpectedNodeType,
+    #[error("Node {0} was not declared in a parent region to {1} or {1} itself")]
+    NodeNotInParentRegion(NodeRef, NodeRef),
 
     #[error("The definition of {0} is not a callable node.")]
     NotCallable(NodeRef),
