@@ -2,6 +2,7 @@ use thiserror::Error;
 
 use crate::{
     edge::{InportLocation, InputType, OutportLocation, OutputType},
+    region::RegionLocation,
     EdgeRef, NodeRef,
 };
 
@@ -42,12 +43,10 @@ pub enum GraphError {
 
     #[error("{0} is not connected to any region's output, or input")]
     NotConnectedInRegion(NodeRef),
-    #[error("Source and destination port are not in the same region {src}.region({src_reg_idx}) != {dst}.region({dst_reg_idx})")]
+    #[error("Source and destination port are not in the same region {src:?} != {dst:?}")]
     NodesNotInSameRegion {
-        src: NodeRef,
-        src_reg_idx: usize,
-        dst: NodeRef,
-        dst_reg_idx: usize,
+        src: RegionLocation,
+        dst: RegionLocation,
     },
 
     #[error("{0:?} is already in use")]

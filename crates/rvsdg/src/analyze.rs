@@ -294,43 +294,6 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
         SuccWalker::new(self, node)
     }
 
-    ///Explores the region from this node, trying to find its parent node. Returns none, if the node is not connected to any
-    /// region's result, or argument via any reference.
-    ///
-    /// Otherwise returns the parent node, and region index of of this node's region in the parent node.
-    pub fn find_parent(&self, node: NodeRef) -> Option<(NodeRef, usize)> {
-        //First, check if we can find a source argument
-        for pred in self.walk_predecessors(node) {
-            match pred.output {
-                OutputType::Argument(_)
-                | OutputType::ContextVariableArgument(_)
-                | OutputType::RecursionVariableArgument(_) => return Some((pred.node, 0)),
-                OutputType::EntryVariableArgument {
-                    branch,
-                    entry_variable: _,
-                } => return Some((pred.node, branch)),
-                _ => {}
-            }
-        }
-
-        //if that didn't work, try the same for an result
-        for succ in self.walk_successors(node) {
-            match succ.input {
-                InputType::Result(_)
-                | InputType::RecursionVariableResult(_)
-                | InputType::ThetaPredicate
-                | InputType::LoopVariableResult(_) => return Some((succ.node, 0)),
-                InputType::ExitVariableResult {
-                    branch,
-                    exit_variable: _,
-                } => return Some((succ.node, branch)),
-                _ => {}
-            }
-        }
-        //Otherwise, this is not connected to a region
-        None
-    }
-
     ///Builds an iterator that emits all reachable nodes for the entrypoint of this graph. The iterator is breadth-first and top down style.
     ///
     /// _Reachable_ is defined as any node, that can be reached from any of the exported nodes.
@@ -360,20 +323,5 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
             walked,
             waiting_regions: VecDeque::new(),
         }
-    }
-
-    ///Does an exhaustive search for `node` in all known regions of the Rvsdg.
-    ///
-    /// Shouldn't be used to often, since this becomes really slow for bigger graphs.
-    //TODO: Remove, once we have NodeRef<->Region mapping
-    pub fn search_node_def(&self, node: NodeRef) -> Option<(NodeRef, usize)> {
-        for (key, rnode) in &self.nodes {
-            for (regidx, reg) in rnode.regions().iter().enumerate() {
-                if reg.nodes.contains(&node) {
-                    return Some((key, regidx));
-                }
-            }
-        }
-        None
     }
 }

@@ -240,41 +240,35 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
     ) -> Result<EdgeRef, GraphError> {
         //Find the region this port is defined in.
         // This is always the parent port, except for argument(like) ports, that are defined _on_ the region
-        let (src_parent_node, src_parent_region_index) =
-            if let Some(reg_idx) = src.output.argument_region_index() {
-                (src.node, reg_idx)
-            } else {
-                if let Some(parent) = self.find_parent(src.node) {
-                    parent
-                } else {
-                    self.search_node_def(src.node)
-                        .ok_or(GraphError::NotConnectedInRegion(src.node))?
-                }
-            };
+        let src_parent_region = if let Some(reg_idx) = src.output.argument_region_index() {
+            RegionLocation {
+                node: src.node,
+                region_index: reg_idx,
+            }
+        } else {
+            self.node(src.node)
+                .parent
+                .clone()
+                .expect("Expected src node to have a parent")
+        };
 
         //Similarly, all result-like outputs are defined on their source region, all others are defined in their parent's region.
-        let (dst_parent_node, dst_parent_region_index) =
-            if let Some(reg_idx) = dst.input.result_region_index() {
-                (dst.node, reg_idx)
-            } else {
-                if let Some(parent) = self.find_parent(dst.node) {
-                    parent
-                } else {
-                    //In this case we have go the _slow_ way, and check all regions for this node.
-                    //TODO: that is not really optimal, we'd want to have some kind of node<->region mapping
-                    //      that is not expressed by the edges. But we'd have to track that when moving nodes out of regions.
-                    self.search_node_def(dst.node)
-                        .ok_or(GraphError::NotConnectedInRegion(dst.node))?
-                }
-            };
+        let dst_parent_region = if let Some(reg_idx) = dst.input.result_region_index() {
+            RegionLocation {
+                node: dst.node,
+                region_index: reg_idx,
+            }
+        } else {
+            self.node(dst.node)
+                .parent
+                .clone()
+                .expect("Expected dst to have a src node")
+        };
 
-        if src_parent_node != dst_parent_node || src_parent_region_index != dst_parent_region_index
-        {
+        if src_parent_region != dst_parent_region {
             return Err(GraphError::NodesNotInSameRegion {
-                src: src_parent_node,
-                src_reg_idx: src_parent_region_index,
-                dst: dst_parent_node,
-                dst_reg_idx: dst_parent_region_index,
+                src: src_parent_region,
+                dst: dst_parent_region,
             });
         }
 
@@ -309,9 +303,9 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
         self.node_mut(dst.node).inport_mut(&dst.input).unwrap().edge = Some(edge);
 
         //now notify the region of this new edge
-        self.node_mut(src_parent_node)
+        self.node_mut(src_parent_region.node)
             .regions_mut()
-            .get_mut(src_parent_region_index)
+            .get_mut(src_parent_region.region_index)
             .expect("Expected region to exist!")
             .edges
             .insert(edge);
