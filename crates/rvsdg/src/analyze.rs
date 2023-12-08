@@ -9,8 +9,7 @@ use ahash::AHashSet;
 
 use crate::{
     edge::{InportLocation, InputType, LangEdge, OutportLocation, OutputType},
-    nodes::{LangNode, Node},
-    region::RegionLocation,
+    nodes::{LangNode, Node, NodeType},
     NodeRef, Rvsdg,
 };
 
@@ -279,8 +278,8 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
         //If the found node is λ/ϕ, we return.
 
         let producer = self.find_producer_out(src)?;
-        match self.node(producer) {
-            Node::Lambda(_) | Node::Phi(_) => Some(producer),
+        match self.node(producer).node_type {
+            NodeType::Lambda(_) | NodeType::Phi(_) => Some(producer),
             _ => None,
         }
     }

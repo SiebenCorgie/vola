@@ -2,7 +2,7 @@
 //!
 use crate::{
     edge::{InportLocation, InputType, LangEdge, OutportLocation, OutputType},
-    nodes::{DeltaNode, LambdaNode, LangNode, Node, OmegaNode, PhiNode},
+    nodes::{DeltaNode, LambdaNode, LangNode, NodeType, OmegaNode, PhiNode},
     NodeRef, Rvsdg,
 };
 
@@ -17,12 +17,12 @@ pub struct LambdaBuilder<'a, N: LangNode + 'static, E: LangEdge + 'static> {
 
 impl<'a, N: LangNode + 'static, E: LangEdge + 'static> LambdaBuilder<'a, N, E> {
     pub fn new(ctx: &'a mut Rvsdg<N, E>) -> Self {
-        let node_ref = ctx.new_node(Node::Lambda(LambdaNode::new()));
+        let node_ref = ctx.new_node(NodeType::Lambda(LambdaNode::new()));
         LambdaBuilder { ctx, node_ref }
     }
 
     pub fn node(&self) -> &LambdaNode {
-        if let Node::Lambda(l) = self.ctx.node(self.node_ref) {
+        if let NodeType::Lambda(l) = &self.ctx.node(self.node_ref).node_type {
             l
         } else {
             panic!("not lambda!")
@@ -30,7 +30,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> LambdaBuilder<'a, N, E> {
     }
 
     pub fn node_mut(&mut self) -> &mut LambdaNode {
-        if let Node::Lambda(l) = self.ctx.node_mut(self.node_ref) {
+        if let NodeType::Lambda(l) = &mut self.ctx.node_mut(self.node_ref).node_type {
             l
         } else {
             panic!("not lambda!")
@@ -95,7 +95,7 @@ pub struct DeltaBuilder<'a, N: LangNode + 'static, E: LangEdge + 'static> {
 
 impl<'a, N: LangNode + 'static, E: LangEdge + 'static> DeltaBuilder<'a, N, E> {
     pub fn new(ctx: &'a mut Rvsdg<N, E>) -> Self {
-        let node_ref = ctx.new_node(Node::Delta(DeltaNode::new()));
+        let node_ref = ctx.new_node(NodeType::Delta(DeltaNode::new()));
         DeltaBuilder { ctx, node_ref }
     }
 
@@ -106,7 +106,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> DeltaBuilder<'a, N, E> {
     }
 
     pub fn node(&self) -> &DeltaNode {
-        if let Node::Delta(d) = self.ctx.node(self.node_ref) {
+        if let NodeType::Delta(d) = &self.ctx.node(self.node_ref).node_type {
             d
         } else {
             panic!("not delta!")
@@ -114,7 +114,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> DeltaBuilder<'a, N, E> {
     }
 
     pub fn node_mut(&mut self) -> &mut DeltaNode {
-        if let Node::Delta(d) = self.ctx.node_mut(self.node_ref) {
+        if let NodeType::Delta(d) = &mut self.ctx.node_mut(self.node_ref).node_type {
             d
         } else {
             panic!("not delta!")
@@ -157,7 +157,7 @@ pub struct PhiBuilder<'a, N: LangNode + 'static, E: LangEdge + 'static> {
 
 impl<'a, N: LangNode + 'static, E: LangEdge + 'static> PhiBuilder<'a, N, E> {
     pub fn new(ctx: &'a mut Rvsdg<N, E>) -> Self {
-        let node_ref = ctx.new_node(Node::Phi(PhiNode::new()));
+        let node_ref = ctx.new_node(NodeType::Phi(PhiNode::new()));
         PhiBuilder { ctx, node_ref }
     }
 
@@ -169,7 +169,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> PhiBuilder<'a, N, E> {
     }
 
     pub fn node(&self) -> &PhiNode {
-        if let Node::Phi(p) = self.ctx.node(self.node_ref) {
+        if let NodeType::Phi(p) = &self.ctx.node(self.node_ref).node_type {
             p
         } else {
             panic!("not phi!")
@@ -177,7 +177,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> PhiBuilder<'a, N, E> {
     }
 
     pub fn node_mut(&mut self) -> &mut PhiNode {
-        if let Node::Phi(p) = self.ctx.node_mut(self.node_ref) {
+        if let NodeType::Phi(p) = &mut self.ctx.node_mut(self.node_ref).node_type {
             p
         } else {
             panic!("not phi!")
@@ -275,7 +275,7 @@ pub struct OmegaBuilder<'a, N: LangNode + 'static, E: LangEdge + 'static> {
 
 impl<'a, N: LangNode + 'static, E: LangEdge + 'static> OmegaBuilder<'a, N, E> {
     pub fn node(&self) -> &OmegaNode {
-        if let Node::Omega(o) = self.ctx.node(self.node_ref) {
+        if let NodeType::Omega(o) = &self.ctx.node(self.node_ref).node_type {
             o
         } else {
             panic!("not omega!")
@@ -283,7 +283,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> OmegaBuilder<'a, N, E> {
     }
 
     pub fn node_mut(&mut self) -> &mut OmegaNode {
-        if let Node::Omega(o) = self.ctx.node_mut(self.node_ref) {
+        if let NodeType::Omega(o) = &mut self.ctx.node_mut(self.node_ref).node_type {
             o
         } else {
             panic!("not omeg!")

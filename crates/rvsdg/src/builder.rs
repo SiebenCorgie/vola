@@ -18,7 +18,7 @@ use std::marker::PhantomData;
 use crate::{
     edge::{InportLocation, InputType, LangEdge, OutportLocation, OutputType},
     err::GraphError,
-    nodes::{ApplyNode, LangNode, Node, StructuralNode},
+    nodes::{ApplyNode, LangNode, Node, NodeType, StructuralNode},
     region::Region,
     EdgeRef, NodeRef, Rvsdg,
 };
@@ -66,7 +66,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static, PARENT: StructuralNode>
 
     ///Adds `node` to this region, returns the ref it was registered as
     pub fn insert_node(&mut self, node: N) -> NodeRef {
-        let nref = self.ctx.new_node(Node::Simple(node));
+        let nref = self.ctx.new_node(NodeType::Simple(node));
         self.region_mut().nodes.insert(nref);
 
         nref
@@ -222,7 +222,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static, PARENT: StructuralNode>
     ) -> Result<(NodeRef, TinyVec<[EdgeRef; 3]>), GraphError> {
         let (apply_node, is_defined) =
             if let Some(funct_def) = self.ctx.find_callabel_def(callable_src.clone()) {
-                if let Node::Lambda(l) = self.ctx.node(funct_def) {
+                if let NodeType::Lambda(l) = &self.ctx.node(funct_def).node_type {
                     (ApplyNode::new_for_lambda(l), true)
                 } else {
                     println!("Callable for phi not implemented!");
@@ -233,7 +233,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static, PARENT: StructuralNode>
             };
 
         //insert into graph
-        let apply_node_ref = self.ctx.new_node(Node::Apply(apply_node));
+        let apply_node_ref = self.ctx.new_node(NodeType::Apply(apply_node));
         //add to block
         self.region_mut().nodes.insert(apply_node_ref);
 
@@ -257,7 +257,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static, PARENT: StructuralNode>
         for (idx, arg_src) in arguments.iter().enumerate() {
             //If producer is not defined, push all args we connect to.
             if !is_defined {
-                if let Node::Apply(an) = self.ctx.node_mut(apply_node_ref) {
+                if let NodeType::Apply(an) = &mut self.ctx.node_mut(apply_node_ref).node_type {
                     let at = an.add_input();
                     assert!(idx == at - 1, "argument count missmatch");
                 } else {

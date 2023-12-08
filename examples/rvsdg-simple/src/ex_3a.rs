@@ -1,7 +1,7 @@
 use rvsdg::{
     common::{CommonRvsdg, VSEdge},
     edge::{InportLocation, InputType, OutportLocation, OutputType},
-    nodes::Node,
+    nodes::{Node, NodeType},
     Rvsdg,
 };
 pub use rvsdg_viewer::macroquad;
@@ -171,10 +171,10 @@ pub fn emit() -> Rvsdg<LNode, VSEdge> {
                 // max is currently undefined.
                 //
                 // We could also do the omega-level interconnect before entering this function, for the def to be defined correctly.
-                if let Node::Apply(apputs) = reg.ctx_mut().node_mut(apply_puts) {
+                if let NodeType::Apply(apputs) = &mut reg.ctx_mut().node_mut(apply_puts).node_type {
                     assert!(apputs.add_output() == 0);
                 }
-                if let Node::Apply(app_max) = reg.ctx_mut().node_mut(apply_max) {
+                if let NodeType::Apply(app_max) = &mut reg.ctx_mut().node_mut(apply_max).node_type {
                     assert!(app_max.add_output() == 0);
                 }
 

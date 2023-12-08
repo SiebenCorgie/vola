@@ -17,7 +17,7 @@ use ahash::AHashMap;
 use builder::OmegaBuilder;
 use edge::{Edge, InportLocation, InputType, LangEdge, OutportLocation, OutputType};
 use err::GraphError;
-use nodes::{LangNode, Node, OmegaNode};
+use nodes::{LangNode, Node, NodeType, OmegaNode};
 use region::{Region, RegionLocation};
 use slotmap::{new_key_type, SlotMap};
 
@@ -96,9 +96,13 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
     pub fn new() -> Self {
         //Pre-create the omega node we use to track imports/exports
         let mut nodes = SlotMap::default();
-        let omega = nodes.insert(Node::Omega(OmegaNode {
-            body: Region::new(),
-        }));
+        let omega = nodes.insert(Node {
+            node_type: NodeType::Omega(OmegaNode {
+                body: Region::new(),
+            }),
+            //Omega will never have a parent
+            parent: None,
+        });
 
         Rvsdg {
             edges: SlotMap::default(),
@@ -126,8 +130,12 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
         self.omega
     }
 
-    pub fn new_node(&mut self, node: Node<N>) -> NodeRef {
-        self.nodes.insert(node)
+    ///Creates a new node for `node_type`. Returns the reference to that node in `self`.
+    pub fn new_node(&mut self, node_type: NodeType<N>) -> NodeRef {
+        self.nodes.insert(Node {
+            node_type,
+            parent: None,
+        })
     }
 
     ///Returns reference to the node, assuming that it exists. Panics if it does not exist.

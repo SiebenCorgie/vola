@@ -3,7 +3,7 @@
 use crate::{
     edge::{LangEdge, OutportLocation},
     err::GraphError,
-    nodes::{LangNode, Node},
+    nodes::{LangNode, Node, NodeType},
     NodeRef, Rvsdg,
 };
 
@@ -28,7 +28,7 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
         dst: NodeRef,
     ) -> Result<OutportLocation, GraphError> {
         //make sure we are operating on a node with internal region.
-        if let Node::Simple(_) | Node::Apply(_) = self.node(dst) {
+        if let NodeType::Simple(_) | NodeType::Apply(_) = self.node(dst).node_type {
             return Err(GraphError::UnexpectedNodeType);
         }
 
