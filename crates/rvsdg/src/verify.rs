@@ -1,6 +1,11 @@
 //! Implements some verification helper on the rvsdg.
 
-use crate::{edge::LangEdge, nodes::LangNode, Rvsdg};
+use crate::{
+    edge::LangEdge,
+    err::{GraphError, LegalizationError},
+    nodes::LangNode,
+    Rvsdg,
+};
 
 impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
     ///Returns true, if set parental relations of all [Node]s are correct.
@@ -29,5 +34,19 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
         }
 
         !found_error
+    }
+
+    ///legalizes all nodes for structural correctness described in section 4. of the source paper.
+    ///
+    /// If anything un-legalizable is found, an error is returned.
+    pub fn legalize_structural(&mut self) -> Result<(), LegalizationError> {
+        for node in self.nodes.values_mut() {
+            node.legalize::<E>()?;
+        }
+        for node in self.nodes.values() {
+            node.is_legal(self)?;
+        }
+
+        Ok(())
     }
 }

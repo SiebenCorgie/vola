@@ -35,8 +35,8 @@ pub enum GraphError {
 
     #[error("Unexpected node type")]
     UnexpectedNodeType,
-    #[error("Node {0} was not declared in a parent region to {1} or {1} itself")]
-    NodeNotInParentRegion(NodeRef, NodeRef),
+    #[error("Node {0} was not declared in a parent to region {1:?} or {1:?} itself")]
+    NodeNotInParentRegion(NodeRef, RegionLocation),
 
     #[error("The definition of {0} is not a callable node.")]
     NotCallable(NodeRef),

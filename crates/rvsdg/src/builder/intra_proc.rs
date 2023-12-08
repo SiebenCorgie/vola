@@ -4,6 +4,7 @@
 use crate::{
     edge::{InportLocation, InputType, LangEdge, OutportLocation, OutputType},
     nodes::{GammaNode, LangNode, Node, NodeType, ThetaNode},
+    region::RegionLocation,
     NodeRef, Rvsdg,
 };
 
@@ -13,12 +14,17 @@ use super::RegionBuilder;
 pub struct GammaBuilder<'a, N: LangNode + 'static, E: LangEdge + 'static> {
     ctx: &'a mut Rvsdg<N, E>,
     ///Preallocated invalid node ref
-    node_ref: NodeRef,
+    pub(crate) node_ref: NodeRef,
 }
 
 impl<'a, N: LangNode + 'static, E: LangEdge + 'static> GammaBuilder<'a, N, E> {
-    pub fn new(ctx: &'a mut Rvsdg<N, E>) -> Self {
+    pub fn new(ctx: &'a mut Rvsdg<N, E>, parent_location: RegionLocation) -> Self {
         let node_ref = ctx.new_node(NodeType::Gamma(GammaNode::new()));
+        ctx.region_mut(&parent_location)
+            .unwrap()
+            .nodes
+            .insert(node_ref);
+        ctx.node_mut(node_ref).parent = Some(parent_location);
         GammaBuilder { ctx, node_ref }
     }
 
@@ -121,12 +127,17 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> GammaBuilder<'a, N, E> {
 pub struct ThetaBuilder<'a, N: LangNode + 'static, E: LangEdge + 'static> {
     ctx: &'a mut Rvsdg<N, E>,
     ///Preallocated invalid node ref
-    node_ref: NodeRef,
+    pub(crate) node_ref: NodeRef,
 }
 
 impl<'a, N: LangNode + 'static, E: LangEdge + 'static> ThetaBuilder<'a, N, E> {
-    pub fn new(ctx: &'a mut Rvsdg<N, E>) -> Self {
+    pub fn new(ctx: &'a mut Rvsdg<N, E>, parent_location: RegionLocation) -> Self {
         let node_ref = ctx.new_node(NodeType::Theta(ThetaNode::new()));
+        ctx.region_mut(&parent_location)
+            .unwrap()
+            .nodes
+            .insert(node_ref);
+        ctx.node_mut(node_ref).parent = Some(parent_location);
         ThetaBuilder { ctx, node_ref }
     }
 

@@ -148,13 +148,11 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static, PARENT: StructuralNode>
         building: impl FnOnce(&mut ThetaBuilder<N, E>) -> R,
     ) -> (NodeRef, R) {
         let (created_node, res) = {
-            let mut builder = ThetaBuilder::new(self.ctx);
+            let mut builder = ThetaBuilder::new(self.ctx, self.parent_location());
+            //add to our region
             let res = building(&mut builder);
             (builder.build(), res)
         };
-        //add to our region
-        self.region_mut().nodes.insert(created_node);
-        self.ctx.node_mut(created_node).parent = Some(self.parent_location());
         (created_node, res)
     }
 
@@ -165,13 +163,11 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static, PARENT: StructuralNode>
         building: impl FnOnce(&mut GammaBuilder<N, E>) -> R,
     ) -> (NodeRef, R) {
         let (created, res) = {
-            let mut builder = GammaBuilder::new(self.ctx);
+            let mut builder = GammaBuilder::new(self.ctx, self.parent_location());
+            //add to our region
             let res = building(&mut builder);
             (builder.build(), res)
         };
-        //add to our region
-        self.region_mut().nodes.insert(created);
-        self.ctx.node_mut(created).parent = Some(self.parent_location());
         (created, res)
     }
 
@@ -182,13 +178,10 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static, PARENT: StructuralNode>
         building: impl FnOnce(&mut LambdaBuilder<N, E>) -> R,
     ) -> (NodeRef, R) {
         let (created, res) = {
-            let mut builder = LambdaBuilder::new(self.ctx);
+            let mut builder = LambdaBuilder::new(self.ctx, self.parent_location());
             let res = building(&mut builder);
             (builder.build(), res)
         };
-        //add to our region
-        self.region_mut().nodes.insert(created);
-        self.ctx.node_mut(created).parent = Some(self.parent_location());
         (created, res)
     }
 
@@ -199,26 +192,23 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static, PARENT: StructuralNode>
         building: impl FnOnce(&mut PhiBuilder<N, E>) -> R,
     ) -> (NodeRef, R) {
         let (created, res) = {
-            let mut builder = PhiBuilder::new(self.ctx);
+            let mut builder = PhiBuilder::new(self.ctx, self.parent_location());
             let res = building(&mut builder);
             (builder.build(), res)
         };
-        //add to our region
-        self.region_mut().nodes.insert(created);
-        self.ctx.node_mut(created).parent = Some(self.parent_location());
         (created, res)
     }
 
     ///Allows you to spawn a new global-value/[δ-Node](crates::nodes::DeltaNode) in this region. Returns the reference under which the function is created.
-    pub fn new_global(&mut self, building: impl FnOnce(&mut DeltaBuilder<N, E>)) -> NodeRef {
+    pub fn new_global<R: 'static>(
+        &mut self,
+        building: impl FnOnce(&mut DeltaBuilder<N, E>) -> R,
+    ) -> (NodeRef, R) {
         let created = {
-            let mut builder = DeltaBuilder::new(self.ctx);
-            building(&mut builder);
-            builder.build()
+            let mut builder = DeltaBuilder::new(self.ctx, self.parent_location());
+            let res = building(&mut builder);
+            (builder.build(), res)
         };
-        //add to our region
-        self.region_mut().nodes.insert(created);
-        self.ctx.node_mut(created).parent = Some(self.parent_location());
         created
     }
 
@@ -297,13 +287,13 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static, PARENT: StructuralNode>
         Ok((apply_node_ref, arg_edges))
     }
 
-    ///Searches for `node` in all parent regions to this region. If found, builds an import path (employing context variables)
-    /// into this region. If successful, returns the port `node` is imported on.
-    pub fn import_output(
-        &mut self,
-        src: OutportLocation,
-        dst: NodeRef,
-    ) -> Result<OutportLocation, GraphError> {
-        self.ctx_mut().import_output(src, dst)
+    ///Imports the output `src` into this region and return the outport/argument it will be available at in this region.
+    ///
+    /// Uses context variables whenever appropriate.
+    ///
+    /// Might return None if `src` is not part of any parent.
+    pub fn import_context(&mut self, src: OutportLocation) -> Result<OutportLocation, GraphError> {
+        let region = self.parent_location();
+        self.ctx_mut().import_context(src, region)
     }
 }

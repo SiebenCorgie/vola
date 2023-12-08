@@ -32,9 +32,10 @@ mod theta;
 pub use theta::{LoopNode, ThetaNode};
 
 use crate::{
-    edge::{InputType, OutputType},
+    edge::{InputType, LangEdge, OutputType},
     err::LegalizationError,
     region::{Inport, Input, Outport, Output, Region, RegionLocation},
+    Rvsdg,
 };
 
 ///simple node of a language. The trait lets us embed such a node in our overall RVSDG graph.
@@ -160,7 +161,16 @@ impl<N: LangNode + 'static> Node<N> {
         }
     }
 
-    pub fn legalize(&mut self) -> Result<(), LegalizationError> {
+    ///Checks if this node is legal in its current form.
+    pub fn is_legal<E: LangEdge + 'static>(
+        &self,
+        graph: &Rvsdg<N, E>,
+    ) -> Result<(), LegalizationError> {
+        todo!("Implement legalization")
+    }
+
+    ///Lets a node performe legalization on it self.
+    pub fn legalize<E: LangEdge + 'static>(&mut self) -> Result<(), LegalizationError> {
         todo!("Implement legalization")
     }
 
@@ -252,9 +262,9 @@ impl<N: LangNode + 'static> Node<N> {
     }
 }
 
-impl<N: LangNode + Debug + 'static> Display for Node<N> {
+impl<N: LangNode + 'static> Display for NodeType<N> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match &self.node_type {
+        match &self {
             NodeType::Apply(_a) => write!(f, "Apply"),
             NodeType::Delta(d) => {
                 write!(f, "Delta({} cv, {} nodes)", d.cv_count, d.body.nodes.len())
@@ -280,7 +290,7 @@ impl<N: LangNode + Debug + 'static> Display for Node<N> {
                 o.body.nodes.len()
             ),
             NodeType::Phi(p) => write!(f, "Phi({} rv, {} cv)", p.rv_count, p.cv_count),
-            NodeType::Simple(s) => write!(f, "Simple({:?})", s),
+            NodeType::Simple(s) => write!(f, "Simple"),
             NodeType::Theta(t) => write!(f, "Theta({} lv)", t.lv_count),
         }
     }

@@ -50,7 +50,7 @@ impl Querypool {
     ///Tries to find a lambda node that is labeled with `identifier`. If found, returns the lambda decleration port
     pub fn lookup_lambda_decl(&self, identifier: &str) -> Option<OutportLocation> {
         if let Some(node) = self.lambda_decls.get(identifier) {
-            Some(node.as_outport_location(OutputType::LambdaDecleration))
+            Some(node.as_outport_location(OutputType::LambdaDeclaration))
         } else {
             None
         }

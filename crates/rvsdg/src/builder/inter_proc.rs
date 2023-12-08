@@ -13,12 +13,17 @@ use super::RegionBuilder;
 pub struct LambdaBuilder<'a, N: LangNode + 'static, E: LangEdge + 'static> {
     ctx: &'a mut Rvsdg<N, E>,
     ///Preallocated invalid node ref
-    node_ref: NodeRef,
+    pub(crate) node_ref: NodeRef,
 }
 
 impl<'a, N: LangNode + 'static, E: LangEdge + 'static> LambdaBuilder<'a, N, E> {
-    pub fn new(ctx: &'a mut Rvsdg<N, E>) -> Self {
+    pub fn new(ctx: &'a mut Rvsdg<N, E>, parent_location: RegionLocation) -> Self {
         let node_ref = ctx.new_node(NodeType::Lambda(LambdaNode::new()));
+        ctx.region_mut(&parent_location)
+            .unwrap()
+            .nodes
+            .insert(node_ref);
+        ctx.node_mut(node_ref).parent = Some(parent_location);
         LambdaBuilder { ctx, node_ref }
     }
 
@@ -91,12 +96,17 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> LambdaBuilder<'a, N, E> {
 pub struct DeltaBuilder<'a, N: LangNode + 'static, E: LangEdge + 'static> {
     ctx: &'a mut Rvsdg<N, E>,
     ///Preallocated invalid node ref
-    node_ref: NodeRef,
+    pub(crate) node_ref: NodeRef,
 }
 
 impl<'a, N: LangNode + 'static, E: LangEdge + 'static> DeltaBuilder<'a, N, E> {
-    pub fn new(ctx: &'a mut Rvsdg<N, E>) -> Self {
+    pub fn new(ctx: &'a mut Rvsdg<N, E>, parent_location: RegionLocation) -> Self {
         let node_ref = ctx.new_node(NodeType::Delta(DeltaNode::new()));
+        ctx.region_mut(&parent_location)
+            .unwrap()
+            .nodes
+            .insert(node_ref);
+        ctx.node_mut(node_ref).parent = Some(parent_location);
         DeltaBuilder { ctx, node_ref }
     }
 
@@ -153,12 +163,17 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> DeltaBuilder<'a, N, E> {
 pub struct PhiBuilder<'a, N: LangNode + 'static, E: LangEdge + 'static> {
     ctx: &'a mut Rvsdg<N, E>,
     ///Preallocated invalid node ref
-    node_ref: NodeRef,
+    pub(crate) node_ref: NodeRef,
 }
 
 impl<'a, N: LangNode + 'static, E: LangEdge + 'static> PhiBuilder<'a, N, E> {
-    pub fn new(ctx: &'a mut Rvsdg<N, E>) -> Self {
+    pub fn new(ctx: &'a mut Rvsdg<N, E>, parent_location: RegionLocation) -> Self {
         let node_ref = ctx.new_node(NodeType::Phi(PhiNode::new()));
+        ctx.region_mut(&parent_location)
+            .unwrap()
+            .nodes
+            .insert(node_ref);
+        ctx.node_mut(node_ref).parent = Some(parent_location);
         PhiBuilder { ctx, node_ref }
     }
 
@@ -330,14 +345,11 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> OmegaBuilder<'a, N, E> {
         f: impl FnOnce(&mut DeltaBuilder<N, E>) -> R,
     ) -> (NodeRef, R) {
         let (created, res) = {
-            let mut builder = DeltaBuilder::new(self.ctx);
+            let mut builder = DeltaBuilder::new(self.ctx, self.parent_location());
             let res = f(&mut builder);
             (builder.build(), res)
         };
 
-        //add the created node to our region
-        self.node_mut().body.nodes.insert(created);
-        self.ctx.node_mut(created).parent = Some(self.parent_location());
         (created, res)
     }
 
@@ -352,14 +364,11 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> OmegaBuilder<'a, N, E> {
         f: impl FnOnce(&mut LambdaBuilder<N, E>) -> R,
     ) -> (NodeRef, R) {
         let (created, res) = {
-            let mut builder = LambdaBuilder::new(self.ctx);
+            let mut builder = LambdaBuilder::new(self.ctx, self.parent_location());
+            //add the created node to our region
             let res = f(&mut builder);
             (builder.build(), res)
         };
-
-        //add the created node to our region
-        self.node_mut().body.nodes.insert(created);
-        self.ctx.node_mut(created).parent = Some(self.parent_location());
 
         if export {
             let export_port = self.export();
@@ -367,7 +376,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> OmegaBuilder<'a, N, E> {
                 .connect(
                     OutportLocation {
                         node: created,
-                        output: OutputType::LambdaDecleration,
+                        output: OutputType::LambdaDeclaration,
                     },
                     export_port,
                     E::value_edge(),

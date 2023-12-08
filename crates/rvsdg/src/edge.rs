@@ -68,8 +68,8 @@ pub enum OutputType {
     Output(usize),
     ///Any argument to the node's body that is not a special argument like _recusion_variable_ or _context_variable_.
     Argument(usize),
-    LambdaDecleration,
-    DeltaDecleration,
+    LambdaDeclaration,
+    DeltaDeclaration,
     RecursionVariableOutput(usize),
     RecursionVariableArgument(usize),
     EntryVariableArgument {
