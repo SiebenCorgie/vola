@@ -30,6 +30,7 @@ pub mod err;
 pub mod nodes;
 pub mod region;
 pub mod util;
+pub mod verify;
 
 new_key_type! {pub struct NodeRef;}
 impl Display for NodeRef {
@@ -168,6 +169,26 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
     ///Returns reference to the edge, assuming that it exists. Panics if it does not exist.
     pub fn edge_mut(&mut self, eref: EdgeRef) -> &mut Edge<E> {
         self.edges.get_mut(eref).unwrap()
+    }
+
+    ///Returns the region at the given location, if it exists.
+    /// Returns none if either the `region.node` does not exist, or the `region.region_index`-th region on that node does not exist.
+    pub fn region(&self, region: &RegionLocation) -> Option<&Region> {
+        if let Some(node) = self.nodes.get(region.node) {
+            node.regions().get(region.region_index)
+        } else {
+            None
+        }
+    }
+
+    ///Returns the region at the given location, if it exists.
+    /// Returns none if either the `region.node` does not exist, or the `region.region_index`-th region on that node does not exist.
+    pub fn region_mut(&mut self, region: &RegionLocation) -> Option<&mut Region> {
+        if let Some(node) = self.nodes.get_mut(region.node) {
+            node.regions_mut().get_mut(region.region_index)
+        } else {
+            None
+        }
     }
 
     ///Deletes the `edge` from the graph. Note that any further access to `edge` becomes invalid after that.

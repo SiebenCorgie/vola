@@ -19,7 +19,7 @@ use crate::{
     edge::{InportLocation, InputType, LangEdge, OutportLocation, OutputType},
     err::GraphError,
     nodes::{ApplyNode, LangNode, Node, NodeType, StructuralNode},
-    region::Region,
+    region::{Region, RegionLocation},
     EdgeRef, NodeRef, Rvsdg,
 };
 pub use inter_proc::{DeltaBuilder, LambdaBuilder, OmegaBuilder, PhiBuilder};
@@ -64,11 +64,20 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static, PARENT: StructuralNode>
         &mut self.ctx_mut().node_mut(p).regions_mut()[reg_idx]
     }
 
+    ///RegionLocation that points to this region.
+    pub fn parent_location(&self) -> RegionLocation {
+        RegionLocation {
+            node: self.parent_ref,
+            region_index: self.parent_region_index,
+        }
+    }
+
     ///Adds `node` to this region, returns the ref it was registered as
     pub fn insert_node(&mut self, node: N) -> NodeRef {
         let nref = self.ctx.new_node(NodeType::Simple(node));
         self.region_mut().nodes.insert(nref);
-
+        //mark parent on node.
+        self.ctx.node_mut(nref).parent = Some(self.parent_location());
         nref
     }
 
@@ -145,6 +154,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static, PARENT: StructuralNode>
         };
         //add to our region
         self.region_mut().nodes.insert(created_node);
+        self.ctx.node_mut(created_node).parent = Some(self.parent_location());
         (created_node, res)
     }
 
@@ -161,6 +171,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static, PARENT: StructuralNode>
         };
         //add to our region
         self.region_mut().nodes.insert(created);
+        self.ctx.node_mut(created).parent = Some(self.parent_location());
         (created, res)
     }
 
@@ -177,6 +188,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static, PARENT: StructuralNode>
         };
         //add to our region
         self.region_mut().nodes.insert(created);
+        self.ctx.node_mut(created).parent = Some(self.parent_location());
         (created, res)
     }
 
@@ -193,6 +205,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static, PARENT: StructuralNode>
         };
         //add to our region
         self.region_mut().nodes.insert(created);
+        self.ctx.node_mut(created).parent = Some(self.parent_location());
         (created, res)
     }
 
@@ -205,6 +218,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static, PARENT: StructuralNode>
         };
         //add to our region
         self.region_mut().nodes.insert(created);
+        self.ctx.node_mut(created).parent = Some(self.parent_location());
         created
     }
 
@@ -236,6 +250,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static, PARENT: StructuralNode>
         let apply_node_ref = self.ctx.new_node(NodeType::Apply(apply_node));
         //add to block
         self.region_mut().nodes.insert(apply_node_ref);
+        self.ctx.node_mut(apply_node_ref).parent = Some(self.parent_location());
 
         //connect function input and arguments, collect created edges
 

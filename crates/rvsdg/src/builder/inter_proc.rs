@@ -3,6 +3,7 @@
 use crate::{
     edge::{InportLocation, InputType, LangEdge, OutportLocation, OutputType},
     nodes::{DeltaNode, LambdaNode, LangNode, NodeType, OmegaNode, PhiNode},
+    region::RegionLocation,
     NodeRef, Rvsdg,
 };
 
@@ -313,6 +314,14 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> OmegaBuilder<'a, N, E> {
         portloc
     }
 
+    ///Points to the ω-nodes's inner region.
+    pub fn parent_location(&self) -> RegionLocation {
+        RegionLocation {
+            node: self.node_ref,
+            region_index: 0,
+        }
+    }
+
     ///Allows you to add a global value ([δ-Node](crate::nodes::DeltaNode)) to the translation unit.
     ///
     /// Returns the node reference to the created value.
@@ -328,6 +337,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> OmegaBuilder<'a, N, E> {
 
         //add the created node to our region
         self.node_mut().body.nodes.insert(created);
+        self.ctx.node_mut(created).parent = Some(self.parent_location());
         (created, res)
     }
 
@@ -349,6 +359,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> OmegaBuilder<'a, N, E> {
 
         //add the created node to our region
         self.node_mut().body.nodes.insert(created);
+        self.ctx.node_mut(created).parent = Some(self.parent_location());
 
         if export {
             let export_port = self.export();
