@@ -75,6 +75,10 @@ by using this as a library. Servers as interface between the Vola frontend, and 
 - `vola-common`: Factors out common components for Vola's compiler stages. These are mostly debugging / error-reporting related.
 - `volac`: Vola-Compiler. An executable that ties together all vola stages into a single executable.
 
+## Status
+
+Right now testing the RVSDG implementation with a much smaller SDF language over at [MiniSDF](https://gitlab.com/tendsinmende/minisdf).
+
 ## Building
 
 ### non-cargo dependencies
