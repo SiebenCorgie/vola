@@ -72,6 +72,12 @@ Note: The techstack is not set in stone. We might switch to a hand written parse
 by using this as a library. Servers as interface between the Vola frontend, and any middle- / backend.
 - `vola-hir`: HighLevel-Intermediate-Representation. Conceptually similar to Rust's [THIR](https://rustc-dev-guide.rust-lang.org/thir.html). Used for type resolving, and matching and building a crude data-dependency graph.
 - `rvsdg`: A generic [RVSDG](https://dl.acm.org/doi/abs/10.1145/3391902) implementation. 
+- `vola-common`: Factors out common components for Vola's compiler stages. These are mostly debugging / error-reporting related.
+- `volac`: Vola-Compiler. An executable that ties together all vola stages into a single executable.
+
+## Status
+
+Right now testing the RVSDG implementation with a much smaller SDF language over at [MiniSDF](https://gitlab.com/tendsinmende/minisdf).
 
 ## Building
 

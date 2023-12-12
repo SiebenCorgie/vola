@@ -1,79 +1,48 @@
 //! AST diagnosis helper. This is mostly Span of nodes, as well as AST errors and their reporting.
 
-use std::{fmt::Display, num::ParseIntError};
+use std::{num::ParseIntError, sync::Mutex};
 
-use backtrace::Backtrace;
+use lazy_static::lazy_static;
 use thiserror::Error;
 
-use annotate_snippets::{
-    display_list::{DisplayList, FormatOptions},
-    snippet::{Annotation, AnnotationType, Slice, Snippet, SourceAnnotation},
-};
+use tinyvec::TinyVec;
+use vola_common::{CommonError, ErrorReporter, Span};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct Span {
-    pub from: (usize, usize),
-    pub to: (usize, usize),
+lazy_static! {
+    static ref REPORTER: Mutex<ErrorReporter<AstErrorTy>> = Mutex::new(ErrorReporter::new());
 }
 
-impl Span {
-    pub fn empty() -> Self {
-        Span {
-            from: (0, 0),
-            to: (0, 0),
-        }
-    }
+///Sets the default file for reported errors.
+pub fn set_reporter_file_path(file_path: &str) {
+    REPORTER.lock().unwrap().set_default_file(file_path)
 }
 
-impl<'a> From<&tree_sitter::Node<'a>> for Span {
-    fn from(value: &tree_sitter::Node) -> Self {
-        Span {
-            from: (value.start_position().row, value.start_position().column),
-            to: (value.end_position().row, value.end_position().column),
-        }
-    }
+///Reports an error to the static reporter. All reported errors can be printed via
+/// [print_errors].
+pub fn report_error(error: CommonError<AstErrorTy>) {
+    REPORTER.lock().unwrap().push_error(error)
+}
+
+pub fn print_errors() -> TinyVec<[CommonError<AstErrorTy>; 10]> {
+    REPORTER.lock().unwrap().report_all()
 }
 
 #[derive(Debug)]
-pub struct AstError {
-    span: Span,
-    node_line: String,
-    source: AstErrorTy,
-    backtrace: Option<Backtrace>,
-}
+pub struct AstError(pub CommonError<AstErrorTy>);
 
 impl AstError {
-    pub fn at_node(source_code: &[u8], node: &tree_sitter::Node, source: AstErrorTy) -> Self {
-        let node_line = node
-            .utf8_text(source_code)
-            .unwrap_or("CouldNotParseLine")
-            .to_owned();
-
+    pub fn at_node(node: &tree_sitter::Node, source: AstErrorTy) -> Self {
         let span = Span::from(node);
-        AstError {
-            span,
-            node_line,
-            source,
-            backtrace: if std::env::var("VOLA_BACKTRACE").is_ok() {
-                Some(Backtrace::new())
-            } else {
-                None
-            },
-        }
+        AstError(CommonError::new(span, source))
     }
 
     ///Helper that creates an error if `node` is not of `expect_kind`.
-    pub fn kind_expected(
-        source_code: &[u8],
-        node: &tree_sitter::Node,
-        expect_kind: &str,
-    ) -> Result<(), Self> {
+    pub fn kind_expected(node: &tree_sitter::Node, expect_kind: &str) -> Result<(), Self> {
         if node.kind() == expect_kind {
             return Ok(());
         }
 
         Err(Self::at_node(
-            source_code,
             node,
             AstErrorTy::UnexpectedNodeKind {
                 actual: node.kind().to_owned(),
@@ -84,27 +53,18 @@ impl AstError {
 
     ///Helper that checks if the child iterator has ended. Reports an error if not.
     pub fn expect_end<'a>(
-        source_code: &[u8],
         iter: &mut dyn Iterator<Item = tree_sitter::Node<'a>>,
     ) -> Result<(), Self> {
         if let Some(node) = iter.next() {
-            Err(AstError::at_node(
-                source_code,
-                &node,
-                AstErrorTy::ExpectEndOfStatement,
-            ))
+            Err(AstError::at_node(&node, AstErrorTy::ExpectEndOfStatement))
         } else {
             Ok(())
         }
     }
 
-    pub fn uncaught_error(source_code: &[u8], node: &tree_sitter::Node) -> Result<(), Self> {
+    pub fn uncaught_error(node: &tree_sitter::Node) -> Result<(), Self> {
         if node.has_error() {
-            Err(AstError::at_node(
-                source_code,
-                node,
-                AstErrorTy::UncaughtError,
-            ))
+            Err(AstError::at_node(node, AstErrorTy::UncaughtError))
         } else {
             Ok(())
         }
@@ -113,105 +73,11 @@ impl AstError {
 
 impl From<AstErrorTy> for AstError {
     fn from(value: AstErrorTy) -> Self {
-        AstError {
+        AstError(CommonError {
             span: Span::empty(),
-            node_line: String::new(),
             source: value,
             backtrace: None,
-        }
-    }
-}
-
-impl Display for AstError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let error_str = self.source.to_string();
-        //NOTE: usually an error is only on one line / at one point. However,
-        // sometimes it goes over multiple lines. In this case, this makes sure we only
-        // attach annotation to the last line, by clamping to the first line + start offset, and last line - start offset
-        let snippet = if self.span.from.0 != self.span.to.0 {
-            let mut slices = Vec::with_capacity(self.span.to.0 - self.span.from.0);
-            for (slice_line, line_number) in self
-                .node_line
-                .split("\n")
-                .zip(self.span.from.0..=self.span.to.0)
-            {
-                let annotations = if line_number == self.span.from.0 {
-                    vec![SourceAnnotation {
-                        label: &error_str,
-                        annotation_type: AnnotationType::Error,
-                        range: (0, slice_line.chars().count() - 1),
-                    }]
-                } else if line_number == self.span.to.0 {
-                    vec![SourceAnnotation {
-                        label: "end of error region",
-                        annotation_type: AnnotationType::Error,
-                        range: (0, slice_line.chars().count()),
-                    }]
-                } else {
-                    vec![]
-                };
-
-                slices.push(Slice {
-                    source: slice_line,
-                    line_start: line_number + 1, //+1 since we are using indices, but want to display the line number
-                    origin: None,                //TODO carry filename at some point
-                    fold: false,
-                    annotations,
-                })
-            }
-
-            Snippet {
-                title: Some(Annotation {
-                    label: Some("AST"),
-                    id: None, //TODO might want to turn those into error IDs at some point
-                    annotation_type: AnnotationType::Error,
-                }),
-                footer: vec![],
-                slices,
-                opt: FormatOptions {
-                    color: true,
-                    ..Default::default()
-                },
-            }
-        } else {
-            //Simple single line reporting
-            Snippet {
-                title: Some(Annotation {
-                    label: Some("AST"),
-                    id: None, //TODO might want to turn those into error IDs at some point
-                    annotation_type: AnnotationType::Error,
-                }),
-                footer: vec![],
-                slices: vec![Slice {
-                    source: &self.node_line,
-                    line_start: self.span.from.0 + 1, //+1 since we are using indices, but want to display the line number
-                    origin: None,                     //TODO carry filename at some point
-                    fold: true,
-                    annotations: vec![SourceAnnotation {
-                        label: &error_str,
-                        annotation_type: AnnotationType::Error,
-                        range: (0, self.span.to.1 - self.span.from.1),
-                    }],
-                }],
-                opt: FormatOptions {
-                    color: true,
-                    ..Default::default()
-                },
-            }
-        };
-
-        let dl = DisplayList::from(snippet);
-        let res = dl.fmt(f);
-        if let Some(bt) = &self.backtrace {
-            write!(f, "\nBacktrace:")?;
-            write!(f, "\n{:?}", bt)?;
-        } else {
-            write!(
-                f,
-                "\n`VOLA_BACKTRACE=1` to print the backtrace of the error occurrence"
-            )?;
-        }
-        res
+        })
     }
 }
 
@@ -245,4 +111,10 @@ pub enum AstErrorTy {
     Expected(String),
     #[error("Invalid node in tree, but error was not caught correctly")]
     UncaughtError,
+}
+
+impl Default for AstErrorTy {
+    fn default() -> Self {
+        AstErrorTy::UncaughtError
+    }
 }

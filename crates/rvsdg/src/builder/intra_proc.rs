@@ -3,7 +3,8 @@
 
 use crate::{
     edge::{InportLocation, InputType, LangEdge, OutportLocation, OutputType},
-    nodes::{GammaNode, LangNode, Node, ThetaNode},
+    nodes::{GammaNode, LangNode, Node, NodeType, ThetaNode},
+    region::RegionLocation,
     NodeRef, Rvsdg,
 };
 
@@ -13,17 +14,22 @@ use super::RegionBuilder;
 pub struct GammaBuilder<'a, N: LangNode + 'static, E: LangEdge + 'static> {
     ctx: &'a mut Rvsdg<N, E>,
     ///Preallocated invalid node ref
-    node_ref: NodeRef,
+    pub(crate) node_ref: NodeRef,
 }
 
 impl<'a, N: LangNode + 'static, E: LangEdge + 'static> GammaBuilder<'a, N, E> {
-    pub fn new(ctx: &'a mut Rvsdg<N, E>) -> Self {
-        let node_ref = ctx.new_node(Node::Gamma(GammaNode::new()));
+    pub fn new(ctx: &'a mut Rvsdg<N, E>, parent_location: RegionLocation) -> Self {
+        let node_ref = ctx.new_node(NodeType::Gamma(GammaNode::new()));
+        ctx.region_mut(&parent_location)
+            .unwrap()
+            .nodes
+            .insert(node_ref);
+        ctx.node_mut(node_ref).parent = Some(parent_location);
         GammaBuilder { ctx, node_ref }
     }
 
     pub fn node(&self) -> &GammaNode {
-        if let Node::Gamma(g) = self.ctx.node(self.node_ref) {
+        if let NodeType::Gamma(g) = &self.ctx.node(self.node_ref).node_type {
             g
         } else {
             panic!("not gamma!")
@@ -31,7 +37,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> GammaBuilder<'a, N, E> {
     }
 
     pub fn node_mut(&mut self) -> &mut GammaNode {
-        if let Node::Gamma(g) = self.ctx.node_mut(self.node_ref) {
+        if let NodeType::Gamma(g) = &mut self.ctx.node_mut(self.node_ref).node_type {
             g
         } else {
             panic!("not gamma!")
@@ -121,17 +127,22 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> GammaBuilder<'a, N, E> {
 pub struct ThetaBuilder<'a, N: LangNode + 'static, E: LangEdge + 'static> {
     ctx: &'a mut Rvsdg<N, E>,
     ///Preallocated invalid node ref
-    node_ref: NodeRef,
+    pub(crate) node_ref: NodeRef,
 }
 
 impl<'a, N: LangNode + 'static, E: LangEdge + 'static> ThetaBuilder<'a, N, E> {
-    pub fn new(ctx: &'a mut Rvsdg<N, E>) -> Self {
-        let node_ref = ctx.new_node(Node::Theta(ThetaNode::new()));
+    pub fn new(ctx: &'a mut Rvsdg<N, E>, parent_location: RegionLocation) -> Self {
+        let node_ref = ctx.new_node(NodeType::Theta(ThetaNode::new()));
+        ctx.region_mut(&parent_location)
+            .unwrap()
+            .nodes
+            .insert(node_ref);
+        ctx.node_mut(node_ref).parent = Some(parent_location);
         ThetaBuilder { ctx, node_ref }
     }
 
     pub fn node(&self) -> &ThetaNode {
-        if let Node::Theta(t) = self.ctx.node(self.node_ref) {
+        if let NodeType::Theta(t) = &self.ctx.node(self.node_ref).node_type {
             t
         } else {
             panic!("not theta!")
@@ -139,7 +150,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> ThetaBuilder<'a, N, E> {
     }
 
     pub fn node_mut(&mut self) -> &mut ThetaNode {
-        if let Node::Theta(t) = self.ctx.node_mut(self.node_ref) {
+        if let NodeType::Theta(t) = &mut self.ctx.node_mut(self.node_ref).node_type {
             t
         } else {
             panic!("not theta!")

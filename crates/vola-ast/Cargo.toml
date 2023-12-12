@@ -11,6 +11,7 @@ dot = ["graphviz-rust"]
 
 [dependencies]
 tree-sitter-vola = {path = "../tree-sitter-vola"}
+vola-common = {path = "../vola-common"}
 thiserror.workspace = true
 tree-sitter.workspace = true
 ahash.workspace = true
@@ -18,3 +19,4 @@ tinyvec.workspace = true
 graphviz-rust = {workspace = true, optional = true}
 backtrace.workspace = true
 annotate-snippets.workspace = true
+lazy_static.workspace = true

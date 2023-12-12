@@ -1,6 +1,5 @@
 use tree_sitter::Parser;
-
-use crate::AstError;
+use crate::{AstError};
 
 pub trait FromSitter {
     ///Parses `Self` from some node

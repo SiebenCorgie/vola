@@ -1,7 +1,7 @@
 use rvsdg::{
     common::{CommonRvsdg, VSEdge},
     edge::{InputType, OutputType},
-    nodes::Node,
+    nodes::{Node, NodeType},
     Rvsdg,
 };
 pub use rvsdg_viewer::macroquad;
@@ -18,7 +18,7 @@ pub fn emit() -> Rvsdg<LNode, VSEdge> {
      * }
      */
     graph.on_omega_node(|o| {
-        let phi_export = o.export("f".to_string());
+        let phi_export = o.export();
         o.on_region(|reg| {
             let (_phi_node, phi_out) = reg.new_recursive_region(|phi| {
                 //defines the recursion_variable  we put f() into.
@@ -114,8 +114,8 @@ pub fn emit() -> Rvsdg<LNode, VSEdge> {
 
                                         //NOTE: Since we are recusively define f(), we don't know the caller yet. Therefore the result port
                                         // count doesn't match
-                                        if let Node::Apply(an) =
-                                            callbranch.ctx_mut().node_mut(call_f)
+                                        if let NodeType::Apply(an) =
+                                            &mut callbranch.ctx_mut().node_mut(call_f).node_type
                                         {
                                             //Add the output
                                             assert!(an.add_output() == 0);

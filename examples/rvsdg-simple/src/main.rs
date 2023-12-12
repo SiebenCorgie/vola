@@ -100,9 +100,12 @@ impl View for LNode {
 
 fn main() {
     let ex2d = ex_2d::emit();
+    assert!(ex2d.verify_parental_relations(), "2d had errors");
     rvsdg_viewer::into_svg(&ex2d, "Example_2d.svg");
     let ex3a = ex_3a::emit();
+    assert!(ex3a.verify_parental_relations(), "3a had errors");
     rvsdg_viewer::into_svg(&ex3a, "Example_3a.svg");
     let ex3b = ex_3b::emit();
+    assert!(ex3b.verify_parental_relations(), "3b had errors");
     rvsdg_viewer::into_svg(&ex3b, "Example_3b.svg");
 }

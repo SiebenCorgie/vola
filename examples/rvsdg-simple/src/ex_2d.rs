@@ -22,8 +22,8 @@ pub fn emit() -> Rvsdg<LNode, VSEdge> {
         //NOTE: the example does not live in a omega node. In our case not connecting the result to any export would
         // result in an empty omega, since nothing is reachable. So we connect both loop-variables to an artificial output, to get _some_
         // connection.
-        let export_lv0 = omega.export("lv0".to_string());
-        let export_lv1 = omega.export("lv1".to_string());
+        let export_lv0 = omega.export();
+        let export_lv1 = omega.export();
         //lit 1, then start theta node
         omega.on_region(|reg| {
             let litone = reg.insert_node(LNode::new(MyNodes::ImmI32(1)));

@@ -1,9 +1,10 @@
 //! Common AST components like identifiers and types.
 
+use vola_common::Span;
+
 use crate::{
     alge::{AlgeExpr, BinOp},
     comb::OpNode,
-    diag::Span,
     parser::FromSitter,
     AstError, AstErrorTy,
 };
@@ -28,7 +29,6 @@ impl FromSitter for Keyword {
             "kw_prim" => Ok(Keyword::KwPrim),
             "keywoard" => Self::parse_node(source, &node.child(0).unwrap()),
             _ => Err(AstError::at_node(
-                source,
                 node,
                 crate::AstErrorTy::UnexpectedToken {
                     token: node.kind().to_owned(),
@@ -84,7 +84,6 @@ impl FromSitter for Ty {
                 Ok(Ty::Mat { width, height })
             }
             _ => Err(AstError::at_node(
-                source,
                 node,
                 crate::AstErrorTy::UnexpectedToken {
                     token: node.kind().to_owned(),
@@ -107,7 +106,7 @@ impl FromSitter for Identifier {
     where
         Self: Sized,
     {
-        AstError::kind_expected(source, node, "identifier")?;
+        AstError::kind_expected(node, "identifier")?;
 
         let iden = node.utf8_text(source).map_err(|e| AstErrorTy::from(e))?;
         Ok(Identifier {
@@ -126,7 +125,7 @@ impl Identifier {
         let mut children = param_list.children(&mut walker);
 
         let mut params = Vec::with_capacity(param_list.child_count() - 2);
-        AstError::kind_expected(source, &children.next().unwrap(), "<")?;
+        AstError::kind_expected(&children.next().unwrap(), "<")?;
         for child in children {
             match child.kind() {
                 "," => {}
@@ -169,7 +168,7 @@ impl FromSitter for Digit {
     where
         Self: Sized,
     {
-        AstError::kind_expected(source, node, "digit")?;
+        AstError::kind_expected(node, "digit")?;
 
         Ok(Digit {
             src: Span::from(node),
@@ -194,7 +193,7 @@ impl FromSitter for Imm {
     where
         Self: Sized,
     {
-        AstError::kind_expected(source, node, "float")?;
+        AstError::kind_expected(node, "float")?;
 
         let first = Digit::parse_node(source, &node.child(0).unwrap())?;
 
@@ -227,7 +226,7 @@ impl FromSitter for TypedIdent {
     where
         Self: Sized,
     {
-        AstError::kind_expected(source, node, "typed_identifier")?;
+        AstError::kind_expected(node, "typed_identifier")?;
 
         let ident = Identifier::parse_node(source, &node.child(0).unwrap())?;
         let ty = if let Some(ty_node) = node.child(2) {
@@ -247,7 +246,7 @@ impl FromSitter for TypedIdent {
 
 impl TypedIdent {
     fn parse_param_list(source: &[u8], node: &tree_sitter::Node) -> Result<Vec<Self>, AstError> {
-        AstError::kind_expected(source, node, "parameter_list")?;
+        AstError::kind_expected(node, "parameter_list")?;
 
         let mut args = Vec::with_capacity(node.child_count());
         let mut walker = node.walk();
@@ -262,7 +261,6 @@ impl TypedIdent {
                 }
                 _ => {
                     return Err(AstError::at_node(
-                        source,
                         node,
                         crate::AstErrorTy::UnexpectedToken {
                             token: node.kind().to_owned(),
@@ -331,7 +329,7 @@ impl FromSitter for Stmt {
                 //find out which kind of assignment we have.
 
                 let assignee = children.next().unwrap();
-                AstError::kind_expected(source, &assignee, "assignee")?;
+                AstError::kind_expected(&assignee, "assignee")?;
 
                 // Based on the assignee we can find out which kind of assignment we have.
                 // If it begins with kw_at, its at_assign,
@@ -350,7 +348,7 @@ impl FromSitter for Stmt {
                         //try to parse the two fields
                         let prim = Identifier::parse_node(source, &assignee.child(0).unwrap())?;
 
-                        AstError::kind_expected(source, &assignee.child(1).as_ref().unwrap(), ".")?;
+                        AstError::kind_expected(&assignee.child(1).as_ref().unwrap(), ".")?;
 
                         let second_part = assignee.child(2).unwrap();
                         match second_part.kind() {
@@ -393,7 +391,6 @@ impl FromSitter for Stmt {
                                 })
                             }
                             _ => Err(AstError::at_node(
-                                source,
                                 node,
                                 crate::AstErrorTy::UnexpectedToken {
                                     token: second_part.kind().to_owned(),
@@ -406,9 +403,9 @@ impl FromSitter for Stmt {
                 final_stmt
             }
             "eval" => {
-                AstError::kind_expected(source, &children.next().unwrap(), "eval")?;
+                AstError::kind_expected(&children.next().unwrap(), "eval")?;
                 let template_ident = Identifier::parse_node(source, &children.next().unwrap())?;
-                AstError::kind_expected(source, &children.next().unwrap(), "->")?;
+                AstError::kind_expected(&children.next().unwrap(), "->")?;
                 let binding = Identifier::parse_node(source, &children.next().unwrap())?;
 
                 Ok(Stmt::EvalStmt {
@@ -418,7 +415,6 @@ impl FromSitter for Stmt {
                 })
             }
             _ => Err(AstError::at_node(
-                source,
                 node,
                 crate::AstErrorTy::UnexpectedToken {
                     token: node.kind().to_owned(),
@@ -427,7 +423,7 @@ impl FromSitter for Stmt {
             )),
         };
 
-        AstError::uncaught_error(source, node)?;
+        AstError::uncaught_error(node)?;
         result
     }
 }
@@ -447,22 +443,18 @@ impl FromSitter for PrimBlock {
     where
         Self: Sized,
     {
-        AstError::kind_expected(source, node, "block")?;
+        AstError::kind_expected(node, "block")?;
         let mut walker = node.walk();
         let mut children = node.children(&mut walker);
 
-        AstError::kind_expected(source, &children.next().unwrap(), "{")?;
+        AstError::kind_expected(&children.next().unwrap(), "{")?;
 
         let mut stmt_list = Vec::with_capacity(node.child_count().checked_sub(3).unwrap_or(0));
         let mut ret_op = None;
 
         for child in &mut children {
             if ret_op.is_some() && child.kind() != "}" {
-                return Err(AstError::at_node(
-                    source,
-                    &child,
-                    AstErrorTy::ExpectedEndAfterRet,
-                ));
+                return Err(AstError::at_node(&child, AstErrorTy::ExpectedEndAfterRet));
             }
 
             match child.kind() {
@@ -508,10 +500,9 @@ impl FromSitter for PrimBlock {
                 //Ignoring comments at this point.
                 "comment" => {}
                 "}" => break, // block ended
-                "ERROR" => return Err(AstError::at_node(source, &child, AstErrorTy::ParseError)),
+                "ERROR" => return Err(AstError::at_node(&child, AstErrorTy::ParseError)),
                 _ => {
                     return Err(AstError::at_node(
-                        source,
                         &child,
                         AstErrorTy::UnexpectedToken {
                             token: child.kind().to_owned(),
@@ -522,8 +513,8 @@ impl FromSitter for PrimBlock {
             }
         }
 
-        AstError::expect_end(source, &mut children)?;
-        AstError::uncaught_error(source, node)?;
+        AstError::expect_end(&mut children)?;
+        AstError::uncaught_error(node)?;
         if let Some(ret) = ret_op {
             Ok(PrimBlock {
                 src: Span::from(node),
@@ -532,7 +523,7 @@ impl FromSitter for PrimBlock {
             })
         } else {
             //NOTE: happens if the block ended, but no primitive statment / optree was set.
-            Err(AstError::at_node(source, node, AstErrorTy::BlockEndNoPrim))
+            Err(AstError::at_node(node, AstErrorTy::BlockEndNoPrim))
         }
     }
 }
@@ -555,7 +546,7 @@ impl FromSitter for Field {
         let mut field_walker = node.walk();
         let mut children = node.children(&mut field_walker);
 
-        AstError::kind_expected(source, &children.next().unwrap(), "field")?;
+        AstError::kind_expected(&children.next().unwrap(), "field")?;
         let ident = children.next().unwrap();
 
         let ident = Identifier::parse_node(source, &ident)?;
@@ -574,7 +565,6 @@ impl FromSitter for Field {
         // therefore we can share the block parsing for `fields`  and `ops`. which is why we delegate that at this point.
         if next_node.as_ref().unwrap().kind() != "block" {
             return Err(AstError::at_node(
-                source,
                 next_node.as_ref().unwrap(),
                 AstErrorTy::UnexpectedToken {
                     token: next_node.as_ref().unwrap().kind().to_string(),
@@ -585,7 +575,7 @@ impl FromSitter for Field {
 
         let block = PrimBlock::parse_node(source, next_node.as_ref().unwrap())?;
 
-        AstError::uncaught_error(source, node)?;
+        AstError::uncaught_error(node)?;
         Ok(Field {
             ident,
             args,
@@ -612,7 +602,7 @@ impl FromSitter for Op {
     {
         let mut walker = node.walk();
         let mut children = node.children(&mut walker);
-        AstError::kind_expected(source, &children.next().unwrap(), "op")?;
+        AstError::kind_expected(&children.next().unwrap(), "op")?;
         let ident = Identifier::parse_node(source, children.next().as_ref().unwrap())?;
 
         //Collect all primitive identifier
@@ -638,7 +628,6 @@ impl FromSitter for Op {
         //at this point we should be at a block
         if next_node.kind() != "block" {
             return Err(AstError::at_node(
-                source,
                 &next_node,
                 AstErrorTy::UnexpectedToken {
                     token: next_node.kind().to_owned(),
@@ -648,7 +637,7 @@ impl FromSitter for Op {
         }
         let block = PrimBlock::parse_node(source, &next_node)?;
 
-        AstError::uncaught_error(source, node)?;
+        AstError::uncaught_error(node)?;
         Ok(Op {
             src: Span::from(node),
             ident,
@@ -677,7 +666,7 @@ impl FromSitter for Prim {
     {
         let mut walker = node.walk();
         let mut children = node.children(&mut walker);
-        AstError::kind_expected(source, &children.next().unwrap(), "prim")?;
+        AstError::kind_expected(&children.next().unwrap(), "prim")?;
         let ident = Identifier::parse_node(source, children.next().as_ref().unwrap())?;
 
         //Collect all primitive identifier
@@ -693,10 +682,10 @@ impl FromSitter for Prim {
         };
 
         //at this point we should be at a block
-        AstError::kind_expected(source, &next_node, "block")?;
+        AstError::kind_expected(&next_node, "block")?;
         let block = PrimBlock::parse_node(source, &next_node)?;
 
-        AstError::uncaught_error(source, node)?;
+        AstError::uncaught_error(node)?;
         Ok(Prim {
             ident,
             args,
@@ -722,7 +711,7 @@ impl FromSitter for Alge {
     {
         let mut walker = node.walk();
         let mut children = node.children(&mut walker);
-        AstError::kind_expected(source, &children.next().unwrap(), "alge")?;
+        AstError::kind_expected(&children.next().unwrap(), "alge")?;
         let ident = Identifier::parse_node(source, children.next().as_ref().unwrap())?;
 
         //Collect all primitive identifier
@@ -738,10 +727,10 @@ impl FromSitter for Alge {
         };
 
         //at this point we should be at a block
-        AstError::kind_expected(source, &next_node, "scoped_expr")?;
+        AstError::kind_expected(&next_node, "scoped_expr")?;
         let ret = AlgeExpr::parse_node(source, &next_node)?;
 
-        AstError::uncaught_error(source, node)?;
+        AstError::uncaught_error(node)?;
         Ok(Alge {
             src: Span::from(node),
             ident,

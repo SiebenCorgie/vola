@@ -1,7 +1,7 @@
 use rvsdg::{
     common::{CommonRvsdg, VSEdge},
     edge::{InportLocation, InputType, OutportLocation, OutputType},
-    nodes::Node,
+    nodes::NodeType,
     Rvsdg,
 };
 pub use rvsdg_viewer::macroquad;
@@ -22,9 +22,9 @@ pub fn emit() -> Rvsdg<LNode, VSEdge> {
     // }
     // ```
     graph.on_omega_node(|tu| {
-        let puts_import = tu.import("puts");
+        let puts_import = tu.import();
         //create the global "max" value
-        let global_string_max = tu.new_global(|glob| {
+        let (global_string_max, _) = tu.new_global(|glob| {
             glob.on_region(|reg| {
                 let const_m = reg.insert_node(LNode::new(MyNodes::ImmChar('m')));
                 let const_a = reg.insert_node(LNode::new(MyNodes::ImmChar('a')));
@@ -54,7 +54,7 @@ pub fn emit() -> Rvsdg<LNode, VSEdge> {
         });
 
         //Create the max function
-        let function_max = tu.new_function(None, |func| {
+        let (function_max, _) = tu.new_function(false, |func| {
             let arg_x = func.add_argument();
             let arg_y = func.add_argument();
             let res_max = func.add_result();
@@ -142,40 +142,51 @@ pub fn emit() -> Rvsdg<LNode, VSEdge> {
         });
 
         //now import global string-max and function_max to define f
-        let funktion_f = tu.new_function(Some("f".to_owned()), |func| {
-            let (_cv_input_fmax, cv_arg_fmax) = func.add_context_variable();
-            let (_cv_input_fputs, cv_arg_fputs) = func.add_context_variable();
-            let (_cv_str_max_input, cv_str_max) = func.add_context_variable();
+        let (_function_f, _) = tu.new_function(true, |func| {
+            //let (_cv_input_fmax, cv_arg_fmax) = func.add_context_variable();
+            //let (cv_input_fputs, cv_arg_fputs) = func.add_context_variable();
+            //let (cv_str_max_input, cv_str_max) = func.add_context_variable();
             let arg_a = func.add_argument();
             let arg_b = func.add_argument();
             let arg_ctrl = func.add_argument();
             let f_res = func.add_result();
             let f_ctr_res = func.add_result();
-
             //NOTE: on state edges. I think the original paper has a error in the state edge for the puts function.
             //      The state edge should go args -> λ(puts) -> λ(max) -> result. Instead it goes args -> λ(puts) -> result.
             //      IMO this dose not guarantees that puts() is ordered _before_ max. In controll flow this is okay, since max()
             //      does not output anything though. For the sake of comparability I'll leave it as it is.
 
             func.on_region(|reg| {
+                //Instead of declaring all cv_imports _by hand_, we use the import helper to import
+                // max(), puts() the global "max" string.
+                let cv_f_max = reg
+                    .import_context(function_max.as_outport_location(OutputType::LambdaDeclaration))
+                    .expect("Failed to import fmax");
+
+                let cv_f_puts = reg
+                    .import_context(puts_import)
+                    .expect("Failed to import f_puts as context");
+
+                let cv_string_max = reg
+                    .import_context(global_string_max.as_outport_location(OutputType::Output(0)))
+                    .expect("Failed to import string");
+
                 //call puts("max");
                 let (apply_puts, call_edges) =
-                    reg.call(cv_arg_fputs, &[cv_str_max, arg_ctrl]).unwrap();
+                    reg.call(cv_f_puts, &[cv_string_max, arg_ctrl]).unwrap();
                 //mutate last edge to state edge
                 reg.ctx_mut().edge_mut(call_edges[2]).ty = VSEdge::State;
 
                 //call max(a, b);
-                let (apply_max, _) = reg.call(cv_arg_fmax, &[arg_a, arg_b]).unwrap();
+                let (apply_max, _) = reg.call(cv_f_max, &[arg_a, arg_b]).unwrap();
 
                 //We have to add the results to apply_max and apply_puts our selfs, since puts is imported, and
                 // max is currently undefined.
                 //
                 // We could also do the omega-level interconnect before entering this function, for the def to be defined correctly.
-                if let Node::Apply(apputs) = reg.ctx_mut().node_mut(apply_puts) {
+
+                if let NodeType::Apply(apputs) = &mut reg.ctx_mut().node_mut(apply_puts).node_type {
                     assert!(apputs.add_output() == 0);
-                }
-                if let Node::Apply(app_max) = reg.ctx_mut().node_mut(apply_max) {
-                    assert!(app_max.add_output() == 0);
                 }
 
                 //now connect call outputs to the λ result
@@ -205,36 +216,6 @@ pub fn emit() -> Rvsdg<LNode, VSEdge> {
                     )
                     .unwrap();
             });
-        });
-        //finally wire the lambda and delta nodes
-        //we wire the f_max to cv0, the imported f_puts to cv1 and the glob_max to cv2
-        // and finally the output of f to the export
-        tu.on_region(|tureg| {
-            tureg
-                .ctx_mut()
-                .connect(
-                    function_max.as_outport_location(OutputType::LambdaDecleration),
-                    funktion_f.as_inport_location(InputType::ContextVariableInput(0)),
-                    VSEdge::Value,
-                )
-                .unwrap();
-            tureg
-                .ctx_mut()
-                .connect(
-                    puts_import,
-                    funktion_f.as_inport_location(InputType::ContextVariableInput(1)),
-                    VSEdge::Value,
-                )
-                .unwrap();
-
-            tureg
-                .ctx_mut()
-                .connect(
-                    global_string_max.as_outport_location(OutputType::DeltaDecleration),
-                    funktion_f.as_inport_location(InputType::ContextVariableInput(2)),
-                    VSEdge::Value,
-                )
-                .unwrap();
         });
     });
 

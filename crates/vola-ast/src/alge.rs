@@ -1,6 +1,7 @@
 //! Algebra level AST components.
 
 use ahash::AHashMap;
+use vola_common::Span;
 
 use crate::{
     common::{Identifier, Imm, Keyword, TypedIdent},
@@ -17,7 +18,7 @@ pub enum UnOp {
 }
 
 impl FromSitter for UnOp {
-    fn parse_node(source: &[u8], node: &tree_sitter::Node) -> Result<Self, AstError>
+    fn parse_node(_source: &[u8], node: &tree_sitter::Node) -> Result<Self, AstError>
     where
         Self: Sized,
     {
@@ -25,7 +26,6 @@ impl FromSitter for UnOp {
             "!" => Ok(UnOp::Not),
             "-" => Ok(UnOp::Neg),
             _ => Err(AstError::at_node(
-                source,
                 &node,
                 AstErrorTy::UnexpectedToken {
                     token: node.kind().to_owned(),
@@ -48,7 +48,7 @@ pub enum BinOp {
 impl BinOp {
     ///Tries to parse assignment op. So `+=`, `*=` etc. Returns None if its just an assignment.
     pub fn parse_assign_op(
-        source: &[u8],
+        _source: &[u8],
         node: &tree_sitter::Node,
     ) -> Result<Option<Self>, AstError> {
         match node.kind() {
@@ -59,7 +59,6 @@ impl BinOp {
             "%=" => Ok(Some(BinOp::Mod)),
             "=" => Ok(None),
             _ => Err(AstError::at_node(
-                source,
                 &node,
                 AstErrorTy::UnexpectedToken {
                     token: node.kind().to_owned(),
@@ -71,7 +70,7 @@ impl BinOp {
 }
 
 impl FromSitter for BinOp {
-    fn parse_node(source: &[u8], node: &tree_sitter::Node) -> Result<Self, AstError>
+    fn parse_node(_source: &[u8], node: &tree_sitter::Node) -> Result<Self, AstError>
     where
         Self: Sized,
     {
@@ -82,7 +81,6 @@ impl FromSitter for BinOp {
             "/" => Ok(BinOp::Div),
             "%" => Ok(BinOp::Mod),
             _ => Err(AstError::at_node(
-                source,
                 &node,
                 AstErrorTy::UnexpectedToken {
                     token: node.kind().to_owned(),
@@ -96,30 +94,46 @@ impl FromSitter for BinOp {
 ///Algebraic expression.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AlgeExpr {
-    Identifier(Identifier),
-    List(Vec<AlgeExpr>),
+    Identifier {
+        ident: Identifier,
+        span: Span,
+    },
+    List {
+        list: Vec<AlgeExpr>,
+        span: Span,
+    },
     BinOp {
+        span: Span,
         op: BinOp,
         left: Box<AlgeExpr>,
         right: Box<AlgeExpr>,
     },
     UnaryOp {
+        span: Span,
         op: UnOp,
         expr: Box<AlgeExpr>,
     },
     ///Call to some algebraic function
     Call {
+        span: Span,
         ident: Identifier,
         args: Vec<AlgeExpr>,
     },
     ///Acccess on an primitives field
     PrimAccess {
+        span: Span,
         ident: Identifier,
         field: Identifier,
     },
     //Some keyword
-    Kw(Keyword),
-    Float(Imm),
+    Kw {
+        kw: Keyword,
+        span: Span,
+    },
+    Float {
+        float: Imm,
+        span: Span,
+    },
 }
 
 impl FromSitter for AlgeExpr {
@@ -136,6 +150,7 @@ impl FromSitter for AlgeExpr {
                 let op = UnOp::parse_node(source, &node.child(0).unwrap())?;
                 let expr = AlgeExpr::parse_node(source, &node.child(1).unwrap())?;
                 Ok(AlgeExpr::UnaryOp {
+                    span: Span::from(node),
                     op,
                     expr: Box::new(expr),
                 })
@@ -149,6 +164,7 @@ impl FromSitter for AlgeExpr {
                 let op = BinOp::parse_node(source, &node.child(1).unwrap())?;
                 let right = Self::parse_node(source, &node.child(2).unwrap())?;
                 Ok(AlgeExpr::BinOp {
+                    span: Span::from(node),
                     op,
                     left: Box::new(left),
                     right: Box::new(right),
@@ -180,18 +196,35 @@ impl FromSitter for AlgeExpr {
             }
             "call_expr" => {
                 let (ident, args) = Self::parse_call(source, node)?;
-                Ok(AlgeExpr::Call { ident, args })
+                Ok(AlgeExpr::Call {
+                    ident,
+                    args,
+                    span: Span::from(node),
+                })
             }
-            "identifier" => Ok(AlgeExpr::Identifier(Identifier::parse_node(source, node)?)),
+            "identifier" => Ok(AlgeExpr::Identifier {
+                ident: Identifier::parse_node(source, node)?,
+                span: Span::from(node),
+            }),
             "arg_access" => {
                 assert!(node.child_count() == 3);
                 let ident = Identifier::parse_node(source, &node.child(0).unwrap())?;
                 let field = Identifier::parse_node(source, &node.child(2).unwrap())?;
 
-                Ok(AlgeExpr::PrimAccess { ident, field })
+                Ok(AlgeExpr::PrimAccess {
+                    ident,
+                    field,
+                    span: Span::from(node),
+                })
             }
-            "float" => Ok(AlgeExpr::Float(Imm::parse_node(source, node)?)),
-            "kw_at" => Ok(AlgeExpr::Kw(Keyword::parse_node(source, node)?)),
+            "float" => Ok(AlgeExpr::Float {
+                float: Imm::parse_node(source, node)?,
+                span: Span::from(node),
+            }),
+            "kw_at" => Ok(AlgeExpr::Kw {
+                kw: Keyword::parse_node(source, node)?,
+                span: Span::from(node),
+            }),
             "list" => {
                 let mut walker = node.walk();
                 let mut children = node.children(&mut walker);
@@ -207,10 +240,12 @@ impl FromSitter for AlgeExpr {
                         }
                     }
                 }
-                Ok(AlgeExpr::List(list))
+                Ok(AlgeExpr::List {
+                    list,
+                    span: Span::from(node),
+                })
             }
             _ => Err(AstError::at_node(
-                source,
                 &node,
                 AstErrorTy::UnexpectedToken {
                     token: node.kind().to_owned(),
@@ -227,7 +262,7 @@ impl AlgeExpr {
         source: &[u8],
         call_expr: &tree_sitter::Node,
     ) -> Result<(Identifier, Vec<AlgeExpr>), AstError> {
-        AstError::kind_expected(source, call_expr, "call_expr")?;
+        AstError::kind_expected(call_expr, "call_expr")?;
 
         let mut walker = call_expr.walk();
         let mut children = call_expr.children(&mut walker);

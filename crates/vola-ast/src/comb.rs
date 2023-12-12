@@ -49,7 +49,6 @@ impl FromSitter for OpNode {
             }
             "optree" => Self::parse_optree(source, &expr),
             _ => Err(AstError::at_node(
-                source,
                 &expr,
                 AstErrorTy::UnexpectedToken {
                     token: expr.kind().to_owned(),

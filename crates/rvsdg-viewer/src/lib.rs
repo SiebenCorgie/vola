@@ -27,7 +27,7 @@ use printer::Printer;
 use rvsdg::{
     common::VSEdge,
     edge::LangEdge,
-    nodes::{LangNode, Node},
+    nodes::{LangNode, NodeType},
     Rvsdg,
 };
 
@@ -79,27 +79,27 @@ impl View for rvsdg::common::VSEdge {
 
 impl<N: View + LangNode + 'static> View for rvsdg::nodes::Node<N> {
     fn color(&self) -> macroquad::color::Color {
-        match self {
-            Node::Apply(_) => Color::from_rgba(255, 255, 128, 255),
-            Node::Delta(_) => Color::from_rgba(128, 128, 0, 100),
-            Node::Gamma(_) => Color::from_rgba(128, 255, 128, 255),
-            Node::Lambda(_) => Color::from_rgba(128, 180, 255, 255),
-            Node::Omega(_) => Color::from_rgba(172, 157, 147, 255),
-            Node::Phi(_) => Color::from_rgba(255, 179, 128, 255),
-            Node::Simple(n) => n.color(),
-            Node::Theta(_) => Color::from_rgba(255, 128, 128, 255),
+        match &self.node_type {
+            NodeType::Apply(_) => Color::from_rgba(255, 255, 128, 255),
+            NodeType::Delta(_) => Color::from_rgba(128, 128, 0, 100),
+            NodeType::Gamma(_) => Color::from_rgba(128, 255, 128, 255),
+            NodeType::Lambda(_) => Color::from_rgba(128, 180, 255, 255),
+            NodeType::Omega(_) => Color::from_rgba(172, 157, 147, 255),
+            NodeType::Phi(_) => Color::from_rgba(255, 179, 128, 255),
+            NodeType::Simple(n) => n.color(),
+            NodeType::Theta(_) => Color::from_rgba(255, 128, 128, 255),
         }
     }
     fn name(&self) -> &str {
-        match self {
-            Node::Apply(_) => "Apply",
-            Node::Delta(_) => "Delta",
-            Node::Gamma(_) => "Gamma",
-            Node::Lambda(_) => "Lambda",
-            Node::Omega(_) => "Omega",
-            Node::Phi(_) => "Phi",
-            Node::Simple(n) => n.name(),
-            Node::Theta(_) => "Theta",
+        match &self.node_type {
+            NodeType::Apply(_) => "Apply",
+            NodeType::Delta(_) => "Delta",
+            NodeType::Gamma(_) => "Gamma",
+            NodeType::Lambda(_) => "Lambda",
+            NodeType::Omega(_) => "Omega",
+            NodeType::Phi(_) => "Phi",
+            NodeType::Simple(n) => n.name(),
+            NodeType::Theta(_) => "Theta",
         }
     }
 }

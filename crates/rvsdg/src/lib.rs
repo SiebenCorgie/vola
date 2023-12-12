@@ -17,20 +17,20 @@ use ahash::AHashMap;
 use builder::OmegaBuilder;
 use edge::{Edge, InportLocation, InputType, LangEdge, OutportLocation, OutputType};
 use err::GraphError;
-use label::LabelLoc;
-use nodes::{LangNode, Node, OmegaNode};
-use region::Region;
+use nodes::{LangNode, Node, NodeType, OmegaNode};
+use region::{Region, RegionLocation};
 use slotmap::{new_key_type, SlotMap};
-use tinyvec::TinyVec;
 
 pub mod analyze;
+pub mod attrib;
 pub mod builder;
 pub mod common;
 pub mod edge;
 pub mod err;
-pub mod label;
 pub mod nodes;
 pub mod region;
+pub mod util;
+pub mod verify;
 
 new_key_type! {pub struct NodeRef;}
 impl Display for NodeRef {
@@ -89,9 +89,6 @@ impl EdgeRef {
 pub struct Rvsdg<N: LangNode + 'static, E: LangEdge + 'static> {
     pub(crate) nodes: SlotMap<NodeRef, Node<N>>,
     pub(crate) edges: SlotMap<EdgeRef, Edge<E>>,
-
-    pub(crate) labels: AHashMap<LabelLoc, TinyVec<[String; 1]>>,
-
     ///Entrypoint of this translation unit.
     pub(crate) omega: NodeRef,
 }
@@ -100,13 +97,16 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
     pub fn new() -> Self {
         //Pre-create the omega node we use to track imports/exports
         let mut nodes = SlotMap::default();
-        let omega = nodes.insert(Node::Omega(OmegaNode {
-            body: Region::new(),
-        }));
+        let omega = nodes.insert(Node {
+            node_type: NodeType::Omega(OmegaNode {
+                body: Region::new(),
+            }),
+            //Omega will never have a parent
+            parent: None,
+        });
 
         Rvsdg {
             edges: SlotMap::default(),
-            labels: AHashMap::default(),
             nodes,
             omega,
         }
@@ -131,31 +131,17 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
         self.omega
     }
 
-    pub fn new_node(&mut self, node: Node<N>) -> NodeRef {
-        self.nodes.insert(node)
+    ///Creates a new node for `node_type`. Returns the reference to that node in `self`.
+    pub fn new_node(&mut self, node_type: NodeType<N>) -> NodeRef {
+        self.nodes.insert(Node {
+            node_type,
+            parent: None,
+        })
     }
 
     ///Returns reference to the node, assuming that it exists. Panics if it does not exist.
     pub fn node(&self, nref: NodeRef) -> &Node<N> {
         self.nodes.get(nref).as_ref().unwrap()
-    }
-
-    pub fn push_label(&mut self, label: LabelLoc, value: String) {
-        if let Some(vals) = self.labels.get_mut(&label) {
-            vals.push(value);
-        } else {
-            let mut new_vec = TinyVec::default();
-            new_vec.push(value);
-            self.labels.insert(label, new_vec);
-        }
-    }
-
-    pub fn labels(&self, label: &LabelLoc) -> Option<&TinyVec<[String; 1]>> {
-        self.labels.get(label)
-    }
-
-    pub fn labels_mut(&mut self, label: &LabelLoc) -> Option<&mut TinyVec<[String; 1]>> {
-        self.labels.get_mut(label)
     }
 
     ///Returns reference to the node, assuming that it exists. Panics if it does not exist.
@@ -183,6 +169,26 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
     ///Returns reference to the edge, assuming that it exists. Panics if it does not exist.
     pub fn edge_mut(&mut self, eref: EdgeRef) -> &mut Edge<E> {
         self.edges.get_mut(eref).unwrap()
+    }
+
+    ///Returns the region at the given location, if it exists.
+    /// Returns none if either the `region.node` does not exist, or the `region.region_index`-th region on that node does not exist.
+    pub fn region(&self, region: &RegionLocation) -> Option<&Region> {
+        if let Some(node) = self.nodes.get(region.node) {
+            node.regions().get(region.region_index)
+        } else {
+            None
+        }
+    }
+
+    ///Returns the region at the given location, if it exists.
+    /// Returns none if either the `region.node` does not exist, or the `region.region_index`-th region on that node does not exist.
+    pub fn region_mut(&mut self, region: &RegionLocation) -> Option<&mut Region> {
+        if let Some(node) = self.nodes.get_mut(region.node) {
+            node.regions_mut().get_mut(region.region_index)
+        } else {
+            None
+        }
     }
 
     ///Deletes the `edge` from the graph. Note that any further access to `edge` becomes invalid after that.
@@ -234,41 +240,35 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
     ) -> Result<EdgeRef, GraphError> {
         //Find the region this port is defined in.
         // This is always the parent port, except for argument(like) ports, that are defined _on_ the region
-        let (src_parent_node, src_parent_region_index) =
-            if let Some(reg_idx) = src.output.argument_region_index() {
-                (src.node, reg_idx)
-            } else {
-                if let Some(parent) = self.find_parent(src.node) {
-                    parent
-                } else {
-                    self.search_node_def(src.node)
-                        .ok_or(GraphError::NotConnectedInRegion(src.node))?
-                }
-            };
+        let src_parent_region = if let Some(reg_idx) = src.output.argument_region_index() {
+            RegionLocation {
+                node: src.node,
+                region_index: reg_idx,
+            }
+        } else {
+            self.node(src.node)
+                .parent
+                .clone()
+                .expect("Expected src node to have a parent")
+        };
 
         //Similarly, all result-like outputs are defined on their source region, all others are defined in their parent's region.
-        let (dst_parent_node, dst_parent_region_index) =
-            if let Some(reg_idx) = dst.input.result_region_index() {
-                (dst.node, reg_idx)
-            } else {
-                if let Some(parent) = self.find_parent(dst.node) {
-                    parent
-                } else {
-                    //In this case we have go the _slow_ way, and check all regions for this node.
-                    //TODO: that is not really optimal, we'd want to have some kind of node<->region mapping
-                    //      that is not expressed by the edges. But we'd have to track that when moving nodes out of regions.
-                    self.search_node_def(dst.node)
-                        .ok_or(GraphError::NotConnectedInRegion(dst.node))?
-                }
-            };
+        let dst_parent_region = if let Some(reg_idx) = dst.input.result_region_index() {
+            RegionLocation {
+                node: dst.node,
+                region_index: reg_idx,
+            }
+        } else {
+            self.node(dst.node)
+                .parent
+                .clone()
+                .expect("Expected dst to have a src node")
+        };
 
-        if src_parent_node != dst_parent_node || src_parent_region_index != dst_parent_region_index
-        {
+        if src_parent_region != dst_parent_region {
             return Err(GraphError::NodesNotInSameRegion {
-                src: src_parent_node,
-                src_reg_idx: src_parent_region_index,
-                dst: dst_parent_node,
-                dst_reg_idx: dst_parent_region_index,
+                src: src_parent_region,
+                dst: dst_parent_region,
             });
         }
 
@@ -299,12 +299,13 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
             .unwrap()
             .edges
             .push(edge);
+
         self.node_mut(dst.node).inport_mut(&dst.input).unwrap().edge = Some(edge);
 
         //now notify the region of this new edge
-        self.node_mut(src_parent_node)
+        self.node_mut(src_parent_region.node)
             .regions_mut()
-            .get_mut(src_parent_region_index)
+            .get_mut(src_parent_region.region_index)
             .expect("Expected region to exist!")
             .edges
             .insert(edge);

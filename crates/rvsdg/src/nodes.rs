@@ -32,9 +32,10 @@ mod theta;
 pub use theta::{LoopNode, ThetaNode};
 
 use crate::{
-    edge::{InputType, OutputType},
+    edge::{InputType, LangEdge, OutputType},
     err::LegalizationError,
-    region::{Inport, Input, Outport, Output, Region},
+    region::{Inport, Input, Outport, Output, Region, RegionLocation},
+    Rvsdg,
 };
 
 ///simple node of a language. The trait lets us embed such a node in our overall RVSDG graph.
@@ -46,11 +47,12 @@ pub trait LangNode {
     fn outputs(&self) -> &[Output];
     fn outputs_mut(&mut self) -> &mut [Output];
 }
+
 ///Different node types as outlined in section 4. of the RVSDG paper. The
 /// _Simple_ node represent your IR's instruction. All other nodes are RVSDG
 /// specific architectural nodes.
 #[derive(Debug, Clone)]
-pub enum Node<N: LangNode + 'static> {
+pub enum NodeType<N: LangNode + 'static> {
     ///Simple input/output sequential node
     Simple(N),
     ///Decision point node of matching signatures
@@ -70,86 +72,105 @@ pub enum Node<N: LangNode + 'static> {
     Omega(OmegaNode),
 }
 
+///A single node container in the RVSDG. Contains the most important inner `node_type`, as well as context information.
+///
+/// The most interesting here is the `parent` field, which lets you efficiently traverse child->parent relationships.
+#[derive(Debug, Clone)]
+pub struct Node<N: LangNode + 'static> {
+    pub node_type: NodeType<N>,
+    ///Declares in which nodes's region `self` is located.
+    pub parent: Option<RegionLocation>,
+}
+
 impl<N: LangNode + 'static> Node<N> {
     pub fn inputs(&self) -> &[Input] {
-        match &self {
-            Node::Simple(node) => node.inputs(),
-            Node::Gamma(g) => g.inputs(),
-            Node::Theta(g) => &g.inputs(),
-            Node::Lambda(g) => &g.inputs(),
-            Node::Apply(g) => &g.inputs,
-            Node::Delta(g) => &g.inputs(),
-            Node::Phi(g) => &g.inputs(),
-            Node::Omega(g) => &g.inputs(),
+        match &self.node_type {
+            NodeType::Simple(node) => node.inputs(),
+            NodeType::Gamma(g) => g.inputs(),
+            NodeType::Theta(g) => &g.inputs(),
+            NodeType::Lambda(g) => &g.inputs(),
+            NodeType::Apply(g) => &g.inputs,
+            NodeType::Delta(g) => &g.inputs(),
+            NodeType::Phi(g) => &g.inputs(),
+            NodeType::Omega(g) => &g.inputs(),
         }
     }
 
     pub fn inputs_mut(&mut self) -> &mut [Input] {
-        match self {
-            Node::Simple(node) => node.inputs_mut(),
-            Node::Gamma(g) => g.inputs_mut(),
-            Node::Theta(g) => g.inputs_mut(),
-            Node::Lambda(g) => g.inputs_mut(),
-            Node::Apply(g) => &mut g.inputs,
-            Node::Delta(g) => g.inputs_mut(),
-            Node::Phi(g) => g.inputs_mut(),
-            Node::Omega(_g) => &mut [],
+        match &mut self.node_type {
+            NodeType::Simple(node) => node.inputs_mut(),
+            NodeType::Gamma(g) => g.inputs_mut(),
+            NodeType::Theta(g) => g.inputs_mut(),
+            NodeType::Lambda(g) => g.inputs_mut(),
+            NodeType::Apply(g) => &mut g.inputs,
+            NodeType::Delta(g) => g.inputs_mut(),
+            NodeType::Phi(g) => g.inputs_mut(),
+            NodeType::Omega(_g) => &mut [],
         }
     }
     pub fn outputs(&self) -> &[Output] {
-        match &self {
-            Node::Simple(node) => node.outputs(),
-            Node::Gamma(g) => g.outputs(),
-            Node::Theta(g) => g.outputs(),
-            Node::Lambda(g) => g.outputs(),
-            Node::Apply(g) => &g.outputs,
-            Node::Delta(g) => g.outputs(),
-            Node::Phi(g) => g.outputs(),
-            Node::Omega(_g) => &[],
+        match &self.node_type {
+            NodeType::Simple(node) => node.outputs(),
+            NodeType::Gamma(g) => g.outputs(),
+            NodeType::Theta(g) => g.outputs(),
+            NodeType::Lambda(g) => g.outputs(),
+            NodeType::Apply(g) => &g.outputs,
+            NodeType::Delta(g) => g.outputs(),
+            NodeType::Phi(g) => g.outputs(),
+            NodeType::Omega(_g) => &[],
         }
     }
 
     pub fn outputs_mut(&mut self) -> &mut [Output] {
-        match self {
-            Node::Simple(node) => node.outputs_mut(),
-            Node::Gamma(g) => g.outputs_mut(),
-            Node::Theta(g) => g.outputs_mut(),
-            Node::Lambda(g) => g.outputs_mut(),
-            Node::Apply(g) => &mut g.outputs,
-            Node::Delta(g) => g.outputs_mut(),
-            Node::Phi(g) => g.outputs_mut(),
-            Node::Omega(_g) => &mut [],
+        match &mut self.node_type {
+            NodeType::Simple(node) => node.outputs_mut(),
+            NodeType::Gamma(g) => g.outputs_mut(),
+            NodeType::Theta(g) => g.outputs_mut(),
+            NodeType::Lambda(g) => g.outputs_mut(),
+            NodeType::Apply(g) => &mut g.outputs,
+            NodeType::Delta(g) => g.outputs_mut(),
+            NodeType::Phi(g) => g.outputs_mut(),
+            NodeType::Omega(_g) => &mut [],
         }
     }
 
     ///Reference to all internal regions. This will mostly have length 0/1. Only gamma nodes have >1 regions.
     pub fn regions(&self) -> &[Region] {
-        match &self {
-            Node::Simple(_node) => &[],
-            Node::Gamma(g) => g.regions(),
-            Node::Theta(g) => g.regions(),
-            Node::Lambda(g) => g.regions(),
-            Node::Apply(_g) => &[],
-            Node::Delta(g) => g.regions(),
-            Node::Phi(g) => g.regions(),
-            Node::Omega(g) => g.regions(),
+        match &self.node_type {
+            NodeType::Simple(_node) => &[],
+            NodeType::Gamma(g) => g.regions(),
+            NodeType::Theta(g) => g.regions(),
+            NodeType::Lambda(g) => g.regions(),
+            NodeType::Apply(_g) => &[],
+            NodeType::Delta(g) => g.regions(),
+            NodeType::Phi(g) => g.regions(),
+            NodeType::Omega(g) => g.regions(),
         }
     }
     ///Reference to all internal regions. This will mostly have length 0/1. Only gamma nodes have >1 regions.
     pub fn regions_mut(&mut self) -> &mut [Region] {
-        match self {
-            Node::Simple(_node) => &mut [],
-            Node::Gamma(g) => g.regions_mut(),
-            Node::Theta(g) => g.regions_mut(),
-            Node::Lambda(g) => g.regions_mut(),
-            Node::Apply(_g) => &mut [],
-            Node::Delta(g) => g.regions_mut(),
-            Node::Phi(g) => g.regions_mut(),
-            Node::Omega(g) => g.regions_mut(),
+        match &mut self.node_type {
+            NodeType::Simple(_node) => &mut [],
+            NodeType::Gamma(g) => g.regions_mut(),
+            NodeType::Theta(g) => g.regions_mut(),
+            NodeType::Lambda(g) => g.regions_mut(),
+            NodeType::Apply(_g) => &mut [],
+            NodeType::Delta(g) => g.regions_mut(),
+            NodeType::Phi(g) => g.regions_mut(),
+            NodeType::Omega(g) => g.regions_mut(),
         }
     }
 
-    pub fn legalize(&mut self) -> Result<(), LegalizationError> {
+    ///Checks if this node is legal in its current form.
+    pub fn is_legal<E: LangEdge + 'static>(
+        &self,
+        graph: &Rvsdg<N, E>,
+    ) -> Result<(), LegalizationError> {
+        todo!("Implement legalization")
+    }
+
+    ///Lets a node performe legalization on it self.
+    pub fn legalize<E: LangEdge + 'static>(&mut self) -> Result<(), LegalizationError> {
         todo!("Implement legalization")
     }
 
@@ -157,14 +178,14 @@ impl<N: LangNode + 'static> Node<N> {
     pub fn outport(&self, port_ty: &OutputType) -> Option<&Outport> {
         match port_ty {
             OutputType::Output(p) => self.outputs().get(*p),
-            _ => match self {
-                Node::Simple(_) | Node::Apply(_) => None,
-                Node::Theta(g) => g.outport(port_ty),
-                Node::Lambda(g) => g.outport(port_ty),
-                Node::Delta(g) => g.outport(port_ty),
-                Node::Phi(g) => g.outport(port_ty),
-                Node::Omega(g) => g.outport(port_ty),
-                Node::Gamma(g) => g.outport(port_ty),
+            _ => match &self.node_type {
+                NodeType::Simple(_) | NodeType::Apply(_) => None,
+                NodeType::Theta(g) => g.outport(port_ty),
+                NodeType::Lambda(g) => g.outport(port_ty),
+                NodeType::Delta(g) => g.outport(port_ty),
+                NodeType::Phi(g) => g.outport(port_ty),
+                NodeType::Omega(g) => g.outport(port_ty),
+                NodeType::Gamma(g) => g.outport(port_ty),
             },
         }
     }
@@ -173,14 +194,14 @@ impl<N: LangNode + 'static> Node<N> {
     pub fn outport_mut(&mut self, port_ty: &OutputType) -> Option<&mut Outport> {
         match port_ty {
             OutputType::Output(p) => self.outputs_mut().get_mut(*p),
-            _ => match self {
-                Node::Simple(_) | Node::Apply(_) => None,
-                Node::Theta(g) => g.outport_mut(port_ty),
-                Node::Lambda(g) => g.outport_mut(port_ty),
-                Node::Delta(g) => g.outport_mut(port_ty),
-                Node::Phi(g) => g.outport_mut(port_ty),
-                Node::Omega(g) => g.outport_mut(port_ty),
-                Node::Gamma(g) => g.outport_mut(port_ty),
+            _ => match &mut self.node_type {
+                NodeType::Simple(_) | NodeType::Apply(_) => None,
+                NodeType::Theta(g) => g.outport_mut(port_ty),
+                NodeType::Lambda(g) => g.outport_mut(port_ty),
+                NodeType::Delta(g) => g.outport_mut(port_ty),
+                NodeType::Phi(g) => g.outport_mut(port_ty),
+                NodeType::Omega(g) => g.outport_mut(port_ty),
+                NodeType::Gamma(g) => g.outport_mut(port_ty),
             },
         }
     }
@@ -188,14 +209,14 @@ impl<N: LangNode + 'static> Node<N> {
     pub fn inport(&self, port_ty: &InputType) -> Option<&Inport> {
         match port_ty {
             InputType::Input(i) => self.inputs().get(*i),
-            _ => match self {
-                Node::Simple(_) | Node::Apply(_) => None,
-                Node::Theta(g) => g.inport(port_ty),
-                Node::Lambda(g) => g.inport(port_ty),
-                Node::Delta(g) => g.inport(port_ty),
-                Node::Phi(g) => g.inport(port_ty),
-                Node::Omega(g) => g.inport(port_ty),
-                Node::Gamma(g) => g.inport(port_ty),
+            _ => match &self.node_type {
+                NodeType::Simple(_) | NodeType::Apply(_) => None,
+                NodeType::Theta(g) => g.inport(port_ty),
+                NodeType::Lambda(g) => g.inport(port_ty),
+                NodeType::Delta(g) => g.inport(port_ty),
+                NodeType::Phi(g) => g.inport(port_ty),
+                NodeType::Omega(g) => g.inport(port_ty),
+                NodeType::Gamma(g) => g.inport(port_ty),
             },
         }
     }
@@ -203,47 +224,74 @@ impl<N: LangNode + 'static> Node<N> {
     pub fn inport_mut(&mut self, port_ty: &InputType) -> Option<&mut Inport> {
         match port_ty {
             InputType::Input(i) => self.inputs_mut().get_mut(*i),
-            _ => match self {
-                Node::Simple(_) | Node::Apply(_) => None,
-                Node::Theta(g) => g.inport_mut(port_ty),
-                Node::Lambda(g) => g.inport_mut(port_ty),
-                Node::Delta(g) => g.inport_mut(port_ty),
-                Node::Phi(g) => g.inport_mut(port_ty),
-                Node::Omega(g) => g.inport_mut(port_ty),
-                Node::Gamma(g) => g.inport_mut(port_ty),
+            _ => match &mut self.node_type {
+                NodeType::Simple(_) | NodeType::Apply(_) => None,
+                NodeType::Theta(g) => g.inport_mut(port_ty),
+                NodeType::Lambda(g) => g.inport_mut(port_ty),
+                NodeType::Delta(g) => g.inport_mut(port_ty),
+                NodeType::Phi(g) => g.inport_mut(port_ty),
+                NodeType::Omega(g) => g.inport_mut(port_ty),
+                NodeType::Gamma(g) => g.inport_mut(port_ty),
             },
         }
     }
+
+    ///Returns true if this is either a lambda, or phi node
+    pub fn is_callable(&self) -> bool {
+        if let NodeType::Lambda(_) | NodeType::Phi(_) = self.node_type {
+            true
+        } else {
+            false
+        }
+    }
+
+    ///Returns true, if any input or output port has a connection
+    pub fn is_connected(&self) -> bool {
+        for input in self.inputs().iter() {
+            if input.edge.is_some() {
+                return true;
+            }
+        }
+        for output in self.outputs().iter() {
+            if !output.edges.is_empty() {
+                return true;
+            }
+        }
+
+        false
+    }
 }
 
-impl<N: LangNode + Debug + 'static> Display for Node<N> {
+impl<N: LangNode + 'static> Display for NodeType<N> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Node::Apply(_a) => write!(f, "Apply"),
-            Node::Delta(d) => write!(f, "Delta({} cv, {} nodes)", d.cv_count, d.body.nodes.len()),
-            Node::Gamma(g) => write!(
+        match &self {
+            NodeType::Apply(_a) => write!(f, "Apply"),
+            NodeType::Delta(d) => {
+                write!(f, "Delta({} cv, {} nodes)", d.cv_count, d.body.nodes.len())
+            }
+            NodeType::Gamma(g) => write!(
                 f,
                 "Gamma({} branches, {} entry-vars, {} exit-vars)",
                 g.regions.len(),
                 g.entry_var_count,
                 g.exit_var_count
             ),
-            Node::Lambda(l) => write!(
+            NodeType::Lambda(l) => write!(
                 f,
                 "Lambda({} arguments, {} results)",
                 l.body.arguments.len(),
                 l.body.results.len()
             ),
-            Node::Omega(o) => write!(
+            NodeType::Omega(o) => write!(
                 f,
                 "Omega({} imports, {} exports, {} top-level nodes)",
                 o.body.arguments.len(),
                 o.body.results.len(),
                 o.body.nodes.len()
             ),
-            Node::Phi(p) => write!(f, "Phi({} rv, {} cv)", p.rv_count, p.cv_count),
-            Node::Simple(s) => write!(f, "Simple({:?})", s),
-            Node::Theta(t) => write!(f, "Theta({} lv)", t.lv_count),
+            NodeType::Phi(p) => write!(f, "Phi({} rv, {} cv)", p.rv_count, p.cv_count),
+            NodeType::Simple(s) => write!(f, "Simple"),
+            NodeType::Theta(t) => write!(f, "Theta({} lv)", t.lv_count),
         }
     }
 }

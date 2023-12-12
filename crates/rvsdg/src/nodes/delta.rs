@@ -54,7 +54,7 @@ impl StructuralNode for DeltaNode {
                     None
                 }
             }
-            OutputType::DeltaDecleration => Some(&self.output),
+            OutputType::DeltaDeclaration => Some(&self.output),
             OutputType::ContextVariableArgument(n) => self.cv_argument(*n),
             _ => None,
         }
@@ -68,7 +68,7 @@ impl StructuralNode for DeltaNode {
                     None
                 }
             }
-            OutputType::DeltaDecleration => Some(&mut self.output),
+            OutputType::DeltaDeclaration => Some(&mut self.output),
             OutputType::ContextVariableArgument(n) => self.cv_argument_mut(*n),
             _ => None,
         }

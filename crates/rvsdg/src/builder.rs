@@ -18,8 +18,8 @@ use std::marker::PhantomData;
 use crate::{
     edge::{InportLocation, InputType, LangEdge, OutportLocation, OutputType},
     err::GraphError,
-    nodes::{ApplyNode, LangNode, Node, StructuralNode},
-    region::Region,
+    nodes::{ApplyNode, LangNode, Node, NodeType, StructuralNode},
+    region::{Region, RegionLocation},
     EdgeRef, NodeRef, Rvsdg,
 };
 pub use inter_proc::{DeltaBuilder, LambdaBuilder, OmegaBuilder, PhiBuilder};
@@ -64,11 +64,20 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static, PARENT: StructuralNode>
         &mut self.ctx_mut().node_mut(p).regions_mut()[reg_idx]
     }
 
+    ///RegionLocation that points to this region.
+    pub fn parent_location(&self) -> RegionLocation {
+        RegionLocation {
+            node: self.parent_ref,
+            region_index: self.parent_region_index,
+        }
+    }
+
     ///Adds `node` to this region, returns the ref it was registered as
     pub fn insert_node(&mut self, node: N) -> NodeRef {
-        let nref = self.ctx.new_node(Node::Simple(node));
+        let nref = self.ctx.new_node(NodeType::Simple(node));
         self.region_mut().nodes.insert(nref);
-
+        //mark parent on node.
+        self.ctx.node_mut(nref).parent = Some(self.parent_location());
         nref
     }
 
@@ -139,12 +148,11 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static, PARENT: StructuralNode>
         building: impl FnOnce(&mut ThetaBuilder<N, E>) -> R,
     ) -> (NodeRef, R) {
         let (created_node, res) = {
-            let mut builder = ThetaBuilder::new(self.ctx);
+            let mut builder = ThetaBuilder::new(self.ctx, self.parent_location());
+            //add to our region
             let res = building(&mut builder);
             (builder.build(), res)
         };
-        //add to our region
-        self.region_mut().nodes.insert(created_node);
         (created_node, res)
     }
 
@@ -155,12 +163,11 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static, PARENT: StructuralNode>
         building: impl FnOnce(&mut GammaBuilder<N, E>) -> R,
     ) -> (NodeRef, R) {
         let (created, res) = {
-            let mut builder = GammaBuilder::new(self.ctx);
+            let mut builder = GammaBuilder::new(self.ctx, self.parent_location());
+            //add to our region
             let res = building(&mut builder);
             (builder.build(), res)
         };
-        //add to our region
-        self.region_mut().nodes.insert(created);
         (created, res)
     }
 
@@ -171,12 +178,10 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static, PARENT: StructuralNode>
         building: impl FnOnce(&mut LambdaBuilder<N, E>) -> R,
     ) -> (NodeRef, R) {
         let (created, res) = {
-            let mut builder = LambdaBuilder::new(self.ctx);
+            let mut builder = LambdaBuilder::new(self.ctx, self.parent_location());
             let res = building(&mut builder);
             (builder.build(), res)
         };
-        //add to our region
-        self.region_mut().nodes.insert(created);
         (created, res)
     }
 
@@ -187,24 +192,23 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static, PARENT: StructuralNode>
         building: impl FnOnce(&mut PhiBuilder<N, E>) -> R,
     ) -> (NodeRef, R) {
         let (created, res) = {
-            let mut builder = PhiBuilder::new(self.ctx);
+            let mut builder = PhiBuilder::new(self.ctx, self.parent_location());
             let res = building(&mut builder);
             (builder.build(), res)
         };
-        //add to our region
-        self.region_mut().nodes.insert(created);
         (created, res)
     }
 
     ///Allows you to spawn a new global-value/[δ-Node](crates::nodes::DeltaNode) in this region. Returns the reference under which the function is created.
-    pub fn new_global(&mut self, building: impl FnOnce(&mut DeltaBuilder<N, E>)) -> NodeRef {
+    pub fn new_global<R: 'static>(
+        &mut self,
+        building: impl FnOnce(&mut DeltaBuilder<N, E>) -> R,
+    ) -> (NodeRef, R) {
         let created = {
-            let mut builder = DeltaBuilder::new(self.ctx);
-            building(&mut builder);
-            builder.build()
+            let mut builder = DeltaBuilder::new(self.ctx, self.parent_location());
+            let res = building(&mut builder);
+            (builder.build(), res)
         };
-        //add to our region
-        self.region_mut().nodes.insert(created);
         created
     }
 
@@ -222,7 +226,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static, PARENT: StructuralNode>
     ) -> Result<(NodeRef, TinyVec<[EdgeRef; 3]>), GraphError> {
         let (apply_node, is_defined) =
             if let Some(funct_def) = self.ctx.find_callabel_def(callable_src.clone()) {
-                if let Node::Lambda(l) = self.ctx.node(funct_def) {
+                if let NodeType::Lambda(l) = &self.ctx.node(funct_def).node_type {
                     (ApplyNode::new_for_lambda(l), true)
                 } else {
                     println!("Callable for phi not implemented!");
@@ -233,9 +237,10 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static, PARENT: StructuralNode>
             };
 
         //insert into graph
-        let apply_node_ref = self.ctx.new_node(Node::Apply(apply_node));
+        let apply_node_ref = self.ctx.new_node(NodeType::Apply(apply_node));
         //add to block
         self.region_mut().nodes.insert(apply_node_ref);
+        self.ctx.node_mut(apply_node_ref).parent = Some(self.parent_location());
 
         //connect function input and arguments, collect created edges
 
@@ -257,7 +262,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static, PARENT: StructuralNode>
         for (idx, arg_src) in arguments.iter().enumerate() {
             //If producer is not defined, push all args we connect to.
             if !is_defined {
-                if let Node::Apply(an) = self.ctx.node_mut(apply_node_ref) {
+                if let NodeType::Apply(an) = &mut self.ctx.node_mut(apply_node_ref).node_type {
                     let at = an.add_input();
                     assert!(idx == at - 1, "argument count missmatch");
                 } else {
@@ -280,5 +285,15 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static, PARENT: StructuralNode>
         }
 
         Ok((apply_node_ref, arg_edges))
+    }
+
+    ///Imports the output `src` into this region and return the outport/argument it will be available at in this region.
+    ///
+    /// Uses context variables whenever appropriate.
+    ///
+    /// Might return None if `src` is not part of any parent.
+    pub fn import_context(&mut self, src: OutportLocation) -> Result<OutportLocation, GraphError> {
+        let region = self.parent_location();
+        self.ctx_mut().import_context(src, region)
     }
 }

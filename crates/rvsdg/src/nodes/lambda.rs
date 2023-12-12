@@ -32,12 +32,12 @@ impl ApplyNode {
     ///Creates a call that has the signature needed for the given lambda node
     pub fn new_for_lambda(node: &LambdaNode) -> Self {
         let node_body = &node.body;
+        //need to add one more inputs then args
+        let inputs = (0..(node_body.arguments.len() + 1))
+            .map(|_| Input::default())
+            .collect();
         ApplyNode {
-            inputs: node_body
-                .arguments
-                .iter()
-                .map(|_p| Input::default())
-                .collect(),
+            inputs,
             outputs: node_body
                 .results
                 .iter()
@@ -135,7 +135,7 @@ impl StructuralNode for LambdaNode {
                 }
             }
             OutputType::Argument(n) => self.body.arguments.get(*n + self.cv_count),
-            OutputType::LambdaDecleration => Some(&self.output),
+            OutputType::LambdaDeclaration => Some(&self.output),
             OutputType::ContextVariableArgument(n) => self.cv_argument(*n),
             _ => None,
         }
@@ -150,7 +150,7 @@ impl StructuralNode for LambdaNode {
                 }
             }
             OutputType::Argument(n) => self.body.arguments.get_mut(*n + self.cv_count),
-            OutputType::LambdaDecleration => Some(&mut self.output),
+            OutputType::LambdaDeclaration => Some(&mut self.output),
             OutputType::ContextVariableArgument(n) => self.cv_argument_mut(*n),
             _ => None,
         }
