@@ -18,7 +18,7 @@ use std::marker::PhantomData;
 use crate::{
     edge::{InportLocation, InputType, LangEdge, OutportLocation, OutputType},
     err::GraphError,
-    nodes::{ApplyNode, LangNode, Node, NodeType, StructuralNode},
+    nodes::{ApplyNode, LangNode, NodeType, StructuralNode},
     region::{Region, RegionLocation},
     EdgeRef, NodeRef, Rvsdg,
 };

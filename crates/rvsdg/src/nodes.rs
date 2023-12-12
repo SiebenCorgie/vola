@@ -164,7 +164,7 @@ impl<N: LangNode + 'static> Node<N> {
     ///Checks if this node is legal in its current form.
     pub fn is_legal<E: LangEdge + 'static>(
         &self,
-        graph: &Rvsdg<N, E>,
+        _graph: &Rvsdg<N, E>,
     ) -> Result<(), LegalizationError> {
         todo!("Implement legalization")
     }
@@ -290,7 +290,7 @@ impl<N: LangNode + 'static> Display for NodeType<N> {
                 o.body.nodes.len()
             ),
             NodeType::Phi(p) => write!(f, "Phi({} rv, {} cv)", p.rv_count, p.cv_count),
-            NodeType::Simple(s) => write!(f, "Simple"),
+            NodeType::Simple(_s) => write!(f, "Simple"),
             NodeType::Theta(t) => write!(f, "Theta({} lv)", t.lv_count),
         }
     }

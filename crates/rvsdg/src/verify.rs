@@ -2,7 +2,7 @@
 
 use crate::{
     edge::LangEdge,
-    err::{GraphError, LegalizationError},
+    err::{LegalizationError},
     nodes::LangNode,
     Rvsdg,
 };

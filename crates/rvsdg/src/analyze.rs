@@ -9,7 +9,7 @@ use ahash::AHashSet;
 
 use crate::{
     edge::{InportLocation, InputType, LangEdge, OutportLocation, OutputType},
-    nodes::{LangNode, Node, NodeType},
+    nodes::{LangNode, NodeType},
     NodeRef, Rvsdg,
 };
 

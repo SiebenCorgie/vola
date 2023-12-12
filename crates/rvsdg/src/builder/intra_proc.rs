@@ -3,7 +3,7 @@
 
 use crate::{
     edge::{InportLocation, InputType, LangEdge, OutportLocation, OutputType},
-    nodes::{GammaNode, LangNode, Node, NodeType, ThetaNode},
+    nodes::{GammaNode, LangNode, NodeType, ThetaNode},
     region::RegionLocation,
     NodeRef, Rvsdg,
 };

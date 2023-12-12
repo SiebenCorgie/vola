@@ -1,13 +1,13 @@
 //! Implements some helper function when working with the RVSDG.
 
-use std::{collections::VecDeque, fmt::Debug};
+use std::collections::VecDeque;
 
 use crate::{
     edge::{InputType, LangEdge, OutportLocation, OutputType},
     err::GraphError,
-    nodes::{LangNode, Node, NodeType},
+    nodes::{LangNode, NodeType},
     region::RegionLocation,
-    NodeRef, Rvsdg,
+    Rvsdg,
 };
 
 impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
@@ -112,8 +112,8 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
     ///Similarly to [Self::build_import_path_cv], but imports values via normal arguments to inner regions.
     pub fn build_import_path_arg(
         &mut self,
-        src: OutportLocation,
-        path: &[RegionLocation],
+        _src: OutportLocation,
+        _path: &[RegionLocation],
     ) -> OutportLocation {
         //TODO implement similar to the CV version. Find out how we could merge the code though
         todo!("Implement")

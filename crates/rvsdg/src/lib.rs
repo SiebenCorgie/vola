@@ -13,7 +13,7 @@
 //! calls. Those things reside in the [common] module.
 use std::fmt::Display;
 
-use ahash::AHashMap;
+
 use builder::OmegaBuilder;
 use edge::{Edge, InportLocation, InputType, LangEdge, OutportLocation, OutputType};
 use err::GraphError;

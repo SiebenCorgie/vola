@@ -1,7 +1,7 @@
 use rvsdg::{
     common::{CommonRvsdg, VSEdge},
     edge::{InputType, OutputType},
-    nodes::{Node, NodeType},
+    nodes::NodeType,
     Rvsdg,
 };
 pub use rvsdg_viewer::macroquad;
