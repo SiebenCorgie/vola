@@ -171,6 +171,7 @@ pub struct AnyNode {
 
 impl AnyNode {
     pub const PADDING: f32 = 10.0;
+    pub const YSHIFT: f32 = 30.0;
     pub const FONT_SIZE: f32 = Self::PADDING - 1.0;
 
     pub const PORT_WIDTH: f32 = 5.0;
@@ -203,7 +204,7 @@ impl AnyNode {
             }
             max_x = max_x.max(xoff);
             //add to the y offset for the next line
-            yoff += line_height + Self::PADDING;
+            yoff += line_height + Self::YSHIFT;
         }
 
         //set the x offset
@@ -533,10 +534,13 @@ impl Printer {
                 }
             } else {
                 if let Some(node_output) = lookup_output(edg, edge.src.node) {
-                    let (line, column) = node_ref_map
-                        .get(&edge.src.node)
-                        .cloned()
-                        .expect("Node was not in lookup map!");
+                    let (line, column) = if let Some(e) = node_ref_map.get(&edge.src.node).cloned()
+                    {
+                        e
+                    } else {
+                        println!("Node {:?} was not in lookup map, this means there are edges that are not connected to any export!", edge.src.node);
+                        continue;
+                    };
                     BodyRegionPort::Out {
                         line,
                         column,
@@ -557,10 +561,13 @@ impl Printer {
                 }
             } else {
                 if let Some(input_idx) = lookup_input(edg, edge.dst.node) {
-                    let (line, column) = node_ref_map
-                        .get(&edge.dst.node)
-                        .cloned()
-                        .expect("Node was not in lookup map!");
+                    let (line, column) = if let Some(e) = node_ref_map.get(&edge.dst.node).cloned()
+                    {
+                        e
+                    } else {
+                        println!("Node {:?} was not in lookup map, this means there are edges that ore not connected to any export!", edge.dst.node);
+                        continue;
+                    };
                     BodyRegionPort::Inp {
                         line,
                         column,

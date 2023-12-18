@@ -13,7 +13,6 @@
 //! calls. Those things reside in the [common] module.
 use std::fmt::Display;
 
-
 use builder::OmegaBuilder;
 use edge::{Edge, InportLocation, InputType, LangEdge, OutportLocation, OutputType};
 use err::GraphError;
@@ -113,7 +112,7 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
     }
 
     ///Allows you to modify the graph from its entry point, the [ω-Node](crate::nodes::OmegaNode).
-    pub fn on_omega_node(&mut self, f: impl FnOnce(&mut OmegaBuilder<N, E>)) {
+    pub fn on_omega_node<R>(&mut self, f: impl FnOnce(&mut OmegaBuilder<N, E>) -> R) -> R {
         //we do this by replacing the actual omega node, setup the builder, call it,
         // and then substituding it again.
         let omega_ref = self.omega;

@@ -9,7 +9,7 @@ use crate::{
     EdgeRef, NodeRef,
 };
 
-#[derive(Debug, Hash, PartialEq, Eq)]
+#[derive(Debug, Hash, PartialEq, Eq, Clone)]
 pub enum AttribLocation {
     InPort(InportLocation),
     OutPort(OutportLocation),
@@ -51,19 +51,18 @@ impl<ATTRIB: 'static> AttribStore<ATTRIB> {
             attribs: AHashMap::default(),
         }
     }
-    pub fn attrib(&self, location: impl AsRef<AttribLocation>) -> Option<&[ATTRIB]> {
-        self.attribs.get(location.as_ref()).map(|s| s.as_slice())
+    pub fn attrib(&self, location: &AttribLocation) -> Option<&[ATTRIB]> {
+        self.attribs.get(location).map(|s| s.as_slice())
     }
-    pub fn attrib_mut(&mut self, location: impl AsRef<AttribLocation>) -> Option<&mut Vec<ATTRIB>> {
-        self.attribs.get_mut(location.as_ref())
+    pub fn attrib_mut(&mut self, location: &AttribLocation) -> Option<&mut Vec<ATTRIB>> {
+        self.attribs.get_mut(location)
     }
 
-    pub fn push_attrib(&mut self, location: impl Into<AttribLocation>, attrib: ATTRIB) {
-        let loc = location.into();
-        if let Some(coll) = self.attribs.get_mut(&loc) {
+    pub fn push_attrib(&mut self, location: &AttribLocation, attrib: ATTRIB) {
+        if let Some(coll) = self.attribs.get_mut(&location) {
             coll.push(attrib);
         } else {
-            self.attribs.insert(loc, vec![attrib]);
+            self.attribs.insert(location.clone(), vec![attrib]);
         }
     }
 }
