@@ -80,7 +80,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> GammaBuilder<'a, N, E> {
     /// ```
     pub fn new_branch<R>(
         &mut self,
-        branch_builder: impl FnOnce(&mut RegionBuilder<N, E, GammaNode>, usize) -> R,
+        branch_builder: impl FnOnce(&mut RegionBuilder<N, E>, usize) -> R,
     ) -> (usize, R) {
         self.node_mut().add_region();
         let idx = self.node().regions.len() - 1;
@@ -164,7 +164,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> ThetaBuilder<'a, N, E> {
     }
 
     ///lets you change the behaviour of this node.
-    pub fn on_loop<R>(&mut self, f: impl FnOnce(&mut RegionBuilder<N, E, ThetaNode>) -> R) -> R {
+    pub fn on_loop<R>(&mut self, f: impl FnOnce(&mut RegionBuilder<N, E>) -> R) -> R {
         //setup the builder for the region
         let mut builder = RegionBuilder::new(self.ctx, 0, self.node_ref);
         f(&mut builder)

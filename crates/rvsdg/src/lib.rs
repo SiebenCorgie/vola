@@ -13,7 +13,7 @@
 //! calls. Those things reside in the [common] module.
 use std::fmt::Display;
 
-use builder::OmegaBuilder;
+use builder::{OmegaBuilder, RegionBuilder};
 use edge::{Edge, InportLocation, InputType, LangEdge, OutportLocation, OutputType};
 use err::GraphError;
 use nodes::{LangNode, Node, NodeType, OmegaNode};
@@ -185,6 +185,20 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
     pub fn region_mut(&mut self, region: &RegionLocation) -> Option<&mut Region> {
         if let Some(node) = self.nodes.get_mut(region.node) {
             node.regions_mut().get_mut(region.region_index)
+        } else {
+            None
+        }
+    }
+
+    ///Executes `mutator` on `region` Returns none if `region` does not exist.
+    pub fn on_region<R>(
+        &mut self,
+        region: &RegionLocation,
+        mutator: impl FnOnce(&mut RegionBuilder<N, E>) -> R,
+    ) -> Option<R> {
+        if let Some(_reg) = self.region_mut(region) {
+            let mut builder = RegionBuilder::new_for_location(self, region);
+            Some(mutator(&mut builder))
         } else {
             None
         }

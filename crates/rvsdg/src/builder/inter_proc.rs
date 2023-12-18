@@ -85,7 +85,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> LambdaBuilder<'a, N, E> {
     }
 
     ///Lets you change the behaviour of this node. You can use `R` to export state from _inside_ the builder outside.
-    pub fn on_region<R>(&mut self, f: impl FnOnce(&mut RegionBuilder<N, E, LambdaNode>) -> R) -> R {
+    pub fn on_region<R>(&mut self, f: impl FnOnce(&mut RegionBuilder<N, E>) -> R) -> R {
         //setup the builder for the region
         let mut builder = RegionBuilder::new(self.ctx, 0, self.node_ref);
         f(&mut builder)
@@ -149,7 +149,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> DeltaBuilder<'a, N, E> {
     }
 
     ///lets you change the behaviour of this node.
-    pub fn on_region<R>(&mut self, f: impl FnOnce(&mut RegionBuilder<N, E, DeltaNode>) -> R) -> R {
+    pub fn on_region<R>(&mut self, f: impl FnOnce(&mut RegionBuilder<N, E>) -> R) -> R {
         //setup the builder for the region
         let mut builder = RegionBuilder::new(self.ctx, 0, self.node_ref);
         f(&mut builder)
@@ -233,7 +233,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> PhiBuilder<'a, N, E> {
     }
 
     ///lets you change the behaviour of this node.
-    pub fn on_region<R>(&mut self, f: impl FnOnce(&mut RegionBuilder<N, E, PhiNode>) -> R) -> R {
+    pub fn on_region<R>(&mut self, f: impl FnOnce(&mut RegionBuilder<N, E>) -> R) -> R {
         //setup the builder for the region
         let mut builder = RegionBuilder::new(self.ctx, 0, self.node_ref);
         f(&mut builder)
@@ -386,7 +386,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> OmegaBuilder<'a, N, E> {
         (created, res)
     }
     ///lets you change the behaviour of this node.
-    pub fn on_region<R>(&mut self, f: impl FnOnce(&mut RegionBuilder<N, E, OmegaNode>) -> R) -> R {
+    pub fn on_region<R>(&mut self, f: impl FnOnce(&mut RegionBuilder<N, E>) -> R) -> R {
         //setup the builder for the region
         let mut builder = RegionBuilder::new(self.ctx, 0, self.node_ref);
         f(&mut builder)
