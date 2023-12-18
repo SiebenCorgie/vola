@@ -32,11 +32,16 @@ pub enum GraphError {
     InvalidEdge(EdgeRef),
     #[error("The node {0} is invalid. It might have been deleted since its creation.")]
     InvalidNode(NodeRef),
+    #[error("The region location {0:?} is invalid in this graph")]
+    InvalidRegion(RegionLocation),
 
     #[error("Unexpected node type")]
     UnexpectedNodeType,
     #[error("Node {0} was not declared in a parent to region {1:?} or {1:?} itself")]
     NodeNotInParentRegion(NodeRef, RegionLocation),
+
+    #[error("Node {0} has no parent region")]
+    NoParentRegion(NodeRef),
 
     #[error("The definition of {0} is not a callable node.")]
     NotCallable(NodeRef),
@@ -48,6 +53,8 @@ pub enum GraphError {
         src: RegionLocation,
         dst: RegionLocation,
     },
+    #[error("Edge {0} was not in any region")]
+    EdgeNotInRegion(EdgeRef),
 
     #[error("{0:?} is already in use")]
     InportInUse(InportLocation),

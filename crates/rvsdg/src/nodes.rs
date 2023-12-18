@@ -32,10 +32,10 @@ mod theta;
 pub use theta::{LoopNode, ThetaNode};
 
 use crate::{
-    edge::{InputType, LangEdge, OutputType},
+    edge::{InportLocation, InputType, LangEdge, OutportLocation, OutputType},
     err::LegalizationError,
     region::{Inport, Input, Outport, Output, Region, RegionLocation},
-    Rvsdg,
+    Rvsdg, SmallColl,
 };
 
 ///simple node of a language. The trait lets us embed such a node in our overall RVSDG graph.
@@ -259,6 +259,43 @@ impl<N: LangNode + 'static> Node<N> {
         }
 
         false
+    }
+
+    ///Accesses the `input` of this node and tries to resolve the connected `src` node on that port.
+    ///
+    /// Panics if `input` is not connected.
+    /// This is a shortcut to matching `node.inputs().get(input)`
+    pub fn input_src<E: LangEdge + 'static>(
+        &self,
+        ctx: &Rvsdg<N, E>,
+        input: usize,
+    ) -> OutportLocation {
+        if let Some(edg) = self.inputs().get(input).unwrap().edge {
+            ctx.edge(edg).src.clone()
+        } else {
+            panic!("Input {} of node was not connected", input);
+        }
+    }
+
+    ///Accesses the `output`-th output port of the node, and tries to resolve it to a set of
+    /// connected nodes.
+    ///
+    /// Panics if the `output`-th port does not exist.
+    pub fn output_dsts<E: LangEdge + 'static>(
+        &self,
+        ctx: &Rvsdg<N, E>,
+        output: usize,
+    ) -> SmallColl<InportLocation> {
+        let mut retcoll = SmallColl::default();
+        if let Some(output) = self.outputs().get(output) {
+            for edg in output.edges.iter() {
+                retcoll.push(ctx.edge(*edg).dst.clone());
+            }
+        } else {
+            panic!("Output {} does not exist on node!", output);
+        }
+
+        retcoll
     }
 }
 

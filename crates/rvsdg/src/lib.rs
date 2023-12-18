@@ -19,6 +19,8 @@ use err::GraphError;
 use nodes::{LangNode, Node, NodeType, OmegaNode};
 use region::{Region, RegionLocation};
 use slotmap::{new_key_type, SlotMap};
+pub use smallvec;
+use smallvec::SmallVec;
 
 pub mod analyze;
 pub mod attrib;
@@ -30,6 +32,9 @@ pub mod nodes;
 pub mod region;
 pub mod util;
 pub mod verify;
+
+///SmallVec based collection for dynamically sized, but usually small collections through out the RVSDG.
+pub type SmallColl<T> = SmallVec<[T; 3]>;
 
 new_key_type! {pub struct NodeRef;}
 impl Display for NodeRef {
@@ -228,6 +233,29 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
                 err = Some(GraphError::InvalidNode(dst.node));
             }
 
+            let parent_region = match (
+                self.node(src.node).parent.clone(),
+                self.node(dst.node).parent.clone(),
+            ) {
+                (Some(reg_src), Some(reg_dst)) => {
+                    assert!(reg_src == reg_dst);
+                    reg_src
+                }
+                //Happens if one participant is the omega node
+                (Some(reg), None) | (None, Some(reg)) => reg,
+                (None, None) => return Err(GraphError::InvalidEdge(edge)),
+            };
+
+            //finally remove edge from the parent region.
+            if let Some(reg) = self.region_mut(&parent_region) {
+                if reg.edges.remove(&edge) {
+                } else {
+                    return Err(GraphError::EdgeNotInRegion(edge));
+                }
+            } else {
+                return Err(GraphError::InvalidRegion(parent_region));
+            }
+
             if let Some(e) = err {
                 Err(e)
             } else {
@@ -235,6 +263,44 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
             }
         } else {
             Err(GraphError::InvalidEdge(edge))
+        }
+    }
+
+    ///Removes `node` from the graph, and disconnects all edges leading from/to this node.
+    ///
+    /// Afterwards the `NodeRef` of `node`, and all removed `EdgeRef`s will be invalid.
+    ///
+    ///
+    /// If one or more errors occur while disconnecting the node's edges, the process will try to continue to
+    /// disconnect the remaining edges.
+    /// If any error occurs, Err is returned, carrying the last occurred error;
+    pub fn remove_node(&mut self, node: NodeRef) -> Result<(), GraphError> {
+        let input_edges: SmallColl<EdgeRef> = self
+            .node(node)
+            .inputs()
+            .iter()
+            .filter_map(|inp| inp.edge)
+            .collect();
+        let output_edges: SmallColl<EdgeRef> = self
+            .node(node)
+            .outputs()
+            .iter()
+            .map(|out| out.edges.iter().map(|edg| *edg))
+            .flatten()
+            .collect();
+
+        let mut any_error = None;
+        for edge in input_edges.into_iter().chain(output_edges.into_iter()) {
+            if let Err(e) = self.disconnect(edge) {
+                any_error = Some(e);
+            }
+        }
+
+        //finall, remove our node
+        if let Some(err) = any_error {
+            Err(err)
+        } else {
+            Ok(())
         }
     }
 

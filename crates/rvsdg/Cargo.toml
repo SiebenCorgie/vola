@@ -17,3 +17,4 @@ tinyvec = {workspace = true, features = ["alloc"]}
 slotmap.workspace = true
 annotate-snippets.workspace = true
 graphviz-rust = {workspace = true, optional = true}
+smallvec.workspace = true
