@@ -135,6 +135,14 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
         self.omega
     }
 
+    ///Returns the region location of the [ω-Node](crate::nodes::OmegaNode)'s region.
+    pub fn toplevel_region(&self) -> RegionLocation {
+        RegionLocation {
+            node: self.omega,
+            region_index: 0,
+        }
+    }
+
     ///Creates a new node for `node_type`. Returns the reference to that node in `self`.
     pub fn new_node(&mut self, node_type: NodeType<N>) -> NodeRef {
         self.nodes.insert(Node {
