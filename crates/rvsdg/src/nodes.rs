@@ -72,6 +72,90 @@ pub enum NodeType<N: LangNode + 'static> {
     Omega(OmegaNode),
 }
 
+macro_rules! impl_unwrap {
+    ( NodeType:: $nodevar:tt ( $noderef:ident ) -> $node_type:ty, $asref:ident, $asmut:ident, $owning:ident) => {
+        impl<N: LangNode + 'static> NodeType<N> {
+            pub fn $asref(&self) -> &$node_type {
+                use crate::NodeType;
+                match &self {
+                    NodeType::$nodevar($noderef) => $noderef,
+                    _ => panic!("Expected {}", stringify!($nodevar)),
+                }
+            }
+            pub fn $asmut(&mut self) -> &mut $node_type {
+                use crate::NodeType;
+                match self {
+                    NodeType::$nodevar($noderef) => $noderef,
+                    _ => panic!("Expected {}", stringify!($nodevar)),
+                }
+            }
+            pub fn $owning(self) -> $node_type {
+                use crate::NodeType;
+                match self {
+                    NodeType::$nodevar($noderef) => $noderef,
+                    _ => panic!("Expected {}", stringify!($nodevar)),
+                }
+            }
+        }
+    };
+}
+
+impl_unwrap!(
+    NodeType::Simple(s) -> N,
+    unwrap_simple_ref,
+    unwrap_simple_mut,
+    unwrap_simple
+);
+
+impl_unwrap!(
+    NodeType::Gamma(s) -> GammaNode,
+    unwrap_gamma_ref,
+    unwrap_gamma_mut,
+    unwrap_gamma
+);
+
+impl_unwrap!(
+    NodeType::Theta(s) -> ThetaNode,
+    unwrap_theta_ref,
+    unwrap_theta_mut,
+    unwrap_theta
+);
+
+impl_unwrap!(
+    NodeType::Lambda(s) -> LambdaNode,
+    unwrap_lambda_ref,
+    unwrap_lambda_mut,
+    unwrap_lambda
+);
+
+impl_unwrap!(
+    NodeType::Apply(s) -> ApplyNode,
+    unwrap_apply_ref,
+    unwrap_apply_mut,
+    unwrap_apply
+);
+
+impl_unwrap!(
+    NodeType::Delta(s) -> DeltaNode,
+    unwrap_delta_ref,
+    unwrap_delta_mut,
+    unwrap_delta
+);
+
+impl_unwrap!(
+    NodeType::Phi(s) -> PhiNode,
+    unwrap_phi_ref,
+    unwrap_phi_mut,
+    unwrap_phi
+);
+
+impl_unwrap!(
+    NodeType::Omega(o) -> OmegaNode,
+    unwrap_omega_ref,
+    unwrap_omega_mut,
+    unwrap_omega
+);
+
 ///A single node container in the RVSDG. Contains the most important inner `node_type`, as well as context information.
 ///
 /// The most interesting here is the `parent` field, which lets you efficiently traverse child->parent relationships.
