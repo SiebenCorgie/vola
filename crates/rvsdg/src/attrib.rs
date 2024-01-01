@@ -41,6 +41,7 @@ impl From<EdgeRef> for AttribLocation {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct AttribStore<ATTRIB: 'static> {
     pub attribs: AHashMap<AttribLocation, Vec<ATTRIB>>,
 }
