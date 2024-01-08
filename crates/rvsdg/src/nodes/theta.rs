@@ -1,10 +1,9 @@
 use std::slice;
 
-use tinyvec::TinyVec;
-
 use crate::{
     edge::{InputType, OutputType},
     region::{Argument, Input, Output, RegResult, Region},
+    SmallColl,
 };
 
 use super::StructuralNode;
@@ -23,8 +22,8 @@ pub type LoopNode = ThetaNode;
 pub struct ThetaNode {
     pub(crate) lv_count: usize,
     pub(crate) loop_body: Region,
-    pub(crate) inputs: TinyVec<[Input; 3]>,
-    pub(crate) outputs: TinyVec<[Output; 3]>,
+    pub(crate) inputs: SmallColl<Input>,
+    pub(crate) outputs: SmallColl<Output>,
 }
 
 impl StructuralNode for ThetaNode {
@@ -90,8 +89,8 @@ impl ThetaNode {
         ThetaNode {
             lv_count: 0,
             loop_body,
-            inputs: TinyVec::default(),
-            outputs: TinyVec::default(),
+            inputs: SmallColl::default(),
+            outputs: SmallColl::default(),
         }
     }
 

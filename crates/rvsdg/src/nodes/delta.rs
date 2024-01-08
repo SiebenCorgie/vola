@@ -1,10 +1,9 @@
 use std::slice;
 
-use tinyvec::TinyVec;
-
 use crate::{
     edge::{InputType, OutputType},
     region::{Argument, Input, Output, RegResult, Region},
+    SmallColl,
 };
 
 use super::StructuralNode;
@@ -17,7 +16,7 @@ use super::StructuralNode;
 pub struct DeltaNode {
     pub(crate) cv_count: usize,
     ///All inputs of a delta node are context variables.
-    pub(crate) inputs: TinyVec<[Input; 3]>,
+    pub(crate) inputs: SmallColl<Input>,
     pub(crate) body: Region,
     pub(crate) output: Output,
 }
@@ -95,7 +94,7 @@ impl DeltaNode {
         region.results.push(RegResult::default());
         DeltaNode {
             cv_count: 0,
-            inputs: TinyVec::default(),
+            inputs: SmallColl::default(),
             body: region,
             output: Output::default(),
         }
