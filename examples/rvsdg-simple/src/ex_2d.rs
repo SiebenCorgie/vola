@@ -3,7 +3,6 @@ use rvsdg::{
     edge::{InputType, OutputType},
     Rvsdg,
 };
-pub use rvsdg_viewer::macroquad;
 
 use crate::{LNode, MyNodes};
 

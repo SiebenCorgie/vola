@@ -4,7 +4,6 @@ use rvsdg::{
     nodes::NodeType,
     Rvsdg,
 };
-pub use rvsdg_viewer::macroquad;
 
 use crate::{LNode, MyNodes};
 

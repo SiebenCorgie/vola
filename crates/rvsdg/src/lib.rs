@@ -50,12 +50,24 @@ impl NodeRef {
             input: port_type,
         }
     }
+
+    ///Short for `self.as_inport_location(InputType::Inport(idx))`.
+    pub fn input(self, idx: usize) -> InportLocation {
+        self.as_inport_location(InputType::Input(idx))
+    }
+
     pub fn as_outport_location(self, port_type: OutputType) -> OutportLocation {
         OutportLocation {
             node: self,
             output: port_type,
         }
     }
+
+    ///Short for `self.as_outport_location(OutputType::Outport(idx))`.
+    pub fn output(self, idx: usize) -> OutportLocation {
+        self.as_outport_location(OutputType::Output(idx))
+    }
+
     pub fn as_ffi(&self) -> u64 {
         self.0.as_ffi()
     }
