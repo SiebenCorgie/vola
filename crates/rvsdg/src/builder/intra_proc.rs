@@ -55,7 +55,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> GammaBuilder<'a, N, E> {
     ///
     /// # Example
     ///
-    /// ```rust
+    /// ```rust ignore
     ///gamma.new_branch(|builder, branch_index|{
     ///    //Connects the first entry variable of this branch to the first exit variable
     ///    builder.ctx_mut().connect(

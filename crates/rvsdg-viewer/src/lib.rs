@@ -7,7 +7,7 @@
 //! To view an RVSDG annotate your `main()` with `#[macroquad::main("3D")]`
 //! and call `view()`.
 //!
-//! ```rust
+//! ```rust ignore
 //! #[macroquad::main("MyRVSDG of something")]
 //! async fn main() {
 //!     //... build your rvsdg

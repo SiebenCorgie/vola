@@ -6,8 +6,11 @@ use crate::{
     EdgeRef, NodeRef,
 };
 
-#[derive(Error, Debug)]
-pub enum LegalizationError {}
+#[derive(Error, Debug, Eq, PartialEq)]
+pub enum LegalizationError {
+    #[error("Detected a cycle")]
+    CycleDetected,
+}
 
 ///Errors that are returned when using the builder. Those are mostly recoverabel.
 #[derive(Error, Debug, Clone)]

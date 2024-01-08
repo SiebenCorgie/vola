@@ -245,19 +245,6 @@ impl<N: LangNode + 'static> Node<N> {
         }
     }
 
-    ///Checks if this node is legal in its current form.
-    pub fn is_legal<E: LangEdge + 'static>(
-        &self,
-        _graph: &Rvsdg<N, E>,
-    ) -> Result<(), LegalizationError> {
-        todo!("Implement legalization")
-    }
-
-    ///Lets a node performe legalization on it self.
-    pub fn legalize<E: LangEdge + 'static>(&mut self) -> Result<(), LegalizationError> {
-        todo!("Implement legalization")
-    }
-
     ///Tries to translate the `port` into a valid port.
     pub fn outport(&self, port_ty: &OutputType) -> Option<&Outport> {
         match port_ty {
