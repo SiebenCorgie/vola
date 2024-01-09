@@ -1,11 +1,6 @@
 //! Implements some verification helper on the rvsdg.
 
-use crate::{
-    edge::LangEdge,
-    err::{LegalizationError},
-    nodes::LangNode,
-    Rvsdg,
-};
+use crate::{edge::LangEdge, err::LegalizationError, nodes::LangNode, Rvsdg};
 
 impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
     ///Returns true, if set parental relations of all [Node]s are correct.
@@ -39,12 +34,17 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
     ///legalizes all nodes for structural correctness described in section 4. of the source paper.
     ///
     /// If anything un-legalizable is found, an error is returned.
-    pub fn legalize_structural(&mut self) -> Result<(), LegalizationError> {
-        for node in self.nodes.values_mut() {
-            node.legalize::<E>()?;
-        }
-        for node in self.nodes.values() {
-            node.is_legal(self)?;
+    pub fn is_legal_structural(&self) -> Result<(), LegalizationError> {
+        //NOTE: Right now, most nodes are defined in a way, that only legal nodes can be represented.
+        //
+        // This pass mostly takes care of two things
+        // - Check for cycles
+        // - Check that apply-node callees are λ or ϕ nodes
+
+        for reg in self.walk_region_locations() {
+            if self.region_has_cycles(reg) {
+                return Err(LegalizationError::CycleDetected);
+            }
         }
 
         Ok(())

@@ -7,11 +7,17 @@ use std::collections::VecDeque;
 
 use ahash::AHashSet;
 
+mod region_walker;
+pub use region_walker::RegionWalker;
+
 use crate::{
     edge::{InportLocation, InputType, LangEdge, OutportLocation, OutputType},
     nodes::{LangNode, NodeType},
+    region::RegionLocation,
     NodeRef, Rvsdg,
 };
+
+use self::region_walker::RegionLocationWalker;
 
 ///Utility that walks the predecessors of a node in breadth-first style.
 ///
@@ -323,5 +329,97 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
             walked,
             waiting_regions: VecDeque::new(),
         }
+    }
+
+    pub fn walk_region_locations<'a>(&'a self) -> RegionLocationWalker<'a, N, E> {
+        let mut region_queue = VecDeque::new();
+        region_queue.push_back(self.toplevel_region());
+        RegionLocationWalker {
+            graph: self,
+            region_queue,
+        }
+    }
+
+    ///Iterates all regions of the graph in breadth-first / top-down fashion.
+    pub fn walk_regions<'a>(&'a self) -> RegionWalker<'a, N, E> {
+        RegionWalker {
+            location_walker: self.walk_region_locations(),
+        }
+    }
+
+    ///Checks if any successor of `node` or `node` itself is part of a loop.
+    pub fn node_has_cycle(&self, node: NodeRef) -> bool {
+        //Init the unchecked list with all predecessors.
+        let mut unchecked = (0..self.node(node).outputs().len())
+            .filter_map(|idx| self.node(node).output_dsts(self, idx))
+            .flatten()
+            .map(|inport| inport.node)
+            .collect::<AHashSet<NodeRef>>();
+        let mut checked = AHashSet::new();
+
+        let take_next = |map: &mut AHashSet<NodeRef>| -> Option<NodeRef> {
+            let next = if let Some(next) = map.iter().next().clone() {
+                *next
+            } else {
+                return None;
+            };
+
+            let _ = map.remove(&next);
+            Some(next)
+        };
+
+        while let Some(next) = take_next(&mut unchecked) {
+            //if this is `node`, we found a loop
+            if next == node {
+                return true;
+            }
+
+            //not our node, so push `next` into known nodes
+            if !checked.insert(next) {
+                //this is somewhat strange, but means that we found a loop where `node` is not a part
+                return true;
+            }
+
+            //now, build all successors, and push them into `unchecked`, if
+            // we didn't check them yet
+            for idx in 0..self.node(node).outputs().len() {
+                if let Some(connected) = self.node(next).output_dsts(self, idx) {
+                    for dst_node_inport in connected {
+                        if !checked.contains(&dst_node_inport.node) {
+                            let _ = unchecked.insert(dst_node_inport.node);
+                        }
+                    }
+                }
+            }
+        }
+
+        false
+    }
+
+    ///Checks if the region `r` contains cycles.
+    pub fn region_has_cycles(&self, region: RegionLocation) -> bool {
+        let region = self.region(&region).unwrap();
+
+        //NOTE: this currently a pretty simple "test all nodes for cycle" test.
+        //
+        // We basically pick each node in the region, and iterate all successors. If we visit a node twice, we found a
+        // cycle
+
+        let mut known_nodes = AHashSet::with_capacity(16);
+        for arg_idx in 0..region.arguments.len() {
+            if let Some(connected) = region.argument_dst(self, arg_idx) {
+                for node in connected {
+                    if known_nodes.contains(&node) {
+                        continue;
+                    }
+                    if self.node_has_cycle(node.node) {
+                        return true;
+                    }
+                    known_nodes.insert(node);
+                }
+            }
+        }
+
+        false
     }
 }

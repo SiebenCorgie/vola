@@ -1,8 +1,7 @@
-use tinyvec::TinyVec;
-
 use crate::{
     edge::{InputType, OutputType},
     region::{Argument, Input, Output, RegResult, Region},
+    SmallColl,
 };
 
 use super::StructuralNode;
@@ -15,9 +14,9 @@ use super::StructuralNode;
 pub struct GammaNode {
     pub(crate) entry_var_count: usize,
     pub(crate) exit_var_count: usize,
-    pub(crate) regions: TinyVec<[Region; 3]>,
-    pub(crate) inputs: TinyVec<[Input; 3]>,
-    pub(crate) outputs: TinyVec<[Output; 3]>,
+    pub(crate) regions: SmallColl<Region>,
+    pub(crate) inputs: SmallColl<Input>,
+    pub(crate) outputs: SmallColl<Output>,
 }
 
 impl StructuralNode for GammaNode {
@@ -102,14 +101,14 @@ impl StructuralNode for GammaNode {
 
 impl GammaNode {
     pub fn new() -> Self {
-        let mut inputs = TinyVec::default();
+        let mut inputs = SmallColl::default();
         inputs.push(Input::default());
         GammaNode {
             entry_var_count: 0,
             exit_var_count: 0,
-            regions: TinyVec::default(),
+            regions: SmallColl::default(),
             inputs,
-            outputs: TinyVec::default(),
+            outputs: SmallColl::default(),
         }
     }
 

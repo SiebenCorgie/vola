@@ -1,18 +1,21 @@
 use ahash::AHashSet;
-use tinyvec::TinyVec;
 
-use crate::{EdgeRef, NodeRef};
+use crate::{
+    edge::{InportLocation, LangEdge, OutportLocation},
+    nodes::LangNode,
+    EdgeRef, NodeRef, Rvsdg, SmallColl,
+};
 
 ///A Outport allows us to define multiple destination edges. It is the base type for [Output] and [Argument].
 #[derive(Debug, Clone)]
 pub struct Outport {
-    pub edges: TinyVec<[EdgeRef; 2]>,
+    pub edges: SmallColl<EdgeRef>,
 }
 
 impl Default for Outport {
     fn default() -> Self {
         Outport {
-            edges: TinyVec::default(),
+            edges: SmallColl::default(),
         }
     }
 }
@@ -39,8 +42,8 @@ pub type RegResult = Inport;
 /// A region R = (A, N, E, R) is characterised through a set of arguments A, its internal nodes N and edges E, and a result tuple R.
 #[derive(Debug, Clone)]
 pub struct Region {
-    pub arguments: TinyVec<[Argument; 3]>,
-    pub results: TinyVec<[RegResult; 3]>,
+    pub arguments: SmallColl<Argument>,
+    pub results: SmallColl<RegResult>,
     pub nodes: AHashSet<NodeRef>,
     pub edges: AHashSet<EdgeRef>,
 }
@@ -50,8 +53,42 @@ impl Region {
         Region {
             nodes: AHashSet::default(),
             edges: AHashSet::default(),
-            arguments: TinyVec::default(),
-            results: TinyVec::default(),
+            arguments: SmallColl::default(),
+            results: SmallColl::default(),
+        }
+    }
+
+    ///Return the OutportLocation that result is connected to.
+    pub fn result_src<N: LangNode + 'static, E: LangEdge + 'static>(
+        &self,
+        ctx: &Rvsdg<N, E>,
+        result_index: usize,
+    ) -> Option<OutportLocation> {
+        if let Some(port) = self.results.get(result_index) {
+            if let Some(edg) = port.edge {
+                Some(ctx.edge(edg).src)
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    }
+
+    ///Collects all InportLocations that `argument_index` is connected to.
+    pub fn argument_dst<N: LangNode + 'static, E: LangEdge + 'static>(
+        &self,
+        ctx: &Rvsdg<N, E>,
+        argument_index: usize,
+    ) -> Option<SmallColl<InportLocation>> {
+        if let Some(port) = self.arguments.get(argument_index) {
+            let mut coll = SmallColl::new();
+            for edg in port.edges.iter() {
+                coll.push(ctx.edge(*edg).dst);
+            }
+            Some(coll)
+        } else {
+            None
         }
     }
 }

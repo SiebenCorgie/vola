@@ -1,13 +1,12 @@
+use crate::{
+    primitives::{color_styling, Rect},
+    Stroke, View,
+};
 use ahash::{AHashMap, AHashSet};
 use macroquad::prelude::{Color, Vec2, BLACK, WHITE};
 use rvsdg::{edge::LangEdge, nodes::LangNode, region::Region, EdgeRef, NodeRef, Rvsdg};
 use std::collections::VecDeque;
 use std::fmt::Debug;
-
-use crate::{
-    primitives::{color_styling, Rect},
-    Stroke, View,
-};
 
 #[derive(Debug, Clone)]
 struct BodyNode {
@@ -171,6 +170,7 @@ pub struct AnyNode {
 
 impl AnyNode {
     pub const PADDING: f32 = 10.0;
+    pub const YSHIFT: f32 = 30.0;
     pub const FONT_SIZE: f32 = Self::PADDING - 1.0;
 
     pub const PORT_WIDTH: f32 = 5.0;
@@ -203,7 +203,7 @@ impl AnyNode {
             }
             max_x = max_x.max(xoff);
             //add to the y offset for the next line
-            yoff += line_height + Self::PADDING;
+            yoff += line_height + Self::YSHIFT;
         }
 
         //set the x offset
@@ -389,7 +389,7 @@ impl Printer {
         for res in region.results.iter() {
             if let Some(edg) = res.edge {
                 let _ = seen_edges.insert(edg);
-                let node_ref = ctx.edge(edg).src.node;
+                let node_ref = ctx.edge(edg).src().node;
                 if !seen_nodes.contains(&node_ref) && node_ref != parent {
                     waiting_nodes.push_front(node_ref);
                     seen_nodes.insert(node_ref);
@@ -410,7 +410,7 @@ impl Printer {
                 for inp in ctx.node(node).inputs() {
                     if let Some(edg) = inp.edge {
                         let _ = seen_edges.insert(edg);
-                        let node_ref = ctx.edge(edg).src.node;
+                        let node_ref = ctx.edge(edg).src().node;
                         if !seen_nodes.contains(&node_ref) && node_ref != parent {
                             waiting_nodes.push_front(node_ref);
                             seen_nodes.insert(node_ref);
@@ -524,7 +524,7 @@ impl Printer {
         for edg in &region.edges {
             let edge = ctx.edge(*edg);
             //resolve both ports, then insert
-            let src_port = if edge.src.output.is_argument() {
+            let src_port = if edge.src().output.is_argument() {
                 if let Some(arg_idx) = lookup_arg(edg) {
                     BodyRegionPort::Arg(arg_idx)
                 } else {
@@ -532,11 +532,15 @@ impl Printer {
                     continue;
                 }
             } else {
-                if let Some(node_output) = lookup_output(edg, edge.src.node) {
-                    let (line, column) = node_ref_map
-                        .get(&edge.src.node)
-                        .cloned()
-                        .expect("Node was not in lookup map!");
+                if let Some(node_output) = lookup_output(edg, edge.src().node) {
+                    let (line, column) = if let Some(e) =
+                        node_ref_map.get(&edge.src().node).cloned()
+                    {
+                        e
+                    } else {
+                        println!("Node {:?} was not in lookup map, this means there are edges that are not connected to any export!", edge.src().node);
+                        continue;
+                    };
                     BodyRegionPort::Out {
                         line,
                         column,
@@ -548,7 +552,7 @@ impl Printer {
                 }
             };
 
-            let dst_port = if edge.dst.input.is_result() {
+            let dst_port = if edge.dst().input.is_result() {
                 if let Some(res_idx) = lookup_res(edg) {
                     BodyRegionPort::Res(res_idx)
                 } else {
@@ -556,11 +560,15 @@ impl Printer {
                     continue;
                 }
             } else {
-                if let Some(input_idx) = lookup_input(edg, edge.dst.node) {
-                    let (line, column) = node_ref_map
-                        .get(&edge.dst.node)
-                        .cloned()
-                        .expect("Node was not in lookup map!");
+                if let Some(input_idx) = lookup_input(edg, edge.dst().node) {
+                    let (line, column) = if let Some(e) =
+                        node_ref_map.get(&edge.dst().node).cloned()
+                    {
+                        e
+                    } else {
+                        println!("Node {:?} was not in lookup map, this means there are edges that ore not connected to any export!", edge.dst().node);
+                        continue;
+                    };
                     BodyRegionPort::Inp {
                         line,
                         column,

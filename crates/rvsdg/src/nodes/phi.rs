@@ -1,10 +1,9 @@
 use std::slice;
 
-use tinyvec::TinyVec;
-
 use crate::{
     edge::{InputType, OutputType},
     region::{Argument, Input, Output, RegResult, Region},
+    SmallColl,
 };
 
 use super::StructuralNode;
@@ -39,8 +38,8 @@ pub struct PhiNode {
     pub(crate) cv_count: usize,
     pub(crate) rv_count: usize,
     pub(crate) body: Region,
-    pub(crate) outputs: TinyVec<[Output; 3]>,
-    pub(crate) inputs: TinyVec<[Input; 3]>,
+    pub(crate) outputs: SmallColl<Output>,
+    pub(crate) inputs: SmallColl<Input>,
 }
 
 impl StructuralNode for PhiNode {
@@ -117,9 +116,9 @@ impl PhiNode {
         PhiNode {
             cv_count: 0,
             rv_count: 0,
-            inputs: TinyVec::default(),
+            inputs: SmallColl::default(),
             body: Region::new(),
-            outputs: TinyVec::default(),
+            outputs: SmallColl::default(),
         }
     }
 

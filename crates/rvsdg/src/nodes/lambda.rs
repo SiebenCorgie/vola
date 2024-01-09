@@ -1,10 +1,9 @@
 use std::slice;
 
-use tinyvec::TinyVec;
-
 use crate::{
     edge::{InputType, OutputType},
     region::{Argument, Input, Output, RegResult, Region},
+    SmallColl,
 };
 
 use super::StructuralNode;
@@ -14,18 +13,18 @@ use super::StructuralNode;
 #[derive(Debug, Clone)]
 pub struct ApplyNode {
     ///Function being called, must be a edge to a lambdaNode
-    pub(crate) inputs: TinyVec<[Input; 3]>,
-    pub(crate) outputs: TinyVec<[Output; 3]>,
+    pub(crate) inputs: SmallColl<Input>,
+    pub(crate) outputs: SmallColl<Output>,
 }
 
 impl ApplyNode {
     pub fn new() -> Self {
-        let mut inputs = TinyVec::default();
+        let mut inputs = SmallColl::default();
         //The function input to apply
         inputs.insert(0, Input::default());
         ApplyNode {
             inputs,
-            outputs: TinyVec::default(),
+            outputs: SmallColl::default(),
         }
     }
 
@@ -97,7 +96,7 @@ pub type FunctionNode = LambdaNode;
 #[derive(Debug, Clone)]
 pub struct LambdaNode {
     pub(crate) cv_count: usize,
-    pub(crate) inputs: TinyVec<[Input; 3]>,
+    pub(crate) inputs: SmallColl<Input>,
     pub(crate) output: Output,
     pub(crate) body: Region,
 }
@@ -177,7 +176,7 @@ impl LambdaNode {
     pub fn new() -> Self {
         LambdaNode {
             cv_count: 0,
-            inputs: TinyVec::default(),
+            inputs: SmallColl::default(),
             output: Output::default(),
             body: Region::new(),
         }

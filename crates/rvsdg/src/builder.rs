@@ -13,36 +13,38 @@
 
 mod inter_proc;
 mod intra_proc;
-use std::marker::PhantomData;
 
 use crate::{
     edge::{InportLocation, InputType, LangEdge, OutportLocation, OutputType},
     err::GraphError,
-    nodes::{ApplyNode, LangNode, NodeType, StructuralNode},
+    nodes::{ApplyNode, LangNode, NodeType},
     region::{Region, RegionLocation},
-    EdgeRef, NodeRef, Rvsdg,
+    EdgeRef, NodeRef, Rvsdg, SmallColl,
 };
 pub use inter_proc::{DeltaBuilder, LambdaBuilder, OmegaBuilder, PhiBuilder};
 pub use intra_proc::{GammaBuilder, ThetaBuilder};
-use tinyvec::TinyVec;
 
 ///Probably the most used builder. Represents a simple [Region](crate::region::Region) within one of the higher level nodes.
-pub struct RegionBuilder<'a, N: LangNode + 'static, E: LangEdge + 'static, PARENT: StructuralNode> {
+pub struct RegionBuilder<'a, N: LangNode + 'static, E: LangEdge + 'static> {
     ctx: &'a mut Rvsdg<N, E>,
     parent_region_index: usize,
     parent_ref: NodeRef,
-    parent: PhantomData<PARENT>,
 }
 
-impl<'a, N: LangNode + 'static, E: LangEdge + 'static, PARENT: StructuralNode>
-    RegionBuilder<'a, N, E, PARENT>
-{
+impl<'a, N: LangNode + 'static, E: LangEdge + 'static> RegionBuilder<'a, N, E> {
     pub fn new(ctx: &'a mut Rvsdg<N, E>, parent_region_index: usize, parent_ref: NodeRef) -> Self {
         RegionBuilder {
             ctx,
-            parent: PhantomData,
             parent_region_index,
             parent_ref,
+        }
+    }
+
+    pub fn new_for_location(ctx: &'a mut Rvsdg<N, E>, region_location: &RegionLocation) -> Self {
+        RegionBuilder {
+            ctx,
+            parent_region_index: region_location.region_index,
+            parent_ref: region_location.node,
         }
     }
 
@@ -91,9 +93,9 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static, PARENT: StructuralNode>
         &mut self,
         node: N,
         src: &[OutportLocation],
-    ) -> Result<(NodeRef, TinyVec<[EdgeRef; 3]>), GraphError> {
+    ) -> Result<(NodeRef, SmallColl<EdgeRef>), GraphError> {
         let created_node = self.insert_node(node);
-        let mut edges = TinyVec::default();
+        let mut edges = SmallColl::default();
         for (dst_idx, src_port) in src.into_iter().enumerate() {
             edges.push(self.ctx_mut().connect(
                 src_port.clone(),
@@ -223,7 +225,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static, PARENT: StructuralNode>
         &mut self,
         callable_src: OutportLocation,
         arguments: &[OutportLocation],
-    ) -> Result<(NodeRef, TinyVec<[EdgeRef; 3]>), GraphError> {
+    ) -> Result<(NodeRef, SmallColl<EdgeRef>), GraphError> {
         let (apply_node, is_defined) =
             if let Some(funct_def) = self.ctx.find_callabel_def(callable_src.clone()) {
                 if let NodeType::Lambda(l) = &self.ctx.node(funct_def).node_type {
@@ -244,7 +246,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static, PARENT: StructuralNode>
 
         //connect function input and arguments, collect created edges
 
-        let mut arg_edges = TinyVec::default();
+        let mut arg_edges = SmallColl::default();
         let call_edge = self
             .ctx_mut()
             .connect(

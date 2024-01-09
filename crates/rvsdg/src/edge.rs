@@ -1,6 +1,6 @@
 use crate::NodeRef;
 
-#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub enum InputType {
     ///Any input to the node. Could also be a exit variable etc.
     Input(usize),
@@ -56,13 +56,13 @@ impl InputType {
     }
 }
 
-#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub struct InportLocation {
     pub node: NodeRef,
     pub input: InputType,
 }
 
-#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub enum OutputType {
     ///Any output of the node. Could be a lambda definition, or a exit-variable output.
     Output(usize),
@@ -113,7 +113,7 @@ impl OutputType {
     }
 }
 
-#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub struct OutportLocation {
     pub node: NodeRef,
     pub output: OutputType,
@@ -122,10 +122,22 @@ pub struct OutportLocation {
 ///An edge in a RVSDG is always a directed edge from `src` to `dst`. It contains a language specific
 /// edge-type `E`, that represent the dependency type. In general there are at least `State` and `Value` edges, but a
 /// language is free to represent more sophisticated dependencies through those types.
+///
+/// `dst` and `src` are exposed read only, because _by hand_ change of those can lead to an invalid RVSDG.
+/// If you want to change those, consider using [connect](crate::Rvsdg::connect) / [disconnect](crate::Rvsdg::disconnect).
 pub struct Edge<E: LangEdge + 'static> {
-    pub src: OutportLocation,
-    pub dst: InportLocation,
+    pub(crate) src: OutportLocation,
+    pub(crate) dst: InportLocation,
     pub ty: E,
+}
+
+impl<E: LangEdge + 'static> Edge<E> {
+    pub fn dst(&self) -> &InportLocation {
+        &self.dst
+    }
+    pub fn src(&self) -> &OutportLocation {
+        &self.src
+    }
 }
 
 pub trait LangEdge {
