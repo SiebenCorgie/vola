@@ -3,7 +3,7 @@ use rvsdg::{
     region::{Input, Output},
 };
 pub use rvsdg_viewer::macroquad;
-use rvsdg_viewer::View;
+use rvsdg_viewer::{layout::Layout, View};
 
 //Example 2.d. of the source paper
 mod ex_2d;
@@ -108,4 +108,11 @@ fn main() {
     let ex3b = ex_3b::emit();
     assert!(ex3b.verify_parental_relations(), "3b had errors");
     rvsdg_viewer::into_svg(&ex3b, "Example_3b.svg");
+
+    println!("2d");
+    Layout::for_rvsdg(&ex2d);
+    println!("3a");
+    Layout::for_rvsdg(&ex3a);
+    println!("3b");
+    Layout::for_rvsdg(&ex3b);
 }

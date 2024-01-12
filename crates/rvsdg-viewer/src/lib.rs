@@ -17,6 +17,8 @@
 mod primitives;
 mod printer;
 
+pub mod layout;
+
 use std::{fmt::Debug, path::Path};
 
 pub use macroquad;

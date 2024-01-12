@@ -14,6 +14,7 @@ members = [
 "examples/rvsdg-simple",
 ]
 
+resolver = "2"
 
 [workspace.dependencies]
 tree-sitter = "0.20.10"
