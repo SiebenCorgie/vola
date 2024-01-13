@@ -100,7 +100,7 @@ impl Default for Region {
 }
 
 ///Specifies the location of a certain `node`'s `region_index`-th region.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct RegionLocation {
     pub node: NodeRef,
     pub region_index: usize,

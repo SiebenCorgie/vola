@@ -110,9 +110,13 @@ fn main() {
     rvsdg_viewer::into_svg(&ex3b, "Example_3b.svg");
 
     println!("2d");
-    Layout::for_rvsdg(&ex2d);
+    Layout::for_rvsdg_default(&ex2d);
     println!("3a");
-    Layout::for_rvsdg(&ex3a);
+    Layout::for_rvsdg_default(&ex3a);
     println!("3b");
-    Layout::for_rvsdg(&ex3b);
+    let l = Layout::for_rvsdg_default(&ex3b);
+
+    let tree = l.into_primitive_tree();
+    let tree_svg = tree.to_svg();
+    std::fs::write("test.svg", tree_svg).unwrap();
 }

@@ -1,11 +1,14 @@
 use std::ops::Not;
 
 use ahash::{AHashMap, AHashSet};
+use macroquad::math::Vec2;
 use rvsdg::{edge::LangEdge, nodes::LangNode, NodeRef, Rvsdg};
 
-use super::RegionLayout;
+use crate::View;
 
-struct NodeGrid {
+use super::{LayoutConfig, RegionLayout};
+
+pub struct NodeGrid {
     known: AHashMap<NodeRef, (usize, usize)>,
     rows: Vec<Vec<Option<NodeRef>>>,
 }
@@ -160,18 +163,135 @@ impl RegionLayout {
 
         let mut seed_index = 0usize;
         while let Some(seed_node) = region.result_src(rvsdg, seed_index) {
-            self.node_grid_explore(rvsdg, &mut grid, seed_node.node, (seed_index, 0));
             seed_index += 1;
+            if !region.nodes.contains(&seed_node.node) {
+                continue;
+            }
+            self.node_grid_explore(rvsdg, &mut grid, seed_node.node, (seed_index, 0));
         }
 
         grid.print();
         //Now restart and fix all grid criterias
         let mut seed_index = 0usize;
         while let Some(seed_node) = region.result_src(rvsdg, seed_index) {
-            self.fix_grid_criteria(rvsdg, &mut grid, seed_node.node);
             seed_index += 1;
+            if !region.nodes.contains(&seed_node.node) {
+                continue;
+            }
+            self.fix_grid_criteria(rvsdg, &mut grid, seed_node.node);
         }
 
         grid.print();
+
+        self.node_grid = Some(grid);
+    }
+
+    pub fn ext_for_label<N: LangNode + View + 'static, E: LangEdge + View + 'static>(
+        node: NodeRef,
+        rvsdg: &Rvsdg<N, E>,
+        config: &LayoutConfig,
+    ) -> Vec2 {
+        let name = rvsdg.node(node).name();
+        let port_count = {
+            let n = rvsdg.node(node);
+            n.inputs().len().max(n.outputs().len())
+        };
+        let num_chars = name.chars().count();
+        let port_width = (port_count * config.port_width)
+            + (config.horizontal_node_padding * 2)
+            + (config.port_width * 2);
+        Vec2::new(
+            (num_chars * config.font_size).max(port_width) as f32,
+            config.font_size as f32,
+        )
+    }
+
+    ///Bottom up builds all region extents based on the previously created grid,
+    /// which lets us calculate each node size in the grid.
+    pub fn bottom_up_transfer_grid<N: LangNode + View + 'static, E: LangEdge + View + 'static>(
+        &mut self,
+        rvsdg: &Rvsdg<N, E>,
+        config: &LayoutConfig,
+    ) {
+        //first gather all node extents in this region, by recursively building sub regions,
+        // then using that information to build the node's extent
+        for node in self.nodes.values_mut() {
+            for sub_reg in node.sub_regions.iter_mut() {
+                sub_reg.bottom_up_transfer_grid(rvsdg, config);
+            }
+
+            //now build the node extent. Each node consists at least of one label, and possibly sub regions.
+            let label_ext = Self::ext_for_label(node.src, rvsdg, config);
+            //This one does two things, it calculates _how wide_ this node needs to be,
+            // and it finds the heighest and widest sub region.
+            let (node_region_ext, max_subreg_ext) =
+                rvsdg.node(node.src).regions().iter().enumerate().fold(
+                    (
+                        Vec2::new(
+                            config.horizontal_node_padding as f32,
+                            config.vertical_node_padding as f32,
+                        ),
+                        Vec2::ZERO,
+                    ),
+                    |(mut ext, max_reg_ext), (reg_idx, _sub_reg)| {
+                        let this_reg_ext = node.sub_regions[reg_idx].extent;
+                        ext.x += this_reg_ext.x.max(config.grid_empty_spacing as f32)
+                            + config.horizontal_node_padding as f32;
+                        ext.y = ext
+                            .y
+                            .max(this_reg_ext.y + (2 * config.vertical_node_padding) as f32);
+                        (ext, max_reg_ext.max(this_reg_ext))
+                    },
+                );
+
+            let ext = Vec2::new(
+                label_ext.x.max(node_region_ext.x),
+                label_ext.y + node_region_ext.y,
+            );
+
+            //Post fix up all sub regions heights. This will make sub regions of theta-nodes the same height.
+            for subreg in node.sub_regions.iter_mut() {
+                subreg.extent.y = max_subreg_ext.y.max(subreg.extent.y);
+            }
+
+            //overwrite our node ext
+            node.extent = ext;
+        }
+
+        let mut offset_y = config.vertical_node_padding as f32;
+        let mut max_x = 0.0f32;
+        for row in self.node_grid.as_ref().unwrap().rows.iter() {
+            let mut offset_x = config.horizontal_node_padding as f32;
+            let max_height = row.iter().fold(0.0f32, |f, n| {
+                if let Some(n) = n {
+                    f.max(self.nodes.get(n).unwrap().extent.y)
+                } else {
+                    f
+                }
+            });
+
+            //we now use max height to position our nodes _lowest possible_,
+            // as well as advancing the general _height_ variable later.
+            for node in row {
+                if let Some(node) = node {
+                    //TODO move down to line
+                    let node = self.nodes.get_mut(node).unwrap();
+                    node.location = Vec2::new(offset_x, offset_y);
+                    offset_x += node.extent.x + config.horizontal_node_padding as f32;
+                } else {
+                    //if no node here, move a standard width
+                    offset_x += config.grid_empty_spacing as f32;
+                }
+            }
+
+            offset_y += max_height + config.grid_padding as f32;
+
+            max_x = max_x.max(offset_x);
+        }
+
+        self.extent = Vec2::new(
+            max_x.max(config.grid_empty_spacing as f32),
+            offset_y.max(config.grid_empty_spacing as f32),
+        )
     }
 }

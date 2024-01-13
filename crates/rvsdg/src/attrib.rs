@@ -6,6 +6,7 @@ use ahash::AHashMap;
 
 use crate::{
     edge::{InportLocation, OutportLocation},
+    region::RegionLocation,
     EdgeRef, NodeRef,
 };
 
@@ -13,10 +14,16 @@ use crate::{
 pub enum AttribLocation {
     InPort(InportLocation),
     OutPort(OutportLocation),
+    Region(RegionLocation),
     Node(NodeRef),
     Edge(EdgeRef),
 }
 
+impl From<RegionLocation> for AttribLocation {
+    fn from(value: RegionLocation) -> Self {
+        AttribLocation::Region(value)
+    }
+}
 impl From<InportLocation> for AttribLocation {
     fn from(value: InportLocation) -> Self {
         AttribLocation::InPort(value)

@@ -16,9 +16,37 @@ use ahash::AHashMap;
 use macroquad::math::Vec2;
 use rvsdg::{edge::LangEdge, nodes::LangNode, region::RegionLocation, NodeRef, Rvsdg};
 
-use crate::View;
+use crate::{primitives::PrimTree, View};
+
+use self::initial::NodeGrid;
 
 mod initial;
+mod toprims;
+
+pub struct LayoutConfig {
+    //The _height_ of a node's outer border to the inner region
+    pub vertical_node_padding: usize,
+    //The _width_ of a node's outer border to the inner region
+    pub horizontal_node_padding: usize,
+    //horizontal and vertical padding between nodes in a grid layout
+    pub grid_padding: usize,
+    pub font_size: usize,
+    pub port_width: usize,
+    pub grid_empty_spacing: usize,
+}
+
+impl Default for LayoutConfig {
+    fn default() -> Self {
+        LayoutConfig {
+            vertical_node_padding: 10,
+            horizontal_node_padding: 10,
+            grid_padding: 20,
+            font_size: 10,
+            port_width: 4,
+            grid_empty_spacing: 10,
+        }
+    }
+}
 
 pub struct LayoutNode {
     location: Vec2,
@@ -36,6 +64,8 @@ pub struct LayoutEdge {
 pub struct RegionLayout {
     //Source loc of the region
     src: RegionLocation,
+    extent: Vec2,
+    node_grid: Option<NodeGrid>,
     nodes: AHashMap<NodeRef, LayoutNode>,
 }
 
@@ -82,25 +112,41 @@ impl RegionLayout {
             })
             .collect();
 
-        RegionLayout { src: region, nodes }
+        RegionLayout {
+            src: region,
+            nodes,
+            node_grid: None,
+            extent: Vec2::ZERO,
+        }
     }
 }
 
 pub struct Layout<'a, N: LangNode + View + 'static, E: LangEdge + View + 'static> {
-    src_graph: &'a Rvsdg<N, E>,
-    region_tree: RegionLayout,
+    pub(crate) src_graph: &'a Rvsdg<N, E>,
+    pub(crate) config: LayoutConfig,
+    pub(crate) region_tree: RegionLayout,
 }
 
 impl<'a, N: LangNode + View + 'static, E: LangEdge + View + 'static> Layout<'a, N, E> {
-    pub fn for_rvsdg(rvsdg: &'a Rvsdg<N, E>) -> Self {
+    pub fn for_rvsdg_default(rvsdg: &'a Rvsdg<N, E>) -> Self {
+        Self::for_rvsdg(rvsdg, LayoutConfig::default())
+    }
+    pub fn for_rvsdg(rvsdg: &'a Rvsdg<N, E>, config: LayoutConfig) -> Self {
         let tlregion = rvsdg.toplevel_region();
         let mut region_tree = RegionLayout::build_for_region(rvsdg, tlregion);
 
         region_tree.initial_layouting(rvsdg);
 
+        region_tree.bottom_up_transfer_grid(rvsdg, &config);
+
         Layout {
             src_graph: rvsdg,
+            config,
             region_tree,
         }
+    }
+
+    pub fn into_primitive_tree(&self) -> PrimTree {
+        self.to_prim_tree(&self.config)
     }
 }
