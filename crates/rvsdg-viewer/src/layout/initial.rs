@@ -291,7 +291,12 @@ impl RegionLayout {
         }
 
         self.extent = Vec2::new(
-            max_x.max(config.grid_empty_spacing as f32),
+            max_x.max(config.grid_empty_spacing as f32).max(
+                self.arg_ports
+                    .iter()
+                    .chain(self.res_ports.iter())
+                    .fold(0.0f32, |a, p| a.max(p.x + config.port_spacing as f32)),
+            ),
             offset_y.max(config.grid_empty_spacing as f32),
         )
     }
