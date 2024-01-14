@@ -64,6 +64,29 @@ pub struct Path {
     pub color: Color,
 }
 
+impl Path {
+    pub fn emit_svg(&self, id: &AttribLocation) -> String {
+        let start = self.points[0];
+        let mut path_command = format!("<path id=\"{:?}\" d=\" M {} {} ", id, start.x, start.y);
+
+        //Write all line-to commads
+        for point in &self.points[1..] {
+            write!(path_command, "L {} {} ", point.x, point.y).unwrap();
+        }
+        //finish by setting up stroke and fill
+
+        write!(
+            path_command,
+            "\" fill=\"none\" stroke-width=\"{}\" style=\"stroke:{}\" />",
+            self.width,
+            color_styling(&self.color)
+        )
+        .unwrap();
+
+        path_command
+    }
+}
+
 #[allow(dead_code)]
 #[derive(Debug)]
 pub struct Text {
@@ -134,6 +157,7 @@ impl PrimTree {
             Prim::Offset(o) => {
                 write!(buffer, "\n<g transform=\"translate({}, {})\">", o.x, o.y).unwrap()
             }
+            Prim::Path(p) => write!(buffer, "\n{}", p.emit_svg(&self.id)).unwrap(),
             _ => todo!("got {:?}", self.prim),
         }
 

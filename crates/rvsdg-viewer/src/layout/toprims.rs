@@ -1,12 +1,38 @@
-use macroquad::{color::Color, math::Vec2};
+use macroquad::{camera::Camera, color::Color, math::Vec2};
 use rvsdg::{edge::LangEdge, nodes::LangNode};
 
 use crate::{
-    primitives::{Point, Prim, PrimTree, Rect, Text},
+    primitives::{Path, Point, Prim, PrimTree, Rect, Text},
     View,
 };
 
-use super::{Layout, LayoutConfig, LayoutNode, RegionLayout};
+use super::{Layout, LayoutConfig, LayoutEdge, LayoutNode, RegionLayout};
+
+impl LayoutEdge {
+    fn into_path(&self) -> Path {
+        //Builds a path from this edge. This allows us to optimize a little.
+        // We basically iterate all "steps, but only emit an actual vertex, whenever the direction changes".
+
+        let mut path = Path {
+            points: Vec::new(),
+            width: 1.0,
+            color: Color::from_rgba(0, 0, 0, 255),
+        };
+
+        //push the first vertex
+        path.points.push(self.path[0]);
+
+        //TODO merge straight path segments
+        for mov in &self.path[1..(self.path.len() - 1).max(1)] {
+            path.points.push(*mov);
+        }
+
+        //push last vertex
+        path.points.push(*self.path.last().unwrap());
+
+        path
+    }
+}
 
 impl<'a, N: LangNode + View + 'static, E: LangEdge + View + 'static> Layout<'a, N, E> {
     fn node_to_prim_tree(&self, node: &LayoutNode, config: &LayoutConfig) -> PrimTree {
@@ -71,7 +97,6 @@ impl<'a, N: LangNode + View + 'static, E: LangEdge + View + 'static> Layout<'a, 
             let yoff = config.vertical_node_padding as f32 + config.font_size as f32;
             let mut xoff = config.horizontal_node_padding as f32;
             for reg in node.sub_regions.iter() {
-                println!("Emit sub to {} {}", xoff, yoff);
                 let subreg = self.reg_to_prim_tree(reg, config);
                 pt_wrap.children.push(PrimTree {
                     id: reg.src.into(),
@@ -100,7 +125,6 @@ impl<'a, N: LangNode + View + 'static, E: LangEdge + View + 'static> Layout<'a, 
 
     fn reg_to_prim_tree(&self, reg: &RegionLayout, config: &LayoutConfig) -> PrimTree {
         //NOTE: our region is always a empty white box as the base layer
-        println!("regext: {}", reg.extent);
         let bg_prim = Prim::Box(Rect {
             from: Point::ZERO,
             to: reg.extent,
@@ -134,7 +158,14 @@ impl<'a, N: LangNode + View + 'static, E: LangEdge + View + 'static> Layout<'a, 
             })
         }
 
-        //TODO add edges
+        //Now append all paths
+        for edg in reg.edges.iter() {
+            tree_node.children.push(PrimTree {
+                id: edg.src.into(),
+                prim: Prim::Path(edg.into_path()),
+                children: Vec::with_capacity(0),
+            });
+        }
 
         tree_node
     }

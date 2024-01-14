@@ -259,10 +259,10 @@ impl RegionLayout {
             }
         }
 
-        let mut offset_y = config.vertical_node_padding as f32;
+        let mut offset_y = config.grid_padding as f32;
         let mut max_x = 0.0f32;
         for row in self.node_grid.as_ref().unwrap().rows.iter() {
-            let mut offset_x = config.horizontal_node_padding as f32;
+            let mut offset_x = config.grid_padding as f32;
             let max_height = row.iter().fold(0.0f32, |f, n| {
                 if let Some(n) = n {
                     f.max(self.nodes.get(n).unwrap().extent.y)
@@ -278,7 +278,7 @@ impl RegionLayout {
                     //TODO move down to line
                     let node = self.nodes.get_mut(node).unwrap();
                     node.location = Vec2::new(offset_x, offset_y);
-                    offset_x += node.extent.x + config.horizontal_node_padding as f32;
+                    offset_x += node.extent.x + config.grid_padding as f32;
                 } else {
                     //if no node here, move a standard width
                     offset_x += config.grid_empty_spacing as f32;

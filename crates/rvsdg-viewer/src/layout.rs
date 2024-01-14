@@ -14,12 +14,13 @@
 
 use ahash::AHashMap;
 use macroquad::math::Vec2;
-use rvsdg::{edge::LangEdge, nodes::LangNode, region::RegionLocation, NodeRef, Rvsdg};
+use rvsdg::{edge::LangEdge, nodes::LangNode, region::RegionLocation, EdgeRef, NodeRef, Rvsdg};
 
 use crate::{primitives::PrimTree, View};
 
 use self::initial::NodeGrid;
 
+mod edge_routing;
 mod initial;
 mod toprims;
 
@@ -35,6 +36,9 @@ pub struct LayoutConfig {
     pub port_spacing: usize,
     pub port_width: usize,
     pub port_height: usize,
+
+    pub routing_cell_size: f32,
+    pub routing_dead_padding: f32,
 }
 
 impl Default for LayoutConfig {
@@ -48,6 +52,8 @@ impl Default for LayoutConfig {
             port_spacing: 10,
             port_width: 3,
             port_height: 2,
+            routing_cell_size: 2.0,
+            routing_dead_padding: 5.0,
         }
     }
 }
@@ -65,6 +71,7 @@ pub struct LayoutEdge {
     ///Path points. Can be read like a svg path "xy -> zw -> ab", all
     /// in region local coordinates.
     path: Vec<Vec2>,
+    src: EdgeRef,
 }
 
 pub struct RegionLayout {
@@ -75,6 +82,7 @@ pub struct RegionLayout {
     extent: Vec2,
     node_grid: Option<NodeGrid>,
     nodes: AHashMap<NodeRef, LayoutNode>,
+    edges: Vec<LayoutEdge>,
 }
 
 impl RegionLayout {
@@ -180,6 +188,7 @@ impl RegionLayout {
             nodes,
             arg_ports,
             res_ports,
+            edges: Vec::with_capacity(rvsdg.region(&region).unwrap().edges.len()),
             node_grid: None,
             extent: Vec2::ZERO,
         }
@@ -192,6 +201,7 @@ pub struct Layout<'a, N: LangNode + View + 'static, E: LangEdge + View + 'static
     pub(crate) region_tree: RegionLayout,
 }
 
+//NOTE: Most interesting implementation happens in the submodules!
 impl<'a, N: LangNode + View + 'static, E: LangEdge + View + 'static> Layout<'a, N, E> {
     pub fn for_rvsdg_default(rvsdg: &'a Rvsdg<N, E>) -> Self {
         Self::for_rvsdg(rvsdg, LayoutConfig::default())
@@ -204,11 +214,18 @@ impl<'a, N: LangNode + View + 'static, E: LangEdge + View + 'static> Layout<'a, 
 
         region_tree.bottom_up_transfer_grid(rvsdg, &config);
 
-        Layout {
+        let regheight = region_tree.extent.y;
+        region_tree.set_height(regheight, &config);
+
+        let mut layout = Layout {
             src_graph: rvsdg,
             config,
             region_tree,
-        }
+        };
+
+        layout.route_edges();
+
+        layout
     }
 
     pub fn into_primitive_tree(&self) -> PrimTree {
