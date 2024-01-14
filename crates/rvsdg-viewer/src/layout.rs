@@ -31,8 +31,10 @@ pub struct LayoutConfig {
     //horizontal and vertical padding between nodes in a grid layout
     pub grid_padding: usize,
     pub font_size: usize,
-    pub port_width: usize,
     pub grid_empty_spacing: usize,
+    pub port_spacing: usize,
+    pub port_width: usize,
+    pub port_height: usize,
 }
 
 impl Default for LayoutConfig {
@@ -42,8 +44,10 @@ impl Default for LayoutConfig {
             horizontal_node_padding: 10,
             grid_padding: 20,
             font_size: 10,
-            port_width: 4,
             grid_empty_spacing: 10,
+            port_spacing: 10,
+            port_width: 3,
+            port_height: 2,
         }
     }
 }
@@ -52,6 +56,8 @@ pub struct LayoutNode {
     location: Vec2,
     extent: Vec2,
     src: NodeRef,
+    inports: Vec<Vec2>,
+    outports: Vec<Vec2>,
     sub_regions: Vec<RegionLayout>,
 }
 
@@ -64,6 +70,8 @@ pub struct LayoutEdge {
 pub struct RegionLayout {
     //Source loc of the region
     src: RegionLocation,
+    arg_ports: Vec<Vec2>,
+    res_ports: Vec<Vec2>,
     extent: Vec2,
     node_grid: Option<NodeGrid>,
     nodes: AHashMap<NodeRef, LayoutNode>,
@@ -73,6 +81,7 @@ impl RegionLayout {
     fn build_for_region<'a, N: LangNode + View + 'static, E: LangEdge + View + 'static>(
         rvsdg: &Rvsdg<N, E>,
         region: RegionLocation,
+        config: &LayoutConfig,
     ) -> RegionLayout {
         //For each node in the region, build a LayoutNode, and if applicable, build sub-regions
 
@@ -92,6 +101,7 @@ impl RegionLayout {
                                 node: *nref,
                                 region_index: subidx,
                             },
+                            config,
                         ));
                     }
 
@@ -100,14 +110,67 @@ impl RegionLayout {
                     Vec::with_capacity(0)
                 };
 
+                let inports = node
+                    .inputs()
+                    .iter()
+                    .enumerate()
+                    .map(|(idx, _p)| {
+                        Vec2::new(
+                            config.port_width as f32 + config.port_spacing as f32 * idx as f32,
+                            0.0,
+                        )
+                    })
+                    .collect();
+                let outports = node
+                    .outputs()
+                    .iter()
+                    .enumerate()
+                    .map(|(idx, _p)| {
+                        Vec2::new(
+                            config.port_width as f32 + config.port_spacing as f32 * idx as f32,
+                            -(config.port_height as f32),
+                        )
+                    })
+                    .collect();
+
                 (
                     *nref,
                     LayoutNode {
                         location: Vec2::ZERO,
                         extent: Vec2::ZERO,
                         src: *nref,
+                        inports,
+                        outports,
                         sub_regions,
                     },
+                )
+            })
+            .collect();
+
+        let arg_ports = rvsdg
+            .region(&region)
+            .unwrap()
+            .arguments
+            .iter()
+            .enumerate()
+            .map(|(idx, _)| {
+                Vec2::new(
+                    config.port_width as f32 + config.port_spacing as f32 * idx as f32,
+                    0.0,
+                )
+            })
+            .collect();
+
+        let res_ports = rvsdg
+            .region(&region)
+            .unwrap()
+            .results
+            .iter()
+            .enumerate()
+            .map(|(idx, _)| {
+                Vec2::new(
+                    config.port_width as f32 + config.port_spacing as f32 * idx as f32,
+                    0.0,
                 )
             })
             .collect();
@@ -115,6 +178,8 @@ impl RegionLayout {
         RegionLayout {
             src: region,
             nodes,
+            arg_ports,
+            res_ports,
             node_grid: None,
             extent: Vec2::ZERO,
         }
@@ -133,7 +198,7 @@ impl<'a, N: LangNode + View + 'static, E: LangEdge + View + 'static> Layout<'a, 
     }
     pub fn for_rvsdg(rvsdg: &'a Rvsdg<N, E>, config: LayoutConfig) -> Self {
         let tlregion = rvsdg.toplevel_region();
-        let mut region_tree = RegionLayout::build_for_region(rvsdg, tlregion);
+        let mut region_tree = RegionLayout::build_for_region(rvsdg, tlregion, &config);
 
         region_tree.initial_layouting(rvsdg);
 

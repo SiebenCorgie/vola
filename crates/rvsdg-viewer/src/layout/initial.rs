@@ -1,6 +1,6 @@
 use std::ops::Not;
 
-use ahash::{AHashMap, AHashSet};
+use ahash::AHashMap;
 use macroquad::math::Vec2;
 use rvsdg::{edge::LangEdge, nodes::LangNode, NodeRef, Rvsdg};
 
@@ -170,7 +170,6 @@ impl RegionLayout {
             self.node_grid_explore(rvsdg, &mut grid, seed_node.node, (seed_index, 0));
         }
 
-        grid.print();
         //Now restart and fix all grid criterias
         let mut seed_index = 0usize;
         while let Some(seed_node) = region.result_src(rvsdg, seed_index) {
@@ -180,8 +179,6 @@ impl RegionLayout {
             }
             self.fix_grid_criteria(rvsdg, &mut grid, seed_node.node);
         }
-
-        grid.print();
 
         self.node_grid = Some(grid);
     }
@@ -251,11 +248,15 @@ impl RegionLayout {
 
             //Post fix up all sub regions heights. This will make sub regions of theta-nodes the same height.
             for subreg in node.sub_regions.iter_mut() {
-                subreg.extent.y = max_subreg_ext.y.max(subreg.extent.y);
+                subreg.set_height(max_subreg_ext.y, config)
             }
 
             //overwrite our node ext
             node.extent = ext;
+            //update the inports location based on the extent
+            for inp in node.inports.iter_mut() {
+                inp.y = node.extent.y;
+            }
         }
 
         let mut offset_y = config.vertical_node_padding as f32;
@@ -293,5 +294,12 @@ impl RegionLayout {
             max_x.max(config.grid_empty_spacing as f32),
             offset_y.max(config.grid_empty_spacing as f32),
         )
+    }
+
+    pub fn set_height(&mut self, height: f32, config: &LayoutConfig) {
+        self.extent.y = height;
+        for arg in &mut self.arg_ports {
+            arg.y = height - config.port_height as f32;
+        }
     }
 }
