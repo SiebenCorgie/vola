@@ -140,9 +140,9 @@ impl EdgeLayoutGrid {
                 let cell = &self.grid[x][y];
                 if cell.active {
                     if cell.in_use {
-                        print!("*");
+                        print!("O");
                     } else {
-                        print!(" ")
+                        print!("X")
                     }
                 } else {
                     print!(" ")
@@ -190,9 +190,9 @@ impl EdgeLayoutGrid {
         end_coord.0 += 1;
         end_coord.1 += 1;
 
-        let line_vector = line.1 - line.0;
+        let line_vector = (line.1 - line.0).normalize();
 
-        println!("{start_coord:?} -> {end_coord:?}");
+        //println!("{start_coord:?} -> {end_coord:?}");
         for x in start_coord.0..end_coord.0 {
             for y in start_coord.1..end_coord.1 {
                 //we use vector projection to find out if cell is in b. For that we project the cell
@@ -200,9 +200,9 @@ impl EdgeLayoutGrid {
                 // is furhter than `cell_size` we ignore, otherwise we mark.
 
                 let a = self.cell_to_loc((x, y)) - line.0;
-                let a2 = a - ((a.dot(line_vector) / (line_vector.dot(line_vector))) * line_vector);
-                if a2.length() < self.cell_size {
-                    println!("marking: {x},{y}");
+                let a2 = a - ((a.dot(line_vector)) * line_vector);
+                if a2.length() < (self.cell_size / 2.0) {
+                    //println!("marking: {x},{y}");
                     self.mark_use((x, y));
                 }
             }
@@ -233,7 +233,6 @@ impl EdgeLayoutGrid {
         //route by following "dir" till we reach either the x or y coord of `target`
         let step = dir.into_vec2();
 
-        //Check if that routing advance us at all
         if ((pos + step) - target).length() > (pos - target).length() {
             return false;
         }
@@ -243,6 +242,7 @@ impl EdgeLayoutGrid {
 
         let mut offset = Vec2::ZERO;
         let mut best_dist = (pos - target).length();
+        let mut last_was_in_use = false;
         loop {
             let next = pos + offset;
             //println!("   {next}");
@@ -256,6 +256,18 @@ impl EdgeLayoutGrid {
             if !self.grid[cellid.0][cellid.1].active {
                 //println!("Not active");
                 break;
+            }
+
+            if self.grid[cellid.0][cellid.1].in_use && last_was_in_use {
+                //println!("Avoid double collision");
+                offset -= step * 2.0;
+                break;
+            }
+
+            if self.grid[cellid.0][cellid.1].in_use {
+                last_was_in_use = true;
+            } else {
+                last_was_in_use = false;
             }
 
             let this_dist = (next - target).length();
@@ -296,28 +308,28 @@ impl EdgeLayoutGrid {
         if dir.is_vertical() {
             //now try to plot route in all directions from this location
             if self.route_direction(Dir::Left, new_pos, target, edge) {
-                //add this pos to the edge list
-
                 edge.path.push(new_pos);
                 return true;
             }
             if self.route_direction(Dir::Right, new_pos, target, edge) {
-                //add this pos to the edge list
                 edge.path.push(new_pos);
                 return true;
             }
+
+            false
         } else {
             if self.route_direction(Dir::Up, new_pos, target, edge) {
-                //add this pos to the edge list
                 edge.path.push(new_pos);
                 return true;
+            } else {
+                false
             }
         }
-        false
     }
 
     ///Finds a unused location _around_ `loc`
-    fn find_valid_around(&self, loc: Vec2, y_strict_positive: bool) -> Option<Vec2> {
+    fn find_valid_around(&self, loc: Vec2, y_strict_positive: bool) -> Vec<Vec2> {
+        let mut valid_points = Vec::new();
         for xradius in 0..5 {
             for yradius in 0..5 {
                 let pos_offset = loc
@@ -331,7 +343,7 @@ impl EdgeLayoutGrid {
                     );
 
                 if self.is_useable(pos_offset) {
-                    return Some(pos_offset);
+                    valid_points.push(pos_offset);
                 }
 
                 let pos_offset = loc
@@ -344,12 +356,12 @@ impl EdgeLayoutGrid {
                         },
                     );
                 if self.is_useable(pos_offset) {
-                    return Some(pos_offset);
+                    valid_points.push(pos_offset);
                 }
             }
         }
 
-        None
+        valid_points
     }
 }
 
@@ -465,7 +477,7 @@ impl RegionLayout {
             let valid_start_pos = grid.find_valid_around(offseted_start_pos, false);
             let valid_end_pos = grid.find_valid_around(offseted_end_pos, true);
 
-            if valid_end_pos.is_none() || valid_start_pos.is_none() {
+            if valid_end_pos.is_empty() || valid_start_pos.is_empty() {
                 println!("Could not find valid start/end pos for port, falling back");
                 edge.path.clear();
                 edge.path
@@ -478,19 +490,23 @@ impl RegionLayout {
                 edge.path
                     .push(end_pos + Vec2::new(config.port_width as f32 / 2.0, 0.0));
 
-                //now route based on the pre-checked valid start/end positions
-                if grid.route_direction(
-                    Dir::Up,
-                    valid_start_pos.unwrap(),
-                    valid_end_pos.unwrap(),
-                    &mut edge,
-                ) {
-                    //post push port location for visual connection.
-                    edge.path
-                        .push(start_pos + Vec2::new(config.port_width as f32 / 2.0, 0.0));
-                    //now mark the used path as _in use_.
-                    grid.set_in_use(&edge);
-                } else {
+                let mut found_route = false;
+                'search: for valid_start in valid_start_pos {
+                    for valid_end in &valid_end_pos {
+                        //now route based on the pre-checked valid start/end positions
+                        if grid.route_direction(Dir::Up, valid_start, *valid_end, &mut edge) {
+                            //post push port location for visual connection.
+                            edge.path
+                                .push(start_pos + Vec2::new(config.port_width as f32 / 2.0, 0.0));
+                            //now mark the used path as _in use_.
+                            grid.set_in_use(&edge);
+                            found_route = true;
+                            break 'search;
+                        }
+                    }
+                }
+
+                if !found_route {
                     println!("Could not route");
                     edge.path.clear();
                     edge.path
@@ -503,8 +519,9 @@ impl RegionLayout {
             self.edges.push(edge);
         }
 
-        //grid.print_all();
+        //grid.print_active();
         //println!();
+        //grid.print_all();
     }
 }
 
