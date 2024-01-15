@@ -1,3 +1,5 @@
+use std::mem;
+
 use macroquad::math::Vec2;
 use rvsdg::{
     edge::{InportLocation, InputType, LangEdge, OutportLocation, OutputType},
@@ -165,6 +167,62 @@ impl EdgeLayoutGrid {
         self.grid[coord.0][coord.1].in_use = false;
     }
 
+    fn is_useable(&self, pos: Vec2) -> bool {
+        let coord = self.loc_to_cell(pos);
+        if !self.in_bound((coord.0 as isize, coord.1 as isize)) {
+            return false;
+        }
+
+        !self.grid[coord.0][coord.1].in_use
+    }
+
+    fn set_used_if_intersects(&mut self, line: (Vec2, Vec2)) {
+        let mut start_coord = self.loc_to_cell(line.0);
+        let mut end_coord = self.loc_to_cell(line.1);
+        if start_coord.0 > end_coord.0 {
+            std::mem::swap(&mut start_coord.0, &mut end_coord.0);
+        }
+        if start_coord.1 > end_coord.1 {
+            std::mem::swap(&mut start_coord.1, &mut end_coord.1);
+        }
+        start_coord.0 = start_coord.0.checked_sub(1).unwrap_or(0);
+        start_coord.1 = start_coord.1.checked_sub(1).unwrap_or(0);
+        end_coord.0 += 1;
+        end_coord.1 += 1;
+
+        let line_vector = line.1 - line.0;
+
+        println!("{start_coord:?} -> {end_coord:?}");
+        for x in start_coord.0..end_coord.0 {
+            for y in start_coord.1..end_coord.1 {
+                //we use vector projection to find out if cell is in b. For that we project the cell
+                // onto the line vector. If the projection (a2 in this article: https://en.wikipedia.org/wiki/Vector_projection)
+                // is furhter than `cell_size` we ignore, otherwise we mark.
+
+                let a = self.cell_to_loc((x, y)) - line.0;
+                let a2 = a - ((a.dot(line_vector) / (line_vector.dot(line_vector))) * line_vector);
+                if a2.length() < self.cell_size {
+                    println!("marking: {x},{y}");
+                    self.mark_use((x, y));
+                }
+            }
+        }
+    }
+
+    ///Sets all cells _in_use_ that are touched by `edge`.
+    fn set_in_use(&mut self, edge: &LayoutEdge) {
+        //TODO: This is a little _unoptimized_. We constrain the iteration per line segment, and then check
+        // each cell in the cluster agains the line for intersection.
+
+        let num_segments = edge.path.len() - 1;
+        for seg in 0..num_segments {
+            let start = edge.path[seg];
+            let end = edge.path[seg + 1];
+
+            self.set_used_if_intersects((start, end));
+        }
+    }
+
     fn route_direction(&self, dir: Dir, pos: Vec2, target: Vec2, edge: &mut LayoutEdge) -> bool {
         //println!("{dir:?} {pos} -> {target}");
         //In vicinity aka. _reached target_
@@ -256,6 +314,42 @@ impl EdgeLayoutGrid {
             }
         }
         false
+    }
+
+    ///Finds a unused location _around_ `loc`
+    fn find_valid_around(&self, loc: Vec2, y_strict_positive: bool) -> Option<Vec2> {
+        for xradius in 0..5 {
+            for yradius in 0..5 {
+                let pos_offset = loc
+                    + Vec2::new(
+                        xradius as f32 * self.cell_size,
+                        if y_strict_positive {
+                            yradius as f32 * self.cell_size
+                        } else {
+                            0.0
+                        },
+                    );
+
+                if self.is_useable(pos_offset) {
+                    return Some(pos_offset);
+                }
+
+                let pos_offset = loc
+                    - Vec2::new(
+                        xradius as f32 * self.cell_size,
+                        if y_strict_positive {
+                            0.0
+                        } else {
+                            yradius as f32 * self.cell_size
+                        },
+                    );
+                if self.is_useable(pos_offset) {
+                    return Some(pos_offset);
+                }
+            }
+        }
+
+        None
     }
 }
 
@@ -350,29 +444,60 @@ impl RegionLayout {
             let start_pos = self.out_port_to_location(rvsdg, edge.src(), *edgeref);
             let end_pos = self.in_port_to_location(rvsdg, edge.dst(), *edgeref);
 
+            //The layout edge we append to
             let mut edge = LayoutEdge {
                 src: *edgeref,
                 path: Vec::with_capacity(grid.resolution.0 + grid.resolution.1),
             };
 
+            //Offset the start / end position vertically to not _fuse_ the edge with the node
             let local_offset =
                 Vec2::new(config.port_width as f32 / 2.0, config.routing_dead_padding);
             let offseted_start_pos = start_pos + (local_offset * Vec2::new(1.0, -1.0));
             let offseted_end_pos = end_pos + local_offset;
 
-            edge.path
-                .push(end_pos + Vec2::new(config.port_width as f32 / 2.0, 0.0));
+            //Before starting the routing, make sure the startpoint is unused. Otherwise the path finding will not
+            // work.
+            //
+            // We try to find a start point left or right from the offsetted start/end pos that is not in use
+            //
+            // We use `radius` for that and tab left and right to the port till we found something.
+            let valid_start_pos = grid.find_valid_around(offseted_start_pos, false);
+            let valid_end_pos = grid.find_valid_around(offseted_end_pos, true);
 
-            if grid.route_direction(Dir::Up, offseted_start_pos, offseted_end_pos, &mut edge) {
-                edge.path
-                    .push(start_pos + Vec2::new(config.port_width as f32 / 2.0, 0.0));
-            } else {
-                println!("Could not route");
+            if valid_end_pos.is_none() || valid_start_pos.is_none() {
+                println!("Could not find valid start/end pos for port, falling back");
                 edge.path.clear();
                 edge.path
                     .push(start_pos + Vec2::new(config.port_width as f32 / 2.0, 0.0));
                 edge.path
                     .push(end_pos + Vec2::new(config.port_width as f32 / 2.0, 0.0));
+                continue;
+            } else {
+                //pre-push the port's location to have a visual connection
+                edge.path
+                    .push(end_pos + Vec2::new(config.port_width as f32 / 2.0, 0.0));
+
+                //now route based on the pre-checked valid start/end positions
+                if grid.route_direction(
+                    Dir::Up,
+                    valid_start_pos.unwrap(),
+                    valid_end_pos.unwrap(),
+                    &mut edge,
+                ) {
+                    //post push port location for visual connection.
+                    edge.path
+                        .push(start_pos + Vec2::new(config.port_width as f32 / 2.0, 0.0));
+                    //now mark the used path as _in use_.
+                    grid.set_in_use(&edge);
+                } else {
+                    println!("Could not route");
+                    edge.path.clear();
+                    edge.path
+                        .push(start_pos + Vec2::new(config.port_width as f32 / 2.0, 0.0));
+                    edge.path
+                        .push(end_pos + Vec2::new(config.port_width as f32 / 2.0, 0.0));
+                }
             }
 
             self.edges.push(edge);
