@@ -168,9 +168,9 @@ impl AStarSearch {
         const OFFSETS: &'static [(isize, isize)] = &[
             (0, 1),
             (0, -1),
-            //(1, -1),
+            (1, -1),
             (-1, 0),
-            //(-1, -1),
+            (-1, -1),
             (1, 0),
             (0, -2),
             (0, 2),
@@ -245,44 +245,17 @@ impl AStarSearch {
 /// A regular grid we use to layout our edges using A*
 ///
 /// The process first calculates the size of the grid, then marks
-/// all cells used by a node as "dead",
-/// and finally does the DFS routing.
+/// all cells used by a node as "dead", as well as the _outer boundary_
+/// and finally does the A* routing.
 ///
-/// However, we don't allow "up" movement. So x is free to change, and y can only increment.
+/// We penalize direction change, which gives us _longer lines_, instead of _stairs_.
 ///
-/// Another criteria is, that each cell can only be used once for a horizontal, and once for a vertical line.
+/// We also track used cells, but allow the algorithm to _jump_ over used cells.
 struct EdgeLayoutGrid {
     resolution: (usize, usize),
     cell_size: f32,
     grid: Vec<Vec<ELCell>>,
     search_helper: AStarSearch,
-}
-
-#[derive(Debug)]
-enum Dir {
-    Up,
-    Left,
-    Right,
-}
-
-impl Dir {
-    fn is_vertical(&self) -> bool {
-        if let Dir::Up = self {
-            true
-        } else {
-            false
-        }
-    }
-}
-
-impl Dir {
-    const fn into_vec2(&self) -> Vec2 {
-        match self {
-            Dir::Up => Vec2 { x: 0.0, y: -1.0 },
-            Dir::Left => Vec2 { x: -1.0, y: 0.0 },
-            Dir::Right => Vec2 { x: 1.0, y: 0.0 },
-        }
-    }
 }
 
 impl EdgeLayoutGrid {
@@ -380,10 +353,6 @@ impl EdgeLayoutGrid {
 
     fn mark_use(&mut self, coord: (usize, usize)) {
         self.grid[coord.0][coord.1].in_use = true;
-    }
-
-    fn unmark_use(&mut self, coord: (usize, usize)) {
-        self.grid[coord.0][coord.1].in_use = false;
     }
 
     fn is_useable(&self, pos: Vec2) -> bool {
@@ -584,6 +553,9 @@ impl RegionLayout {
         //now use the grid to route any port edges.
         for edgeref in &rvsdg.region(&self.src).unwrap().edges {
             let edge = rvsdg.edge(*edgeref);
+            let stroke = edge.ty.stroke();
+            let color = edge.ty.color();
+
             let start_pos = self.out_port_to_location(rvsdg, edge.src(), *edgeref);
             let end_pos = self.in_port_to_location(rvsdg, edge.dst(), *edgeref);
 
@@ -637,7 +609,7 @@ impl RegionLayout {
                 None
             };
 
-            let edge = if let Some(edg) = edge {
+            let mut edge = if let Some(edg) = edge {
                 edg
             } else {
                 println!("Could not route");
@@ -651,61 +623,8 @@ impl RegionLayout {
                 edge
             };
 
-            /*
-            //Before starting the routing, make sure the startpoint is unused. Otherwise the path finding will not
-            // work.
-            //
-            // We try to find a start point left or right from the offsetted start/end pos that is not in use
-            //
-            // We use `radius` for that and tab left and right to the port till we found something.
-            let valid_start_pos = grid.find_valid_around(offseted_start_pos, false);
-            let valid_end_pos = grid.find_valid_around(offseted_end_pos, true);
-
-            if valid_end_pos.is_empty() || valid_start_pos.is_empty() {
-                println!("Could not find valid start/end pos for port, falling back");
-                edge.path.clear();
-                edge.path
-                    .push(start_pos + Vec2::new(config.port_width as f32 / 2.0, 0.0));
-                edge.path
-                    .push(end_pos + Vec2::new(config.port_width as f32 / 2.0, 0.0));
-                continue;
-            } else {
-                //pre-push the port's location to have a visual connection
-                edge.path
-                    .push(end_pos + Vec2::new(config.port_width as f32 / 2.0, 0.0));
-
-                let mut found_route = false;
-                'search: for valid_start in valid_start_pos {
-                    for valid_end in &valid_end_pos {
-                        //now route based on the pre-checked valid start/end positions
-                        if grid.route_direction(Dir::Up, valid_start, *valid_end, &mut edge) {
-                            //post push port location for visual connection.
-                            edge.path
-                                .push(start_pos + Vec2::new(config.port_width as f32 / 2.0, 0.0));
-                            //now mark the used path as _in use_.
-                            grid.set_in_use(&edge);
-                            found_route = true;
-                            break 'search;
-                        }
-                    }
-                }
-
-                if !found_route {
-                    println!("Could not route");
-                    edge.path.clear();
-                    edge.path
-                        .push(start_pos + Vec2::new(config.port_width as f32 / 2.0, 0.0));
-                    edge.path
-                        .push(end_pos + Vec2::new(config.port_width as f32 / 2.0, 0.0));
-                }
-            }
-            */
             self.edges.push(edge);
         }
-
-        //grid.print_active();
-        //println!();
-        //grid.print_all();
     }
 }
 

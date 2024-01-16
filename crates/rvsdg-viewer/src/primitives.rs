@@ -2,6 +2,8 @@ use macroquad::prelude::{Color, Vec2};
 use rvsdg::attrib::AttribLocation;
 use std::fmt::Write;
 
+use crate::Stroke;
+
 pub type Point = Vec2;
 
 #[derive(Debug, Clone)]
@@ -62,6 +64,7 @@ pub struct Path {
     pub points: Vec<Point>,
     pub width: f32,
     pub color: Color,
+    pub stroke: Stroke,
 }
 
 impl Path {
@@ -74,10 +77,10 @@ impl Path {
             write!(path_command, "L {} {} ", point.x, point.y).unwrap();
         }
         //finish by setting up stroke and fill
-
         write!(
             path_command,
-            "\" fill=\"none\" stroke-width=\"{}\" style=\"stroke:{}\" />",
+            "\" fill=\"none\" {} stroke-width=\"{}\" style=\"stroke:{};\" />",
+            self.stroke.into_svg(),
             self.width,
             color_styling(&self.color)
         )

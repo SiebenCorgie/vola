@@ -16,7 +16,7 @@ use ahash::AHashMap;
 use macroquad::math::Vec2;
 use rvsdg::{edge::LangEdge, nodes::LangNode, region::RegionLocation, EdgeRef, NodeRef, Rvsdg};
 
-use crate::{primitives::PrimTree, View};
+use crate::{primitives::PrimTree, Stroke, View};
 
 use self::initial::NodeGrid;
 
@@ -49,7 +49,7 @@ impl Default for LayoutConfig {
             grid_padding: 20,
             font_size: 10,
             grid_empty_spacing: 10,
-            port_spacing: 10,
+            port_spacing: 15,
             port_width: 3,
             port_height: 2,
             routing_cell_size: 5.0,

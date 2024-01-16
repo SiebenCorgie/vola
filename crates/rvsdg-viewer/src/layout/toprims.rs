@@ -3,20 +3,21 @@ use rvsdg::{edge::LangEdge, nodes::LangNode};
 
 use crate::{
     primitives::{Path, Point, Prim, PrimTree, Rect, Text},
-    View,
+    Stroke, View,
 };
 
 use super::{Layout, LayoutConfig, LayoutEdge, LayoutNode, RegionLayout};
 
 impl LayoutEdge {
-    fn into_path(&self) -> Path {
+    fn into_path(&self, color: Color, stroke: Stroke) -> Path {
         //Builds a path from this edge. This allows us to optimize a little.
         // We basically iterate all "steps, but only emit an actual vertex, whenever the direction changes".
 
         let mut path = Path {
             points: Vec::new(),
             width: 1.0,
-            color: Color::from_rgba(0, 0, 0, 255),
+            color,
+            stroke,
         };
 
         //push the first vertex
@@ -160,9 +161,13 @@ impl<'a, N: LangNode + View + 'static, E: LangEdge + View + 'static> Layout<'a, 
 
         //Now append all paths
         for edg in reg.edges.iter() {
+            let src_edge = self.src_graph.edge(edg.src);
+            let color = src_edge.ty.color();
+            let stroke = src_edge.ty.stroke();
+
             tree_node.children.push(PrimTree {
                 id: edg.src.into(),
-                prim: Prim::Path(edg.into_path()),
+                prim: Prim::Path(edg.into_path(color, stroke)),
                 children: Vec::with_capacity(0),
             });
         }

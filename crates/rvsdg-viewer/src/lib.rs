@@ -42,7 +42,7 @@ pub trait View {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Stroke {
     Line,
     Dashs,
