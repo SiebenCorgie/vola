@@ -110,7 +110,7 @@ pub fn into_svg<N: View + LangNode + Debug + 'static, E: View + LangEdge + 'stat
 ) {
     let layout = Layout::for_rvsdg_default(rvsdg);
     let prims = layout.into_primitive_tree();
-    let svg = prims.to_svg();
+    let svg = prims.to_svg(layout.region_tree.get_extent().y);
 
     std::fs::write(svg_path.as_ref(), svg).unwrap();
 }

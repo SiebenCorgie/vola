@@ -108,10 +108,14 @@ impl Text {
 
     pub fn emit_svg(&self, id: &AttribLocation) -> String {
         format!(
-            "<text id=\"{:?}\" x=\"{}\" y=\"{}\" font-size=\"{}\" font-family=\"monospace\">{}</text>",
+            "
+<g transform=\"scale(1, -1)\">
+<text id=\"{:?}\" x=\"{}\" y=\"{}\" font-size=\"{}\" font-family=\"monospace\">{}</text>
+</g>
+",
             id,
             self.size / 2.0,
-            self.size - 1.0,
+            -(self.size - 1.0),
             self.size,
             self.string
         )
@@ -143,12 +147,15 @@ pub struct PrimTree {
 }
 
 impl PrimTree {
-    pub fn to_svg(&self) -> String {
+    pub fn to_svg(&self, height: f32) -> String {
         //1024 because _why not_
         let mut buffer = String::with_capacity(1024);
         write!(buffer, "<svg>").unwrap();
+        write!(buffer, "<g transform=\"matrix(1 0 0 -1 0 {height})\">").unwrap();
 
         self.append_svg(&mut buffer);
+
+        write!(buffer, "\n</g>").unwrap();
 
         write!(buffer, "\n</svg>\n").unwrap();
         buffer

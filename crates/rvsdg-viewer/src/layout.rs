@@ -86,6 +86,10 @@ pub struct RegionLayout {
 }
 
 impl RegionLayout {
+    pub fn get_extent(&self) -> Vec2 {
+        self.extent
+    }
+
     fn build_for_region<'a, N: LangNode + View + 'static, E: LangEdge + View + 'static>(
         rvsdg: &Rvsdg<N, E>,
         region: RegionLocation,
@@ -230,5 +234,9 @@ impl<'a, N: LangNode + View + 'static, E: LangEdge + View + 'static> Layout<'a, 
 
     pub fn into_primitive_tree(&self) -> PrimTree {
         self.to_prim_tree(&self.config)
+    }
+
+    pub fn get_extent(&self) -> Vec2 {
+        self.region_tree.extent
     }
 }

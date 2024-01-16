@@ -116,6 +116,6 @@ fn main() {
     let l = Layout::for_rvsdg_default(&router_test);
 
     let tree = l.into_primitive_tree();
-    let tree_svg = tree.to_svg();
+    let tree_svg = tree.to_svg(l.get_extent().y);
     std::fs::write("test.svg", tree_svg).unwrap();
 }
