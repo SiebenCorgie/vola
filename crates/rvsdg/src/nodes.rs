@@ -33,7 +33,6 @@ pub use theta::{LoopNode, ThetaNode};
 
 use crate::{
     edge::{InportLocation, InputType, LangEdge, OutportLocation, OutputType},
-    err::LegalizationError,
     region::{Inport, Input, Outport, Output, Region, RegionLocation},
     Rvsdg, SmallColl,
 };

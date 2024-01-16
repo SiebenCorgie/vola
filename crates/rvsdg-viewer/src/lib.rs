@@ -14,22 +14,21 @@
 //!     view(rvsdg);
 //! }
 //! ```
+pub mod layout;
 mod primitives;
-mod printer;
 
-use std::{fmt::Debug, path::Path};
-
+use layout::Layout;
 pub use macroquad;
 ///The color of a node or edge.
 pub use macroquad::color::Color;
 use macroquad::prelude::{BLACK, RED};
-use printer::Printer;
 use rvsdg::{
     common::VSEdge,
     edge::LangEdge,
     nodes::{LangNode, NodeType},
     Rvsdg,
 };
+use std::{fmt::Debug, path::Path};
 
 pub trait View {
     fn name(&self) -> &str;
@@ -39,7 +38,7 @@ pub trait View {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Stroke {
     Line,
     Dashs,
@@ -109,18 +108,11 @@ pub fn into_svg<N: View + LangNode + Debug + 'static, E: View + LangEdge + 'stat
     rvsdg: &Rvsdg<N, E>,
     svg_path: impl AsRef<Path>,
 ) {
-    let mut printer = Printer::new(rvsdg);
+    let layout = Layout::for_rvsdg_default(rvsdg);
+    let prims = layout.into_primitive_tree();
+    let svg = prims.to_svg(layout.region_tree.get_extent().y);
 
-    printer.layout(rvsdg);
-    printer.root.flip_y();
-
-    if svg_path.as_ref().exists() {
-        std::fs::remove_file(svg_path.as_ref()).unwrap()
-    }
-
-    let buffer = printer.emit_svg();
-
-    std::fs::write(svg_path.as_ref(), buffer).unwrap();
+    std::fs::write(svg_path.as_ref(), svg).unwrap();
 }
 
 /*

@@ -12,6 +12,9 @@ mod ex_3a;
 //Example 3.b. of the source paper
 mod ex_3b;
 
+//simple test for the viewer library.
+mod minigraph;
+
 ///Builds the simple rvsdg structures presented in figure 2 of the RVSDG paper.
 #[derive(Clone, Debug)]
 pub enum MyNodes {
@@ -108,4 +111,10 @@ fn main() {
     let ex3b = ex_3b::emit();
     assert!(ex3b.verify_parental_relations(), "3b had errors");
     rvsdg_viewer::into_svg(&ex3b, "Example_3b.svg");
+    let router_test = minigraph::emit();
+    assert!(
+        router_test.verify_parental_relations(),
+        "router_test had errors"
+    );
+    rvsdg_viewer::into_svg(&router_test, "router_test.svg");
 }
