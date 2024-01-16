@@ -53,7 +53,7 @@ impl Default for LayoutConfig {
             port_width: 3,
             port_height: 2,
             routing_cell_size: 5.0,
-            routing_dead_padding: 5.0,
+            routing_dead_padding: 4.0,
         }
     }
 }

@@ -1,6 +1,8 @@
 use std::mem;
 
+use ahash::{AHashMap, AHashSet};
 use macroquad::math::Vec2;
+use priority_queue::{DoublePriorityQueue, PriorityQueue};
 use rvsdg::{
     edge::{InportLocation, InputType, LangEdge, OutportLocation, OutputType},
     nodes::LangNode,
@@ -37,6 +39,209 @@ impl ELCell {
     }
 }
 
+type GridCoord = (usize, usize);
+struct AStarAttrib {
+    //The node, preceding this node on its _best_ path
+    came_from: Option<GridCoord>,
+    //the cost of the cheapest pathc from start to this node currently known.
+    gscore: isize,
+}
+
+impl AStarAttrib {
+    fn reset(&mut self) {
+        self.gscore = isize::MAX;
+        self.came_from = None;
+    }
+}
+
+impl Default for AStarAttrib {
+    fn default() -> Self {
+        AStarAttrib {
+            came_from: None,
+            gscore: isize::MAX,
+        }
+    }
+}
+
+struct AStarSearch {
+    openset: DoublePriorityQueue<GridCoord, isize>,
+    attrib_map: AHashMap<GridCoord, AStarAttrib>,
+    start: GridCoord,
+    end: GridCoord,
+    extent: (usize, usize),
+}
+
+impl AStarSearch {
+    fn new() -> Self {
+        AStarSearch {
+            openset: DoublePriorityQueue::default(),
+            attrib_map: AHashMap::default(),
+            start: (0, 0),
+            end: (0, 0),
+            extent: (0, 0),
+        }
+    }
+
+    fn fscore_for(&self, coord: GridCoord) -> isize {
+        self.attrib_map
+            .get(&coord)
+            .unwrap()
+            .gscore
+            .checked_add(self.h(coord))
+            .unwrap_or(isize::MAX)
+    }
+
+    //heuristical score, currently Manhattan distance
+    fn h(&self, coord: GridCoord) -> isize {
+        let end_vec = (
+            (coord.0 as isize - self.start.0 as isize).abs(),
+            (coord.1 as isize - self.start.1 as isize).abs(),
+        );
+
+        end_vec.0 + end_vec.1
+    }
+
+    ///Calculates how much it costs going from current to next
+    fn d(&self, current: GridCoord, next: GridCoord) -> isize {
+        //Penalize direction change
+        let delta_add = if let Some(from) = self.attrib_map.get(&current).unwrap().came_from {
+            let deltax = from.0 as isize - next.0 as isize;
+            let deltay = from.1 as isize - next.1 as isize;
+
+            if deltax != 0 && deltay != 0 {
+                1
+            } else {
+                0
+            }
+        } else {
+            0
+        };
+        let diffx = (current.0 as isize - next.0 as isize).abs();
+        let diffy = (current.1 as isize - next.1 as isize).abs();
+        diffx + diffy + delta_add
+    }
+
+    fn start_for(&mut self, resolution: (usize, usize), start: GridCoord, end: GridCoord) {
+        self.openset.clear();
+        self.openset.push(start, self.h(self.start));
+
+        for x in 0..resolution.0 {
+            for y in 0..resolution.1 {
+                if let Some(attr) = self.attrib_map.get_mut(&(x, y)) {
+                    attr.reset();
+                } else {
+                    self.attrib_map.insert((x, y), AStarAttrib::default());
+                }
+            }
+        }
+
+        //Init search
+        self.attrib_map.get_mut(&start).unwrap().gscore = 0;
+        assert!(self.fscore_for(start) == self.h(start));
+
+        self.start = start;
+        self.end = end;
+    }
+
+    fn offset_coord(&self, coord: GridCoord, offset: (isize, isize)) -> Option<GridCoord> {
+        let x = coord.0 as isize + offset.0;
+        if x < 0 || x >= self.extent.0 as isize {
+            return None;
+        }
+        let y = coord.1 as isize + offset.1;
+        if y < 0 || y >= self.extent.1 as isize {
+            return None;
+        }
+
+        Some((x as usize, y as usize))
+    }
+
+    fn search(
+        &mut self,
+        grid: &Vec<Vec<ELCell>>,
+        resolution: (usize, usize),
+        start: GridCoord,
+        end: GridCoord,
+    ) -> Option<Vec<GridCoord>> {
+        ///Neighbor offsets in the A* search. We _preffer_ short vertical over long horizontal
+        /// movement.
+        const OFFSETS: &'static [(isize, isize)] = &[
+            (0, 1),
+            (0, -1),
+            //(1, -1),
+            (-1, 0),
+            //(-1, -1),
+            (1, 0),
+            (0, -2),
+            (0, 2),
+            (-2, 0),
+            (2, 0),
+        ];
+
+        self.extent = resolution;
+
+        //Reset data structure for new search.
+        self.start_for(resolution, start, end);
+
+        while !self.openset.is_empty() {
+            let (current, _fscore) = self.openset.pop_min().unwrap();
+            if current == end {
+                return Some(self.reconstruct_path(current.clone()));
+            }
+
+            //Iterate all neighbors for seeding a search
+            for offset in OFFSETS {
+                let coord = if let Some(c) = self.offset_coord(current, *offset) {
+                    c
+                } else {
+                    continue;
+                };
+
+                if !grid[coord.0][coord.1].active || grid[coord.0][coord.1].in_use {
+                    continue;
+                }
+
+                let tentative_gscore =
+                    self.attrib_map.get(&current).unwrap().gscore + self.d(current, coord);
+                //Check if it is cheaper to go from current to neighbor, compared to the last known "best way" for neighbor.
+                if tentative_gscore < self.attrib_map.get(&coord).unwrap().gscore {
+                    //is better, update neighbor and enrow
+                    let attrib = self.attrib_map.get_mut(&coord).unwrap();
+                    attrib.came_from = Some(current);
+                    attrib.gscore = tentative_gscore;
+                    //Change the fscore, or add if not already in queue
+                    let new_fscore = tentative_gscore + self.h(coord);
+                    if self.openset.change_priority(&coord, new_fscore).is_none() {
+                        self.openset.push(coord, new_fscore);
+                    }
+                }
+            }
+        }
+
+        None
+    }
+
+    fn reconstruct_path(&mut self, current: GridCoord) -> Vec<GridCoord> {
+        let mut last_key = current;
+        let mut total_path = Vec::with_capacity(self.extent.0 + self.extent.1);
+        while last_key != self.start {
+            //find the came_from of the last key, use that as the next, and push last key
+            let next_key = self
+                .attrib_map
+                .get(&last_key)
+                .unwrap()
+                .came_from
+                .expect("Expected set last key!");
+            total_path.push(last_key);
+            last_key = next_key;
+        }
+
+        total_path.push(self.start);
+
+        total_path
+    }
+}
+
 /// A regular grid we use to layout our edges using A*
 ///
 /// The process first calculates the size of the grid, then marks
@@ -50,6 +255,7 @@ struct EdgeLayoutGrid {
     resolution: (usize, usize),
     cell_size: f32,
     grid: Vec<Vec<ELCell>>,
+    search_helper: AStarSearch,
 }
 
 #[derive(Debug)]
@@ -84,12 +290,25 @@ impl EdgeLayoutGrid {
         let resolution = (reg.extent / config.routing_cell_size).ceil() + 1.0;
         let resolution = (resolution.x as usize, resolution.y as usize);
 
-        let grid = vec![vec![ELCell::default(); resolution.1]; resolution.0];
+        let mut grid = vec![vec![ELCell::default(); resolution.1]; resolution.0];
+
+        //mark all "outer" cells as "inactive, to prevent edges from clipping to the
+        // outer walls
+        for x in 0..resolution.0 {
+            grid[x][0].active = false;
+            grid[x][resolution.1 - 1].active = false;
+        }
+
+        for y in 0..resolution.1 {
+            grid[0][y].active = false;
+            grid[resolution.0 - 1][y].active = false;
+        }
 
         EdgeLayoutGrid {
             resolution,
             cell_size: config.routing_cell_size,
             grid,
+            search_helper: AStarSearch::new(),
         }
     }
 
@@ -223,145 +442,57 @@ impl EdgeLayoutGrid {
         }
     }
 
-    fn route_direction(&self, dir: Dir, pos: Vec2, target: Vec2, edge: &mut LayoutEdge) -> bool {
-        //println!("{dir:?} {pos} -> {target}");
-        //In vicinity aka. _reached target_
-        if (pos - target).length() <= 2.0 {
-            return true;
-        }
+    ///Finds a unused location _around_ `loc`. y_mul and from_right are used to weight the search to the left/right and
+    /// clamp to +y or -y from `loc`.
+    fn find_valid_around(&self, loc: Vec2, y_mul: isize, from_right: isize) -> Option<Vec2> {
+        const SEARCH_OFFSETS: &'static [(isize, isize)] = &[
+            //directly on port
+            (0, 0),
+            //1 below port
+            (0, 1),
+            (1, 1),
+            (-1, 1),
+            (2, 1),
+            (-2, 1),
+            (3, 1),
+            (-3, 1),
+            //2 below port
+            (0, 2),
+            (1, 2),
+            (-1, 2),
+            (2, 2),
+            (-2, 2),
+            (3, 2),
+            (-3, 2),
+        ];
 
-        //route by following "dir" till we reach either the x or y coord of `target`
-        let step = dir.into_vec2();
-
-        if ((pos + step) - target).length() > (pos - target).length() {
-            return false;
-        }
-
-        //now advance `step` until we reach one coord of `target` < step_size OR
-        // until we reach an inactive cell
-
-        let mut offset = Vec2::ZERO;
-        let mut best_dist = (pos - target).length();
-        let mut last_was_in_use = false;
-        loop {
-            let next = pos + offset;
-            //println!("   {next}");
-            let cellid = self.loc_to_cell(next);
-
-            if !self.in_bound((cellid.0 as isize, cellid.1 as isize)) {
-                //println!("Not In bound");
-                break;
-            }
-
-            if !self.grid[cellid.0][cellid.1].active {
-                //println!("Not active");
-                break;
-            }
-
-            if self.grid[cellid.0][cellid.1].in_use && last_was_in_use {
-                //println!("Avoid double collision");
-                offset -= step * 2.0;
-                break;
-            }
-
-            if self.grid[cellid.0][cellid.1].in_use {
-                last_was_in_use = true;
-            } else {
-                last_was_in_use = false;
-            }
-
-            let this_dist = (next - target).length();
-
-            if this_dist < 1.0 {
-                //println!("in vicinity");
-                best_dist = this_dist;
-                break;
-            }
-
-            //Also break if we are moving away again
-            if this_dist > best_dist {
-                //println!("wrong direction @ {next}");
-                break;
-            } else {
-                best_dist = this_dist;
-            }
-
-            offset += step;
-        }
-
-        let mut new_pos = pos + offset;
-
-        if new_pos == pos {
-            //println!("Didn't move at all");
-            return false;
-        }
-
-        if new_pos.y < target.y {
-            //println!("Fixing pos y");
-            new_pos.y = target.y;
-        }
-
-        if best_dist < 2.0 {
-            new_pos.x = target.x;
-        }
-
-        if dir.is_vertical() {
-            //now try to plot route in all directions from this location
-            if self.route_direction(Dir::Left, new_pos, target, edge) {
-                edge.path.push(new_pos);
-                return true;
-            }
-            if self.route_direction(Dir::Right, new_pos, target, edge) {
-                edge.path.push(new_pos);
-                return true;
-            }
-
-            false
-        } else {
-            if self.route_direction(Dir::Up, new_pos, target, edge) {
-                edge.path.push(new_pos);
-                return true;
-            } else {
-                false
+        for offset in SEARCH_OFFSETS {
+            let pos = loc
+                + Vec2::new(
+                    offset.0 as f32 * self.cell_size * from_right as f32,
+                    offset.1 as f32 * self.cell_size * y_mul as f32,
+                );
+            if self.is_useable(pos) {
+                return Some(pos);
             }
         }
+
+        None
     }
 
-    ///Finds a unused location _around_ `loc`
-    fn find_valid_around(&self, loc: Vec2, y_strict_positive: bool) -> Vec<Vec2> {
-        let mut valid_points = Vec::new();
-        for xradius in 0..5 {
-            for yradius in 0..5 {
-                let pos_offset = loc
-                    + Vec2::new(
-                        xradius as f32 * self.cell_size,
-                        if y_strict_positive {
-                            yradius as f32 * self.cell_size
-                        } else {
-                            0.0
-                        },
-                    );
-
-                if self.is_useable(pos_offset) {
-                    valid_points.push(pos_offset);
-                }
-
-                let pos_offset = loc
-                    - Vec2::new(
-                        xradius as f32 * self.cell_size,
-                        if y_strict_positive {
-                            0.0
-                        } else {
-                            yradius as f32 * self.cell_size
-                        },
-                    );
-                if self.is_useable(pos_offset) {
-                    valid_points.push(pos_offset);
-                }
-            }
+    fn route_edge(&mut self, src: EdgeRef, start: GridCoord, end: GridCoord) -> Option<LayoutEdge> {
+        let gridcoord_path = self
+            .search_helper
+            .search(&self.grid, self.resolution, start, end)?;
+        let mut edge = LayoutEdge {
+            src,
+            path: Vec::with_capacity(gridcoord_path.len()),
+        };
+        for coord in gridcoord_path {
+            edge.path.push(self.cell_to_loc(coord));
         }
 
-        valid_points
+        Some(edge)
     }
 }
 
@@ -456,18 +587,71 @@ impl RegionLayout {
             let start_pos = self.out_port_to_location(rvsdg, edge.src(), *edgeref);
             let end_pos = self.in_port_to_location(rvsdg, edge.dst(), *edgeref);
 
-            //The layout edge we append to
-            let mut edge = LayoutEdge {
-                src: *edgeref,
-                path: Vec::with_capacity(grid.resolution.0 + grid.resolution.1),
-            };
+            let start_port_location = start_pos
+                + Vec2::new(
+                    config.port_width as f32 / 2.0,
+                    config.port_height as f32 / 2.0,
+                );
+            let end_port_location = end_pos
+                + Vec2::new(
+                    config.port_width as f32 / 2.0,
+                    config.port_height as f32 / 2.0,
+                );
 
             //Offset the start / end position vertically to not _fuse_ the edge with the node
-            let local_offset =
-                Vec2::new(config.port_width as f32 / 2.0, config.routing_dead_padding);
-            let offseted_start_pos = start_pos + (local_offset * Vec2::new(1.0, -1.0));
-            let offseted_end_pos = end_pos + local_offset;
+            let local_offset = Vec2::new(0.0, config.routing_dead_padding);
+            let offseted_start_pos = start_port_location + (local_offset * Vec2::new(1.0, -1.0));
+            let offseted_end_pos = end_port_location + local_offset;
 
+            //Before starting search, make sure we have a valid start/end position
+            let start_to_right = if offseted_start_pos.x > offseted_end_pos.x {
+                0
+            } else {
+                1
+            };
+            let route_start_pos = grid.find_valid_around(offseted_start_pos, -1, start_to_right);
+            let route_end_pos = grid.find_valid_around(offseted_end_pos, 1, -1 * start_to_right);
+
+            let edge = if let (Some(start), Some(end)) = (route_start_pos, route_end_pos) {
+                if let Some(mut edge) =
+                    grid.route_edge(*edgeref, grid.loc_to_cell(start), grid.loc_to_cell(end))
+                {
+                    grid.set_in_use(&edge);
+
+                    //edge.path[0].x = end_port_location.x;
+                    //edge.path.last_mut().unwrap().x = start_port_location.x;
+
+                    edge.path.push(start_port_location);
+                    edge.path.insert(0, end_port_location);
+                    Some(edge)
+                } else {
+                    println!("Could not route fo real");
+                    None
+                }
+            } else {
+                println!(
+                    "No port found: s={} e={}",
+                    route_start_pos.is_some(),
+                    route_end_pos.is_some()
+                );
+                None
+            };
+
+            let edge = if let Some(edg) = edge {
+                edg
+            } else {
+                println!("Could not route");
+                let mut edge = LayoutEdge {
+                    src: *edgeref,
+                    path: Vec::with_capacity(2),
+                };
+                edge.path.clear();
+                edge.path.push(start_port_location);
+                edge.path.push(end_port_location);
+                edge
+            };
+
+            /*
             //Before starting the routing, make sure the startpoint is unused. Otherwise the path finding will not
             // work.
             //
@@ -515,7 +699,7 @@ impl RegionLayout {
                         .push(end_pos + Vec2::new(config.port_width as f32 / 2.0, 0.0));
                 }
             }
-
+            */
             self.edges.push(edge);
         }
 
