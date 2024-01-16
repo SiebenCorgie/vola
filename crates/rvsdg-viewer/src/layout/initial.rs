@@ -1,4 +1,4 @@
-use ahash::AHashMap;
+use ahash::AHashSet;
 use macroquad::math::Vec2;
 use rvsdg::{edge::LangEdge, nodes::LangNode, NodeRef, Rvsdg};
 
@@ -7,136 +7,19 @@ use crate::View;
 use super::{LayoutConfig, RegionLayout};
 
 pub struct NodeGrid {
-    known: AHashMap<NodeRef, (usize, usize)>,
-    rows: Vec<Vec<Option<NodeRef>>>,
-}
-
-impl NodeGrid {
-    #[allow(dead_code)]
-    pub fn print(&self) {
-        println!("known:\n{:?}\n\n", self.known);
-
-        for row in self.rows.iter().rev() {
-            for col in row {
-                if col.is_some() {
-                    print!(" x");
-                } else {
-                    print!("  ");
-                }
-            }
-            print!("\n");
-        }
-    }
-
-    fn move_at_least(&mut self, node: NodeRef, dst_y: usize) {
-        let location = self.known.get(&node).unwrap();
-        let removed = self.rows[location.1][location.0].take().unwrap();
-        assert!(removed == node);
-        //now insert at new height, same x offset
-        self.rows[dst_y].insert(location.0, Some(node));
-        //NOTE: need to rebuild, cause we invalidated the positions
-        self.rebuild_locations()
-    }
-
-    //Rebuilds the "known" index based on `rows`
-    fn rebuild_locations(&mut self) {
-        self.known.clear();
-        for (y_idx, row) in self.rows.iter_mut().enumerate() {
-            for (x_idx, col) in row.iter_mut().enumerate() {
-                if let Some(node_key) = col {
-                    assert!(self.known.insert(*node_key, (x_idx, y_idx)).is_none());
-                }
-            }
-        }
-    }
+    rows: Vec<Vec<NodeRef>>,
 }
 
 impl RegionLayout {
     pub fn sub_layout<'a, N: LangNode + 'static, E: LangEdge + 'static>(
         &mut self,
         rvsdg: &Rvsdg<N, E>,
+        ignore_dead_nodes: bool,
     ) {
         for n in self.nodes.values_mut() {
             for reg in &mut n.sub_regions {
-                reg.initial_layouting(rvsdg);
+                reg.initial_layouting(rvsdg, ignore_dead_nodes);
             }
-        }
-    }
-
-    fn node_grid_explore<N: LangNode + 'static, E: LangEdge + 'static>(
-        &self,
-        rvsdg: &Rvsdg<N, E>,
-        grid: &mut NodeGrid,
-        node: NodeRef,
-        offset: (usize, usize),
-    ) {
-        //check if that node has been layouted before, in that case all
-        // predecessors have been layouted as well.
-        if grid.known.contains_key(&node) {
-            return;
-        }
-
-        //add our selfs to the grid
-        //We do that by indexing into the rows, and then searching for an _open_ spot starting at the
-        // x value of offset.
-        if grid.rows.len() <= offset.1 {
-            grid.rows.resize(offset.1 + 1, Vec::with_capacity(0));
-        }
-        if grid.rows[offset.1].len() <= offset.0 {
-            grid.rows[offset.1].resize(offset.0 + 1, None);
-        }
-
-        //Now insert our node directly at offest
-        grid.rows[offset.1].insert(offset.0, Some(node));
-        grid.known.insert(node, offset);
-
-        let num_pred = rvsdg.node(node).inputs().len();
-        for (idx, pred) in rvsdg.node(node).pred(rvsdg).enumerate() {
-            //do not walk out of region
-            if !rvsdg.region(&self.src).unwrap().nodes.contains(&pred.node) {
-                continue;
-            }
-
-            //We try to spread the predecessors evenly to the left and right.
-            let local_offset = idx as isize - (num_pred as isize / 2);
-            self.node_grid_explore(
-                rvsdg,
-                grid,
-                pred.node,
-                (
-                    (offset.0 as isize + local_offset).max(0) as usize,
-                    offset.1 + 1,
-                ),
-            )
-        }
-    }
-
-    fn fix_grid_criteria<N: LangNode + 'static, E: LangEdge + 'static>(
-        &mut self,
-        rvsdg: &Rvsdg<N, E>,
-        grid: &mut NodeGrid,
-        node: NodeRef,
-    ) {
-        //this one checks that all successor nodes are strictly _below_ the their predecessors.
-        let this_location = *grid.known.get(&node).unwrap();
-        for pred in rvsdg.node(node).pred(rvsdg) {
-            if !rvsdg.region(&self.src).unwrap().nodes.contains(&pred.node) {
-                continue;
-            }
-            if let Some(pred_loc) = grid.known.get(&pred.node) {
-                if pred_loc.1 <= this_location.1 {
-                    println!("TODO: not yet touched: diverting node {node}");
-                    grid.move_at_least(pred.node, this_location.1);
-                }
-            }
-        }
-
-        //now go up the tree
-        for pred in rvsdg.node(node).pred(rvsdg) {
-            if !rvsdg.region(&self.src).unwrap().nodes.contains(&pred.node) {
-                continue;
-            }
-            self.fix_grid_criteria(rvsdg, grid, pred.node);
         }
     }
 
@@ -144,39 +27,97 @@ impl RegionLayout {
     pub fn initial_layouting<N: LangNode + 'static, E: LangEdge + 'static>(
         &mut self,
         rvsdg: &Rvsdg<N, E>,
+        ignore_dead_nodes: bool,
     ) {
-        self.sub_layout(rvsdg);
-
-        //For layouting we use a grid with variable width/height for each row and column.
-        // We first sort in all nodes depending on their successor / predecessor relation.
-        // After that we execute a _fix_ pass, that makes sure that all successors are strictly _below_ a
-        // predecessor.
-        // If thats not the case, the predecessor is moved "up" until it is above. If the cell at the desired "up"
-        // location is not available, a new row is inserted.
-
-        let mut grid = NodeGrid {
-            rows: Vec::new(),
-            known: AHashMap::default(),
-        };
-        let region = rvsdg.region(&self.src).unwrap();
-
-        let mut seed_index = 0usize;
-        while let Some(seed_node) = region.result_src(rvsdg, seed_index) {
-            seed_index += 1;
-            if !region.nodes.contains(&seed_node.node) {
-                continue;
-            }
-            self.node_grid_explore(rvsdg, &mut grid, seed_node.node, (seed_index, 0));
+        #[derive(Debug, PartialEq, Eq, Hash)]
+        struct WaitingNode {
+            node: NodeRef,
+            successors: Vec<NodeRef>,
         }
 
-        //Now restart and fix all grid criterias
-        let mut seed_index = 0usize;
-        while let Some(seed_node) = region.result_src(rvsdg, seed_index) {
-            seed_index += 1;
-            if !region.nodes.contains(&seed_node.node) {
+        self.sub_layout(rvsdg, ignore_dead_nodes);
+
+        //For layouting we use an adapted bottom-up BFS.
+        // The adaption being, that we defer the insertion of a node, if not all predecessors have been layouted yet.
+
+        let region = rvsdg.region(&self.src).unwrap();
+
+        let mut layouted: AHashSet<NodeRef> = AHashSet::new();
+        let mut waiting: Vec<WaitingNode> = Vec::new();
+
+        //Build the waiting-node for each in the region
+        for (noderef, _) in self.nodes.iter() {
+            let mut successor_set = AHashSet::new();
+
+            let mut had_any_succ_connection = false;
+            for succ in rvsdg.node(*noderef).succ(rvsdg) {
+                had_any_succ_connection = true;
+                //branch prevents us from adding the sourrounding node.
+                if region.nodes.contains(&succ.node) {
+                    successor_set.insert(succ.node);
+                }
+            }
+
+            //If the node has no successor, it is a dead node by definition.
+            if ignore_dead_nodes && !had_any_succ_connection {
                 continue;
             }
-            self.fix_grid_criteria(rvsdg, &mut grid, seed_node.node);
+
+            let waiting_node = WaitingNode {
+                node: *noderef,
+                successors: successor_set.into_iter().collect(),
+            };
+            waiting.push(waiting_node);
+        }
+
+        //Now, until all are layouted, or we found a cycle:
+        // for each level, insert all nodes that have all predecessors layouted already
+        let mut grid = NodeGrid { rows: Vec::new() };
+
+        for y in 0.. {
+            if waiting.is_empty() {
+                break;
+            }
+
+            grid.rows.push(Vec::new());
+            let mut layouted_any = false;
+            //Move all waiting elements into the pingpong buffer. with_capacity(0) prevents
+            // allocation here.
+            let mut waiting_ping_pong = Vec::with_capacity(0);
+            waiting_ping_pong.append(&mut waiting);
+
+            //Collects all nodes layouted on this level. Othewise the
+            // _layouted_ test later on might fire too early.
+            let mut waiting_to_be_added = Vec::new();
+
+            for w in waiting_ping_pong {
+                let mut all_succ_layouted = true;
+                for s in &w.successors {
+                    if !layouted.contains(&s) {
+                        all_succ_layouted = false;
+                        break;
+                    }
+                }
+                if all_succ_layouted {
+                    layouted_any = true;
+                    grid.rows[y].push(w.node);
+                    waiting_to_be_added.push(w.node);
+                } else {
+                    waiting.push(w);
+                }
+            }
+
+            for wtba in waiting_to_be_added {
+                layouted.insert(wtba);
+            }
+
+            if !layouted_any && !waiting.is_empty() {
+                println!(
+                    "error: Could not layout all nodes, there are still {} nodes!",
+                    waiting.len()
+                );
+                break;
+            }
         }
 
         self.node_grid = Some(grid);
@@ -262,26 +203,17 @@ impl RegionLayout {
         let mut max_x = 0.0f32;
         for row in self.node_grid.as_ref().unwrap().rows.iter() {
             let mut offset_x = config.grid_padding as f32;
-            let max_height = row.iter().fold(0.0f32, |f, n| {
-                if let Some(n) = n {
-                    f.max(self.nodes.get(n).unwrap().extent.y)
-                } else {
-                    f
-                }
-            });
+            let max_height = row
+                .iter()
+                .fold(0.0f32, |f, n| f.max(self.nodes.get(n).unwrap().extent.y));
 
             //we now use max height to position our nodes _lowest possible_,
             // as well as advancing the general _height_ variable later.
             for node in row {
-                if let Some(node) = node {
-                    //TODO move down to line
-                    let node = self.nodes.get_mut(node).unwrap();
-                    node.location = Vec2::new(offset_x, offset_y);
-                    offset_x += node.extent.x + config.grid_padding as f32;
-                } else {
-                    //if no node here, move a standard width
-                    offset_x += config.grid_empty_spacing as f32;
-                }
+                //TODO move down to line
+                let node = self.nodes.get_mut(node).unwrap();
+                node.location = Vec2::new(offset_x, offset_y);
+                offset_x += node.extent.x + config.grid_padding as f32;
             }
 
             offset_y += max_height + config.grid_padding as f32;

@@ -39,6 +39,8 @@ pub struct LayoutConfig {
 
     pub routing_cell_size: f32,
     pub routing_dead_padding: f32,
+
+    pub ignore_dead_node: bool,
 }
 
 impl Default for LayoutConfig {
@@ -54,6 +56,7 @@ impl Default for LayoutConfig {
             port_height: 2,
             routing_cell_size: 5.0,
             routing_dead_padding: 4.0,
+            ignore_dead_node: true,
         }
     }
 }
@@ -102,7 +105,7 @@ impl RegionLayout {
             .unwrap()
             .nodes
             .iter()
-            .map(|nref| {
+            .filter_map(|nref| {
                 let node = rvsdg.node(*nref);
                 let sub_regions = if node.regions().len() > 0 {
                     let mut sub_regions = Vec::with_capacity(node.regions().len());
@@ -145,17 +148,28 @@ impl RegionLayout {
                     })
                     .collect();
 
-                (
-                    *nref,
-                    LayoutNode {
-                        location: Vec2::ZERO,
-                        extent: Vec2::ZERO,
-                        src: *nref,
-                        inports,
-                        outports,
-                        sub_regions,
-                    },
-                )
+                let connection_count = node
+                    .outputs()
+                    .iter()
+                    .fold(0, |cc, outport| cc + outport.edges.len());
+
+                let is_dead = connection_count == 0;
+
+                if config.ignore_dead_node && is_dead {
+                    None
+                } else {
+                    Some((
+                        *nref,
+                        LayoutNode {
+                            location: Vec2::ZERO,
+                            extent: Vec2::ZERO,
+                            src: *nref,
+                            inports,
+                            outports,
+                            sub_regions,
+                        },
+                    ))
+                }
             })
             .collect();
 
@@ -214,7 +228,7 @@ impl<'a, N: LangNode + View + 'static, E: LangEdge + View + 'static> Layout<'a, 
         let tlregion = rvsdg.toplevel_region();
         let mut region_tree = RegionLayout::build_for_region(rvsdg, tlregion, &config);
 
-        region_tree.initial_layouting(rvsdg);
+        region_tree.initial_layouting(rvsdg, config.ignore_dead_node);
 
         region_tree.bottom_up_transfer_grid(rvsdg, &config);
 

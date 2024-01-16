@@ -279,6 +279,11 @@ impl EdgeLayoutGrid {
             while off.y < (node.extent.y + config.routing_dead_padding) {
                 let cell =
                     self.loc_to_cell(node.location + off - (config.routing_dead_padding / 2.0));
+
+                if !self.in_bound((cell.0 as isize, cell.1 as isize)) {
+                    continue;
+                }
+
                 self.grid[cell.0][cell.1].active = false;
                 off.y += self.cell_size;
             }
@@ -460,7 +465,7 @@ impl RegionLayout {
         rvsdg: &Rvsdg<N, E>,
         port: &OutportLocation,
         edge: EdgeRef,
-    ) -> Vec2 {
+    ) -> Option<Vec2> {
         if port.node == self.src.node {
             //Similarly to below, search for the edge in all argument ports
             for (idx, arg) in rvsdg
@@ -471,7 +476,7 @@ impl RegionLayout {
                 .enumerate()
             {
                 if arg.edges.contains(&edge) {
-                    return self.arg_ports[idx];
+                    return Some(self.arg_ports[idx]);
                 }
             }
             panic!("Edge was not contained in arguments!");
@@ -481,12 +486,13 @@ impl RegionLayout {
             if let Some(node) = self.nodes.get(&port.node) {
                 for (idx, outport) in rvsdg.node(port.node).outputs().iter().enumerate() {
                     if outport.edges.contains(&edge) {
-                        return node.outports[idx] + node.location;
+                        return Some(node.outports[idx] + node.location);
                     }
                 }
             }
-            panic!("Could not find output port on node {:?}", port);
         }
+
+        None
     }
 
     ///Translates the `port` to an actual location. Panics if
@@ -496,12 +502,12 @@ impl RegionLayout {
         rvsdg: &Rvsdg<N, E>,
         port: &InportLocation,
         edge: EdgeRef,
-    ) -> Vec2 {
+    ) -> Option<Vec2> {
         if port.node == self.src.node {
             //Similarly to below, search for the edge in all result ports
             for (idx, res) in rvsdg.region(&self.src).unwrap().results.iter().enumerate() {
                 if res.edge == Some(edge) {
-                    return self.res_ports[idx];
+                    return Some(self.res_ports[idx]);
                 }
             }
             panic!("Edge was not contained in results!");
@@ -511,12 +517,12 @@ impl RegionLayout {
             if let Some(node) = self.nodes.get(&port.node) {
                 for (idx, inports) in rvsdg.node(port.node).inputs().iter().enumerate() {
                     if inports.edge == Some(edge) {
-                        return node.inports[idx] + node.location;
+                        return Some(node.inports[idx] + node.location);
                     }
                 }
             }
-            panic!("Could not find output port on node {:?}", port);
         }
+        None
     }
 
     ///Recursively routes all children's edges, and then its own
@@ -541,8 +547,17 @@ impl RegionLayout {
         for edgeref in &rvsdg.region(&self.src).unwrap().edges {
             let edge = rvsdg.edge(*edgeref);
 
-            let start_pos = self.out_port_to_location(rvsdg, edge.src(), *edgeref);
-            let end_pos = self.in_port_to_location(rvsdg, edge.dst(), *edgeref);
+            let start_pos = if let Some(sp) = self.out_port_to_location(rvsdg, edge.src(), *edgeref)
+            {
+                sp
+            } else {
+                continue;
+            };
+            let end_pos = if let Some(ep) = self.in_port_to_location(rvsdg, edge.dst(), *edgeref) {
+                ep
+            } else {
+                continue;
+            };
 
             let start_port_location = start_pos
                 + Vec2::new(
@@ -582,22 +597,15 @@ impl RegionLayout {
                     edge.path.insert(0, end_port_location);
                     Some(edge)
                 } else {
-                    println!("Could not route fo real");
                     None
                 }
             } else {
-                println!(
-                    "No port found: s={} e={}",
-                    route_start_pos.is_some(),
-                    route_end_pos.is_some()
-                );
                 None
             };
 
             let edge = if let Some(edg) = edge {
                 edg
             } else {
-                println!("Could not route");
                 let mut edge = LayoutEdge {
                     src: *edgeref,
                     path: Vec::with_capacity(2),

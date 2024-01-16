@@ -111,6 +111,7 @@ fn main() {
     let ex3b = ex_3b::emit();
     assert!(ex3b.verify_parental_relations(), "3b had errors");
     rvsdg_viewer::into_svg(&ex3b, "Example_3b.svg");
+
     let router_test = minigraph::emit();
     assert!(
         router_test.verify_parental_relations(),

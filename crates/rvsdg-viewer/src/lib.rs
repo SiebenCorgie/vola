@@ -108,6 +108,7 @@ pub fn into_svg<N: View + LangNode + Debug + 'static, E: View + LangEdge + 'stat
     rvsdg: &Rvsdg<N, E>,
     svg_path: impl AsRef<Path>,
 ) {
+    println!("Building: {:?}", svg_path.as_ref());
     let layout = Layout::for_rvsdg_default(rvsdg);
     let prims = layout.into_primitive_tree();
     let svg = prims.to_svg(layout.region_tree.get_extent().y);
