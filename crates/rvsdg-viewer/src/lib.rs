@@ -17,7 +17,7 @@
 pub mod layout;
 mod primitives;
 
-use layout::Layout;
+use layout::{Layout, LayoutConfig};
 pub use macroquad;
 ///The color of a node or edge.
 pub use macroquad::color::Color;
@@ -108,8 +108,17 @@ pub fn into_svg<N: View + LangNode + Debug + 'static, E: View + LangEdge + 'stat
     rvsdg: &Rvsdg<N, E>,
     svg_path: impl AsRef<Path>,
 ) {
+    into_svg_with_config(rvsdg, svg_path, &LayoutConfig::default())
+}
+
+///Saves the rvsdg graph as an SVG image at `svg_path`.
+pub fn into_svg_with_config<N: View + LangNode + Debug + 'static, E: View + LangEdge + 'static>(
+    rvsdg: &Rvsdg<N, E>,
+    svg_path: impl AsRef<Path>,
+    config: &LayoutConfig,
+) {
     println!("Building: {:?}", svg_path.as_ref());
-    let layout = Layout::for_rvsdg_default(rvsdg);
+    let layout = Layout::for_rvsdg(rvsdg, config);
     let prims = layout.into_primitive_tree();
     let svg = prims.to_svg(layout.region_tree.get_extent().y);
 

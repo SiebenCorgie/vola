@@ -181,8 +181,17 @@ impl RegionLayout {
                     },
                 );
 
+            let node_port_max_x = node
+                .inports
+                .iter()
+                .chain(node.outports.iter())
+                .fold(0.0f32, |max, loc| max.max(loc.x));
+
             let ext = Vec2::new(
-                label_ext.x.max(node_region_ext.x),
+                label_ext
+                    .x
+                    .max(node_region_ext.x)
+                    .max(node_port_max_x + config.port_width as f32 + 2.0),
                 label_ext.y + node_region_ext.y,
             );
 

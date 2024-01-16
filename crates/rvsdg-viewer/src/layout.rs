@@ -24,6 +24,7 @@ mod edge_routing;
 mod initial;
 mod toprims;
 
+#[derive(Debug, Clone)]
 pub struct LayoutConfig {
     //The _height_ of a node's outer border to the inner region
     pub vertical_node_padding: usize,
@@ -222,9 +223,9 @@ pub struct Layout<'a, N: LangNode + View + 'static, E: LangEdge + View + 'static
 //NOTE: Most interesting implementation happens in the submodules!
 impl<'a, N: LangNode + View + 'static, E: LangEdge + View + 'static> Layout<'a, N, E> {
     pub fn for_rvsdg_default(rvsdg: &'a Rvsdg<N, E>) -> Self {
-        Self::for_rvsdg(rvsdg, LayoutConfig::default())
+        Self::for_rvsdg(rvsdg, &LayoutConfig::default())
     }
-    pub fn for_rvsdg(rvsdg: &'a Rvsdg<N, E>, config: LayoutConfig) -> Self {
+    pub fn for_rvsdg(rvsdg: &'a Rvsdg<N, E>, config: &LayoutConfig) -> Self {
         let tlregion = rvsdg.toplevel_region();
         let mut region_tree = RegionLayout::build_for_region(rvsdg, tlregion, &config);
 
@@ -237,7 +238,7 @@ impl<'a, N: LangNode + View + 'static, E: LangEdge + View + 'static> Layout<'a, 
 
         let mut layout = Layout {
             src_graph: rvsdg,
-            config,
+            config: config.clone(),
             region_tree,
         };
 
