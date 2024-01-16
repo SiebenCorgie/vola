@@ -3,7 +3,7 @@ use rvsdg::{
     region::{Input, Output},
 };
 pub use rvsdg_viewer::macroquad;
-use rvsdg_viewer::{layout::Layout, View};
+use rvsdg_viewer::View;
 
 //Example 2.d. of the source paper
 mod ex_2d;
@@ -13,7 +13,7 @@ mod ex_3a;
 mod ex_3b;
 
 //simple test for the viewer library.
-mod router_test;
+mod minigraph;
 
 ///Builds the simple rvsdg structures presented in figure 2 of the RVSDG paper.
 #[derive(Clone, Debug)]
@@ -111,11 +111,10 @@ fn main() {
     let ex3b = ex_3b::emit();
     assert!(ex3b.verify_parental_relations(), "3b had errors");
     rvsdg_viewer::into_svg(&ex3b, "Example_3b.svg");
-
-    let router_test = router_test::emit();
-    let l = Layout::for_rvsdg_default(&router_test);
-
-    let tree = l.into_primitive_tree();
-    let tree_svg = tree.to_svg(l.get_extent().y);
-    std::fs::write("test.svg", tree_svg).unwrap();
+    let router_test = minigraph::emit();
+    assert!(
+        router_test.verify_parental_relations(),
+        "router_test had errors"
+    );
+    rvsdg_viewer::into_svg(&router_test, "router_test.svg");
 }

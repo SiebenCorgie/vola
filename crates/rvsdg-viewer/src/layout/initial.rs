@@ -1,5 +1,3 @@
-use std::ops::Not;
-
 use ahash::AHashMap;
 use macroquad::math::Vec2;
 use rvsdg::{edge::LangEdge, nodes::LangNode, NodeRef, Rvsdg};
@@ -14,6 +12,7 @@ pub struct NodeGrid {
 }
 
 impl NodeGrid {
+    #[allow(dead_code)]
     pub fn print(&self) {
         println!("known:\n{:?}\n\n", self.known);
 

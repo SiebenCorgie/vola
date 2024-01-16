@@ -1,4 +1,4 @@
-use macroquad::{camera::Camera, color::Color, math::Vec2};
+use macroquad::{color::Color, math::Vec2};
 use rvsdg::{edge::LangEdge, nodes::LangNode};
 
 use crate::{

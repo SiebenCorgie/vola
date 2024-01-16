@@ -16,7 +16,7 @@ use ahash::AHashMap;
 use macroquad::math::Vec2;
 use rvsdg::{edge::LangEdge, nodes::LangNode, region::RegionLocation, EdgeRef, NodeRef, Rvsdg};
 
-use crate::{primitives::PrimTree, Stroke, View};
+use crate::{primitives::PrimTree, View};
 
 use self::initial::NodeGrid;
 

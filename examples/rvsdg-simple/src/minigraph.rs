@@ -1,6 +1,5 @@
 use rvsdg::{
     common::{CommonRvsdg, VSEdge},
-    edge::{InputType, OutputType},
     Rvsdg,
 };
 

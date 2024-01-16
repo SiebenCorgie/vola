@@ -1,10 +1,8 @@
-use std::mem;
-
-use ahash::{AHashMap, AHashSet};
+use ahash::AHashMap;
 use macroquad::math::Vec2;
-use priority_queue::{DoublePriorityQueue, PriorityQueue};
+use priority_queue::DoublePriorityQueue;
 use rvsdg::{
-    edge::{InportLocation, InputType, LangEdge, OutportLocation, OutputType},
+    edge::{InportLocation, LangEdge, OutportLocation},
     nodes::LangNode,
     EdgeRef, Rvsdg,
 };
@@ -24,17 +22,6 @@ impl Default for ELCell {
         ELCell {
             active: true,
             in_use: false,
-        }
-    }
-}
-
-impl ELCell {
-    //checks if we can claim horizontal or vertical route in this cell
-    pub fn can_route(&mut self) -> bool {
-        if !self.active {
-            false
-        } else {
-            !self.in_use
         }
     }
 }
@@ -168,9 +155,9 @@ impl AStarSearch {
         const OFFSETS: &'static [(isize, isize)] = &[
             (0, 1),
             (0, -1),
-            (1, -1),
+            //(1, -1),
             (-1, 0),
-            (-1, -1),
+            //(-1, -1),
             (1, 0),
             (0, -2),
             (0, 2),
@@ -553,8 +540,6 @@ impl RegionLayout {
         //now use the grid to route any port edges.
         for edgeref in &rvsdg.region(&self.src).unwrap().edges {
             let edge = rvsdg.edge(*edgeref);
-            let stroke = edge.ty.stroke();
-            let color = edge.ty.color();
 
             let start_pos = self.out_port_to_location(rvsdg, edge.src(), *edgeref);
             let end_pos = self.in_port_to_location(rvsdg, edge.dst(), *edgeref);
@@ -609,7 +594,7 @@ impl RegionLayout {
                 None
             };
 
-            let mut edge = if let Some(edg) = edge {
+            let edge = if let Some(edg) = edge {
                 edg
             } else {
                 println!("Could not route");
