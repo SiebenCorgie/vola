@@ -14,25 +14,21 @@
 //!     view(rvsdg);
 //! }
 //! ```
-mod primitives;
-//mod printer;
-
 pub mod layout;
-
-use std::{fmt::Debug, path::Path};
+mod primitives;
 
 use layout::Layout;
 pub use macroquad;
 ///The color of a node or edge.
 pub use macroquad::color::Color;
 use macroquad::prelude::{BLACK, RED};
-//use printer::Printer;
 use rvsdg::{
     common::VSEdge,
     edge::LangEdge,
     nodes::{LangNode, NodeType},
     Rvsdg,
 };
+use std::{fmt::Debug, path::Path};
 
 pub trait View {
     fn name(&self) -> &str;
