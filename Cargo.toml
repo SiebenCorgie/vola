@@ -2,15 +2,11 @@
 members = [
 "crates/tree-sitter-vola",
 "crates/vola-ast",
-"crates/vola-hir",
 "crates/rvsdg",
 "crates/rvsdg-viewer",
 "crates/vola-common",
-"crates/volac",
 
-"examples/dry-run",
 "examples/runtime-patch",
-"examples/hir-simple",
 "examples/rvsdg-simple",
 ]
 
