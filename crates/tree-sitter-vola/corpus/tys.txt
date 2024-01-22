@@ -1,0 +1,151 @@
+
+==================
+digit
+==================
+
+alge test(){
+    1
+}
+
+---
+(source_file
+      (alge_decl
+        (identifier)
+        (alge_region
+          (alge_expr
+            (literal
+              (integer_literal
+                (digit)))))))
+
+
+==================
+float
+==================
+
+alge test(){
+    1.0
+}
+
+---
+(source_file
+      (alge_decl
+        (identifier)
+        (alge_region
+          (alge_expr
+            (literal
+              (float_literal
+                (digit)
+                (digit)))))))
+
+
+==================
+scalar constructor
+==================
+
+alge test(){
+    s(1.0)
+}
+
+---
+(source_file
+      (alge_decl
+        (identifier)
+        (alge_region
+          (alge_expr
+            (alge_type_constructor
+              (alge_type
+                (t_scalar))
+              (param_list
+                (alge_expr
+                  (literal
+                    (float_literal
+                      (digit)
+                      (digit))))))))))
+
+==================
+vec n
+==================
+
+alge test(){
+    vec3(1.0, 2.3, 1.0)
+}
+
+---
+(source_file
+      (alge_decl
+        (identifier)
+        (alge_region
+          (alge_expr
+            (alge_type_constructor
+              (alge_type
+                (t_vec
+                  (digit)))
+              (param_list
+                (alge_expr
+                  (literal
+                    (float_literal
+                      (digit)
+                      (digit))))
+                (alge_expr
+                  (literal
+                    (float_literal
+                      (digit)
+                      (digit))))
+                (alge_expr
+                  (literal
+                    (float_literal
+                      (digit)
+                      (digit))))))))))
+
+==================
+mat nxm
+==================
+
+alge test(){
+    mat2x3(
+        1.0, 2.3,
+        1.0, 2,
+        3, 420.0
+    )
+}
+
+---
+(source_file
+      (alge_decl
+        (identifier)
+        (alge_region
+          (alge_expr
+            (alge_type_constructor
+              (alge_type
+                (t_mat
+                  (digit)
+                  (digit)))
+              (param_list
+                (alge_expr
+                  (literal
+                    (float_literal
+                      (digit)
+                      (digit))))
+                (alge_expr
+                  (literal
+                    (float_literal
+                      (digit)
+                      (digit))))
+                (alge_expr
+                  (literal
+                    (float_literal
+                      (digit)
+                      (digit))))
+                (alge_expr
+                  (literal
+                    (integer_literal
+                      (digit))))
+                (alge_expr
+                  (literal
+                    (integer_literal
+                      (digit))))
+                (alge_expr
+                  (literal
+                    (float_literal
+                      (digit)
+                      (digit))))))))))

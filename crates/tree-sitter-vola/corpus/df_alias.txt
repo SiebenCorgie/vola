@@ -1,0 +1,18 @@
+
+==================
+Proof of concept parse
+==================
+
+type NormalSdf = DF<vec3 -> s>
+
+---
+
+(source_file
+      (df_alias
+        (identifier)
+        (t_df
+          (alge_type
+            (t_vec
+              (digit)))
+          (alge_type
+            (t_scalar)))))

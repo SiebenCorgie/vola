@@ -1,0 +1,267 @@
+==================
+simple_tree
+==================
+
+field testfield(a: vec3, b: s){
+    union(){
+        sphere(b)
+    }{
+        box(a)
+    }
+}
+
+---
+
+(source_file
+      (field_decl
+        (identifier)
+        (arg_list
+          (typed_arg
+            (identifier)
+            (alge_type
+              (t_vec
+                (digit))))
+          (typed_arg
+            (identifier)
+            (alge_type
+              (t_scalar))))
+        (subtree
+          (csg_binary
+            (identifier)
+            (subtree
+              (csg_prim
+                (identifier)
+                (param_list
+                  (alge_expr
+                    (identifier)))))
+            (subtree
+              (csg_prim
+                (identifier)
+                (param_list
+                  (alge_expr
+                    (identifier)))))))))
+
+
+
+==================
+tree_with_param_const
+==================
+
+field test_field(a: vec3, b: s){
+    smooth_union(1.0){
+        sphere(b)
+    }{
+        box(a)
+    }
+}
+
+---
+
+(source_file
+      (field_decl
+        (identifier)
+        (arg_list
+          (typed_arg
+            (identifier)
+            (alge_type
+              (t_vec
+                (digit))))
+          (typed_arg
+            (identifier)
+            (alge_type
+              (t_scalar))))
+        (subtree
+          (csg_binary
+            (identifier)
+            (param_list
+              (alge_expr
+                (literal
+                  (float_literal
+                    (digit)
+                    (digit)))))
+            (subtree
+              (csg_prim
+                (identifier)
+                (param_list
+                  (alge_expr
+                    (identifier)))))
+            (subtree
+              (csg_prim
+                (identifier)
+                (param_list
+                  (alge_expr
+                    (identifier)))))))))
+
+==================
+tree with small algebraic
+==================
+
+field testfield(a: vec3, b: s){
+    union(){
+        sphere(b + 3)
+    }{
+        box(a)
+    }
+}
+
+---
+
+(source_file
+      (field_decl
+        (identifier)
+        (arg_list
+          (typed_arg
+            (identifier)
+            (alge_type
+              (t_vec
+                (digit))))
+          (typed_arg
+            (identifier)
+            (alge_type
+              (t_scalar))))
+        (subtree
+          (csg_binary
+            (identifier)
+            (subtree
+              (csg_prim
+                (identifier)
+                (param_list
+                  (alge_expr
+                    (binary_expr
+                      (alge_expr
+                        (identifier))
+                      (alge_binary_op)
+                      (alge_expr
+                        (literal
+                          (integer_literal
+                            (digit)))))))))
+            (subtree
+              (csg_prim
+                (identifier)
+                (param_list
+                  (alge_expr
+                    (identifier)))))))))
+
+==================
+tree with const
+==================
+
+field testfield(a: vec3, b: s){
+    union(){
+        sphere(b)
+    }{
+        box(vec3(3.0, 1.0, 4.0))
+    }
+}
+
+---
+
+(source_file
+      (field_decl
+        (identifier)
+        (arg_list
+          (typed_arg
+            (identifier)
+            (alge_type
+              (t_vec
+                (digit))))
+          (typed_arg
+            (identifier)
+            (alge_type
+              (t_scalar))))
+        (subtree
+          (csg_binary
+            (identifier)
+            (subtree
+              (csg_prim
+                (identifier)
+                (param_list
+                  (alge_expr
+                    (identifier)))))
+            (subtree
+              (csg_prim
+                (identifier)
+                (param_list
+                  (alge_expr
+                    (alge_type_constructor
+                      (alge_type
+                        (t_vec
+                          (digit)))
+                      (param_list
+                        (alge_expr
+                          (literal
+                            (float_literal
+                              (digit)
+                              (digit))))
+                        (alge_expr
+                          (literal
+                            (float_literal
+                              (digit)
+                              (digit))))
+                        (alge_expr
+                          (literal
+                            (float_literal
+                              (digit)
+                              (digit))))))))))))))
+
+==================
+tree unary
+==================
+
+field testfield(b: s){
+    translate(){
+        sphere(b)
+    }
+}
+
+---
+(source_file
+      (field_decl
+        (identifier)
+        (arg_list
+          (typed_arg
+            (identifier)
+            (alge_type
+              (t_scalar))))
+        (subtree
+          (csg_unary
+            (identifier)
+            (subtree
+              (csg_prim
+                (identifier)
+                (param_list
+                  (alge_expr
+                    (identifier)))))))))
+
+==================
+tree unary with param
+==================
+
+field testfield(b: s){
+    translate(b){
+        sphere(b)
+    }
+}
+
+---
+
+(source_file
+      (field_decl
+        (identifier)
+        (arg_list
+          (typed_arg
+            (identifier)
+            (alge_type
+              (t_scalar))))
+        (subtree
+          (csg_unary
+            (identifier)
+            (param_list
+              (alge_expr
+                (identifier)))
+            (subtree
+              (csg_prim
+                (identifier)
+                (param_list
+                  (alge_expr
+                    (identifier)))))))))
