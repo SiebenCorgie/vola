@@ -1,15 +1,14 @@
-use std::{error::Error, str::FromStr};
+use std::error::Error;
 
 use ahash::AHashMap;
-use tinyvec::TinyVec;
-use tinyvec_string::TinyString;
+use smallvec::SmallVec;
 
-use crate::{CommonError, ErrorPrintBundle, Span, TinyErrorString};
+use crate::{CommonError, ErrorPrintBundle, FileString, Span};
 
 ///Helper utility that collects [CommonError](crate::CommonError)s, and reports them when asked.
 pub struct ErrorReporter<E: Error + Default> {
-    src_file: TinyErrorString,
-    errors: TinyVec<[CommonError<E>; 10]>,
+    src_file: FileString,
+    errors: SmallVec<[CommonError<E>; 10]>,
     ///Map of cached files we already _know_.
     cached_files: AHashMap<String, Vec<String>>,
 }
@@ -17,14 +16,14 @@ pub struct ErrorReporter<E: Error + Default> {
 impl<E: Error + Default> ErrorReporter<E> {
     pub fn new() -> Self {
         ErrorReporter {
-            src_file: TinyString::default(),
-            errors: TinyVec::default(),
+            src_file: FileString::default(),
+            errors: SmallVec::default(),
             cached_files: AHashMap::default(),
         }
     }
 
     pub fn set_default_file(&mut self, file_path: &str) {
-        self.src_file = TinyString::from_str(file_path).unwrap();
+        self.src_file = FileString::from_str(file_path);
     }
 
     pub fn has_errors(&self) -> bool {
@@ -69,8 +68,8 @@ impl<E: Error + Default> ErrorReporter<E> {
     }
 
     ///Prints all errors to stdout that occurred till now. Also returns them as an collection
-    pub fn report_all(&mut self) -> TinyVec<[CommonError<E>; 10]> {
-        let mut errors: TinyVec<[CommonError<E>; 10]> = TinyVec::default();
+    pub fn report_all(&mut self) -> SmallVec<[CommonError<E>; 10]> {
+        let mut errors: SmallVec<[CommonError<E>; 10]> = SmallVec::default();
         std::mem::swap(&mut errors, &mut self.errors);
         println!("{} Errors:", errors.len());
         for error in &errors {

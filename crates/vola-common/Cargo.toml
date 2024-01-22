@@ -10,6 +10,6 @@ thiserror.workspace = true
 backtrace.workspace = true
 annotate-snippets.workspace = true
 tree-sitter.workspace = true
-tinyvec.workspace = true
-tinyvec_string = {workspace = true, features = ["alloc"]}
 ahash.workspace = true
+smallvec.workspace = true
+smallstr.workspace = true

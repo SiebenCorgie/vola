@@ -1,6 +1,6 @@
 //! Common diagnosis helper. This is mostly Span of nodes, as well their reporting.
 
-use std::{fmt::Display, str::FromStr};
+use std::fmt::Display;
 
 use backtrace::Backtrace;
 
@@ -8,17 +8,17 @@ use annotate_snippets::{
     display_list::{DisplayList, FormatOptions},
     snippet::{Annotation, AnnotationType, Slice, Snippet, SourceAnnotation},
 };
-use tinyvec_string::TinyString;
 
 mod reporter;
 pub use reporter::ErrorReporter;
+use smallstr::SmallString;
 
-pub type TinyErrorString = TinyString<[u8; 32]>;
+pub type FileString = SmallString<[u8; 32]>;
 
 ///Source-Code span information.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Span {
-    pub file: TinyErrorString,
+    pub file: FileString,
     pub from: (usize, usize),
     pub to: (usize, usize),
 }
@@ -26,14 +26,14 @@ pub struct Span {
 impl Span {
     pub fn empty() -> Self {
         Span {
-            file: TinyString::default(),
+            file: FileString::default(),
             from: (0, 0),
             to: (0, 0),
         }
     }
 
     pub fn with_file(mut self, file_name: &str) -> Self {
-        self.file = TinyString::from_str(file_name).unwrap();
+        self.file = FileString::from_str(file_name);
         self
     }
 }
@@ -41,7 +41,7 @@ impl Span {
 impl<'a> From<&tree_sitter::Node<'a>> for Span {
     fn from(value: &tree_sitter::Node) -> Self {
         Span {
-            file: TinyString::default(),
+            file: FileString::default(),
             from: (value.start_position().row, value.start_position().column),
             to: (value.end_position().row, value.end_position().column),
         }
