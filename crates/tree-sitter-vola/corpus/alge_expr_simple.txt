@@ -1,0 +1,221 @@
+==================
+alge add
+==================
+
+alge test_field(a: s, b: s){
+    a + b
+}
+
+---
+(source_file
+      (alge_decl
+        (identifier)
+        (typed_arg
+          (identifier)
+          (alge_type
+            (t_scalar)))
+        (typed_arg
+          (identifier)
+          (alge_type
+            (t_scalar)))
+        (alge_expr
+          (binary_expr
+            (alge_expr
+              (identifier))
+            (alge_expr
+              (identifier))))))
+==================
+alge let
+==================
+
+alge test_field(a: s, b: s){
+    let c = 3.0;
+    c
+}
+
+---
+(source_file
+      (alge_decl
+        (identifier)
+        (typed_arg
+          (identifier)
+          (alge_type
+            (t_scalar)))
+        (typed_arg
+          (identifier)
+          (alge_type
+            (t_scalar)))
+        (let_stmt
+          (identifier)
+          (alge_expr
+            (float_literal
+              (digit)
+              (digit))))
+        (alge_expr
+          (identifier))))
+
+
+==================
+alge left-associativity-binary
+==================
+
+alge test_field(a: s, b: s){
+    let c = 3.0;
+    3.0 + 3 + c
+}
+
+---
+(source_file
+      (alge_decl
+        (identifier)
+        (typed_arg
+          (identifier)
+          (alge_type
+            (t_scalar)))
+        (typed_arg
+          (identifier)
+          (alge_type
+            (t_scalar)))
+        (let_stmt
+          (identifier)
+          (alge_expr
+            (float_literal
+              (digit)
+              (digit))))
+        (alge_expr
+          (binary_expr
+            (alge_expr
+              (binary_expr
+                (alge_expr
+                  (float_literal
+                    (digit)
+                    (digit)))
+                (alge_expr
+                  (integer_literal
+                    (digit)))))
+            (alge_expr
+              (identifier))))))
+
+==================
+alge mul-before-additive
+==================
+
+alge test_field(a: s, b: s){
+    let c = 3.0;
+    3.0 * 3 + c
+}
+
+---
+(source_file
+      (alge_decl
+        (identifier)
+        (typed_arg
+          (identifier)
+          (alge_type
+            (t_scalar)))
+        (typed_arg
+          (identifier)
+          (alge_type
+            (t_scalar)))
+        (let_stmt
+          (identifier)
+          (alge_expr
+            (float_literal
+              (digit)
+              (digit))))
+        (alge_expr
+          (binary_expr
+            (alge_expr
+              (binary_expr
+                (alge_expr
+                  (float_literal
+                    (digit)
+                    (digit)))
+                (alge_expr
+                  (integer_literal
+                    (digit)))))
+            (alge_expr
+              (identifier))))))
+
+==================
+alge mul-before-additive reverse
+==================
+
+alge test_field(a: s, b: s){
+    let c = 3.0;
+    3.0 + 3 * c
+}
+
+---
+(source_file
+      (alge_decl
+        (identifier)
+        (typed_arg
+          (identifier)
+          (alge_type
+            (t_scalar)))
+        (typed_arg
+          (identifier)
+          (alge_type
+            (t_scalar)))
+        (let_stmt
+          (identifier)
+          (alge_expr
+            (float_literal
+              (digit)
+              (digit))))
+        (alge_expr
+          (binary_expr
+            (alge_expr
+              (float_literal
+                (digit)
+                (digit)))
+            (alge_expr
+              (binary_expr
+                (alge_expr
+                  (integer_literal
+                    (digit)))
+                (alge_expr
+                  (identifier))))))))
+
+==================
+alge braces
+==================
+
+alge test_field(a: s, b: s){
+    let c = 3.0;
+    (3.0 + 3) * c
+}
+
+---
+(source_file
+      (alge_decl
+        (identifier)
+        (typed_arg
+          (identifier)
+          (alge_type
+            (t_scalar)))
+        (typed_arg
+          (identifier)
+          (alge_type
+            (t_scalar)))
+        (let_stmt
+          (identifier)
+          (alge_expr
+            (float_literal
+              (digit)
+              (digit))))
+        (alge_expr
+          (binary_expr
+            (alge_expr
+              (alge_expr
+                (binary_expr
+                  (alge_expr
+                    (float_literal
+                      (digit)
+                      (digit)))
+                  (alge_expr
+                    (integer_literal
+                      (digit))))))
+            (alge_expr
+              (identifier))))))

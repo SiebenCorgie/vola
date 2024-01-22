@@ -1,6 +1,6 @@
 
 ==================
-Proof of concept parse
+DF typedef
 ==================
 
 type NormalSdf = DF<vec3 -> s>
@@ -16,3 +16,14 @@ type NormalSdf = DF<vec3 -> s>
               (digit)))
           (alge_type
             (t_scalar)))))
+
+
+==================
+DF typedef
+==================
+
+
+
+---
+
+(source_file)

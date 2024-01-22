@@ -11,37 +11,28 @@ field testfield(a: vec3, b: s){
 }
 
 ---
-
 (source_file
       (field_decl
         (identifier)
-        (arg_list
-          (typed_arg
+        (typed_arg
+          (identifier)
+          (alge_type
+            (t_vec
+              (digit))))
+        (typed_arg
+          (identifier)
+          (alge_type
+            (t_scalar)))
+        (csg_binary
+          (identifier)
+          (csg_prim
             (identifier)
-            (alge_type
-              (t_vec
-                (digit))))
-          (typed_arg
+            (alge_expr
+              (identifier)))
+          (csg_prim
             (identifier)
-            (alge_type
-              (t_scalar))))
-        (subtree
-          (csg_binary
-            (identifier)
-            (subtree
-              (csg_prim
-                (identifier)
-                (param_list
-                  (alge_expr
-                    (identifier)))))
-            (subtree
-              (csg_prim
-                (identifier)
-                (param_list
-                  (alge_expr
-                    (identifier)))))))))
-
-
+            (alge_expr
+              (identifier))))))
 
 ==================
 tree_with_param_const
@@ -60,37 +51,29 @@ field test_field(a: vec3, b: s){
 (source_file
       (field_decl
         (identifier)
-        (arg_list
-          (typed_arg
+        (typed_arg
+          (identifier)
+          (alge_type
+            (t_vec
+              (digit))))
+        (typed_arg
+          (identifier)
+          (alge_type
+            (t_scalar)))
+        (csg_binary
+          (identifier)
+          (alge_expr
+            (float_literal
+              (digit)
+              (digit)))
+          (csg_prim
             (identifier)
-            (alge_type
-              (t_vec
-                (digit))))
-          (typed_arg
+            (alge_expr
+              (identifier)))
+          (csg_prim
             (identifier)
-            (alge_type
-              (t_scalar))))
-        (subtree
-          (csg_binary
-            (identifier)
-            (param_list
-              (alge_expr
-                (literal
-                  (float_literal
-                    (digit)
-                    (digit)))))
-            (subtree
-              (csg_prim
-                (identifier)
-                (param_list
-                  (alge_expr
-                    (identifier)))))
-            (subtree
-              (csg_prim
-                (identifier)
-                (param_list
-                  (alge_expr
-                    (identifier)))))))))
+            (alge_expr
+              (identifier))))))
 
 ==================
 tree with small algebraic
@@ -109,38 +92,30 @@ field testfield(a: vec3, b: s){
 (source_file
       (field_decl
         (identifier)
-        (arg_list
-          (typed_arg
+        (typed_arg
+          (identifier)
+          (alge_type
+            (t_vec
+              (digit))))
+        (typed_arg
+          (identifier)
+          (alge_type
+            (t_scalar)))
+        (csg_binary
+          (identifier)
+          (csg_prim
             (identifier)
-            (alge_type
-              (t_vec
-                (digit))))
-          (typed_arg
+            (alge_expr
+              (binary_expr
+                (alge_expr
+                  (identifier))
+                (alge_expr
+                  (integer_literal
+                    (digit))))))
+          (csg_prim
             (identifier)
-            (alge_type
-              (t_scalar))))
-        (subtree
-          (csg_binary
-            (identifier)
-            (subtree
-              (csg_prim
-                (identifier)
-                (param_list
-                  (alge_expr
-                    (binary_expr
-                      (alge_expr
-                        (identifier))
-                      (alge_binary_op)
-                      (alge_expr
-                        (literal
-                          (integer_literal
-                            (digit)))))))))
-            (subtree
-              (csg_prim
-                (identifier)
-                (param_list
-                  (alge_expr
-                    (identifier)))))))))
+            (alge_expr
+              (identifier))))))
 
 ==================
 tree with const
@@ -159,50 +134,40 @@ field testfield(a: vec3, b: s){
 (source_file
       (field_decl
         (identifier)
-        (arg_list
-          (typed_arg
+        (typed_arg
+          (identifier)
+          (alge_type
+            (t_vec
+              (digit))))
+        (typed_arg
+          (identifier)
+          (alge_type
+            (t_scalar)))
+        (csg_binary
+          (identifier)
+          (csg_prim
             (identifier)
-            (alge_type
-              (t_vec
-                (digit))))
-          (typed_arg
+            (alge_expr
+              (identifier)))
+          (csg_prim
             (identifier)
-            (alge_type
-              (t_scalar))))
-        (subtree
-          (csg_binary
-            (identifier)
-            (subtree
-              (csg_prim
-                (identifier)
-                (param_list
-                  (alge_expr
-                    (identifier)))))
-            (subtree
-              (csg_prim
-                (identifier)
-                (param_list
-                  (alge_expr
-                    (alge_type_constructor
-                      (alge_type
-                        (t_vec
-                          (digit)))
-                      (param_list
-                        (alge_expr
-                          (literal
-                            (float_literal
-                              (digit)
-                              (digit))))
-                        (alge_expr
-                          (literal
-                            (float_literal
-                              (digit)
-                              (digit))))
-                        (alge_expr
-                          (literal
-                            (float_literal
-                              (digit)
-                              (digit))))))))))))))
+            (alge_expr
+              (alge_type_constructor
+                (alge_type
+                  (t_vec
+                    (digit)))
+                (alge_expr
+                  (float_literal
+                    (digit)
+                    (digit)))
+                (alge_expr
+                  (float_literal
+                    (digit)
+                    (digit)))
+                (alge_expr
+                  (float_literal
+                    (digit)
+                    (digit)))))))))
 
 ==================
 tree unary
@@ -218,20 +183,16 @@ field testfield(b: s){
 (source_file
       (field_decl
         (identifier)
-        (arg_list
-          (typed_arg
+        (typed_arg
+          (identifier)
+          (alge_type
+            (t_scalar)))
+        (csg_unary
+          (identifier)
+          (csg_prim
             (identifier)
-            (alge_type
-              (t_scalar))))
-        (subtree
-          (csg_unary
-            (identifier)
-            (subtree
-              (csg_prim
-                (identifier)
-                (param_list
-                  (alge_expr
-                    (identifier)))))))))
+            (alge_expr
+              (identifier))))))
 
 ==================
 tree unary with param
@@ -248,20 +209,15 @@ field testfield(b: s){
 (source_file
       (field_decl
         (identifier)
-        (arg_list
-          (typed_arg
+        (typed_arg
+          (identifier)
+          (alge_type
+            (t_scalar)))
+        (csg_unary
+          (identifier)
+          (alge_expr
+            (identifier))
+          (csg_prim
             (identifier)
-            (alge_type
-              (t_scalar))))
-        (subtree
-          (csg_unary
-            (identifier)
-            (param_list
-              (alge_expr
-                (identifier)))
-            (subtree
-              (csg_prim
-                (identifier)
-                (param_list
-                  (alge_expr
-                    (identifier)))))))))
+            (alge_expr
+              (identifier))))))

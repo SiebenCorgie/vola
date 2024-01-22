@@ -1,3 +1,25 @@
+
+//Shamelessly taken from the RUST precedence rules. But we don't use all
+const PREC = {
+  call: 15,
+  field: 14,
+  try: 13,
+  unary: 12,
+  cast: 11,
+  multiplicative: 10,
+  additive: 9,
+  shift: 8,
+  bitand: 7,
+  bitxor: 6,
+  bitor: 5,
+  comparative: 4,
+  and: 3,
+  or: 2,
+  range: 1,
+  assign: 0,
+  closure: -1,
+};
+
 module.exports = grammar({
   name: 'vola',
   rules: {
@@ -16,16 +38,16 @@ module.exports = grammar({
 
     field_decl: $ => seq(
       "field",
-      $.identifier,
+      field("field_name", $.identifier),
       "(",
-      optional($.arg_list),
+      optional($._arg_list),
       ")",
       "{",
-      $.subtree,
+      $._subtree,
       "}",
     ),
 
-    subtree: $ => choice(
+    _subtree: $ => choice(
       $.csg_unary,
       $.csg_binary,
       $.csg_prim,
@@ -34,41 +56,39 @@ module.exports = grammar({
     csg_unary: $ => seq(
       $.identifier,
       "(",
-      optional($.param_list),
+      optional($._param_list),
       ")",
       "{",
-      $.subtree,
+      $._subtree,
       "}"
     ),
 
     csg_binary: $ => seq(
       $.identifier,
       "(",
-      optional($.param_list),
+      optional($._param_list),
       ")",
       "{",
-      $.subtree,
+      $._subtree,
       "}",
       "{",
-      $.subtree,
+      $._subtree,
       "}"
     ),
-
 
     csg_prim: $ => seq(
       $.identifier,
       "(",
-      optional($.param_list),
+      optional($._param_list),
       ")",
     ),
 
-
-    param_list: $ => seq(
+    _param_list: $ => seq(
       repeat(seq(
-        $.alge_expr,
+        field("parameter", $.alge_expr),
         ","
       )),
-      $.alge_expr
+      field("parameter", $.alge_expr)
     ),
 
 
@@ -82,51 +102,51 @@ module.exports = grammar({
     // and `op` for a (DF, DF, ...) -> DF operation.
     alge_decl: $ => seq(
       "alge",
-      $.identifier,
+      field("alge_name", $.identifier),
       "(",
-      optional($.arg_list),
+      optional($._arg_list),
       ")",
       "{",
-      $.alge_region,
+      $._alge_region,
       "}",
     ),
 
     op_decl: $ => seq(
       "op",
-      $.identifier,
+      field("op_name", $.identifier),
       seq(
         "<",
-        $.df_list,
+        $._df_list,
         ">",
       ),
       "(",
-      optional($.arg_list),
+      optional($._arg_list),
       ")",
       optional(seq(
         "->",
         $.t_df
       )),
       "{",
-      $.alge_region,
+      $._alge_region,
       "}",
     ),
 
     prim_decl: $ => seq(
       "prim",
-      $.identifier,
+      field("prim_name", $.identifier),
       "(",
-      optional($.arg_list),
+      optional($._arg_list),
       ")",
       optional(seq(
         "->",
         $.t_df
       )),
       "{",
-      $.alge_region,
+      $._alge_region,
       "}",
     ),
 
-    arg_list: $ => seq(
+    _arg_list: $ => seq(
       repeat(seq(
         $.typed_arg,
         ","
@@ -134,7 +154,7 @@ module.exports = grammar({
       $.typed_arg,
     ),
 
-    df_list: $ => seq(
+    _df_list: $ => seq(
       repeat(seq(
         $.t_df,
         ','
@@ -148,22 +168,24 @@ module.exports = grammar({
       $.alge_type,
     ),
 
-    alge_region: $ => seq(
-      repeat($._alge_stmt),
+    _alge_region: $ => seq(
+      repeat(choice($._alge_stmt, $.comment)),
       $.alge_expr,
     ),
 
-    _alge_stmt: $ => choice(
-      $.let_stmt,
-      $.assign_stmt,
-      $.comment
+    _alge_stmt: $ => seq(
+      choice(
+        $.let_stmt,
+        $.assign_stmt,
+      ),
+      ";"
     ),
 
     let_stmt: $ => seq(
       "let",
       $.identifier,
       "=",
-      $.alge_expr
+      $.alge_expr,
     ),
 
     assign_stmt: $ => seq(
@@ -178,9 +200,9 @@ module.exports = grammar({
       $.unary_expr,
       $.binary_expr,
       $.eval_expr,
-      prec(6, $.alge_type_constructor),
-      prec(5, seq('(', $.alge_expr, ')')),
-      $.literal,
+      $.alge_type_constructor,
+      seq('(', $.alge_expr, ')'),
+      $._literal,
       $.identifier,
     ),
 
@@ -188,43 +210,24 @@ module.exports = grammar({
       "eval",
       $.identifier,
       "(",
-      optional($.ident_list),
+      optional($._param_list),
       ")"
     ),
 
-    ident_list: $ => seq(
-      repeat(seq(
-        $.identifier,
-        ","
-      )),
-      $.identifier,
+    unary_expr: $ => prec.left(PREC.unary, choice(
+        seq("-", $.alge_expr),
+        seq("!", $.alge_expr),
+    )),
+
+    binary_expr: $ => choice(
+      prec.left(PREC.multiplicative, seq($.alge_expr, "/", $.alge_expr)),
+      prec.left(PREC.multiplicative, seq($.alge_expr, "*", $.alge_expr)),
+      prec.left(PREC.additive, seq($.alge_expr, "+", $.alge_expr)),
+      prec.left(PREC.additive, seq($.alge_expr, "-", $.alge_expr)),
+      prec.left(PREC.additive, seq($.alge_expr, "%", $.alge_expr)),
     ),
 
-
-    unary_expr: $ => prec.left(4,
-      seq(
-        $.alge_unary_op,
-        $.alge_expr
-      ),
-    ),
-
-    binary_expr: $ => prec.left(3,
-      seq(
-        $.alge_expr,
-        $.alge_binary_op,
-        $.alge_expr
-      ),
-    ),
-
-    alge_unary_op: $ => choice(
-      '-', '!'
-    ),
-
-    alge_binary_op: $ => choice(
-      '/', '*', '+', '-', '%'
-    ),
-
-    type: $ => choice(
+    _type: $ => choice(
       $.alge_type,
       $.t_df,
     ),
@@ -238,7 +241,7 @@ module.exports = grammar({
     alge_type_constructor: $ => seq(
       $.alge_type,
       "(",
-      optional($.param_list),
+      optional($._param_list),
       ")"
     ),
 
@@ -275,7 +278,7 @@ module.exports = grammar({
     ),
 
 
-    literal: $ => choice(
+    _literal: $ => choice(
       $.integer_literal,
       $.float_literal
     ),
