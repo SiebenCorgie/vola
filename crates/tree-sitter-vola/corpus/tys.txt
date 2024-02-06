@@ -3,126 +3,200 @@
 digit
 ==================
 
-alge test(){
+impl Test for Test{
     1
 }
 
 ---
 (source_file
-      (alge_decl
+      (impl_block
         (identifier)
-        (alge_expr
-          (integer_literal
-            (digit)))))
+        (identifier)
+        (block
+          (alge_expr
+            (integer_literal
+              (digit))))))
 
 ==================
 float
 ==================
 
-alge test(){
+impl Test for Test{
     1.0
 }
 
 ---
 (source_file
-      (alge_decl
+      (impl_block
         (identifier)
-        (alge_expr
-          (float_literal
-            (digit)
-            (digit)))))
-
-==================
-scalar constructor
-==================
-
-alge test(){
-    s(1.0)
-}
-
----
-(source_file
-      (alge_decl
         (identifier)
-        (alge_expr
-          (alge_type_constructor
-            (alge_type
-              (t_scalar))
-            (alge_expr
-              (float_literal
-                (digit)
-                (digit)))))))
+        (block
+          (alge_expr
+            (float_literal
+              (digit)
+              (digit))))))
+
+
 ==================
 vec n
 ==================
 
-alge test(){
-    vec3(1.0, 2.3, 1.0)
+
+impl Test for Test{
+     [1.0, a, 12]
 }
 
 ---
 (source_file
-      (alge_decl
+      (impl_block
         (identifier)
-        (alge_expr
-          (alge_type_constructor
-            (alge_type
-              (t_vec
-                (digit)))
-            (alge_expr
-              (float_literal
-                (digit)
-                (digit)))
-            (alge_expr
-              (float_literal
-                (digit)
-                (digit)))
-            (alge_expr
-              (float_literal
-                (digit)
-                (digit)))))))
+        (identifier)
+        (block
+          (alge_expr
+            (list
+              (alge_expr
+                (float_literal
+                  (digit)
+                  (digit)))
+              (alge_expr
+                (identifier))
+              (alge_expr
+                (integer_literal
+                  (digit))))))))
 
 ==================
 mat nxm
 ==================
 
-alge test(){
-    mat2x3(
-        1.0, 2.3,
-        1.0, 2,
-        3, 420.0
-    )
+impl Test for Test{
+    [
+        [1.0, 2.3],
+        [1.0, 2],
+        [3, 420.0]
+    ]
 }
 
 ---
 (source_file
-      (alge_decl
+      (impl_block
         (identifier)
-        (alge_expr
-          (alge_type_constructor
-            (alge_type
-              (t_mat
-                (digit)
-                (digit)))
-            (alge_expr
-              (float_literal
-                (digit)
-                (digit)))
-            (alge_expr
-              (float_literal
-                (digit)
-                (digit)))
-            (alge_expr
-              (float_literal
-                (digit)
-                (digit)))
-            (alge_expr
-              (integer_literal
-                (digit)))
-            (alge_expr
-              (integer_literal
-                (digit)))
-            (alge_expr
-              (float_literal
-                (digit)
-                (digit)))))))
+        (identifier)
+        (block
+          (alge_expr
+            (list
+              (alge_expr
+                (list
+                  (alge_expr
+                    (float_literal
+                      (digit)
+                      (digit)))
+                  (alge_expr
+                    (float_literal
+                      (digit)
+                      (digit)))))
+              (alge_expr
+                (list
+                  (alge_expr
+                    (float_literal
+                      (digit)
+                      (digit)))
+                  (alge_expr
+                    (integer_literal
+                      (digit)))))
+              (alge_expr
+                (list
+                  (alge_expr
+                    (integer_literal
+                      (digit)))
+                  (alge_expr
+                    (float_literal
+                      (digit)
+                      (digit))))))))))
+
+
+==================
+3d tensor
+==================
+
+impl Test for Test{
+    [
+        [[1.0, 0.0], [0.0, 1.0]],
+        [[2.0, 0.0], [0.0, 2.0]],
+        [[3.0, 0.0], [0.0, 3.0]]
+    ]
+}
+
+---
+(source_file
+      (impl_block
+        (identifier)
+        (identifier)
+        (block
+          (alge_expr
+            (list
+              (alge_expr
+                (list
+                  (alge_expr
+                    (list
+                      (alge_expr
+                        (float_literal
+                          (digit)
+                          (digit)))
+                      (alge_expr
+                        (float_literal
+                          (digit)
+                          (digit)))))
+                  (alge_expr
+                    (list
+                      (alge_expr
+                        (float_literal
+                          (digit)
+                          (digit)))
+                      (alge_expr
+                        (float_literal
+                          (digit)
+                          (digit)))))))
+              (alge_expr
+                (list
+                  (alge_expr
+                    (list
+                      (alge_expr
+                        (float_literal
+                          (digit)
+                          (digit)))
+                      (alge_expr
+                        (float_literal
+                          (digit)
+                          (digit)))))
+                  (alge_expr
+                    (list
+                      (alge_expr
+                        (float_literal
+                          (digit)
+                          (digit)))
+                      (alge_expr
+                        (float_literal
+                          (digit)
+                          (digit)))))))
+              (alge_expr
+                (list
+                  (alge_expr
+                    (list
+                      (alge_expr
+                        (float_literal
+                          (digit)
+                          (digit)))
+                      (alge_expr
+                        (float_literal
+                          (digit)
+                          (digit)))))
+                  (alge_expr
+                    (list
+                      (alge_expr
+                        (float_literal
+                          (digit)
+                          (digit)))
+                      (alge_expr
+                        (float_literal
+                          (digit)
+                          (digit))))))))))))

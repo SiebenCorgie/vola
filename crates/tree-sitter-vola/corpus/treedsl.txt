@@ -2,17 +2,19 @@
 simple_tree
 ==================
 
-field testfield(a: vec3, b: s){
-    union(){
+export testfield(a: vec3, b: s){
+    csg tree = union(){
         sphere(b)
     }{
         box(a)
-    }
+    };
+
+    tree.SDF3D(a)
 }
 
 ---
 (source_file
-      (field_decl
+      (field_export
         (identifier)
         (typed_arg
           (identifier)
@@ -23,13 +25,21 @@ field testfield(a: vec3, b: s){
           (identifier)
           (alge_type
             (t_scalar)))
-        (csg_binary
+        (csg_binding
           (identifier)
-          (csg_prim
+          (csg_binary
             (identifier)
-            (alge_expr
-              (identifier)))
-          (csg_prim
+            (fn_call
+              (identifier)
+              (alge_expr
+                (identifier)))
+            (fn_call
+              (identifier)
+              (alge_expr
+                (identifier)))))
+        (access_decl
+          (identifier)
+          (fn_call
             (identifier)
             (alge_expr
               (identifier))))))
@@ -38,18 +48,20 @@ field testfield(a: vec3, b: s){
 tree_with_param_const
 ==================
 
-field test_field(a: vec3, b: s){
-    smooth_union(1.0){
+export test_field(a: vec3, b: s){
+    csg tree = smooth_union(1.0){
         sphere(b)
     }{
         box(a)
-    }
+    };
+
+    tree.SDF3D(a)
 }
 
 ---
 
 (source_file
-      (field_decl
+      (field_export
         (identifier)
         (typed_arg
           (identifier)
@@ -60,17 +72,25 @@ field test_field(a: vec3, b: s){
           (identifier)
           (alge_type
             (t_scalar)))
-        (csg_binary
+        (csg_binding
           (identifier)
-          (alge_expr
-            (float_literal
-              (digit)
-              (digit)))
-          (csg_prim
+          (csg_binary
             (identifier)
             (alge_expr
-              (identifier)))
-          (csg_prim
+              (float_literal
+                (digit)
+                (digit)))
+            (fn_call
+              (identifier)
+              (alge_expr
+                (identifier)))
+            (fn_call
+              (identifier)
+              (alge_expr
+                (identifier)))))
+        (access_decl
+          (identifier)
+          (fn_call
             (identifier)
             (alge_expr
               (identifier))))))
@@ -79,18 +99,20 @@ field test_field(a: vec3, b: s){
 tree with small algebraic
 ==================
 
-field testfield(a: vec3, b: s){
-    union(){
+export testfield(a: vec3, b: s){
+    csg tree = union(){
         sphere(b + 3)
     }{
         box(a)
-    }
+    };
+
+    tree.SDF3D(a)
 }
 
 ---
 
 (source_file
-      (field_decl
+      (field_export
         (identifier)
         (typed_arg
           (identifier)
@@ -101,18 +123,26 @@ field testfield(a: vec3, b: s){
           (identifier)
           (alge_type
             (t_scalar)))
-        (csg_binary
+        (csg_binding
           (identifier)
-          (csg_prim
+          (csg_binary
             (identifier)
-            (alge_expr
-              (binary_expr
-                (alge_expr
-                  (identifier))
-                (alge_expr
-                  (integer_literal
-                    (digit))))))
-          (csg_prim
+            (fn_call
+              (identifier)
+              (alge_expr
+                (binary_expr
+                  (alge_expr
+                    (identifier))
+                  (alge_expr
+                    (integer_literal
+                      (digit))))))
+            (fn_call
+              (identifier)
+              (alge_expr
+                (identifier)))))
+        (access_decl
+          (identifier)
+          (fn_call
             (identifier)
             (alge_expr
               (identifier))))))
@@ -121,18 +151,19 @@ field testfield(a: vec3, b: s){
 tree with const
 ==================
 
-field testfield(a: vec3, b: s){
-    union(){
+export testfield(a: vec3, b: s){
+    csg tree = union(){
         sphere(b)
     }{
-        box(vec3(3.0, 1.0, 4.0))
-    }
+        box([3.0, 1.0, 4.0])
+    };
+
+    tree.SDF3D(a)
 }
 
 ---
-
 (source_file
-      (field_decl
+      (field_export
         (identifier)
         (typed_arg
           (identifier)
@@ -143,19 +174,120 @@ field testfield(a: vec3, b: s){
           (identifier)
           (alge_type
             (t_scalar)))
-        (csg_binary
+        (csg_binding
           (identifier)
-          (csg_prim
+          (csg_binary
+            (identifier)
+            (fn_call
+              (identifier)
+              (alge_expr
+                (identifier)))
+            (fn_call
+              (identifier)
+              (alge_expr
+                (list
+                  (alge_expr
+                    (float_literal
+                      (digit)
+                      (digit)))
+                  (alge_expr
+                    (float_literal
+                      (digit)
+                      (digit)))
+                  (alge_expr
+                    (float_literal
+                      (digit)
+                      (digit))))))))
+        (access_decl
+          (identifier)
+          (fn_call
             (identifier)
             (alge_expr
-              (identifier)))
-          (csg_prim
+              (identifier))))))
+
+==================
+tree unary
+==================
+
+export testfield(b: s){
+    csg tree = translate(){
+        sphere(b)
+    };
+
+    tree.SDF3D([1.0, 1.0, 1.0])
+}
+
+---
+(source_file
+      (field_export
+        (identifier)
+        (typed_arg
+          (identifier)
+          (alge_type
+            (t_scalar)))
+        (csg_binding
+          (identifier)
+          (csg_unary
+            (identifier)
+            (fn_call
+              (identifier)
+              (alge_expr
+                (identifier)))))
+        (access_decl
+          (identifier)
+          (fn_call
             (identifier)
             (alge_expr
-              (alge_type_constructor
-                (alge_type
-                  (t_vec
+              (list
+                (alge_expr
+                  (float_literal
+                    (digit)
                     (digit)))
+                (alge_expr
+                  (float_literal
+                    (digit)
+                    (digit)))
+                (alge_expr
+                  (float_literal
+                    (digit)
+                    (digit)))))))))
+==================
+tree unary with param
+==================
+
+export testfield(b: s){
+    csg tree = translate(b){
+        sphere(b)
+    };
+
+    tree.SDF3D([1.0, 1.0, 1.0])
+}
+
+---
+
+ (source_file
+      (field_export
+        (identifier)
+        (typed_arg
+          (identifier)
+          (alge_type
+            (t_scalar)))
+        (csg_binding
+          (identifier)
+          (csg_unary
+            (identifier)
+            (alge_expr
+              (identifier))
+            (fn_call
+              (identifier)
+              (alge_expr
+                (identifier)))))
+        (access_decl
+          (identifier)
+          (fn_call
+            (identifier)
+            (alge_expr
+              (list
                 (alge_expr
                   (float_literal
                     (digit)
@@ -170,54 +302,98 @@ field testfield(a: vec3, b: s){
                     (digit)))))))))
 
 ==================
-tree unary
+tree multi nest
 ==================
 
-field testfield(b: s){
-    translate(){
-        sphere(b)
-    }
+export testfield(b: s){
+    csg tree = union(){
+        translate([1.0, b, 3.0]){
+            sphere(1.0)
+        }
+    }{
+        smooth_union(1.0){
+            sphere(b)
+        }{
+            box([1.0, 0.4, 1.0])
+        }
+    };
+
+    tree.SDF3D([1.0, 1.0, 1.0])
 }
 
 ---
 (source_file
-      (field_decl
+      (field_export
         (identifier)
         (typed_arg
           (identifier)
           (alge_type
             (t_scalar)))
-        (csg_unary
+        (csg_binding
           (identifier)
-          (csg_prim
+          (csg_binary
+            (identifier)
+            (csg_unary
+              (identifier)
+              (alge_expr
+                (list
+                  (alge_expr
+                    (float_literal
+                      (digit)
+                      (digit)))
+                  (alge_expr
+                    (identifier))
+                  (alge_expr
+                    (float_literal
+                      (digit)
+                      (digit)))))
+              (fn_call
+                (identifier)
+                (alge_expr
+                  (float_literal
+                    (digit)
+                    (digit)))))
+            (csg_binary
+              (identifier)
+              (alge_expr
+                (float_literal
+                  (digit)
+                  (digit)))
+              (fn_call
+                (identifier)
+                (alge_expr
+                  (identifier)))
+              (fn_call
+                (identifier)
+                (alge_expr
+                  (list
+                    (alge_expr
+                      (float_literal
+                        (digit)
+                        (digit)))
+                    (alge_expr
+                      (float_literal
+                        (digit)
+                        (digit)))
+                    (alge_expr
+                      (float_literal
+                        (digit)
+                        (digit)))))))))
+        (access_decl
+          (identifier)
+          (fn_call
             (identifier)
             (alge_expr
-              (identifier))))))
-
-==================
-tree unary with param
-==================
-
-field testfield(b: s){
-    translate(b){
-        sphere(b)
-    }
-}
-
----
-
-(source_file
-      (field_decl
-        (identifier)
-        (typed_arg
-          (identifier)
-          (alge_type
-            (t_scalar)))
-        (csg_unary
-          (identifier)
-          (alge_expr
-            (identifier))
-          (csg_prim
-            (identifier)
-            (alge_expr
-              (identifier))))))
+              (list
+                (alge_expr
+                  (float_literal
+                    (digit)
+                    (digit)))
+                (alge_expr
+                  (float_literal
+                    (digit)
+                    (digit)))
+                (alge_expr
+                  (float_literal
+                    (digit)
+                    (digit)))))))))

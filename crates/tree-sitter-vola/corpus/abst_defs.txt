@@ -1,0 +1,157 @@
+==================
+define entity no arg
+==================
+
+entity Sphere();
+
+---
+(source_file
+      (def_entity
+        (identifier)))
+
+==================
+define entity with arg
+==================
+
+entity Sphere(radius: vec3);
+
+---
+(source_file
+      (def_entity
+        (identifier)
+        (typed_arg
+          (identifier)
+          (alge_type
+            (t_vec
+              (digit))))))
+
+==================
+define entity with two arg
+==================
+
+entity Sphere(radius: vec3, color: s);
+
+---
+(source_file
+      (def_entity
+        (identifier)
+        (typed_arg
+          (identifier)
+          (alge_type
+            (t_vec
+              (digit))))
+        (typed_arg
+          (identifier)
+          (alge_type
+            (t_scalar)))))
+
+==================
+define entity with derive
+==================
+
+#[derive(LocalLipshitz)]
+entity Sphere(radius: vec3, color: s);
+
+---
+(source_file
+      (ct_attrib
+        (fn_call
+          (identifier)
+          (alge_expr
+            (identifier))))
+      (def_entity
+        (identifier)
+        (typed_arg
+          (identifier)
+          (alge_type
+            (t_vec
+              (digit))))
+        (typed_arg
+          (identifier)
+          (alge_type
+            (t_scalar)))))
+
+
+
+
+==================
+define concept no src
+==================
+
+concept Color: -> vec2;
+
+---
+(source_file
+      (def_concept
+        (identifier)
+        (alge_type
+          (t_vec
+            (digit)))))
+
+==================
+define concept src
+==================
+
+concept SDF3D: vec3 -> s;
+
+---
+(source_file
+      (def_concept
+        (identifier)
+        (alge_type
+          (t_vec
+            (digit)))
+        (alge_type
+          (t_scalar))))
+
+
+
+
+==================
+define operator simple
+==================
+
+operation OverwriteColor();
+
+---
+(source_file
+      (def_operation
+        (identifier)))
+
+==================
+define operator with arg
+==================
+
+operation OverwriteColor(col: vec3);
+
+---
+(source_file
+      (def_operation
+        (identifier)
+        (typed_arg
+          (identifier)
+          (alge_type
+            (t_vec
+              (digit))))))
+
+==================
+define operator with two arg
+==================
+
+operation OverwriteColor(col: vec3, other: mat3x3);
+
+---
+(source_file
+      (def_operation
+        (identifier)
+        (typed_arg
+          (identifier)
+          (alge_type
+            (t_vec
+              (digit))))
+        (typed_arg
+          (identifier)
+          (alge_type
+            (t_mat
+              (digit)
+              (digit))))))

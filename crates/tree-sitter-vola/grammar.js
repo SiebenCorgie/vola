@@ -27,30 +27,94 @@ module.exports = grammar({
     source_file: $ => repeat(
       choice(
         $.comment,
-        $.df_alias,
-        $.alge_decl,
-        $.field_decl
+        $.field_decl,
+        $.field_export,
+        $.def_concept,
+        $.def_entity,
+        $.def_operation,
+        $.impl_block,
+        $.ct_attrib,
       )
     ),
+
+//the #[some(stuff)] syntax
+    ct_attrib: $ => seq(
+      "#",
+      "[",
+      $.fn_call,
+      "]"
+    ),
+
 
 //Field DSL
 //=============================================
 
     field_decl: $ => seq(
-      "field",
+      "define",
       field("field_name", $.identifier),
       "(",
       optional($._arg_list),
       ")",
       "{",
+      repeat($._csg_stmt),
+      //field decl must end on subtree
       $._subtree,
       "}",
+    ),
+
+
+    field_export: $ => seq(
+      "export",
+      field("field_name", $.identifier),
+      "(",
+      optional($._arg_list),
+      ")",
+      "{",
+      repeat($._csg_stmt),
+      //export must end on access description
+      $._access_desc,
+      "}",
+    ),
+
+    _csg_stmt: $ => seq(
+      choice(
+        $.let_stmt,
+        $.csg_binding,
+      ),
+      ";"
+    ),
+
+    csg_binding: $ => seq(
+      "csg",
+      field("csg_ident", $.identifier),
+      "=",
+      $._subtree
+    ),
+
+    _access_desc: $ => choice(
+      seq(
+        "(",
+        repeat(seq(
+          $.access_decl,
+          ","
+        )),
+        $.access_decl,
+        ")"
+      ),
+      //single access without tuple decl
+      $.access_decl
+    ),
+
+    access_decl: $ => seq(
+      field("field_name", $.identifier),
+      ".",
+      field("concept_access", $.fn_call),
     ),
 
     _subtree: $ => choice(
       $.csg_unary,
       $.csg_binary,
-      $.csg_prim,
+      $.fn_call,
     ),
 
     csg_unary: $ => seq(
@@ -76,73 +140,61 @@ module.exports = grammar({
       "}"
     ),
 
-    csg_prim: $ => seq(
-      $.identifier,
-      "(",
-      optional($._param_list),
-      ")",
-    ),
-
-    _param_list: $ => seq(
-      repeat(seq(
-        field("parameter", $.alge_expr),
-        ","
-      )),
-      field("parameter", $.alge_expr)
-    ),
-
 
 //Alge DSL
 //=============================================
-    
 
-    //Some type of algebraic decleration.
-    // We have `alge`, for simple algebraic declerations,
-    // `prim` for a DF declartion,
-    // and `op` for a (DF, DF, ...) -> DF operation.
-    alge_decl: $ => seq(
-      "alge",
-      field("alge_name", $.identifier),
+// entity // concept // operation
+
+    def_entity: $ => seq(
+      "entity",
+      field("entity_name", $.identifier),
       "(",
       optional($._arg_list),
       ")",
-      "{",
-      $._alge_region,
-      "}",
+      ";",
     ),
 
-    op_decl: $ => seq(
-      "op",
-      field("op_name", $.identifier),
-      seq(
+
+    def_concept: $ => seq(
+      "concept",
+      field("concept_name", $.identifier),
+      ":",
+      optional(field("concept_arg", $.alge_type)),
+      "->",
+      field("concept_result", $.alge_type),
+      ";",
+    ),
+
+
+    def_operation: $ => seq(
+      "operation",
+      field("operation_name", $.identifier),
+      "(",
+      optional($._arg_list),
+      ")",
+      ";",
+    ),
+
+//impl syntax
+
+    impl_block: $ => seq(
+      "impl",
+      field("op_or_entity", $.identifier),
+      optional(seq(
         "<",
-        $._df_list,
-        ">",
-      ),
-      "(",
-      optional($._arg_list),
-      ")",
+        field("operand", $._ident_list),
+        ">"
+      )),
+      "for",
+      field("concept", $.identifier),
       optional(seq(
-        "->",
-        $.t_df
+        "(",
+        $._ident_list,
+        ")",
       )),
       "{",
-      $._alge_region,
-      "}",
-    ),
-
-    prim_decl: $ => seq(
-      "prim",
-      field("prim_name", $.identifier),
-      "(",
-      optional($._arg_list),
-      ")",
-      optional(seq(
-        "->",
-        $.t_df
-      )),
-      "{",
-      $._alge_region,
+      $.block,
       "}",
     ),
 
@@ -154,29 +206,34 @@ module.exports = grammar({
       $.typed_arg,
     ),
 
-    _df_list: $ => seq(
-      repeat(seq(
-        $.t_df,
-        ','
-      )),
-      $.t_df
-    ),
-
     typed_arg: $ => seq(
       $.identifier,
       ":",
       $.alge_type,
     ),
 
-    _alge_region: $ => seq(
-      repeat(choice($._alge_stmt, $.comment)),
-      $.alge_expr,
+
+    block: $ => seq(
+      repeat(
+        $._alge_stmt
+      ),
+      //must end on alge expr
+      $.alge_expr
+    ),
+
+    _ident_list: $ => seq(
+      repeat(seq(
+        $.identifier,
+        ","
+      )),
+      $.identifier
     ),
 
     _alge_stmt: $ => seq(
       choice(
         $.let_stmt,
         $.assign_stmt,
+        $.dead_eval_stmt,
       ),
       ";"
     ),
@@ -190,21 +247,26 @@ module.exports = grammar({
 
     assign_stmt: $ => seq(
       $.identifier,
-      ".",
-      $.identifier,
       "=",
       $.alge_expr
     ),
 
-    alge_expr: $ => choice(
+    dead_eval_stmt: $ => $.eval_expr,
+
+
+
+    //TODO: add sum and mul loops?
+
+    alge_expr: $ => prec.left(choice(
       $.unary_expr,
       $.binary_expr,
       $.eval_expr,
-      $.alge_type_constructor,
       seq('(', $.alge_expr, ')'),
       $._literal,
       $.identifier,
-    ),
+      $.fn_call,
+      $.list,
+    )),
 
     eval_expr: $ => seq(
       "eval",
@@ -227,38 +289,45 @@ module.exports = grammar({
       prec.left(PREC.additive, seq($.alge_expr, "%", $.alge_expr)),
     ),
 
+    fn_call: $ => seq(
+      field("function_name", $.identifier),
+      "(",
+      optional($._param_list),
+      ")",
+    ),
+
+    _param_list: $ => seq(
+      repeat(seq(
+        field("parameter", $.alge_expr),
+        ","
+      )),
+      field("parameter", $.alge_expr)
+    ),
+
     _type: $ => choice(
       $.alge_type,
-      $.t_df,
+      "CSG",
     ),
 
     alge_type: $ => choice(
       $.t_scalar,
       $.t_vec,
       $.t_mat,
+      $.t_tensor,
     ),
 
-    alge_type_constructor: $ => seq(
-      $.alge_type,
-      "(",
-      optional($._param_list),
-      ")"
-    ),
 
 //Common defs
 //=============================================
 
-    df_alias: $ => seq(
-      'type',
-      $.identifier,
-      '=',
-      $.t_df,
-    ),
-
-    t_df: $ => choice(
-      //an identifier set df type.
-      $.identifier,
-      seq('DF', '<', $.alge_type, '->', $.alge_type, '>'),
+    list: $ => seq(
+      "[",
+      repeat(seq(
+        $.alge_expr,
+        ","
+      )),
+      $.alge_expr,
+      "]"
     ),
 
     t_scalar: $ => seq(
@@ -277,6 +346,21 @@ module.exports = grammar({
       $.digit,
     ),
 
+    t_tensor: $ => seq(
+      "tensor",
+      "<",
+      $._digit_list,
+      ">"
+    ),
+
+    _digit_list: $ => seq(
+      repeat(seq(
+        $.digit,
+        ","
+      )),
+      $.digit
+    ),
+
 
     _literal: $ => choice(
       $.integer_literal,
@@ -292,9 +376,8 @@ module.exports = grammar({
     ),
 
     digit: $ => /[0-9][0-9_]*/,
-    identifier: $ => /([a-zA-Z$][a-zA-Z_]*)/,
-    //identifier: _ => /(r#)?[_\p{XID_Start}][_\p{XID_Continue}]*/,
-
+    //identifier: $ => /([a-zA-Z$][a-zA-Z_]*)/,
+    identifier: _ => /[_\p{XID_Start}][_\p{XID_Continue}]*/,
 //All about comments
 //=================
 
