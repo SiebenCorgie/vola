@@ -9,5 +9,6 @@
 //! The AST-Parsers job is to split both (somewhat like a preprocessor I guess?) into independent trees, that reference each other
 //! _by name_.
 
+mod alge;
 mod common;
 mod csg;

@@ -1,6 +1,5 @@
 [workspace]
 members = [
-"crates/tree-sitter-vola",
 "crates/vola-ast",
 "crates/rvsdg",
 "crates/rvsdg-viewer",
