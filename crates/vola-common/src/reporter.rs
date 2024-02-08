@@ -6,14 +6,14 @@ use smallvec::SmallVec;
 use crate::{CommonError, ErrorPrintBundle, FileString, Span};
 
 ///Helper utility that collects [CommonError](crate::CommonError)s, and reports them when asked.
-pub struct ErrorReporter<E: Error + Default> {
+pub struct ErrorReporter<E: Error> {
     src_file: FileString,
     errors: SmallVec<[CommonError<E>; 10]>,
     ///Map of cached files we already _know_.
     cached_files: AHashMap<String, Vec<String>>,
 }
 
-impl<E: Error + Default> ErrorReporter<E> {
+impl<E: Error> ErrorReporter<E> {
     pub fn new() -> Self {
         ErrorReporter {
             src_file: FileString::default(),
@@ -32,14 +32,16 @@ impl<E: Error + Default> ErrorReporter<E> {
 
     pub fn push_error(&mut self, mut error: CommonError<E>) {
         //Overwrite file, if none was set
-        if error.span.file.is_empty() {
-            error.span.file = self.src_file.clone();
+        if let Some(span) = &mut error.span {
+            if span.file.is_empty() {
+                span.file = self.src_file.clone();
+            }
         }
         self.errors.push(error);
     }
 
-    ///Loads the sub slice for the span. Returns an error string, if the file can not be read.
-    pub fn load_span_line<'a>(&'a mut self, span: &Span) -> &'a [String] {
+    ///Loads the sub slice for the span. Returns nothing, if the file could not be loaded
+    pub fn load_span_line<'a>(&'a mut self, span: &Span) -> Option<&'a Vec<String>> {
         if !self.cached_files.contains_key(span.file.as_str()) {
             //try to load the file, if not possible, ignore
             match std::fs::read_to_string(span.file.as_str()) {
@@ -51,20 +53,11 @@ impl<E: Error + Default> ErrorReporter<E> {
                 }
                 Err(e) => {
                     println!("failed to read file {} : {}", span.file.as_str(), e);
-                    let _ = self.cached_files.insert(
-                        span.file.as_str().to_owned(),
-                        vec![format!("Could not read file: {}", span.file.as_str())],
-                    );
                 }
             }
         }
 
-        if let Some(file_content) = self.cached_files.get(span.file.as_str()) {
-            //try to get the lines range
-            file_content
-        } else {
-            &[]
-        }
+        self.cached_files.get(span.file.as_str())
     }
 
     ///Prints all errors to stdout that occurred till now. Also returns them as an collection
@@ -73,27 +66,31 @@ impl<E: Error + Default> ErrorReporter<E> {
         std::mem::swap(&mut errors, &mut self.errors);
         println!("{} Errors:", errors.len());
         for error in &errors {
-            let span_lines = self.load_span_line(&error.span);
-            if span_lines.is_empty() {
-                //fall back to just printing E
-                println!(
-                    "Error {}:{} .. {}:{}: {}",
-                    error.span.from.0,
-                    error.span.from.1,
-                    error.span.to.0,
-                    error.span.to.1,
-                    error.source,
-                );
+            if let Some(span) = &error.span {
+                let span_lines = self.load_span_line(&span);
+                if span_lines.is_none() {
+                    //fall back to just printing E
+                    println!(
+                        "Error {}:{} .. {}:{}: {}",
+                        span.from.0, span.from.1, span.to.0, span.to.1, error.source,
+                    );
+                    if let Some(bt) = &error.backtrace {
+                        println!("Backtrace:\n{:?}", bt);
+                    }
+                } else {
+                    //otherwise use the pretty printer
+                    let bundle = ErrorPrintBundle {
+                        error: &error,
+                        src_lines: span_lines.unwrap(),
+                    };
+                    println!("{}", bundle);
+                }
+            } else {
+                //Simplest form, a span-less error
+                println!("Error: {}", error.source);
                 if let Some(bt) = &error.backtrace {
                     println!("Backtrace:\n{:?}", bt);
                 }
-            } else {
-                //otherwise use the pretty printer
-                let bundle = ErrorPrintBundle {
-                    error: &error,
-                    src_lines: span_lines,
-                };
-                println!("{}", bundle);
             }
         }
         errors

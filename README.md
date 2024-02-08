@@ -77,21 +77,11 @@ by using this as a library. Servers as interface between the Vola frontend, and 
 
 ## Status
 
-Right now testing the RVSDG implementation with a much smaller SDF language over at [MiniSDF](https://gitlab.com/tendsinmende/minisdf).
+_Working on the first, powerful implementation aka. MVB or Milestone 0_.
 
 ## Building
 
-### non-cargo dependencies
-
-- `tree-sitter-vola`: [Treesitter](https://tree-sitter.github.io/tree-sitter/creating-parsers#dependencies) if you want to rebuild / change the parser:
-  - [Trees-Sitter CLI](https://crates.io/crates/tree-sitter-cli)
-  - Node.js
-  - A C Compiler
-- `vola-ast`: none
-- `vola-hir`: none
-- `rvsdg`: none
-
-## Getting started
+✨ _Just run `cargo build`_ ✨
 
 ### Runtime SDF patching
 **Currently not implemented!**
