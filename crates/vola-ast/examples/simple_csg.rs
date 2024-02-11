@@ -28,4 +28,6 @@ export myField(p: vec3, translation: vec3){
             return;
         }
     };
+
+    println!("AST:\n{:#?}", ast);
 }

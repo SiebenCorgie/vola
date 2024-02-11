@@ -5,6 +5,9 @@ use vola_common::{CommonError, ErrorReporter, FileString};
 
 use crate::{error::ParserError, AstEntry, VolaAst};
 
+mod alge;
+mod common;
+mod csg;
 mod toplevel;
 
 pub trait FromTreeSitter {
@@ -26,7 +29,9 @@ pub fn parse_file(
         Ok(dta) => dta,
         Err(e) => {
             let mut reporter = ErrorReporter::new();
-            reporter.push_error(CommonError::new_spanless(ParserError::FSError(e)));
+            reporter.push_error(CommonError::new_spanless(ParserError::FSError(
+                e.to_string(),
+            )));
             return Err((
                 VolaAst {
                     entries: Vec::with_capacity(0),

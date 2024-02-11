@@ -5,11 +5,13 @@ use vola_common::Span;
 
 use crate::common::{Call, Ident};
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum UnaryOp {
     Not,
     Neg,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum BinaryOp {
     Add,
     Sub,
@@ -18,16 +20,19 @@ pub enum BinaryOp {
     Mod,
 }
 
+#[derive(Clone, Debug)]
 pub struct AlgeExpr {
-    span: Span,
-    expr_ty: AlgeExprTy,
+    pub span: Span,
+    pub expr_ty: AlgeExprTy,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum FieldAccessor {
     Digit(usize),
     Ident(Ident),
 }
 
+#[derive(Clone, Debug)]
 pub enum AlgeExprTy {
     Unary {
         op: UnaryOp,
@@ -52,4 +57,5 @@ pub enum AlgeExprTy {
 }
 
 //NOTE yet specified!
+#[derive(Clone, Debug)]
 pub struct AlgeOp {}

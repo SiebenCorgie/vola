@@ -6,14 +6,16 @@ use crate::{
     common::{Call, Ident, Ty, TypedIdent},
 };
 
+#[derive(Clone, Debug)]
 pub struct CSGOp {
-    span: Span,
-    op: Ident,
-    args: SmallVec<[AlgeExpr; 3]>,
+    pub span: Span,
+    pub op: Ident,
+    pub args: SmallVec<[AlgeExpr; 3]>,
     ///Sub trees this CSGOp evaluates. Mostly this is either 0, 1 or 2.
-    sub_trees: Vec<CSGOp>,
+    pub sub_trees: Vec<CSGOp>,
 }
 
+#[derive(Clone, Debug)]
 pub enum CSGStmt {
     LetStmt {
         span: Span,
@@ -27,25 +29,29 @@ pub enum CSGStmt {
     },
 }
 
+#[derive(Clone, Debug)]
 pub struct FieldDef {
-    span: Span,
-    inputs: SmallVec<[TypedIdent; 2]>,
-    stmts: Vec<CSGStmt>,
-    ret: CSGOp,
+    pub span: Span,
+    pub name: Ident,
+    pub inputs: SmallVec<[TypedIdent; 2]>,
+    pub stmts: Vec<CSGStmt>,
+    pub ret: CSGOp,
 }
 
 ///A export function, which defines a clear signature
+#[derive(Clone, Debug)]
 pub struct ExportFn {
-    span: Span,
-    inputs: SmallVec<[TypedIdent; 2]>,
-    outputs: SmallVec<[Ty; 3]>,
-    stmts: Vec<CSGStmt>,
-    access_descriptors: SmallVec<[AccessDesc; 2]>,
+    pub span: Span,
+    pub name: Ident,
+    pub inputs: SmallVec<[TypedIdent; 2]>,
+    pub stmts: Vec<CSGStmt>,
+    pub access_descriptors: SmallVec<[AccessDesc; 2]>,
 }
 
 ///Last part of an export function. Describes how, and based on what parameters trees are evaluated.
 ///
 /// Implicitly declares the return type of a [ExportFn].
+#[derive(Clone, Debug)]
 pub struct AccessDesc {
     ///The tree that is being called
     pub tree_ref: Ident,

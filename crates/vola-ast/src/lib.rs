@@ -20,15 +20,18 @@ mod parser;
 
 pub use parser::{parse_file, parse_from_bytes, parse_string};
 
+#[derive(Clone, Debug)]
 pub enum AstEntry {
+    Comment,
     Entity,
     Concept,
     Operation,
     ImplBlock,
     FieldDefine(FieldDef),
-    FnExport(ExportFn),
+    ExportFn(ExportFn),
 }
 
+#[derive(Clone, Debug)]
 pub struct VolaAst {
     pub entries: Vec<AstEntry>,
 }

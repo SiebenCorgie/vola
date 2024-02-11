@@ -10,7 +10,8 @@ default = ["dot"]
 dot = ["graphviz-rust"]
 
 [dependencies]
-tree-sitter-vola = {git = "https://gitlab.com/tendsinmende/tree-sitter-vola.git"}
+#tree-sitter-vola = {git = "https://gitlab.com/tendsinmende/tree-sitter-vola.git"}
+tree-sitter-vola = {path = "../../../tree-sitter-vola"}
 vola-common = {path = "../vola-common"}
 thiserror.workspace = true
 tree-sitter.workspace = true

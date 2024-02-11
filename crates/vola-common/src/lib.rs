@@ -12,6 +12,7 @@ use annotate_snippets::{
 mod reporter;
 pub use reporter::ErrorReporter;
 use smallstr::SmallString;
+use tree_sitter::Node;
 
 pub type FileString = SmallString<[u8; 32]>;
 
@@ -78,6 +79,10 @@ impl<E: std::error::Error> CommonError<E> {
                 None
             },
         }
+    }
+
+    pub fn new_on_node(node: &Node, source: E) -> Self {
+        CommonError::new(Span::from(node), source)
     }
 }
 
