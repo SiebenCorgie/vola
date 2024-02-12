@@ -1,16 +1,20 @@
 //! The Algebraic AST
 
+use crate::common::{Call, Ident};
 use smallvec::SmallVec;
 use vola_common::Span;
 
-use crate::common::{Call, Ident};
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
 
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum UnaryOp {
     Not,
     Neg,
 }
 
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum BinaryOp {
     Add,
@@ -20,18 +24,21 @@ pub enum BinaryOp {
     Mod,
 }
 
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Clone, Debug)]
 pub struct AlgeExpr {
     pub span: Span,
     pub expr_ty: AlgeExprTy,
 }
 
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum FieldAccessor {
     Digit(usize),
     Ident(Ident),
 }
 
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Clone, Debug)]
 pub enum AlgeExprTy {
     Unary {
@@ -57,5 +64,6 @@ pub enum AlgeExprTy {
 }
 
 //NOTE yet specified!
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Clone, Debug)]
 pub struct AlgeOp {}

@@ -20,6 +20,10 @@ mod parser;
 
 pub use parser::{parse_file, parse_from_bytes, parse_string};
 
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
+
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Clone, Debug)]
 pub enum AstEntry {
     Comment,

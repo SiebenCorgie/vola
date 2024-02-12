@@ -5,6 +5,7 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+
 [dependencies]
 thiserror.workspace = true
 backtrace.workspace = true
@@ -12,4 +13,6 @@ annotate-snippets.workspace = true
 tree-sitter.workspace = true
 ahash.workspace = true
 smallvec.workspace = true
-smallstr.workspace = true
+smallstr = {workspace = true, features = ["serde"]}
+serde = {workspace = true, features = ["derive"]}
+serde-lexpr.workspace = true

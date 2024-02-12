@@ -2,22 +2,25 @@
 
 use std::fmt::Display;
 
-use backtrace::Backtrace;
-
 use annotate_snippets::{
     display_list::{DisplayList, FormatOptions},
     snippet::{Annotation, AnnotationType, Slice, Snippet, SourceAnnotation},
 };
-
-mod reporter;
+use backtrace::Backtrace;
 pub use reporter::ErrorReporter;
+use serde::{Deserialize, Serialize};
 use smallstr::SmallString;
 use tree_sitter::Node;
+
+pub use serde;
+pub use serde_lexpr;
+
+mod reporter;
 
 pub type FileString = SmallString<[u8; 32]>;
 
 ///Source-Code span information.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Span {
     pub file: FileString,
     pub from: (usize, usize),

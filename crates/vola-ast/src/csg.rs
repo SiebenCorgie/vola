@@ -3,9 +3,13 @@ use vola_common::Span;
 
 use crate::{
     alge::AlgeExpr,
-    common::{Call, Ident, Ty, TypedIdent},
+    common::{Call, Ident, TypedIdent},
 };
 
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
+
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Clone, Debug)]
 pub struct CSGOp {
     pub span: Span,
@@ -15,6 +19,7 @@ pub struct CSGOp {
     pub sub_trees: Vec<CSGOp>,
 }
 
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Clone, Debug)]
 pub enum CSGStmt {
     LetStmt {
@@ -29,6 +34,7 @@ pub enum CSGStmt {
     },
 }
 
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Clone, Debug)]
 pub struct FieldDef {
     pub span: Span,
@@ -39,6 +45,7 @@ pub struct FieldDef {
 }
 
 ///A export function, which defines a clear signature
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Clone, Debug)]
 pub struct ExportFn {
     pub span: Span,
@@ -51,6 +58,7 @@ pub struct ExportFn {
 ///Last part of an export function. Describes how, and based on what parameters trees are evaluated.
 ///
 /// Implicitly declares the return type of a [ExportFn].
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Clone, Debug)]
 pub struct AccessDesc {
     ///The tree that is being called
