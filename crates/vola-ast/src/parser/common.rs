@@ -4,7 +4,6 @@ use vola_common::{CommonError, Span};
 use crate::{
     alge::AlgeExpr,
     common::{Call, Digit, Ident, Literal, Ty, TypedIdent},
-    csg::AccessDesc,
     error::ParserError,
 };
 
@@ -29,8 +28,6 @@ impl FromTreeSitter for Ident {
             }
         };
 
-        println!("Ident: {ident}");
-
         Ok(Ident(ident.to_owned()))
     }
 }
@@ -53,8 +50,6 @@ impl FromTreeSitter for Digit {
             }
             Ok(s) => s.to_owned(),
         };
-
-        println!("Parse Digit: {}", node_text);
 
         let int: usize = match node_text.parse() {
             Ok(f) => f,
@@ -156,8 +151,6 @@ impl FromTreeSitter for Literal {
                     Ok(s) => s.to_owned(),
                 };
 
-                println!("Try parsing {node_text}");
-
                 let float: f64 = match node_text.parse() {
                     Ok(f) => f,
                     Err(e) => {
@@ -167,11 +160,14 @@ impl FromTreeSitter for Literal {
                     }
                 };
 
+                ParserError::assert_node_no_error(reporter, node)?;
                 Ok(Literal::FloatLiteral(float))
             }
             "integer_literal" => {
                 //reuse the digit parser, but unwrap the value
                 let digit = Digit::parse(reporter, dta, &node.child(0).unwrap())?;
+
+                ParserError::assert_node_no_error(reporter, node)?;
                 Ok(Literal::IntegerLiteral(digit.0))
             }
             _ => {
@@ -199,7 +195,12 @@ impl FromTreeSitter for TypedIdent {
         ParserError::consume_expected_node_kind(reporter, node.child(1), ":")?;
         let ty = Ty::parse_alge_ty(reporter, dta, node.child(2).as_ref().unwrap())?;
 
-        Ok(TypedIdent { ident, ty })
+        ParserError::assert_node_no_error(reporter, node)?;
+        Ok(TypedIdent {
+            span: Span::from(node),
+            ident,
+            ty,
+        })
     }
 }
 
@@ -212,7 +213,7 @@ impl FromTreeSitter for Call {
     where
         Self: Sized,
     {
-        ParserError::assert_node_kind(reporter, node, "fn_call");
+        ParserError::assert_node_kind(reporter, node, "fn_call")?;
         let mut walker = node.walk();
         let mut children = node.children(&mut walker);
 
@@ -236,6 +237,11 @@ impl FromTreeSitter for Call {
             }
         }
 
-        Ok(Call { ident, args })
+        ParserError::assert_node_no_error(reporter, node)?;
+        Ok(Call {
+            span: Span::from(node),
+            ident,
+            args,
+        })
     }
 }

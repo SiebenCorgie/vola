@@ -14,6 +14,8 @@ use tree_sitter::Node;
 
 pub use serde;
 pub use serde_lexpr;
+#[cfg(feature = "dot")]
+pub mod dot;
 
 mod reporter;
 

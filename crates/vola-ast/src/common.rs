@@ -3,6 +3,7 @@ use smallvec::SmallVec;
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
+use vola_common::Span;
 
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -36,6 +37,7 @@ pub enum Literal {
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TypedIdent {
+    pub span: Span,
     pub ident: Ident,
     pub ty: Ty,
 }
@@ -45,6 +47,7 @@ pub struct TypedIdent {
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Clone, Debug)]
 pub struct Call {
+    pub span: Span,
     pub ident: Ident,
     pub args: SmallVec<[AlgeExpr; 3]>,
 }

@@ -2,8 +2,9 @@ use smallvec::SmallVec;
 use vola_common::{CommonError, ErrorReporter, Span};
 
 use crate::{
+    alge::LetStmt,
     common::{Call, Ident, TypedIdent},
-    csg::{AccessDesc, CSGOp, ExportFn, FieldDef},
+    csg::{AccessDesc, CSGBinding, CSGOp, CSGStmt, ExportFn, FieldDef},
     error::ParserError,
     AstEntry,
 };
@@ -26,17 +27,12 @@ impl FromTreeSitter for AstEntry {
         println!("Teddy B");
         match node.kind() {
             //always ignore
-            "comment" => {
-                println!("comment!");
-                Ok(AstEntry::Comment)
-            }
+            "comment" => Ok(AstEntry::Comment(Span::from(node))),
             "field_decl" => {
-                println!("Teddv");
                 let field_def = FieldDef::parse(reporter, dta, node)?;
                 Ok(AstEntry::FieldDefine(field_def))
             }
             "field_export" => {
-                println!("Field Export");
                 let field_export = ExportFn::parse(reporter, dta, node)?;
                 Ok(AstEntry::ExportFn(field_export))
             }
@@ -86,6 +82,7 @@ impl FromTreeSitter for FieldDef {
             Err(ParserError::NoChildAvailable)
         }?;
 
+        ParserError::assert_node_no_error(reporter, node)?;
         Ok(FieldDef {
             span: Span::from(node),
             name: field_ident,
@@ -158,9 +155,13 @@ impl FromTreeSitter for ExportFn {
                 "comment" => {}
                 "let_stmt" => {
                     //take away the ;
+                    stmts.push(CSGStmt::LetStmt(LetStmt::parse(reporter, dta, &next_node)?));
                     ParserError::consume_expected_node_kind(reporter, children.next(), ";")?;
                 }
                 "csg_binding" => {
+                    stmts.push(CSGStmt::CSGBinding(CSGBinding::parse(
+                        reporter, dta, &next_node,
+                    )?));
                     //take away the ;
                     ParserError::consume_expected_node_kind(reporter, children.next(), ";")?;
                 }
@@ -212,6 +213,7 @@ impl FromTreeSitter for ExportFn {
             return Err(err);
         }
 
+        ParserError::assert_node_no_error(reporter, node)?;
         Ok(ExportFn {
             span: Span::from(node),
             name: field_ident,

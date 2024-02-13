@@ -14,28 +14,39 @@ use csg::{ExportFn, FieldDef};
 mod alge;
 mod common;
 mod csg;
-mod dot;
 mod error;
 mod parser;
+
+#[cfg(feature = "dot")]
+pub mod dot;
 
 pub use parser::{parse_file, parse_from_bytes, parse_string};
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
+use vola_common::Span;
 
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Clone, Debug)]
 pub enum AstEntry {
-    Comment,
-    Entity,
-    Concept,
-    Operation,
-    ImplBlock,
+    Comment(Span),
+    Entity(Span),
+    Concept(Span),
+    Operation(Span),
+    ImplBlock(Span),
     FieldDefine(FieldDef),
     ExportFn(ExportFn),
 }
 
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Clone, Debug)]
 pub struct VolaAst {
     pub entries: Vec<AstEntry>,
+}
+
+#[cfg(feature = "serde")]
+impl VolaAst {
+    pub fn to_sexpr(&self) -> String {
+        vola_common::serde_lexpr::to_string(self).unwrap_or("error".to_string())
+    }
 }

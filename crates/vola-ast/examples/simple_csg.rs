@@ -1,4 +1,4 @@
-use vola_ast::VolaAst;
+use vola_ast::{dot::ast_to_svg, VolaAst};
 
 pub fn main() {
     let string = "
@@ -29,5 +29,5 @@ export myField(p: vec3, translation: vec3){
         }
     };
 
-    println!("AST:\n{:#?}", ast);
+    ast_to_svg(&ast, "simple_csg");
 }

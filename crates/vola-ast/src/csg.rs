@@ -2,7 +2,7 @@ use smallvec::SmallVec;
 use vola_common::Span;
 
 use crate::{
-    alge::AlgeExpr,
+    alge::{AlgeExpr, LetStmt},
     common::{Call, Ident, TypedIdent},
 };
 
@@ -22,16 +22,17 @@ pub struct CSGOp {
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Clone, Debug)]
 pub enum CSGStmt {
-    LetStmt {
-        span: Span,
-        decl_name: Ident,
-        expr: AlgeExpr,
-    },
-    CSGBinding {
-        span: Span,
-        decl_name: Ident,
-        tree: CSGOp,
-    },
+    LetStmt(LetStmt),
+    CSGBinding(CSGBinding),
+}
+
+///Binds a CSG-Tree to an identifier
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[derive(Clone, Debug)]
+pub struct CSGBinding {
+    pub span: Span,
+    pub decl_name: Ident,
+    pub tree: CSGOp,
 }
 
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
@@ -61,6 +62,7 @@ pub struct ExportFn {
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Clone, Debug)]
 pub struct AccessDesc {
+    pub span: Span,
     ///The tree that is being called
     pub tree_ref: Ident,
     ///The concept that is evaluated based on some arguments

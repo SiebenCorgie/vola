@@ -21,6 +21,10 @@ pub enum ParserError {
     UnexpectedAstNode { kind: String, expected: String },
     #[error("Expected child but got none")]
     NoChildAvailable,
+
+    #[error("Did not expect any further nodes on AST-Level")]
+    LevelNotEmpty,
+
     #[error("UTF8 parser error: {0}")]
     Utf8ParseError(Utf8Error),
     #[error("Parsing float literal failed: {0}")]
@@ -63,6 +67,31 @@ impl ParserError {
                 return Err(Self::NoChildAvailable);
             }
             Some(node) => Self::assert_node_kind(reporter, &node, kind),
+        }
+    }
+    pub fn assert_ast_level_empty(
+        reporter: &mut ErrorReporter<Self>,
+        node: Option<Node>,
+    ) -> Result<(), Self> {
+        if let Some(node) = node {
+            let err = Self::LevelNotEmpty;
+            reporter.push_error(CommonError::new(Span::from(&node), err.clone()));
+            Err(err)
+        } else {
+            Ok(())
+        }
+    }
+
+    pub fn assert_node_no_error(
+        reporter: &mut ErrorReporter<Self>,
+        node: &Node,
+    ) -> Result<(), Self> {
+        if node.has_error() {
+            let err = Self::UnknownError(format!("Ast node {:?} has uncaught error", node));
+            reporter.push_error(CommonError::new(Span::from(node), err.clone()));
+            Err(err)
+        } else {
+            Ok(())
         }
     }
 }
