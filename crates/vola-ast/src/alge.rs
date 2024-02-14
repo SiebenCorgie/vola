@@ -1,6 +1,6 @@
 //! The Algebraic AST
 
-use crate::common::{Call, Ident};
+use crate::common::{Call, Ident, Literal};
 use smallvec::SmallVec;
 use vola_common::Span;
 
@@ -34,8 +34,8 @@ pub struct AlgeExpr {
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum FieldAccessor {
-    Digit(usize),
-    Ident(Ident),
+    Digit { span: Span, digit: usize },
+    Ident { span: Span, ident: Ident },
 }
 
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
@@ -60,7 +60,8 @@ pub enum AlgeExprTy {
         accessors: SmallVec<[FieldAccessor; 1]>,
     },
     Call(Box<Call>),
-    List(Vec<[AlgeExpr; 3]>),
+    List(Vec<AlgeExpr>),
+    Literal(Literal),
 }
 
 //NOTE yet specified!

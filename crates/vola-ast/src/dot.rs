@@ -11,8 +11,8 @@ use vola_common::dot::{
 };
 
 use crate::{
-    alge::{AlgeExpr, LetStmt},
-    common::TypedIdent,
+    alge::{AlgeExpr, AlgeExprTy, FieldAccessor, LetStmt},
+    common::{Call, TypedIdent},
     csg::{AccessDesc, CSGBinding, CSGOp, CSGStmt, ExportFn, FieldDef},
     AstEntry, VolaAst,
 };
@@ -35,7 +35,7 @@ pub fn ast_to_svg(ast: &VolaAst, file_name: &str) {
 
     let dot = builder.graph.print(&mut PrinterContext::default());
 
-    println!("DOT STRING:\n{}", dot);
+    println!("Dot:\n{dot}");
 
     let format = Format::Svg;
     let graph_svg = exec_dot(dot, vec![format.into()]).unwrap();
@@ -168,7 +168,14 @@ impl DotNode for AccessDesc {
     fn shape(&self) -> vola_common::dot::graphviz_rust::attributes::shape {
         vola_common::dot::graphviz_rust::attributes::shape::rarrow
     }
-    fn build_children(&self, builder: GraphvizBuilder) -> GraphvizBuilder {
+    fn build_children(&self, mut builder: GraphvizBuilder) -> GraphvizBuilder {
+        for sib in &self.call.args {
+            builder.add_node(sib);
+            builder.connect(self, sib);
+
+            //now recurse
+            builder = sib.build_children(builder)
+        }
         builder
     }
 }
@@ -188,6 +195,13 @@ impl DotNode for CSGStmt {
         }
     }
 
+    fn color(&self) -> vola_common::dot::graphviz_rust::attributes::color_name {
+        match self {
+            CSGStmt::CSGBinding(_) => vola_common::dot::graphviz_rust::attributes::color_name::blue,
+            CSGStmt::LetStmt(_) => vola_common::dot::graphviz_rust::attributes::color_name::black,
+        }
+    }
+
     fn build_children(&self, builder: GraphvizBuilder) -> GraphvizBuilder {
         match self {
             CSGStmt::CSGBinding(b) => b.build_children(builder),
@@ -203,6 +217,10 @@ impl DotNode for CSGBinding {
 
     fn content(&self) -> String {
         self.decl_name.0.clone()
+    }
+
+    fn color(&self) -> vola_common::dot::graphviz_rust::attributes::color_name {
+        vola_common::dot::graphviz_rust::attributes::color_name::blue
     }
 
     fn build_children(&self, mut builder: GraphvizBuilder) -> GraphvizBuilder {
@@ -237,6 +255,10 @@ impl DotNode for CSGOp {
         format!("{}", self.op.0)
     }
 
+    fn color(&self) -> vola_common::dot::graphviz_rust::attributes::color_name {
+        vola_common::dot::graphviz_rust::attributes::color_name::blue
+    }
+
     fn build_children(&self, mut builder: GraphvizBuilder) -> GraphvizBuilder {
         for stmt in &self.sub_trees {
             builder.add_node(stmt);
@@ -267,7 +289,115 @@ impl DotNode for AlgeExpr {
     }
 
     fn content(&self) -> String {
-        format!("AlgeExpr!")
+        match &self.expr_ty {
+            AlgeExprTy::Binary {
+                left: _,
+                right: _,
+                op,
+            } => format!("{:?}", op),
+            AlgeExprTy::Unary { op, operand: _ } => format!("{:?}", op),
+            AlgeExprTy::Call(_call) => format!("call"),
+            AlgeExprTy::EvalExpr {
+                evaluator,
+                params: _,
+            } => format!("Eval {}", evaluator.0),
+            AlgeExprTy::FieldAccess { src, accessors } => {
+                format!("Access: {}.", src.0)
+            }
+            AlgeExprTy::Ident(i) => format!("{}", i.0),
+            AlgeExprTy::List(_l) => format!("List"),
+            AlgeExprTy::Literal(lit) => format!("Lit: {:?}", lit),
+        }
+    }
+
+    fn build_children(&self, mut builder: GraphvizBuilder) -> GraphvizBuilder {
+        match &self.expr_ty {
+            AlgeExprTy::Binary { left, right, op } => {
+                builder.add_node(left.as_ref());
+                builder.add_node(right.as_ref());
+                builder.connect(self, left.as_ref());
+                builder.connect(self, right.as_ref());
+
+                builder = left.build_children(builder);
+                builder = right.build_children(builder);
+                builder
+            }
+            AlgeExprTy::Unary { op, operand } => {
+                builder.add_node(operand.as_ref());
+                builder.connect(self, operand.as_ref());
+                operand.build_children(builder)
+            }
+            AlgeExprTy::Call(op) => {
+                builder.add_node(op.as_ref());
+                builder.connect(self, op.as_ref());
+                op.build_children(builder)
+            }
+            AlgeExprTy::EvalExpr {
+                evaluator: _,
+                params,
+            } => {
+                for param in params {
+                    builder.add_node(param);
+                    builder.connect(self, param);
+                    builder = param.build_children(builder);
+                }
+                builder
+            }
+            AlgeExprTy::FieldAccess { src: _, accessors } => {
+                for param in accessors {
+                    builder.add_node(param);
+                    builder.connect(self, param);
+                    builder = param.build_children(builder);
+                }
+                builder
+            }
+            AlgeExprTy::List(l) => {
+                for li in l {
+                    builder.add_node(li);
+                    builder.connect(self, li);
+                    builder = li.build_children(builder);
+                }
+                builder
+            }
+            AlgeExprTy::Ident(_) | AlgeExprTy::Literal(_) => builder,
+        }
+    }
+}
+
+impl DotNode for Call {
+    fn id(&self) -> String {
+        format!("Call {:?}..{:?}", self.span.from, self.span.to)
+    }
+    fn content(&self) -> String {
+        format!("call {}", self.ident.0)
+    }
+    fn build_children(&self, mut builder: GraphvizBuilder) -> GraphvizBuilder {
+        for arg in &self.args {
+            builder.add_node(arg);
+            builder.connect(self, arg);
+            builder = arg.build_children(builder);
+        }
+        builder
+    }
+}
+
+impl DotNode for FieldAccessor {
+    fn id(&self) -> String {
+        match self {
+            FieldAccessor::Digit { span, .. } => {
+                format!("FieldAccessor {:?}..{:?}", span.from, span.to)
+            }
+            FieldAccessor::Ident { span, .. } => {
+                format!("FieldAccessor {:?}..{:?}", span.from, span.to)
+            }
+        }
+    }
+
+    fn content(&self) -> String {
+        match self {
+            FieldAccessor::Digit { span: _, digit } => format!("{digit}"),
+            FieldAccessor::Ident { span: _, ident } => format!("{}", ident.0),
+        }
     }
 
     fn build_children(&self, builder: GraphvizBuilder) -> GraphvizBuilder {

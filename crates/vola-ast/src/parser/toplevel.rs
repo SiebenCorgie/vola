@@ -23,8 +23,6 @@ impl FromTreeSitter for AstEntry {
         //Collects all compile-time attributes. They are appended to a toplevel construct,
         // whenever needed.
         //        let mut attrib_collector = Vec::new();
-
-        println!("Teddy B");
         match node.kind() {
             //always ignore
             "comment" => Ok(AstEntry::Comment(Span::from(node))),

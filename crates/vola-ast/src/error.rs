@@ -34,6 +34,9 @@ pub enum ParserError {
 
     #[error("Expected at least one access descriptor. For instance:\n my_field.SDF(p)\n")]
     NoAccessDecs,
+
+    #[error("No accessed field on field_access. Try adding one or multiple field names or numbers. For instance `myobject.fieldname.0`.")]
+    NoAccessedField,
 }
 
 impl ParserError {
