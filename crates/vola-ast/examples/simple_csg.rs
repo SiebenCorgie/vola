@@ -2,6 +2,20 @@ use vola_ast::{dot::ast_to_svg, VolaAst};
 
 pub fn main() {
     let string = "
+
+//Some reusable field definition
+define subField(trans: vec3){
+    csg sphere = Sphere(3.0);
+
+    Union(){
+        Translate(trans){
+            Sphere(2.0)
+        }
+    }{
+        Box([1.0, 0.0, 3.0])
+    }
+}
+
 //Export interface of the SDF
 export myField(p: vec3, translation: vec3){
     let some_formula = translation.x * 2.0;

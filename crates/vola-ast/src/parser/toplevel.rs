@@ -51,7 +51,6 @@ impl FromTreeSitter for AstEntry {
                 todo!()
             }
             _ => {
-                println!("Bing bong");
                 let err = ParserError::UnknownAstNode(node.kind().to_owned());
                 reporter.push_error(CommonError::new(Span::from(node), err));
                 Err(ParserError::UnknownAstNode(node.kind().to_owned()))
@@ -74,24 +73,92 @@ impl FromTreeSitter for FieldDef {
         let mut cursor = node.walk();
         let mut children = node.children(&mut cursor);
 
+        ParserError::consume_expected_node_kind(reporter, children.next(), "define")?;
+
         let field_ident = if let Some(child) = children.next() {
             Ident::parse(reporter, dta, &child)
         } else {
             Err(ParserError::NoChildAvailable)
         }?;
 
+        ParserError::consume_expected_node_kind(reporter, children.next(), "(")?;
+        let mut args = SmallVec::new();
+
+        while let Some(next_node) = children.next() {
+            match next_node.kind() {
+                //found the end
+                ")" => break,
+                "typed_arg" => {
+                    let arg = TypedIdent::parse(reporter, dta, &next_node)?;
+                    args.push(arg);
+                }
+                //part of the list, just ignore
+                "," => {}
+                _ => {
+                    let error = ParserError::UnexpectedAstNode {
+                        kind: next_node.kind().to_owned(),
+                        expected: "typed_arg".to_owned(),
+                    };
+                    reporter.push_error(CommonError::new_on_node(&next_node, error.clone()));
+                    return Err(error);
+                }
+            }
+        }
+
+        //We should start with a block now
+        ParserError::consume_expected_node_kind(reporter, children.next(), "{")?;
+
+        //Parse the block. We only allow csg stmts and comments, but need to end with a dangling csg stmt
+        let mut stmts = Vec::new();
+        let mut ret = None;
+        while let Some(next_node) = children.next() {
+            match next_node.kind() {
+                "comment" => {}
+                "let_stmt" => {
+                    //take away the ;
+                    stmts.push(CSGStmt::LetStmt(LetStmt::parse(reporter, dta, &next_node)?));
+                    ParserError::consume_expected_node_kind(reporter, children.next(), ";")?;
+                }
+                "csg_binding" => {
+                    stmts.push(CSGStmt::CSGBinding(CSGBinding::parse(
+                        reporter, dta, &next_node,
+                    )?));
+                    //take away the ;
+                    ParserError::consume_expected_node_kind(reporter, children.next(), ";")?;
+                }
+
+                "csg_unary" | "csg_binary" | "fn_call" => {
+                    ret = Some(CSGOp::parse(reporter, dta, &next_node)?);
+                    break;
+                }
+
+                _ => {
+                    let error = ParserError::UnexpectedAstNode {
+                        kind: next_node.kind().to_owned(),
+                        expected: "comment | let_stmt | csg_binding | access_decl".to_owned(),
+                    };
+                    reporter.push_error(CommonError::new_on_node(&next_node, error.clone()));
+                    return Err(error);
+                }
+            }
+        }
+
+        ParserError::consume_expected_node_kind(reporter, children.next(), "}")?;
+        ParserError::assert_ast_level_empty(reporter, children.next())?;
         ParserError::assert_node_no_error(reporter, node)?;
+
+        if ret.is_none() {
+            let err = ParserError::NoCSGTreeAtDefineEnd;
+            reporter.push_error(CommonError::new_on_node(&node, err.clone()));
+            return Err(err);
+        }
+
         Ok(FieldDef {
             span: Span::from(node),
             name: field_ident,
-            inputs: SmallVec::new(),
-            stmts: Vec::new(),
-            ret: CSGOp {
-                span: Span::empty(),
-                op: Ident("Teddy".to_owned()),
-                args: SmallVec::new(),
-                sub_trees: Vec::new(),
-            },
+            inputs: args,
+            stmts,
+            ret: ret.unwrap(),
         })
     }
 }

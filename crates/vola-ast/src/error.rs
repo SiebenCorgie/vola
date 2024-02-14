@@ -37,6 +37,9 @@ pub enum ParserError {
 
     #[error("No accessed field on field_access. Try adding one or multiple field names or numbers. For instance `myobject.fieldname.0`.")]
     NoAccessedField,
+
+    #[error("Field define needs to end with a CSG-Tree")]
+    NoCSGTreeAtDefineEnd,
 }
 
 impl ParserError {
