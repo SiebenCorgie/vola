@@ -42,8 +42,21 @@ pub struct TypedIdent {
     pub ty: Ty,
 }
 
-///Call to some `ident` with `args`
+///compile-time argument. Can only sit _above_ a function / be attached to a Toplevel node.
+///
+/// Hints _things_ to the compiler down the road.
+//NOTE: Right now there is no real difference to a _call_. However
+//      Both arg conceptually different, so I decided to split them already, maybe
+//      they diverge further down the line.
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[derive(Clone, Debug)]
+pub struct CTArg {
+    pub span: Span,
+    pub ident: Ident,
+    pub args: SmallVec<[AlgeExpr; 3]>,
+}
 
+///Call to some `ident` with `args`
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Clone, Debug)]
 pub struct Call {

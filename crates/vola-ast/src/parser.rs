@@ -1,9 +1,9 @@
 use std::path::Path;
 
 use tree_sitter::{Parser, TreeCursor};
-use vola_common::{CommonError, ErrorReporter, FileString};
+use vola_common::{CommonError, ErrorReporter, FileString, Span};
 
-use crate::{error::ParserError, AstEntry, VolaAst};
+use crate::{common::CTArg, error::ParserError, AstEntry, TopLevelNode, VolaAst};
 
 mod alge;
 mod common;
@@ -89,9 +89,30 @@ fn parse_data(
     };
 
     let mut cursor = syn_tree.root_node().walk();
+    //Collects args until a non-comment, non-ct-arg node is returned. Attaches all preceeding ctargs
+    // to that toplevel node.
+    let mut ct_args = Vec::with_capacity(0);
     for node in syn_tree.root_node().children(&mut cursor) {
-        if let Ok(tlnode) = AstEntry::parse(&mut reporter, data, &node) {
-            ast.entries.push(tlnode);
+        match node.kind() {
+            "comment" => continue,
+            "ct_attrib" => {
+                if let Ok(ctattrib) = CTArg::parse(&mut reporter, data, &node) {
+                    ct_args.push(ctattrib);
+                }
+            }
+            _ => {
+                if let Ok(tlnode) = AstEntry::parse(&mut reporter, data, &node) {
+                    let mut nodes_attribs = Vec::with_capacity(0);
+                    //Swapout all collected nodes and start with an (usally) empty vec again.
+                    std::mem::swap(&mut ct_args, &mut nodes_attribs);
+                    let entry_node = TopLevelNode {
+                        span: Span::from(&node),
+                        ct_args: nodes_attribs,
+                        entry: tlnode,
+                    };
+                    ast.entries.push(entry_node);
+                }
+            }
         }
     }
 

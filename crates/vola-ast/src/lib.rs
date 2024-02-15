@@ -9,6 +9,7 @@
 //! The AST-Parsers job is to split both (somewhat like a preprocessor I guess?) into independent trees, that reference each other
 //! _by name_.
 
+use common::CTArg;
 use csg::{ExportFn, FieldDef};
 
 mod alge;
@@ -40,8 +41,16 @@ pub enum AstEntry {
 
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Clone, Debug)]
+pub struct TopLevelNode {
+    pub span: Span,
+    pub ct_args: Vec<CTArg>,
+    pub entry: AstEntry,
+}
+
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[derive(Clone, Debug)]
 pub struct VolaAst {
-    pub entries: Vec<AstEntry>,
+    pub entries: Vec<TopLevelNode>,
 }
 
 #[cfg(feature = "serde")]

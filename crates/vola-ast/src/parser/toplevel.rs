@@ -24,8 +24,6 @@ impl FromTreeSitter for AstEntry {
         // whenever needed.
         //        let mut attrib_collector = Vec::new();
         match node.kind() {
-            //always ignore
-            "comment" => Ok(AstEntry::Comment(Span::from(node))),
             "field_decl" => {
                 let field_def = FieldDef::parse(reporter, dta, node)?;
                 Ok(AstEntry::FieldDefine(field_def))
@@ -44,10 +42,6 @@ impl FromTreeSitter for AstEntry {
             }
             "impl_block" => {
                 println!("impl block ->");
-                todo!()
-            }
-            "ct_attrib" => {
-                println!("ct attrib ->");
                 todo!()
             }
             _ => {

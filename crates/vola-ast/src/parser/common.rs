@@ -2,8 +2,8 @@ use smallvec::SmallVec;
 use vola_common::{CommonError, Span};
 
 use crate::{
-    alge::AlgeExpr,
-    common::{Call, Digit, Ident, Literal, Ty, TypedIdent},
+    alge::{AlgeExpr, AlgeExprTy},
+    common::{CTArg, Call, Digit, Ident, Literal, Ty, TypedIdent},
     error::ParserError,
 };
 
@@ -243,5 +243,33 @@ impl FromTreeSitter for Call {
             ident,
             args,
         })
+    }
+}
+
+impl FromTreeSitter for CTArg {
+    fn parse(
+        reporter: &mut vola_common::ErrorReporter<ParserError>,
+        dta: &[u8],
+        node: &tree_sitter::Node,
+    ) -> Result<Self, ParserError>
+    where
+        Self: Sized,
+    {
+        ParserError::assert_node_kind(reporter, node, "ct_attrib")?;
+        let mut walker = node.walk();
+        let mut children = node.children(&mut walker);
+
+        ParserError::consume_expected_node_kind(reporter, children.next(), "#")?;
+        ParserError::consume_expected_node_kind(reporter, children.next(), "[")?;
+
+        //NOTE: Right now we reuse the call parser.
+        let call = Call::parse(reporter, dta, &children.next().unwrap())?;
+
+        let Call { span, ident, args } = call;
+
+        ParserError::assert_ast_level_empty(reporter, children.next())?;
+        ParserError::assert_node_no_error(reporter, node)?;
+
+        Ok(CTArg { span, ident, args })
     }
 }

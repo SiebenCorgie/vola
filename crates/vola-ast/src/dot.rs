@@ -12,9 +12,9 @@ use vola_common::dot::{
 
 use crate::{
     alge::{AlgeExpr, AlgeExprTy, FieldAccessor, LetStmt},
-    common::{Call, TypedIdent},
+    common::{CTArg, Call, TypedIdent},
     csg::{AccessDesc, CSGBinding, CSGOp, CSGStmt, ExportFn, FieldDef},
-    AstEntry, VolaAst,
+    AstEntry, TopLevelNode, VolaAst,
 };
 
 ///Creates a Dot svg for `ast`.
@@ -35,12 +35,30 @@ pub fn ast_to_svg(ast: &VolaAst, file_name: &str) {
 
     let dot = builder.graph.print(&mut PrinterContext::default());
 
-    println!("Dot:\n{dot}");
-
     let format = Format::Svg;
     let graph_svg = exec_dot(dot, vec![format.into()]).unwrap();
 
     std::fs::write(file_name, graph_svg).unwrap();
+}
+
+impl DotNode for TopLevelNode {
+    fn id(&self) -> String {
+        format!("TopLevelNode {:?}..{:?}", self.span.from, self.span.to)
+    }
+    fn content(&self) -> String {
+        format!("Top Level Node")
+    }
+    fn build_children(&self, mut builder: GraphvizBuilder) -> GraphvizBuilder {
+        for ct in &self.ct_args {
+            builder.add_node(ct);
+            builder.connect(self, ct);
+            builder = ct.build_children(builder)
+        }
+
+        builder.add_node(&self.entry);
+        builder.connect(self, &self.entry);
+        self.entry.build_children(builder)
+    }
 }
 
 impl DotNode for AstEntry {
@@ -68,7 +86,7 @@ impl DotNode for AstEntry {
         }
     }
 
-    fn build_children(&self, mut builder: GraphvizBuilder) -> GraphvizBuilder {
+    fn build_children(&self, builder: GraphvizBuilder) -> GraphvizBuilder {
         match self {
             AstEntry::Comment(_s) => builder,
             AstEntry::Entity(_s) => builder,
@@ -216,7 +234,7 @@ impl DotNode for CSGBinding {
     }
 
     fn content(&self) -> String {
-        self.decl_name.0.clone()
+        format!("csg {}", self.decl_name.0.clone())
     }
 
     fn color(&self) -> vola_common::dot::graphviz_rust::attributes::color_name {
@@ -419,6 +437,23 @@ impl DotNode for TypedIdent {
         format!("{} : {:?}", self.ident.0, self.ty)
     }
     fn build_children(&self, builder: GraphvizBuilder) -> GraphvizBuilder {
+        builder
+    }
+}
+
+impl DotNode for CTArg {
+    fn id(&self) -> String {
+        format!("CompileTimeArg {:?}..{:?}", self.span.from, self.span.to)
+    }
+    fn content(&self) -> String {
+        format!("CTArg: {}", self.ident.0)
+    }
+    fn build_children(&self, mut builder: GraphvizBuilder) -> GraphvizBuilder {
+        for arg in &self.args {
+            builder.add_node(arg);
+            builder.connect(self, arg);
+            builder = arg.build_children(builder);
+        }
         builder
     }
 }
