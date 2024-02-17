@@ -20,14 +20,14 @@ operation Translate(trans: vec3);
 //declares that `translate` takes a sub-expression and the
 //field
 impl Translate<sub> for SDF3D(at){
-     at = at - trans;
+    at = at - trans;
     eval sub(at)
 }
 
 ///Simple union operation
 operation Union();
 impl Union<left, right> for SDF3D(at) {
-     let left = eval l(at);
+    let left = eval l(at);
     let right = eval r(at);
     let new_result = min(left, right);
     new_result

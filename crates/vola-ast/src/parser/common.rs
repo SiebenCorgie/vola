@@ -225,6 +225,7 @@ impl FromTreeSitter for Call {
         while let Some(next_node) = children.next() {
             match next_node.kind() {
                 ")" => break,
+                "," => {}
                 "alge_expr" => args.push(AlgeExpr::parse(reporter, dta, &next_node)?),
                 _ => {
                     let err = ParserError::UnexpectedAstNode {

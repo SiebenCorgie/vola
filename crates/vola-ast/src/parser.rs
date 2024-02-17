@@ -111,6 +111,11 @@ fn parse_data(
                         entry: tlnode,
                     };
                     ast.entries.push(entry_node);
+                } else {
+                    reporter.push_error(CommonError::new(
+                        Span::from(&node),
+                        ParserError::UnknownAstNode(node.kind().to_string()),
+                    ))
                 }
             }
         }

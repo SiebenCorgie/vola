@@ -2,8 +2,8 @@ use smallvec::SmallVec;
 use vola_common::{CommonError, ErrorReporter, Span};
 
 use crate::{
-    alge::LetStmt,
-    common::{Call, Ident, TypedIdent},
+    alge::{ImplBlock, LetStmt},
+    common::{Ident, TypedIdent},
     csg::{AccessDesc, CSGBinding, CSGConcept, CSGNodeDef, CSGOp, CSGStmt, ExportFn, FieldDef},
     error::ParserError,
     AstEntry,
@@ -40,10 +40,7 @@ impl FromTreeSitter for AstEntry {
                 let def = CSGConcept::parse(reporter, dta, node)?;
                 Ok(AstEntry::Concept(def))
             }
-            "impl_block" => {
-                println!("impl block ->");
-                Ok(AstEntry::ImplBlock(Span::empty()))
-            }
+            "impl_block" => Ok(AstEntry::ImplBlock(ImplBlock::parse(reporter, dta, node)?)),
             _ => {
                 let err = ParserError::UnknownAstNode(node.kind().to_owned());
                 reporter.push_error(CommonError::new(Span::from(node), err));

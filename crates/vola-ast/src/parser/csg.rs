@@ -1,4 +1,4 @@
-use smallvec::SmallVec;
+use smallvec::{smallvec, SmallVec};
 use vola_common::{CommonError, ErrorReporter, Span};
 
 use crate::{
@@ -203,7 +203,7 @@ impl FromTreeSitter for CSGNodeDef {
                 "typed_arg" => args.push(TypedIdent::parse(reporter, dta, &next_node)?),
                 _ => {
                     let err = ParserError::UnexpectedAstNode {
-                        kind: node.kind().to_owned(),
+                        kind: next_node.kind().to_owned(),
                         expected: "typed_arg | )".to_owned(),
                     };
                     reporter.push_error(CommonError::new(Span::from(node), err.clone()));
@@ -246,25 +246,44 @@ impl FromTreeSitter for CSGConcept {
 
         let next_node = children.next().unwrap();
         let arg = match next_node.kind() {
-            "->" => None,
+            //No src ty
+            "->" => SmallVec::new(),
+            //single src ty
             "alge_type" => {
-                let ty = Some(Ty::parse_alge_ty(reporter, dta, &next_node)?);
+                let ty = Ty::parse_alge_ty(reporter, dta, &next_node)?;
                 //Consume the expected -> now
                 ParserError::consume_expected_node_kind(reporter, children.next(), "->")?;
-                ty
+                smallvec![ty]
+            }
+            //multiple src types
+            "(" => {
+                let mut tys = SmallVec::new();
+                while let Some(next_node) = children.next() {
+                    match next_node.kind() {
+                        ")" => break,
+                        "alge_type" => tys.push(Ty::parse_alge_ty(reporter, dta, &next_node)?),
+                        _ => {
+                            let err = ParserError::UnexpectedAstNode {
+                                kind: next_node.kind().to_owned(),
+                                expected: ") | alge_ty".to_owned(),
+                            };
+                            reporter.push_error(CommonError::new(Span::from(node), err.clone()));
+                            return Err(err);
+                        }
+                    }
+                }
+                tys
             }
             _ => {
                 let err = ParserError::UnexpectedAstNode {
-                    kind: node.kind().to_owned(),
-                    expected: "-> | alge_ty".to_owned(),
+                    kind: next_node.kind().to_owned(),
+                    expected: "-> | alge_ty | (".to_owned(),
                 };
                 reporter.push_error(CommonError::new(Span::from(node), err.clone()));
                 return Err(err);
             }
         };
         let result_ty = Ty::parse_alge_ty(reporter, dta, children.next().as_ref().unwrap())?;
-
-        println!("Got dst_ty: {:?}, & resty: {:?}", arg, result_ty);
 
         ParserError::consume_expected_node_kind(reporter, children.next(), ";")?;
         ParserError::assert_ast_level_empty(reporter, children.next())?;

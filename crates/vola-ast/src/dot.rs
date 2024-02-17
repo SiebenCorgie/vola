@@ -1,6 +1,3 @@
-use std::hash::BuildHasher;
-
-use ahash::AHasher;
 use vola_common::dot::{
     graphviz_rust::{
         cmd::Format,
@@ -11,8 +8,10 @@ use vola_common::dot::{
 };
 
 use crate::{
-    alge::{AlgeExpr, AlgeExprTy, FieldAccessor, LetStmt},
-    common::{CTArg, Call, Ty, TypedIdent},
+    alge::{
+        AlgeExpr, AlgeExprTy, AlgeStmt, AssignStmt, EvalExpr, FieldAccessor, ImplBlock, LetStmt,
+    },
+    common::{CTArg, Call, TypedIdent},
     csg::{
         AccessDesc, CSGBinding, CSGConcept, CSGNodeDef, CSGNodeTy, CSGOp, CSGStmt, ExportFn,
         FieldDef,
@@ -70,7 +69,7 @@ impl DotNode for AstEntry {
             AstEntry::Comment(s) => format!("Comment {:?}..{:?}", s.from, s.to),
             AstEntry::CSGNodeDef(def) => def.id(),
             AstEntry::Concept(def) => def.id(),
-            AstEntry::ImplBlock(s) => format!("ImplBlock {:?}..{:?}", s.from, s.to),
+            AstEntry::ImplBlock(b) => b.id(),
             AstEntry::FieldDefine(fd) => fd.id(),
             AstEntry::ExportFn(ef) => ef.id(),
         }
@@ -81,7 +80,7 @@ impl DotNode for AstEntry {
             AstEntry::Comment(_s) => format!("Comment"),
             AstEntry::CSGNodeDef(def) => def.content(),
             AstEntry::Concept(s) => s.content(),
-            AstEntry::ImplBlock(_s) => format!("ImplBlock"),
+            AstEntry::ImplBlock(b) => b.content(),
             AstEntry::FieldDefine(fd) => fd.content(),
             AstEntry::ExportFn(ef) => ef.content(),
         }
@@ -92,7 +91,7 @@ impl DotNode for AstEntry {
             AstEntry::Comment(_s) => builder,
             AstEntry::CSGNodeDef(def) => def.build_children(builder),
             AstEntry::Concept(s) => s.build_children(builder),
-            AstEntry::ImplBlock(_s) => builder,
+            AstEntry::ImplBlock(b) => b.build_children(builder),
             AstEntry::FieldDefine(fd) => fd.build_children(builder),
             AstEntry::ExportFn(ef) => ef.build_children(builder),
         }
@@ -198,6 +197,94 @@ impl DotNode for AccessDesc {
     }
 }
 
+impl DotNode for ImplBlock {
+    fn id(&self) -> String {
+        format!("ImplBlock {:?}..{:?}", self.span.from, self.span.to)
+    }
+
+    fn content(&self) -> String {
+        format!(
+            "impl {}<{}> for {}({})",
+            self.dst.0,
+            self.operands.len(),
+            self.concept.0,
+            self.concept_arg_naming.len()
+        )
+    }
+
+    fn build_children(&self, mut builder: GraphvizBuilder) -> GraphvizBuilder {
+        //Add all sub nodes and connect them to our selfs
+        for stmt in &self.stmts {
+            builder.add_node(stmt);
+            builder.connect(self, stmt);
+            builder = stmt.build_children(builder)
+        }
+
+        //Finally add accessors
+        builder.add_node(&self.return_expr);
+        builder.connect(self, &self.return_expr);
+        builder = self.return_expr.build_children(builder);
+
+        builder
+    }
+}
+
+impl DotNode for AlgeStmt {
+    fn id(&self) -> String {
+        match &self {
+            AlgeStmt::Assign(a) => a.id(),
+            AlgeStmt::DeadEval(eval) => eval.id(),
+            AlgeStmt::Let(l) => l.id(),
+        }
+    }
+    fn content(&self) -> String {
+        match self {
+            AlgeStmt::Assign(a) => a.content(),
+            AlgeStmt::DeadEval(a) => a.content(),
+            AlgeStmt::Let(a) => a.content(),
+        }
+    }
+    fn build_children(&self, builder: GraphvizBuilder) -> GraphvizBuilder {
+        match self {
+            AlgeStmt::Assign(a) => a.build_children(builder),
+            AlgeStmt::DeadEval(a) => a.build_children(builder),
+            AlgeStmt::Let(l) => l.build_children(builder),
+        }
+    }
+}
+
+impl DotNode for AssignStmt {
+    fn id(&self) -> String {
+        format!("assign {:?}..{:?}", self.span.from, self.span.to)
+    }
+    fn content(&self) -> String {
+        format!("{} = ", self.dst.0)
+    }
+    fn build_children(&self, mut builder: GraphvizBuilder) -> GraphvizBuilder {
+        builder.add_node(&self.expr);
+        builder.connect(self, &self.expr);
+        self.expr.build_children(builder)
+    }
+}
+
+impl DotNode for EvalExpr {
+    fn id(&self) -> String {
+        format!("EvalExpr {:?}..{:?}", self.span.from, self.span.to)
+    }
+    fn content(&self) -> String {
+        format!("eval {} ", self.evaluator.0)
+    }
+    fn build_children(&self, mut builder: GraphvizBuilder) -> GraphvizBuilder {
+        for arg in &self.params {
+            builder.add_node(arg);
+            builder.connect(self, arg);
+            builder = arg.build_children(builder);
+        }
+
+        builder
+    }
+}
+
 impl DotNode for CSGStmt {
     fn id(&self) -> String {
         match self {
@@ -299,7 +386,11 @@ impl DotNode for CSGOp {
 
 impl DotNode for AlgeExpr {
     fn id(&self) -> String {
-        format!("AlgeExpr {:?}..{:?}", self.span.from, self.span.to)
+        match &self.expr_ty {
+            AlgeExprTy::EvalExpr(e) => e.id(),
+            AlgeExprTy::Call(c) => c.id(),
+            _ => format!("AlgeExpr {:?}..{:?}", self.span.from, self.span.to),
+        }
     }
 
     fn shape(&self) -> vola_common::dot::graphviz_rust::attributes::shape {
@@ -314,12 +405,9 @@ impl DotNode for AlgeExpr {
                 op,
             } => format!("{:?}", op),
             AlgeExprTy::Unary { op, operand: _ } => format!("{:?}", op),
-            AlgeExprTy::Call(_call) => format!("call"),
-            AlgeExprTy::EvalExpr {
-                evaluator,
-                params: _,
-            } => format!("Eval {}", evaluator.0),
-            AlgeExprTy::FieldAccess { src, accessors } => {
+            AlgeExprTy::Call(call) => call.content(),
+            AlgeExprTy::EvalExpr(eex) => eex.content(),
+            AlgeExprTy::FieldAccess { src, accessors: _ } => {
                 format!("Access: {}.", src.0)
             }
             AlgeExprTy::Ident(i) => format!("{}", i.0),
@@ -345,22 +433,8 @@ impl DotNode for AlgeExpr {
                 builder.connect(self, operand.as_ref());
                 operand.build_children(builder)
             }
-            AlgeExprTy::Call(op) => {
-                builder.add_node(op.as_ref());
-                builder.connect(self, op.as_ref());
-                op.build_children(builder)
-            }
-            AlgeExprTy::EvalExpr {
-                evaluator: _,
-                params,
-            } => {
-                for param in params {
-                    builder.add_node(param);
-                    builder.connect(self, param);
-                    builder = param.build_children(builder);
-                }
-                builder
-            }
+            AlgeExprTy::Call(op) => op.build_children(builder),
+            AlgeExprTy::EvalExpr(e) => e.build_children(builder),
             AlgeExprTy::FieldAccess { src: _, accessors } => {
                 for param in accessors {
                     builder.add_node(param);
@@ -483,8 +557,11 @@ impl DotNode for CSGConcept {
         format!("CSGConcept {:?}..{:?}", self.span.from, self.span.to)
     }
     fn content(&self) -> String {
-        if let Some(arg) = &self.src_ty {
-            format!("concept {}: {:?} -> {:?}", self.name.0, arg, self.dst_ty)
+        if self.src_ty.len() > 0 {
+            format!(
+                "concept {}: {:?} -> {:?}",
+                self.name.0, self.src_ty, self.dst_ty
+            )
         } else {
             format!("concept {}: -> {:?}", self.name.0, self.dst_ty)
         }

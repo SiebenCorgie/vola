@@ -40,6 +40,9 @@ pub enum ParserError {
 
     #[error("Field define needs to end with a CSG-Tree")]
     NoCSGTreeAtDefineEnd,
+
+    #[error("The impl-block must have a algebraic expression as its last statement")]
+    NoAlgeExprAtEnd,
 }
 
 impl ParserError {

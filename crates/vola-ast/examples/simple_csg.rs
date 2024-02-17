@@ -5,7 +5,7 @@ pub fn main() {
         Ok(ast) => ast,
         Err((partial_ast, mut reporter)) => {
             reporter.report_all();
-            println!("\nGot {} entries in toplevel!", partial_ast.entries.len());
+            //println!("\nGot {} entries in toplevel!", partial_ast.entries.len());
             return;
         }
     };

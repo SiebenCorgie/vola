@@ -9,6 +9,7 @@
 //! The AST-Parsers job is to split both (somewhat like a preprocessor I guess?) into independent trees, that reference each other
 //! _by name_.
 
+use alge::ImplBlock;
 use common::CTArg;
 use csg::{CSGConcept, CSGNodeDef, ExportFn, FieldDef};
 
@@ -33,7 +34,7 @@ pub enum AstEntry {
     Comment(Span),
     Concept(CSGConcept),
     CSGNodeDef(CSGNodeDef),
-    ImplBlock(Span),
+    ImplBlock(ImplBlock),
     FieldDefine(FieldDef),
     ExportFn(ExportFn),
 }

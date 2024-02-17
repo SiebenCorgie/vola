@@ -4,7 +4,10 @@ use smallvec::SmallVec;
 use vola_common::{CommonError, ErrorReporter, Span};
 
 use crate::{
-    alge::{AlgeExpr, AlgeExprTy, BinaryOp, FieldAccessor, LetStmt, UnaryOp},
+    alge::{
+        AlgeExpr, AlgeExprTy, AlgeStmt, AssignStmt, BinaryOp, EvalExpr, FieldAccessor, ImplBlock,
+        LetStmt, UnaryOp,
+    },
     common::{Call, Digit, Ident, Literal},
     error::ParserError,
 };
@@ -82,37 +85,7 @@ impl FromTreeSitter for AlgeExpr {
                     op: binop,
                 }
             }
-            "eval_expr" => {
-                let mut walker = child_node.walk();
-                let mut children = child_node.children(&mut walker);
-                ParserError::consume_expected_node_kind(reporter, children.next(), "eval")?;
-                let evaluated = Ident::parse(reporter, dta, &children.next().unwrap())?;
-                ParserError::consume_expected_node_kind(reporter, children.next(), ")")?;
-
-                let mut eval_params = Vec::new();
-                while let Some(next_node) = children.next() {
-                    match next_node.kind() {
-                        ")" => break,
-                        "alge_expr" => {
-                            eval_params.push(AlgeExpr::parse(reporter, dta, &next_node)?)
-                        }
-                        _ => {
-                            let err = ParserError::UnexpectedAstNode {
-                                kind: node.kind().to_owned(),
-                                expected: ") | alge_expr | . ".to_owned(),
-                            };
-                            reporter.push_error(CommonError::new(Span::from(node), err.clone()));
-                            return Err(err);
-                        }
-                    }
-                }
-                ParserError::assert_ast_level_empty(reporter, children.next())?;
-
-                AlgeExprTy::EvalExpr {
-                    evaluator: evaluated,
-                    params: eval_params,
-                }
-            }
+            "eval_expr" => AlgeExprTy::EvalExpr(EvalExpr::parse(reporter, dta, &child_node)?),
             "(" => {
                 //parse inner and return
                 let inner = AlgeExpr::parse(reporter, dta, &node.child(1).unwrap())?;
@@ -148,7 +121,7 @@ impl FromTreeSitter for AlgeExpr {
                                 }
                                 _ => {
                                     let err = ParserError::UnexpectedAstNode {
-                                        kind: node.kind().to_owned(),
+                                        kind: next_field.kind().to_owned(),
                                         expected: "digit | identifier | .".to_owned(),
                                     };
                                     reporter.push_error(CommonError::new(
@@ -161,7 +134,7 @@ impl FromTreeSitter for AlgeExpr {
                         }
                     } else {
                         let err = ParserError::UnexpectedAstNode {
-                            kind: node.kind().to_owned(),
+                            kind: next_node.kind().to_owned(),
                             expected: "field_access_list".to_owned(),
                         };
                         reporter.push_error(CommonError::new(Span::from(node), err.clone()));
@@ -199,7 +172,7 @@ impl FromTreeSitter for AlgeExpr {
                         "alge_expr" => list.push(AlgeExpr::parse(reporter, dta, &next_node)?),
                         _ => {
                             let err = ParserError::UnexpectedAstNode {
-                                kind: node.kind().to_owned(),
+                                kind: next_node.kind().to_owned(),
                                 expected: ", | ] | alge_expr ".to_owned(),
                             };
                             reporter.push_error(CommonError::new(Span::from(node), err.clone()));
@@ -213,7 +186,7 @@ impl FromTreeSitter for AlgeExpr {
             }
             _ => {
                 let err = ParserError::UnexpectedAstNode {
-                    kind: node.kind().to_owned(),
+                    kind: child_node.kind().to_owned(),
                     expected: " unary expression| binary expression | eval expression | (alge expression) | literal | field access | identifier | call | list ".to_owned(),
                 };
                 reporter.push_error(CommonError::new(Span::from(node), err.clone()));
@@ -284,5 +257,280 @@ impl FromTreeSitter for LetStmt {
             decl_name: ident,
             expr: alge_expr,
         })
+    }
+}
+
+impl FromTreeSitter for AssignStmt {
+    fn parse(
+        reporter: &mut ErrorReporter<ParserError>,
+        dta: &[u8],
+        node: &tree_sitter::Node,
+    ) -> Result<Self, ParserError>
+    where
+        Self: Sized,
+    {
+        ParserError::assert_node_kind(reporter, node, "assign_stmt")?;
+
+        let mut walker = node.walk();
+        let mut children = node.children(&mut walker);
+
+        let ident = Ident::parse(reporter, dta, &children.next().unwrap())?;
+        ParserError::consume_expected_node_kind(reporter, children.next(), "=")?;
+        let alge_expr = AlgeExpr::parse(reporter, dta, &children.next().unwrap())?;
+
+        ParserError::assert_ast_level_empty(reporter, children.next())?;
+        ParserError::assert_node_no_error(reporter, node)?;
+        Ok(AssignStmt {
+            span: Span::from(node),
+            dst: ident,
+            expr: alge_expr,
+        })
+    }
+}
+
+impl FromTreeSitter for EvalExpr {
+    fn parse(
+        reporter: &mut ErrorReporter<ParserError>,
+        dta: &[u8],
+        node: &tree_sitter::Node,
+    ) -> Result<Self, ParserError>
+    where
+        Self: Sized,
+    {
+        ParserError::assert_node_kind(reporter, node, "eval_expr")?;
+
+        let mut walker = node.walk();
+        let mut children = node.children(&mut walker);
+        ParserError::consume_expected_node_kind(reporter, children.next(), "eval")?;
+        let evaluated = Ident::parse(reporter, dta, &children.next().unwrap())?;
+        ParserError::consume_expected_node_kind(reporter, children.next(), "(")?;
+
+        let mut eval_params = Vec::new();
+        while let Some(next_node) = children.next() {
+            match next_node.kind() {
+                ")" => break,
+                "alge_expr" => eval_params.push(AlgeExpr::parse(reporter, dta, &next_node)?),
+                _ => {
+                    let err = ParserError::UnexpectedAstNode {
+                        kind: next_node.kind().to_owned(),
+                        expected: ") | alge_expr | . ".to_owned(),
+                    };
+                    reporter.push_error(CommonError::new(Span::from(node), err.clone()));
+                    return Err(err);
+                }
+            }
+        }
+        ParserError::assert_ast_level_empty(reporter, children.next())?;
+        ParserError::assert_node_no_error(reporter, node)?;
+
+        Ok(EvalExpr {
+            span: Span::from(node),
+            evaluator: evaluated,
+            params: eval_params,
+        })
+    }
+}
+
+impl FromTreeSitter for ImplBlock {
+    fn parse(
+        reporter: &mut ErrorReporter<ParserError>,
+        dta: &[u8],
+        node: &tree_sitter::Node,
+    ) -> Result<Self, ParserError>
+    where
+        Self: Sized,
+    {
+        ParserError::assert_node_kind(reporter, node, "impl_block")?;
+
+        let mut walker = node.walk();
+        let mut children = node.children(&mut walker);
+
+        ParserError::consume_expected_node_kind(reporter, children.next(), "impl")?;
+        let dst = Ident::parse(reporter, dta, children.next().as_ref().unwrap())?;
+
+        //Parse operands
+        let next_node = children.next().unwrap();
+
+        let operands = match next_node.kind() {
+            "<" => {
+                let mut operands = SmallVec::new();
+                while let Some(next_node) = children.next() {
+                    match next_node.kind() {
+                        "identifier" => operands.push(Ident::parse(reporter, dta, &next_node)?),
+                        "," => {} //ignore that
+                        ">" => break,
+                        _ => {
+                            let err = ParserError::UnexpectedAstNode {
+                                kind: next_node.kind().to_owned(),
+                                expected: "ident | , | >".to_owned(),
+                            };
+                            reporter.push_error(CommonError::new(Span::from(node), err.clone()));
+                            return Err(err);
+                        }
+                    }
+                }
+
+                ParserError::consume_expected_node_kind(reporter, children.next(), "for")?;
+                operands
+            }
+            "for" => SmallVec::new(),
+            _ => {
+                let err = ParserError::UnexpectedAstNode {
+                    kind: next_node.kind().to_owned(),
+                    expected: "for | < ".to_owned(),
+                };
+                reporter.push_error(CommonError::new(Span::from(node), err.clone()));
+                return Err(err);
+            }
+        };
+
+        let concept = Ident::parse(reporter, dta, children.next().as_ref().unwrap())?;
+
+        //Parse the renaming if there is any
+        let next_node = children.next().unwrap();
+        let concept_arg_naming = match next_node.kind() {
+            "(" => {
+                let mut renaming = SmallVec::new();
+                while let Some(next_node) = children.next() {
+                    match next_node.kind() {
+                        "identifier" => renaming.push(Ident::parse(reporter, dta, &next_node)?),
+                        "," => {}
+                        ")" => break,
+                        _ => {
+                            let err = ParserError::UnexpectedAstNode {
+                                kind: next_node.kind().to_owned(),
+                                expected: "identifier | , | ) ".to_owned(),
+                            };
+                            reporter.push_error(CommonError::new(Span::from(node), err.clone()));
+                            return Err(err);
+                        }
+                    }
+                }
+
+                ParserError::consume_expected_node_kind(reporter, children.next(), "{")?;
+                renaming
+            }
+            "{" => SmallVec::new(),
+            _ => {
+                let err = ParserError::UnexpectedAstNode {
+                    kind: next_node.kind().to_owned(),
+                    expected: "{ | ( ".to_owned(),
+                };
+                reporter.push_error(CommonError::new(Span::from(node), err.clone()));
+                return Err(err);
+            }
+        };
+
+        //Now parse the block
+
+        let block_node = children.next().unwrap();
+        let mut stmts = Vec::new();
+        let mut return_expr = None;
+
+        match block_node.kind() {
+            "block" => {
+                let mut walker = block_node.walk();
+                let mut children = block_node.children(&mut walker);
+
+                while let Some(next_node) = children.next() {
+                    match next_node.kind() {
+                        "comment" => {}
+                        "alge_expr" => {
+                            //must be the last thing in the block
+                            let ret = AlgeExpr::parse(reporter, dta, &next_node)?;
+                            return_expr = Some(ret);
+                            ParserError::assert_ast_level_empty(reporter, children.next())?;
+                            ParserError::assert_node_no_error(reporter, node)?;
+
+                            break;
+                        }
+                        "let_stmt" | "assign_stmt" | "dead_eval_stmt" => {
+                            stmts.push(AlgeStmt::parse(reporter, dta, &next_node)?);
+                            ParserError::consume_expected_node_kind(
+                                reporter,
+                                children.next(),
+                                ";",
+                            )?;
+                        }
+                        _ => {
+                            let err = ParserError::UnexpectedAstNode {
+                                kind: next_node.kind().to_owned(),
+                                expected: "alge_stmt | alge_expr | dead_eval_stmt | comment"
+                                    .to_owned(),
+                            };
+                            reporter.push_error(CommonError::new(Span::from(node), err.clone()));
+                            return Err(err);
+                        }
+                    }
+                }
+            }
+            _ => {
+                let err = ParserError::UnexpectedAstNode {
+                    kind: block_node.kind().to_owned(),
+                    expected: "block".to_owned(),
+                };
+                reporter.push_error(CommonError::new(Span::from(node), err.clone()));
+                return Err(err);
+            }
+        }
+
+        let return_expr = match return_expr {
+            None => {
+                let err = ParserError::NoAlgeExprAtEnd;
+                reporter.push_error(CommonError::new(Span::from(node), err.clone()));
+                return Err(err);
+            }
+            Some(r) => r,
+        };
+
+        ParserError::consume_expected_node_kind(reporter, children.next(), "}")?;
+        ParserError::assert_ast_level_empty(reporter, children.next())?;
+        ParserError::assert_node_no_error(reporter, node)?;
+
+        /*
+                println!(
+                    "Parsed:\ndst {:?}\noperands: {:?}\nconcept: {:?}\nargs: {:?}\nstmts: {:#?}",
+                    dst, operands, concept, concept_arg_naming, stmts
+                );
+        */
+
+        Ok(ImplBlock {
+            span: Span::from(node),
+            dst,
+            operands,
+            concept,
+            concept_arg_naming,
+            stmts,
+            return_expr,
+        })
+    }
+}
+
+impl FromTreeSitter for AlgeStmt {
+    fn parse(
+        reporter: &mut ErrorReporter<ParserError>,
+        dta: &[u8],
+        node: &tree_sitter::Node,
+    ) -> Result<Self, ParserError>
+    where
+        Self: Sized,
+    {
+        match node.kind() {
+            "let_stmt" => Ok(Self::Let(LetStmt::parse(reporter, dta, node)?)),
+            "assign_stmt" => Ok(Self::Assign(AssignStmt::parse(reporter, dta, node)?)),
+            "dead_eval_stmt" => Ok(Self::DeadEval(EvalExpr::parse(
+                reporter,
+                dta,
+                node.child(0).as_ref().unwrap(),
+            )?)),
+            _ => {
+                let err = ParserError::UnexpectedAstNode {
+                    kind: node.kind().to_owned(),
+                    expected: "let_stmt | assign_stmt | dead_eval_stmt".to_owned(),
+                };
+                reporter.push_error(CommonError::new(Span::from(node), err.clone()));
+                return Err(err);
+            }
+        }
     }
 }
