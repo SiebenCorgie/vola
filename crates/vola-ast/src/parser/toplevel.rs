@@ -4,7 +4,7 @@ use vola_common::{CommonError, ErrorReporter, Span};
 use crate::{
     alge::LetStmt,
     common::{Call, Ident, TypedIdent},
-    csg::{AccessDesc, CSGBinding, CSGOp, CSGStmt, ExportFn, FieldDef},
+    csg::{AccessDesc, CSGBinding, CSGConcept, CSGNodeDef, CSGOp, CSGStmt, ExportFn, FieldDef},
     error::ParserError,
     AstEntry,
 };
@@ -32,17 +32,17 @@ impl FromTreeSitter for AstEntry {
                 let field_export = ExportFn::parse(reporter, dta, node)?;
                 Ok(AstEntry::ExportFn(field_export))
             }
-            "def_concept" => {
-                println!(" Def -> ");
-                todo!()
+            "def_entity" | "def_operation" => {
+                let def = CSGNodeDef::parse(reporter, dta, node)?;
+                Ok(AstEntry::CSGNodeDef(def))
             }
-            "def_operation" => {
-                println!("def op ->");
-                todo!()
+            "def_concept" => {
+                let def = CSGConcept::parse(reporter, dta, node)?;
+                Ok(AstEntry::Concept(def))
             }
             "impl_block" => {
                 println!("impl block ->");
-                todo!()
+                Ok(AstEntry::ImplBlock(Span::empty()))
             }
             _ => {
                 let err = ParserError::UnknownAstNode(node.kind().to_owned());

@@ -64,11 +64,6 @@ pub enum AlgeExprTy {
     Literal(Literal),
 }
 
-//NOTE yet specified!
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-#[derive(Clone, Debug)]
-pub struct AlgeOp {}
-
 ///Binds an algebraic expression to an identifier
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Clone, Debug)]

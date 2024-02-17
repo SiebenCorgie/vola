@@ -267,6 +267,8 @@ impl FromTreeSitter for CTArg {
 
         let Call { span, ident, args } = call;
 
+        ParserError::consume_expected_node_kind(reporter, children.next(), "]")?;
+
         ParserError::assert_ast_level_empty(reporter, children.next())?;
         ParserError::assert_node_no_error(reporter, node)?;
 

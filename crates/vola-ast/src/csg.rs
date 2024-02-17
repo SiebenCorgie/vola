@@ -3,7 +3,7 @@ use vola_common::Span;
 
 use crate::{
     alge::{AlgeExpr, LetStmt},
-    common::{Call, Ident, TypedIdent},
+    common::{Call, Ident, Ty, TypedIdent},
 };
 
 #[cfg(feature = "serde")]
@@ -67,4 +67,35 @@ pub struct AccessDesc {
     pub tree_ref: Ident,
     ///The concept that is evaluated based on some arguments
     pub call: Call,
+}
+
+///All types of nodes in a CSGTree
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[derive(Clone, Debug)]
+pub enum CSGNodeTy {
+    Entity,
+    Operation,
+}
+
+///Either a entity or operation definition. Which means a definition of some kind of node in a CSGTree.
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[derive(Clone, Debug)]
+pub struct CSGNodeDef {
+    pub span: Span,
+    pub ty: CSGNodeTy,
+    pub name: Ident,
+    pub args: SmallVec<[TypedIdent; 1]>,
+}
+
+///Defines a concept, that transforms some argument (or none) into a result.
+///
+/// This could for instance be a distance-field-type, that transforms a positional argument into the distance, or
+/// a color-concept that just returns a color.
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[derive(Clone, Debug)]
+pub struct CSGConcept {
+    pub span: Span,
+    pub name: Ident,
+    pub src_ty: Option<Ty>,
+    pub dst_ty: Ty,
 }

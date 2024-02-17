@@ -10,7 +10,7 @@
 //! _by name_.
 
 use common::CTArg;
-use csg::{ExportFn, FieldDef};
+use csg::{CSGConcept, CSGNodeDef, ExportFn, FieldDef};
 
 mod alge;
 mod common;
@@ -31,9 +31,8 @@ use vola_common::Span;
 #[derive(Clone, Debug)]
 pub enum AstEntry {
     Comment(Span),
-    Entity(Span),
-    Concept(Span),
-    Operation(Span),
+    Concept(CSGConcept),
+    CSGNodeDef(CSGNodeDef),
     ImplBlock(Span),
     FieldDefine(FieldDef),
     ExportFn(ExportFn),

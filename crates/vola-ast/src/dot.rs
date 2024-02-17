@@ -12,8 +12,11 @@ use vola_common::dot::{
 
 use crate::{
     alge::{AlgeExpr, AlgeExprTy, FieldAccessor, LetStmt},
-    common::{CTArg, Call, TypedIdent},
-    csg::{AccessDesc, CSGBinding, CSGOp, CSGStmt, ExportFn, FieldDef},
+    common::{CTArg, Call, Ty, TypedIdent},
+    csg::{
+        AccessDesc, CSGBinding, CSGConcept, CSGNodeDef, CSGNodeTy, CSGOp, CSGStmt, ExportFn,
+        FieldDef,
+    },
     AstEntry, TopLevelNode, VolaAst,
 };
 
@@ -65,9 +68,8 @@ impl DotNode for AstEntry {
     fn id(&self) -> String {
         match self {
             AstEntry::Comment(s) => format!("Comment {:?}..{:?}", s.from, s.to),
-            AstEntry::Entity(s) => format!("Entity {:?}..{:?}", s.from, s.to),
-            AstEntry::Concept(s) => format!("Concept {:?}..{:?}", s.from, s.to),
-            AstEntry::Operation(s) => format!("Operation {:?}..{:?}", s.from, s.to),
+            AstEntry::CSGNodeDef(def) => def.id(),
+            AstEntry::Concept(def) => def.id(),
             AstEntry::ImplBlock(s) => format!("ImplBlock {:?}..{:?}", s.from, s.to),
             AstEntry::FieldDefine(fd) => fd.id(),
             AstEntry::ExportFn(ef) => ef.id(),
@@ -77,9 +79,8 @@ impl DotNode for AstEntry {
     fn content(&self) -> String {
         match self {
             AstEntry::Comment(_s) => format!("Comment"),
-            AstEntry::Entity(_s) => format!("Entitiy"),
-            AstEntry::Concept(_s) => format!("Concept"),
-            AstEntry::Operation(_s) => format!("Operation"),
+            AstEntry::CSGNodeDef(def) => def.content(),
+            AstEntry::Concept(s) => s.content(),
             AstEntry::ImplBlock(_s) => format!("ImplBlock"),
             AstEntry::FieldDefine(fd) => fd.content(),
             AstEntry::ExportFn(ef) => ef.content(),
@@ -89,9 +90,8 @@ impl DotNode for AstEntry {
     fn build_children(&self, builder: GraphvizBuilder) -> GraphvizBuilder {
         match self {
             AstEntry::Comment(_s) => builder,
-            AstEntry::Entity(_s) => builder,
-            AstEntry::Concept(_s) => builder,
-            AstEntry::Operation(_s) => builder,
+            AstEntry::CSGNodeDef(def) => def.build_children(builder),
+            AstEntry::Concept(s) => s.build_children(builder),
             AstEntry::ImplBlock(_s) => builder,
             AstEntry::FieldDefine(fd) => fd.build_children(builder),
             AstEntry::ExportFn(ef) => ef.build_children(builder),
@@ -454,6 +454,42 @@ impl DotNode for CTArg {
             builder.connect(self, arg);
             builder = arg.build_children(builder);
         }
+        builder
+    }
+}
+
+impl DotNode for CSGNodeDef {
+    fn id(&self) -> String {
+        format!("CSGDef {:?}..{:?}", self.span.from, self.span.to)
+    }
+    fn content(&self) -> String {
+        match self.ty {
+            CSGNodeTy::Entity => format!("entity {}", self.name.0),
+            CSGNodeTy::Operation => format!("operation {}", self.name.0),
+        }
+    }
+
+    fn build_children(&self, mut builder: GraphvizBuilder) -> GraphvizBuilder {
+        for arg in &self.args {
+            builder.add_node(arg);
+            builder.connect(self, arg);
+            builder = arg.build_children(builder);
+        }
+        builder
+    }
+}
+impl DotNode for CSGConcept {
+    fn id(&self) -> String {
+        format!("CSGConcept {:?}..{:?}", self.span.from, self.span.to)
+    }
+    fn content(&self) -> String {
+        if let Some(arg) = &self.src_ty {
+            format!("concept {}: {:?} -> {:?}", self.name.0, arg, self.dst_ty)
+        } else {
+            format!("concept {}: -> {:?}", self.name.0, self.dst_ty)
+        }
+    }
+    fn build_children(&self, builder: GraphvizBuilder) -> GraphvizBuilder {
         builder
     }
 }
