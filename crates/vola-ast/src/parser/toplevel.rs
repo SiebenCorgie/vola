@@ -104,14 +104,14 @@ impl FromTreeSitter for FieldDef {
                 "let_stmt" => {
                     //take away the ;
                     stmts.push(CSGStmt::LetStmt(LetStmt::parse(ctx, dta, &next_node)?));
-                    ParserError::consume_expected_node_kind(ctx, children.next(), ";")?;
+                    ParserError::consume_expected_node_string(ctx, dta, children.next(), ";")?;
                 }
                 "csg_binding" => {
                     stmts.push(CSGStmt::CSGBinding(CSGBinding::parse(
                         ctx, dta, &next_node,
                     )?));
                     //take away the ;
-                    ParserError::consume_expected_node_kind(ctx, children.next(), ";")?;
+                    ParserError::consume_expected_node_string(ctx, dta, children.next(), ";")?;
                 }
 
                 "csg_unary" | "csg_binary" | "fn_call" => {
@@ -131,7 +131,7 @@ impl FromTreeSitter for FieldDef {
             }
         }
 
-        ParserError::consume_expected_node_kind(ctx, children.next(), "}")?;
+        ParserError::consume_expected_node_string(ctx, dta, children.next(), "}")?;
         ParserError::assert_ast_level_empty(ctx, children.next())?;
         ParserError::assert_node_no_error(ctx, node)?;
 
@@ -161,28 +161,29 @@ impl FromTreeSitter for ExportFn {
         let mut cursor = node.walk();
         let mut children = node.children(&mut cursor);
 
-        ParserError::consume_expected_node_kind(ctx, children.next(), "export")?;
+        ParserError::consume_expected_node_string(ctx, dta, children.next(), "export")?;
 
-        let field_ident = if let Some(child) = children.next() {
-            Ident::parse(ctx, dta, &child)
-        } else {
-            Err(ParserError::NoChildAvailable)
-        }?;
+        let field_ident = Ident::parse(ctx, dta, children.next().as_ref().unwrap())?;
 
-        ParserError::consume_expected_node_kind(ctx, children.next(), "(")?;
+        ParserError::consume_expected_node_string(ctx, dta, children.next(), "(")?;
 
         let mut args = SmallVec::new();
 
         while let Some(next_node) = children.next() {
             match next_node.kind() {
                 //found the end
-                ")" => break,
+                ")" => {
+                    ParserError::consume_expected_node_string(ctx, dta, Some(next_node), ")")?;
+                    break;
+                }
                 "typed_arg" => {
                     let arg = TypedIdent::parse(ctx, dta, &next_node)?;
                     args.push(arg);
                 }
                 //part of the list, just ignore
-                "," => {}
+                "," => {
+                    ParserError::consume_expected_node_string(ctx, dta, Some(next_node), ",")?;
+                }
                 _ => {
                     let error = ParserError::UnexpectedAstNode {
                         span: ctx.span(node).into(),
@@ -196,7 +197,7 @@ impl FromTreeSitter for ExportFn {
         }
 
         //We should start with a block now
-        ParserError::consume_expected_node_kind(ctx, children.next(), "{")?;
+        ParserError::consume_expected_node_string(ctx, dta, children.next(), "{")?;
 
         let mut stmts = Vec::new();
         let mut access_descriptors = SmallVec::new();
@@ -206,31 +207,55 @@ impl FromTreeSitter for ExportFn {
                 "let_stmt" => {
                     //take away the ;
                     stmts.push(CSGStmt::LetStmt(LetStmt::parse(ctx, dta, &next_node)?));
-                    ParserError::consume_expected_node_kind(ctx, children.next(), ";")?;
+                    ParserError::consume_expected_node_string(ctx, dta, children.next(), ";")?;
                 }
                 "csg_binding" => {
                     stmts.push(CSGStmt::CSGBinding(CSGBinding::parse(
                         ctx, dta, &next_node,
                     )?));
                     //take away the ;
-                    ParserError::consume_expected_node_kind(ctx, children.next(), ";")?;
+                    ParserError::consume_expected_node_string(ctx, dta, children.next(), ";")?;
                 }
 
                 //At this point, change into acces_decleration parsing, which must be the last part of the block
                 "access_desc" => {
                     let mut access_decl_walker = next_node.walk();
-                    for child in next_node.children(&mut access_decl_walker) {
-                        match child.kind() {
+                    let mut access_children = next_node.children(&mut access_decl_walker);
+                    while let Some(next_node) = access_children.next() {
+                        match next_node.kind() {
                             //start and , can be ignored
-                            "(" | "," => {}
-                            "access_decl" => {
-                                access_descriptors.push(AccessDesc::parse(ctx, dta, &child)?);
+                            "(" => {
+                                ParserError::consume_expected_node_string(
+                                    ctx,
+                                    dta,
+                                    Some(next_node),
+                                    "(",
+                                )?;
                             }
-                            ")" => break,
+                            "," => {
+                                ParserError::consume_expected_node_string(
+                                    ctx,
+                                    dta,
+                                    Some(next_node),
+                                    ",",
+                                )?;
+                            }
+                            "access_decl" => {
+                                access_descriptors.push(AccessDesc::parse(ctx, dta, &next_node)?);
+                            }
+                            ")" => {
+                                ParserError::consume_expected_node_string(
+                                    ctx,
+                                    dta,
+                                    Some(next_node),
+                                    ")",
+                                )?;
+                                break;
+                            }
                             _ => {
                                 let error = ParserError::UnexpectedAstNode {
                                     span: ctx.span(node).into(),
-                                    kind: child.kind().to_owned(),
+                                    kind: next_node.kind().to_owned(),
                                     expected: "access_decl | , | (".to_owned(),
                                 };
                                 report(error.clone(), ctx.get_file());
@@ -239,6 +264,7 @@ impl FromTreeSitter for ExportFn {
                         }
                     }
 
+                    ParserError::assert_ast_level_empty(ctx, access_children.next())?;
                     break;
                 }
                 _ => {
@@ -254,7 +280,7 @@ impl FromTreeSitter for ExportFn {
         }
 
         //check that we acutally are at the end
-        ParserError::consume_expected_node_kind(ctx, children.next(), "}")?;
+        ParserError::consume_expected_node_string(ctx, dta, children.next(), "}")?;
 
         if access_descriptors.len() == 0 {
             let err = ParserError::NoAccessDecs;

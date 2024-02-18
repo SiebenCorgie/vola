@@ -273,7 +273,7 @@ impl FromTreeSitter for AssignStmt {
         let mut children = node.children(&mut walker);
 
         let ident = Ident::parse(ctx, dta, &children.next().unwrap())?;
-        ParserError::consume_expected_node_kind(ctx, children.next(), "=")?;
+        ParserError::consume_expected_node_string(ctx, dta, children.next(), "=")?;
         let alge_expr = AlgeExpr::parse(ctx, dta, &children.next().unwrap())?;
 
         ParserError::assert_ast_level_empty(ctx, children.next())?;
@@ -295,20 +295,43 @@ impl FromTreeSitter for EvalExpr {
 
         let mut walker = node.walk();
         let mut children = node.children(&mut walker);
-        ParserError::consume_expected_node_kind(ctx, children.next(), "eval")?;
+        ParserError::consume_expected_node_string(ctx, dta, children.next(), "eval")?;
         let evaluated = Ident::parse(ctx, dta, &children.next().unwrap())?;
-        ParserError::consume_expected_node_kind(ctx, children.next(), "(")?;
+        ParserError::consume_expected_node_string(ctx, dta, children.next(), "(")?;
 
         let mut eval_params = Vec::new();
         while let Some(next_node) = children.next() {
             match next_node.kind() {
-                ")" => break,
+                ")" => {
+                    ParserError::consume_expected_node_string(ctx, dta, Some(next_node), ")")?;
+                    break;
+                }
                 "alge_expr" => eval_params.push(AlgeExpr::parse(ctx, dta, &next_node)?),
                 _ => {
                     let err = ParserError::UnexpectedAstNode {
                         span: ctx.span(&next_node).into(),
                         kind: next_node.kind().to_owned(),
-                        expected: ") | alge_expr | . ".to_owned(),
+                        expected: ") | alge_expr  ".to_owned(),
+                    };
+                    report(err.clone(), ctx.get_file());
+                    return Err(err);
+                }
+            }
+
+            let next_node = children.next().unwrap();
+            match next_node.kind() {
+                ")" => {
+                    ParserError::consume_expected_node_string(ctx, dta, Some(next_node), ")")?;
+                    break;
+                }
+                "," => {
+                    ParserError::consume_expected_node_string(ctx, dta, Some(next_node), ",")?;
+                }
+                _ => {
+                    let err = ParserError::UnexpectedAstNode {
+                        span: ctx.span(&next_node).into(),
+                        kind: next_node.kind().to_owned(),
+                        expected: ") | , ".to_owned(),
                     };
                     report(err.clone(), ctx.get_file());
                     return Err(err);
@@ -336,7 +359,7 @@ impl FromTreeSitter for ImplBlock {
         let mut walker = node.walk();
         let mut children = node.children(&mut walker);
 
-        ParserError::consume_expected_node_kind(ctx, children.next(), "impl")?;
+        ParserError::consume_expected_node_string(ctx, dta, children.next(), "impl")?;
         let dst = Ident::parse(ctx, dta, children.next().as_ref().unwrap())?;
 
         //Parse operands
@@ -348,13 +371,41 @@ impl FromTreeSitter for ImplBlock {
                 while let Some(next_node) = children.next() {
                     match next_node.kind() {
                         "identifier" => operands.push(Ident::parse(ctx, dta, &next_node)?),
-                        "," => {} //ignore that
-                        ">" => break,
                         _ => {
                             let err = ParserError::UnexpectedAstNode {
                                 span: ctx.span(&next_node).into(),
                                 kind: next_node.kind().to_owned(),
-                                expected: "ident | , | >".to_owned(),
+                                expected: "identifier".to_owned(),
+                            };
+                            report(err.clone(), ctx.get_file());
+                            return Err(err);
+                        }
+                    }
+
+                    let next_node = children.next().unwrap();
+                    match next_node.kind() {
+                        "," => {
+                            ParserError::consume_expected_node_string(
+                                ctx,
+                                dta,
+                                Some(next_node),
+                                ",",
+                            )?;
+                        }
+                        ">" => {
+                            ParserError::consume_expected_node_string(
+                                ctx,
+                                dta,
+                                Some(next_node),
+                                ">",
+                            )?;
+                            break;
+                        }
+                        _ => {
+                            let err = ParserError::UnexpectedAstNode {
+                                span: ctx.span(&next_node).into(),
+                                kind: next_node.kind().to_owned(),
+                                expected: " , or >".to_owned(),
                             };
                             report(err.clone(), ctx.get_file());
                             return Err(err);
@@ -362,7 +413,7 @@ impl FromTreeSitter for ImplBlock {
                     }
                 }
 
-                ParserError::consume_expected_node_kind(ctx, children.next(), "for")?;
+                ParserError::consume_expected_node_string(ctx, dta, children.next(), "for")?;
                 operands
             }
             "for" => SmallVec::new(),
@@ -387,13 +438,41 @@ impl FromTreeSitter for ImplBlock {
                 while let Some(next_node) = children.next() {
                     match next_node.kind() {
                         "identifier" => renaming.push(Ident::parse(ctx, dta, &next_node)?),
-                        "," => {}
-                        ")" => break,
                         _ => {
                             let err = ParserError::UnexpectedAstNode {
                                 span: ctx.span(&next_node).into(),
                                 kind: next_node.kind().to_owned(),
-                                expected: "identifier | , | ) ".to_owned(),
+                                expected: "identifier".to_owned(),
+                            };
+                            report(err.clone(), ctx.get_file());
+                            return Err(err);
+                        }
+                    }
+
+                    let next_node = children.next().unwrap();
+                    match next_node.kind() {
+                        "," => {
+                            ParserError::consume_expected_node_string(
+                                ctx,
+                                dta,
+                                Some(next_node),
+                                ",",
+                            )?;
+                        }
+                        ")" => {
+                            ParserError::consume_expected_node_string(
+                                ctx,
+                                dta,
+                                Some(next_node),
+                                ")",
+                            )?;
+                            break;
+                        }
+                        _ => {
+                            let err = ParserError::UnexpectedAstNode {
+                                span: ctx.span(&next_node).into(),
+                                kind: next_node.kind().to_owned(),
+                                expected: " , or ) ".to_owned(),
                             };
                             report(err.clone(), ctx.get_file());
                             return Err(err);
@@ -401,7 +480,7 @@ impl FromTreeSitter for ImplBlock {
                     }
                 }
 
-                ParserError::consume_expected_node_kind(ctx, children.next(), "{")?;
+                ParserError::consume_expected_node_string(ctx, dta, children.next(), "{")?;
                 renaming
             }
             "{" => SmallVec::new(),
@@ -441,7 +520,12 @@ impl FromTreeSitter for ImplBlock {
                         }
                         "let_stmt" | "assign_stmt" | "dead_eval_stmt" => {
                             stmts.push(AlgeStmt::parse(ctx, dta, &next_node)?);
-                            ParserError::consume_expected_node_kind(ctx, children.next(), ";")?;
+                            ParserError::consume_expected_node_string(
+                                ctx,
+                                dta,
+                                children.next(),
+                                ";",
+                            )?;
                         }
                         _ => {
                             let err = ParserError::UnexpectedAstNode {
@@ -478,7 +562,7 @@ impl FromTreeSitter for ImplBlock {
             Some(r) => r,
         };
 
-        ParserError::consume_expected_node_kind(ctx, children.next(), "}")?;
+        ParserError::consume_expected_node_string(ctx, dta, children.next(), "}")?;
         ParserError::assert_ast_level_empty(ctx, children.next())?;
         ParserError::assert_node_no_error(ctx, node)?;
 

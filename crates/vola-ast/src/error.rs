@@ -74,6 +74,13 @@ pub enum ParserError {
 
     #[error("The impl-block must have a algebraic expression as its last statement")]
     NoAlgeExprAtEnd,
+
+    #[error("Could not parse {kind}, was empty")]
+    EmptyParse {
+        kind: String,
+        #[label("There should be at least one character!")]
+        span: SourceSpan,
+    },
 }
 
 impl ParserError {

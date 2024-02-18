@@ -20,7 +20,17 @@ impl FromTreeSitter for Ident {
     {
         ParserError::assert_node_kind(ctx, node, "identifier")?;
         let ident = match node.utf8_text(dta) {
-            Ok(parsed) => parsed,
+            Ok(parsed) => {
+                if parsed.is_empty() {
+                    let err = ParserError::EmptyParse {
+                        kind: "identifier".to_owned(),
+                        span: ctx.span(node).into(),
+                    };
+                    report(err.clone(), ctx.get_file());
+                    return Err(err);
+                }
+                parsed
+            }
             Err(e) => {
                 let err = ParserError::Utf8ParseError(e);
                 report(err.clone(), ctx.get_file());
@@ -46,6 +56,15 @@ impl FromTreeSitter for Digit {
             }
             Ok(s) => s.to_owned(),
         };
+
+        if node_text.is_empty() {
+            let err = ParserError::EmptyParse {
+                kind: "digit".to_owned(),
+                span: ctx.span(node).into(),
+            };
+            report(err.clone(), ctx.get_file());
+            return Err(err);
+        }
 
         let int: usize = match node_text.parse() {
             Ok(f) => f,
@@ -73,6 +92,15 @@ impl FromTreeSitter for Ty {
             }
             Ok(s) => s.to_owned(),
         };
+
+        if node_text.is_empty() {
+            let err = ParserError::EmptyParse {
+                kind: "type".to_owned(),
+                span: ctx.span(node).into(),
+            };
+            report(err.clone(), ctx.get_file());
+            return Err(err);
+        }
 
         //First check for the abstract "CSG" type
         if node_text == "CSG" {
@@ -140,6 +168,15 @@ impl FromTreeSitter for Literal {
                     Ok(s) => s.to_owned(),
                 };
 
+                if node_text.is_empty() {
+                    let err = ParserError::EmptyParse {
+                        kind: "float".to_owned(),
+                        span: ctx.span(node).into(),
+                    };
+                    report(err.clone(), ctx.get_file());
+                    return Err(err);
+                }
+
                 let float: f64 = match node_text.parse() {
                     Ok(f) => f,
                     Err(e) => {
@@ -178,7 +215,7 @@ impl FromTreeSitter for TypedIdent {
     {
         ParserError::assert_node_kind(ctx, node, "typed_arg")?;
         let ident = Ident::parse(ctx, dta, node.child(0).as_ref().unwrap())?;
-        ParserError::consume_expected_node_kind(ctx, node.child(1), ":")?;
+        ParserError::consume_expected_node_string(ctx, dta, node.child(1), ":")?;
         let ty = Ty::parse_alge_ty(ctx, dta, node.child(2).as_ref().unwrap())?;
 
         ParserError::assert_node_no_error(ctx, node)?;
@@ -200,14 +237,19 @@ impl FromTreeSitter for Call {
         let mut children = node.children(&mut walker);
 
         let ident = Ident::parse(ctx, dta, &children.next().unwrap())?;
-        ParserError::consume_expected_node_kind(ctx, children.next(), "(")?;
+        ParserError::consume_expected_node_string(ctx, dta, children.next(), "(")?;
 
         let mut args = SmallVec::new();
 
         while let Some(next_node) = children.next() {
             match next_node.kind() {
-                ")" => break,
-                "," => {}
+                ")" => {
+                    ParserError::consume_expected_node_string(ctx, dta, Some(next_node), ")")?;
+                    break;
+                }
+                "," => {
+                    ParserError::consume_expected_node_string(ctx, dta, Some(next_node), ",")?;
+                }
                 "alge_expr" => args.push(AlgeExpr::parse(ctx, dta, &next_node)?),
                 _ => {
                     let err = ParserError::UnexpectedAstNode {
@@ -221,6 +263,7 @@ impl FromTreeSitter for Call {
             }
         }
 
+        ParserError::assert_ast_level_empty(ctx, children.next())?;
         ParserError::assert_node_no_error(ctx, node)?;
         Ok(Call {
             span: Span::from(node),
@@ -239,15 +282,15 @@ impl FromTreeSitter for CTArg {
         let mut walker = node.walk();
         let mut children = node.children(&mut walker);
 
-        ParserError::consume_expected_node_kind(ctx, children.next(), "#")?;
-        ParserError::consume_expected_node_kind(ctx, children.next(), "[")?;
+        ParserError::consume_expected_node_string(ctx, dta, children.next(), "#")?;
+        ParserError::consume_expected_node_string(ctx, dta, children.next(), "[")?;
 
         //NOTE: Right now we reuse the call parser.
         let call = Call::parse(ctx, dta, &children.next().unwrap())?;
 
         let Call { span, ident, args } = call;
 
-        ParserError::consume_expected_node_kind(ctx, children.next(), "]")?;
+        ParserError::consume_expected_node_string(ctx, dta, children.next(), "]")?;
 
         ParserError::assert_ast_level_empty(ctx, children.next())?;
         ParserError::assert_node_no_error(ctx, node)?;
