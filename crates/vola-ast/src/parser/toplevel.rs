@@ -1,5 +1,5 @@
 use smallvec::SmallVec;
-use vola_common::{CommonError, ErrorReporter, Span};
+use vola_common::{report, Span};
 
 use crate::{
     alge::{ImplBlock, LetStmt},
@@ -9,14 +9,10 @@ use crate::{
     AstEntry,
 };
 
-use super::FromTreeSitter;
+use super::{FromTreeSitter, ParserCtx};
 
 impl FromTreeSitter for AstEntry {
-    fn parse(
-        reporter: &mut ErrorReporter<ParserError>,
-        dta: &[u8],
-        node: &tree_sitter::Node,
-    ) -> Result<Self, ParserError>
+    fn parse(ctx: &mut ParserCtx, dta: &[u8], node: &tree_sitter::Node) -> Result<Self, ParserError>
     where
         Self: Sized,
     {
@@ -25,54 +21,53 @@ impl FromTreeSitter for AstEntry {
         //        let mut attrib_collector = Vec::new();
         match node.kind() {
             "field_decl" => {
-                let field_def = FieldDef::parse(reporter, dta, node)?;
+                let field_def = FieldDef::parse(ctx, dta, node)?;
                 Ok(AstEntry::FieldDefine(field_def))
             }
             "field_export" => {
-                let field_export = ExportFn::parse(reporter, dta, node)?;
+                let field_export = ExportFn::parse(ctx, dta, node)?;
                 Ok(AstEntry::ExportFn(field_export))
             }
             "def_entity" | "def_operation" => {
-                let def = CSGNodeDef::parse(reporter, dta, node)?;
+                let def = CSGNodeDef::parse(ctx, dta, node)?;
                 Ok(AstEntry::CSGNodeDef(def))
             }
             "def_concept" => {
-                let def = CSGConcept::parse(reporter, dta, node)?;
+                let def = CSGConcept::parse(ctx, dta, node)?;
                 Ok(AstEntry::Concept(def))
             }
-            "impl_block" => Ok(AstEntry::ImplBlock(ImplBlock::parse(reporter, dta, node)?)),
+            "impl_block" => Ok(AstEntry::ImplBlock(ImplBlock::parse(ctx, dta, node)?)),
             _ => {
-                let err = ParserError::UnknownAstNode(node.kind().to_owned());
-                reporter.push_error(CommonError::new(Span::from(node), err));
-                Err(ParserError::UnknownAstNode(node.kind().to_owned()))
+                let err = ParserError::UnknownAstNode {
+                    kind: node.kind().to_owned(),
+                    span: ctx.span(node).into(),
+                };
+                report(err.clone(), ctx.get_file());
+                Err(err)
             }
         }
     }
 }
 
 impl FromTreeSitter for FieldDef {
-    fn parse(
-        reporter: &mut ErrorReporter<ParserError>,
-        dta: &[u8],
-        node: &tree_sitter::Node,
-    ) -> Result<Self, ParserError>
+    fn parse(ctx: &mut ParserCtx, dta: &[u8], node: &tree_sitter::Node) -> Result<Self, ParserError>
     where
         Self: Sized,
     {
-        ParserError::assert_node_kind(reporter, node, "field_decl")?;
+        ParserError::assert_node_kind(ctx, node, "field_decl")?;
 
         let mut cursor = node.walk();
         let mut children = node.children(&mut cursor);
 
-        ParserError::consume_expected_node_kind(reporter, children.next(), "define")?;
+        ParserError::consume_expected_node_kind(ctx, children.next(), "define")?;
 
         let field_ident = if let Some(child) = children.next() {
-            Ident::parse(reporter, dta, &child)
+            Ident::parse(ctx, dta, &child)
         } else {
             Err(ParserError::NoChildAvailable)
         }?;
 
-        ParserError::consume_expected_node_kind(reporter, children.next(), "(")?;
+        ParserError::consume_expected_node_kind(ctx, children.next(), "(")?;
         let mut args = SmallVec::new();
 
         while let Some(next_node) = children.next() {
@@ -80,24 +75,25 @@ impl FromTreeSitter for FieldDef {
                 //found the end
                 ")" => break,
                 "typed_arg" => {
-                    let arg = TypedIdent::parse(reporter, dta, &next_node)?;
+                    let arg = TypedIdent::parse(ctx, dta, &next_node)?;
                     args.push(arg);
                 }
                 //part of the list, just ignore
                 "," => {}
                 _ => {
                     let error = ParserError::UnexpectedAstNode {
+                        span: ctx.span(node).into(),
                         kind: next_node.kind().to_owned(),
                         expected: "typed_arg".to_owned(),
                     };
-                    reporter.push_error(CommonError::new_on_node(&next_node, error.clone()));
+                    report(error.clone(), ctx.get_file());
                     return Err(error);
                 }
             }
         }
 
         //We should start with a block now
-        ParserError::consume_expected_node_kind(reporter, children.next(), "{")?;
+        ParserError::consume_expected_node_kind(ctx, children.next(), "{")?;
 
         //Parse the block. We only allow csg stmts and comments, but need to end with a dangling csg stmt
         let mut stmts = Vec::new();
@@ -107,40 +103,41 @@ impl FromTreeSitter for FieldDef {
                 "comment" => {}
                 "let_stmt" => {
                     //take away the ;
-                    stmts.push(CSGStmt::LetStmt(LetStmt::parse(reporter, dta, &next_node)?));
-                    ParserError::consume_expected_node_kind(reporter, children.next(), ";")?;
+                    stmts.push(CSGStmt::LetStmt(LetStmt::parse(ctx, dta, &next_node)?));
+                    ParserError::consume_expected_node_kind(ctx, children.next(), ";")?;
                 }
                 "csg_binding" => {
                     stmts.push(CSGStmt::CSGBinding(CSGBinding::parse(
-                        reporter, dta, &next_node,
+                        ctx, dta, &next_node,
                     )?));
                     //take away the ;
-                    ParserError::consume_expected_node_kind(reporter, children.next(), ";")?;
+                    ParserError::consume_expected_node_kind(ctx, children.next(), ";")?;
                 }
 
                 "csg_unary" | "csg_binary" | "fn_call" => {
-                    ret = Some(CSGOp::parse(reporter, dta, &next_node)?);
+                    ret = Some(CSGOp::parse(ctx, dta, &next_node)?);
                     break;
                 }
 
                 _ => {
                     let error = ParserError::UnexpectedAstNode {
+                        span: ctx.span(node).into(),
                         kind: next_node.kind().to_owned(),
                         expected: "comment | let_stmt | csg_binding | access_decl".to_owned(),
                     };
-                    reporter.push_error(CommonError::new_on_node(&next_node, error.clone()));
+                    report(error.clone(), ctx.get_file());
                     return Err(error);
                 }
             }
         }
 
-        ParserError::consume_expected_node_kind(reporter, children.next(), "}")?;
-        ParserError::assert_ast_level_empty(reporter, children.next())?;
-        ParserError::assert_node_no_error(reporter, node)?;
+        ParserError::consume_expected_node_kind(ctx, children.next(), "}")?;
+        ParserError::assert_ast_level_empty(ctx, children.next())?;
+        ParserError::assert_node_no_error(ctx, node)?;
 
         if ret.is_none() {
             let err = ParserError::NoCSGTreeAtDefineEnd;
-            reporter.push_error(CommonError::new_on_node(&node, err.clone()));
+            report(err.clone(), ctx.get_file());
             return Err(err);
         }
 
@@ -155,28 +152,24 @@ impl FromTreeSitter for FieldDef {
 }
 
 impl FromTreeSitter for ExportFn {
-    fn parse(
-        reporter: &mut ErrorReporter<ParserError>,
-        dta: &[u8],
-        node: &tree_sitter::Node,
-    ) -> Result<Self, ParserError>
+    fn parse(ctx: &mut ParserCtx, dta: &[u8], node: &tree_sitter::Node) -> Result<Self, ParserError>
     where
         Self: Sized,
     {
-        ParserError::assert_node_kind(reporter, node, "field_export")?;
+        ParserError::assert_node_kind(ctx, node, "field_export")?;
 
         let mut cursor = node.walk();
         let mut children = node.children(&mut cursor);
 
-        ParserError::consume_expected_node_kind(reporter, children.next(), "export")?;
+        ParserError::consume_expected_node_kind(ctx, children.next(), "export")?;
 
         let field_ident = if let Some(child) = children.next() {
-            Ident::parse(reporter, dta, &child)
+            Ident::parse(ctx, dta, &child)
         } else {
             Err(ParserError::NoChildAvailable)
         }?;
 
-        ParserError::consume_expected_node_kind(reporter, children.next(), "(")?;
+        ParserError::consume_expected_node_kind(ctx, children.next(), "(")?;
 
         let mut args = SmallVec::new();
 
@@ -185,24 +178,25 @@ impl FromTreeSitter for ExportFn {
                 //found the end
                 ")" => break,
                 "typed_arg" => {
-                    let arg = TypedIdent::parse(reporter, dta, &next_node)?;
+                    let arg = TypedIdent::parse(ctx, dta, &next_node)?;
                     args.push(arg);
                 }
                 //part of the list, just ignore
                 "," => {}
                 _ => {
                     let error = ParserError::UnexpectedAstNode {
+                        span: ctx.span(node).into(),
                         kind: next_node.kind().to_owned(),
                         expected: "typed_arg".to_owned(),
                     };
-                    reporter.push_error(CommonError::new_on_node(&next_node, error.clone()));
+                    report(error.clone(), ctx.get_file());
                     return Err(error);
                 }
             }
         }
 
         //We should start with a block now
-        ParserError::consume_expected_node_kind(reporter, children.next(), "{")?;
+        ParserError::consume_expected_node_kind(ctx, children.next(), "{")?;
 
         let mut stmts = Vec::new();
         let mut access_descriptors = SmallVec::new();
@@ -211,15 +205,15 @@ impl FromTreeSitter for ExportFn {
                 "comment" => {}
                 "let_stmt" => {
                     //take away the ;
-                    stmts.push(CSGStmt::LetStmt(LetStmt::parse(reporter, dta, &next_node)?));
-                    ParserError::consume_expected_node_kind(reporter, children.next(), ";")?;
+                    stmts.push(CSGStmt::LetStmt(LetStmt::parse(ctx, dta, &next_node)?));
+                    ParserError::consume_expected_node_kind(ctx, children.next(), ";")?;
                 }
                 "csg_binding" => {
                     stmts.push(CSGStmt::CSGBinding(CSGBinding::parse(
-                        reporter, dta, &next_node,
+                        ctx, dta, &next_node,
                     )?));
                     //take away the ;
-                    ParserError::consume_expected_node_kind(reporter, children.next(), ";")?;
+                    ParserError::consume_expected_node_kind(ctx, children.next(), ";")?;
                 }
 
                 //At this point, change into acces_decleration parsing, which must be the last part of the block
@@ -230,18 +224,16 @@ impl FromTreeSitter for ExportFn {
                             //start and , can be ignored
                             "(" | "," => {}
                             "access_decl" => {
-                                access_descriptors.push(AccessDesc::parse(reporter, dta, &child)?);
+                                access_descriptors.push(AccessDesc::parse(ctx, dta, &child)?);
                             }
                             ")" => break,
                             _ => {
                                 let error = ParserError::UnexpectedAstNode {
+                                    span: ctx.span(node).into(),
                                     kind: child.kind().to_owned(),
                                     expected: "access_decl | , | (".to_owned(),
                                 };
-                                reporter.push_error(CommonError::new_on_node(
-                                    &next_node,
-                                    error.clone(),
-                                ));
+                                report(error.clone(), ctx.get_file());
                                 return Err(error);
                             }
                         }
@@ -251,25 +243,26 @@ impl FromTreeSitter for ExportFn {
                 }
                 _ => {
                     let error = ParserError::UnexpectedAstNode {
+                        span: ctx.span(node).into(),
                         kind: next_node.kind().to_owned(),
                         expected: "comment | let_stmt | csg_binding | access_decl".to_owned(),
                     };
-                    reporter.push_error(CommonError::new_on_node(&next_node, error.clone()));
+                    report(error.clone(), ctx.get_file());
                     return Err(error);
                 }
             }
         }
 
         //check that we acutally are at the end
-        ParserError::consume_expected_node_kind(reporter, children.next(), "}")?;
+        ParserError::consume_expected_node_kind(ctx, children.next(), "}")?;
 
         if access_descriptors.len() == 0 {
             let err = ParserError::NoAccessDecs;
-            reporter.push_error(CommonError::new_on_node(node, err.clone()));
+            report(err.clone(), ctx.get_file());
             return Err(err);
         }
 
-        ParserError::assert_node_no_error(reporter, node)?;
+        ParserError::assert_node_no_error(ctx, node)?;
         Ok(ExportFn {
             span: Span::from(node),
             name: field_ident,

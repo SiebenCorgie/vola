@@ -1,5 +1,5 @@
 use smallvec::{smallvec, SmallVec};
-use vola_common::{CommonError, ErrorReporter, Span};
+use vola_common::{report, Span};
 
 use crate::{
     alge::AlgeExpr,
@@ -8,24 +8,20 @@ use crate::{
     error::ParserError,
 };
 
-use super::FromTreeSitter;
+use super::{FromTreeSitter, ParserCtx};
 
 impl FromTreeSitter for AccessDesc {
-    fn parse(
-        reporter: &mut ErrorReporter<ParserError>,
-        dta: &[u8],
-        node: &tree_sitter::Node,
-    ) -> Result<Self, ParserError>
+    fn parse(ctx: &mut ParserCtx, dta: &[u8], node: &tree_sitter::Node) -> Result<Self, ParserError>
     where
         Self: Sized,
     {
-        ParserError::assert_node_kind(reporter, node, "access_decl")?;
+        ParserError::assert_node_kind(ctx, node, "access_decl")?;
 
-        let src_tree = Ident::parse(reporter, dta, &node.child(0).unwrap())?;
-        ParserError::consume_expected_node_kind(reporter, node.child(1), ".")?;
-        let concept_call = Call::parse(reporter, dta, &node.child(2).unwrap())?;
+        let src_tree = Ident::parse(ctx, dta, &node.child(0).unwrap())?;
+        ParserError::consume_expected_node_kind(ctx, node.child(1), ".")?;
+        let concept_call = Call::parse(ctx, dta, &node.child(2).unwrap())?;
 
-        ParserError::assert_node_no_error(reporter, node)?;
+        ParserError::assert_node_no_error(ctx, node)?;
         Ok(AccessDesc {
             span: Span::from(node),
             tree_ref: src_tree,
@@ -35,27 +31,23 @@ impl FromTreeSitter for AccessDesc {
 }
 
 impl FromTreeSitter for CSGBinding {
-    fn parse(
-        reporter: &mut ErrorReporter<ParserError>,
-        dta: &[u8],
-        node: &tree_sitter::Node,
-    ) -> Result<Self, ParserError>
+    fn parse(ctx: &mut ParserCtx, dta: &[u8], node: &tree_sitter::Node) -> Result<Self, ParserError>
     where
         Self: Sized,
     {
-        ParserError::assert_node_kind(reporter, node, "csg_binding")?;
+        ParserError::assert_node_kind(ctx, node, "csg_binding")?;
 
         let mut walker = node.walk();
         let mut children = node.children(&mut walker);
-        ParserError::consume_expected_node_kind(reporter, children.next(), "csg")?;
+        ParserError::consume_expected_node_kind(ctx, children.next(), "csg")?;
 
-        let csg_ident = Ident::parse(reporter, dta, &children.next().unwrap())?;
+        let csg_ident = Ident::parse(ctx, dta, &children.next().unwrap())?;
 
-        ParserError::consume_expected_node_kind(reporter, children.next(), "=")?;
+        ParserError::consume_expected_node_kind(ctx, children.next(), "=")?;
 
-        let tree = CSGOp::parse(reporter, dta, &children.next().unwrap())?;
+        let tree = CSGOp::parse(ctx, dta, &children.next().unwrap())?;
 
-        ParserError::assert_node_no_error(reporter, node)?;
+        ParserError::assert_node_no_error(ctx, node)?;
         Ok(CSGBinding {
             span: Span::from(node),
             decl_name: csg_ident,
@@ -65,20 +57,17 @@ impl FromTreeSitter for CSGBinding {
 }
 
 impl FromTreeSitter for CSGOp {
-    fn parse(
-        reporter: &mut ErrorReporter<ParserError>,
-        dta: &[u8],
-        node: &tree_sitter::Node,
-    ) -> Result<Self, ParserError>
+    fn parse(ctx: &mut ParserCtx, dta: &[u8], node: &tree_sitter::Node) -> Result<Self, ParserError>
     where
         Self: Sized,
     {
         if node.kind() != "csg_unary" && node.kind() != "csg_binary" && node.kind() != "fn_call" {
             let err = ParserError::UnexpectedAstNode {
+                span: ctx.span(&node).into(),
                 kind: node.kind().to_owned(),
                 expected: "csg_unary | csg_binary | fn_call".to_owned(),
             };
-            reporter.push_error(CommonError::new(Span::from(node), err.clone()));
+            report(err.clone(), ctx.get_file());
             return Err(err);
         }
 
@@ -96,21 +85,23 @@ impl FromTreeSitter for CSGOp {
 
         let mut walker = node.walk();
         let mut children = node.children(&mut walker);
-        let ident = Ident::parse(reporter, dta, &children.next().unwrap())?;
+        let ident = Ident::parse(ctx, dta, &children.next().unwrap())?;
 
-        ParserError::consume_expected_node_kind(reporter, children.next(), "(")?;
+        ParserError::consume_expected_node_kind(ctx, children.next(), "(")?;
 
         let mut params = SmallVec::new();
         while let Some(next_node) = children.next() {
             match next_node.kind() {
                 ")" => break,
-                "alge_expr" => params.push(AlgeExpr::parse(reporter, dta, &next_node)?),
+                "alge_expr" => params.push(AlgeExpr::parse(ctx, dta, &next_node)?),
                 _ => {
                     let err = ParserError::UnexpectedAstNode {
+                        span: ctx.span(&next_node).into(),
                         kind: next_node.kind().to_owned(),
                         expected: "alge_expr | )".to_owned(),
                     };
-                    reporter.push_error(CommonError::new(Span::from(node), err.clone()));
+
+                    report(err.clone(), ctx.get_file());
                     return Err(err);
                 }
             }
@@ -120,21 +111,21 @@ impl FromTreeSitter for CSGOp {
         let sub_trees = match node.kind() {
             "csg_unary" => {
                 let mut subtrees = Vec::with_capacity(1);
-                ParserError::consume_expected_node_kind(reporter, children.next(), "{")?;
-                subtrees.push(CSGOp::parse(reporter, dta, &children.next().unwrap())?);
-                ParserError::consume_expected_node_kind(reporter, children.next(), "}")?;
+                ParserError::consume_expected_node_kind(ctx, children.next(), "{")?;
+                subtrees.push(CSGOp::parse(ctx, dta, &children.next().unwrap())?);
+                ParserError::consume_expected_node_kind(ctx, children.next(), "}")?;
                 subtrees
             }
             "csg_binary" => {
                 let mut subtrees = Vec::with_capacity(2);
                 //left tree
-                ParserError::consume_expected_node_kind(reporter, children.next(), "{")?;
-                subtrees.push(CSGOp::parse(reporter, dta, &children.next().unwrap())?);
-                ParserError::consume_expected_node_kind(reporter, children.next(), "}")?;
+                ParserError::consume_expected_node_kind(ctx, children.next(), "{")?;
+                subtrees.push(CSGOp::parse(ctx, dta, &children.next().unwrap())?);
+                ParserError::consume_expected_node_kind(ctx, children.next(), "}")?;
                 //right tree
-                ParserError::consume_expected_node_kind(reporter, children.next(), "{")?;
-                subtrees.push(CSGOp::parse(reporter, dta, &children.next().unwrap())?);
-                ParserError::consume_expected_node_kind(reporter, children.next(), "}")?;
+                ParserError::consume_expected_node_kind(ctx, children.next(), "{")?;
+                subtrees.push(CSGOp::parse(ctx, dta, &children.next().unwrap())?);
+                ParserError::consume_expected_node_kind(ctx, children.next(), "}")?;
 
                 subtrees
             }
@@ -145,9 +136,9 @@ impl FromTreeSitter for CSGOp {
             }
         };
 
-        ParserError::assert_ast_level_empty(reporter, children.next())?;
+        ParserError::assert_ast_level_empty(ctx, children.next())?;
 
-        ParserError::assert_node_no_error(reporter, node)?;
+        ParserError::assert_node_no_error(ctx, node)?;
         Ok(CSGOp {
             span: Span::from(node),
             op: ident,
@@ -158,20 +149,17 @@ impl FromTreeSitter for CSGOp {
 }
 
 impl FromTreeSitter for CSGNodeDef {
-    fn parse(
-        reporter: &mut ErrorReporter<ParserError>,
-        dta: &[u8],
-        node: &tree_sitter::Node,
-    ) -> Result<Self, ParserError>
+    fn parse(ctx: &mut ParserCtx, dta: &[u8], node: &tree_sitter::Node) -> Result<Self, ParserError>
     where
         Self: Sized,
     {
         if node.kind() != "def_entity" && node.kind() != "def_operation" {
             let err = ParserError::UnexpectedAstNode {
+                span: ctx.span(&node).into(),
                 kind: node.kind().to_owned(),
                 expected: "def_entity | def_operation".to_owned(),
             };
-            reporter.push_error(CommonError::new(Span::from(node), err.clone()));
+            report(err.clone(), ctx.get_file());
             return Err(err);
         }
 
@@ -183,38 +171,40 @@ impl FromTreeSitter for CSGNodeDef {
             "operation" => CSGNodeTy::Operation,
             _ => {
                 let err = ParserError::UnexpectedAstNode {
+                    span: ctx.span(&ty_node).into(),
                     kind: ty_node.kind().to_owned(),
                     expected: "entity | operation".to_owned(),
                 };
-                reporter.push_error(CommonError::new(Span::from(node), err.clone()));
+                report(err.clone(), ctx.get_file());
                 return Err(err);
             }
         };
 
         //parse the identifier
-        let name = Ident::parse(reporter, dta, children.next().as_ref().unwrap())?;
+        let name = Ident::parse(ctx, dta, children.next().as_ref().unwrap())?;
 
-        ParserError::consume_expected_node_kind(reporter, children.next(), "(")?;
+        ParserError::consume_expected_node_kind(ctx, children.next(), "(")?;
 
         let mut args = SmallVec::new();
         while let Some(next_node) = children.next() {
             match next_node.kind() {
                 ")" => break,
-                "typed_arg" => args.push(TypedIdent::parse(reporter, dta, &next_node)?),
+                "typed_arg" => args.push(TypedIdent::parse(ctx, dta, &next_node)?),
                 _ => {
                     let err = ParserError::UnexpectedAstNode {
+                        span: ctx.span(&next_node).into(),
                         kind: next_node.kind().to_owned(),
                         expected: "typed_arg | )".to_owned(),
                     };
-                    reporter.push_error(CommonError::new(Span::from(node), err.clone()));
+                    report(err.clone(), ctx.get_file());
                     return Err(err);
                 }
             }
         }
 
-        ParserError::consume_expected_node_kind(reporter, children.next(), ";")?;
-        ParserError::assert_ast_level_empty(reporter, children.next())?;
-        ParserError::assert_node_no_error(reporter, node)?;
+        ParserError::consume_expected_node_kind(ctx, children.next(), ";")?;
+        ParserError::assert_ast_level_empty(ctx, children.next())?;
+        ParserError::assert_node_no_error(ctx, node)?;
 
         Ok(CSGNodeDef {
             span: Span::from(node),
@@ -226,23 +216,19 @@ impl FromTreeSitter for CSGNodeDef {
 }
 
 impl FromTreeSitter for CSGConcept {
-    fn parse(
-        reporter: &mut ErrorReporter<ParserError>,
-        dta: &[u8],
-        node: &tree_sitter::Node,
-    ) -> Result<Self, ParserError>
+    fn parse(ctx: &mut ParserCtx, dta: &[u8], node: &tree_sitter::Node) -> Result<Self, ParserError>
     where
         Self: Sized,
     {
-        ParserError::assert_node_kind(reporter, node, "def_concept")?;
+        ParserError::assert_node_kind(ctx, node, "def_concept")?;
 
         let mut walker = node.walk();
         let mut children = node.children(&mut walker);
-        ParserError::consume_expected_node_kind(reporter, children.next(), "concept")?;
+        ParserError::consume_expected_node_kind(ctx, children.next(), "concept")?;
 
-        let name = Ident::parse(reporter, dta, children.next().as_ref().unwrap())?;
+        let name = Ident::parse(ctx, dta, children.next().as_ref().unwrap())?;
 
-        ParserError::consume_expected_node_kind(reporter, children.next(), ":")?;
+        ParserError::consume_expected_node_kind(ctx, children.next(), ":")?;
 
         let next_node = children.next().unwrap();
         let arg = match next_node.kind() {
@@ -250,9 +236,9 @@ impl FromTreeSitter for CSGConcept {
             "->" => SmallVec::new(),
             //single src ty
             "alge_type" => {
-                let ty = Ty::parse_alge_ty(reporter, dta, &next_node)?;
+                let ty = Ty::parse_alge_ty(ctx, dta, &next_node)?;
                 //Consume the expected -> now
-                ParserError::consume_expected_node_kind(reporter, children.next(), "->")?;
+                ParserError::consume_expected_node_kind(ctx, children.next(), "->")?;
                 smallvec![ty]
             }
             //multiple src types
@@ -261,13 +247,14 @@ impl FromTreeSitter for CSGConcept {
                 while let Some(next_node) = children.next() {
                     match next_node.kind() {
                         ")" => break,
-                        "alge_type" => tys.push(Ty::parse_alge_ty(reporter, dta, &next_node)?),
+                        "alge_type" => tys.push(Ty::parse_alge_ty(ctx, dta, &next_node)?),
                         _ => {
                             let err = ParserError::UnexpectedAstNode {
+                                span: ctx.span(&next_node).into(),
                                 kind: next_node.kind().to_owned(),
                                 expected: ") | alge_ty".to_owned(),
                             };
-                            reporter.push_error(CommonError::new(Span::from(node), err.clone()));
+                            report(err.clone(), ctx.get_file());
                             return Err(err);
                         }
                     }
@@ -276,18 +263,19 @@ impl FromTreeSitter for CSGConcept {
             }
             _ => {
                 let err = ParserError::UnexpectedAstNode {
+                    span: ctx.span(&next_node).into(),
                     kind: next_node.kind().to_owned(),
                     expected: "-> | alge_ty | (".to_owned(),
                 };
-                reporter.push_error(CommonError::new(Span::from(node), err.clone()));
+                report(err.clone(), ctx.get_file());
                 return Err(err);
             }
         };
-        let result_ty = Ty::parse_alge_ty(reporter, dta, children.next().as_ref().unwrap())?;
+        let result_ty = Ty::parse_alge_ty(ctx, dta, children.next().as_ref().unwrap())?;
 
-        ParserError::consume_expected_node_kind(reporter, children.next(), ";")?;
-        ParserError::assert_ast_level_empty(reporter, children.next())?;
-        ParserError::assert_node_no_error(reporter, node)?;
+        ParserError::consume_expected_node_kind(ctx, children.next(), ";")?;
+        ParserError::assert_ast_level_empty(ctx, children.next())?;
+        ParserError::assert_node_no_error(ctx, node)?;
 
         Ok(CSGConcept {
             span: Span::from(node),

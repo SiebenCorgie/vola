@@ -1,98 +1,94 @@
-use std::error::Error;
-
 use ahash::AHashMap;
-use smallvec::SmallVec;
+use backtrace::Backtrace;
+use miette::Diagnostic;
 
-use crate::{CommonError, ErrorPrintBundle, FileString, Span};
+use lazy_static::lazy_static;
+use std::{
+    error::Error,
+    sync::{Arc, Mutex},
+};
 
-///Helper utility that collects [CommonError](crate::CommonError)s, and reports them when asked.
-pub struct ErrorReporter<E: Error> {
-    src_file: FileString,
-    errors: SmallVec<[CommonError<E>; 10]>,
-    ///Map of cached files we already _know_.
-    cached_files: AHashMap<String, Vec<String>>,
+pub trait Reportable: Error + Diagnostic + Send + Sync + 'static {}
+
+lazy_static! {
+    static ref REPORTER: Mutex<ErrorReporter> = Mutex::new(ErrorReporter::new());
 }
 
-impl<E: Error> ErrorReporter<E> {
+///Helper utility that collects [CommonError](crate::CommonError)s, and reports them when asked.
+pub struct ErrorReporter {
+    had_error: bool,
+    ///Map of cached files we already _know_.
+    cached_files: AHashMap<String, Arc<String>>,
+}
+
+impl ErrorReporter {
     pub fn new() -> Self {
         ErrorReporter {
-            src_file: FileString::default(),
-            errors: SmallVec::default(),
+            had_error: false,
             cached_files: AHashMap::default(),
         }
     }
 
-    pub fn set_default_file(&mut self, file_path: &str) {
-        self.src_file = FileString::from_str(file_path);
-    }
-
     pub fn has_errors(&self) -> bool {
-        self.errors.len() > 0
+        self.had_error
     }
 
-    pub fn push_error(&mut self, mut error: CommonError<E>) {
-        //Overwrite file, if none was set
-        if let Some(span) = &mut error.span {
-            if span.file.is_empty() {
-                span.file = self.src_file.clone();
-            }
-        }
-        self.errors.push(error);
+    pub fn load_src_file<'a>(&'a mut self, file: &str) -> Option<&'a str> {
+        self.cached_files.get(file).map(|s| s.as_str())
     }
 
-    ///Loads the sub slice for the span. Returns nothing, if the file could not be loaded
-    pub fn load_span_line<'a>(&'a mut self, span: &Span) -> Option<&'a Vec<String>> {
-        if !self.cached_files.contains_key(span.file.as_str()) {
-            //try to load the file, if not possible, ignore
-            match std::fs::read_to_string(span.file.as_str()) {
-                Ok(file) => {
-                    let _ = self.cached_files.insert(
-                        span.file.as_str().to_owned(),
-                        file.lines().map(|line| line.to_owned()).collect(),
-                    );
+    ///Tries to ensure that "file" is loaded. Returns false if it couldn't.
+    pub fn ensure_file(&mut self, file: &str) -> Option<Arc<String>> {
+        if !self.cached_files.contains_key(file) {
+            match std::fs::read_to_string(file) {
+                Ok(file_string) => {
+                    let payload = Arc::new(file_string);
+                    let _ = self.cached_files.insert(file.to_owned(), payload.clone());
+                    Some(payload)
                 }
                 Err(e) => {
-                    println!("failed to read file {} : {}", span.file.as_str(), e);
+                    println!("failed to read file {} : {}", file, e);
+                    None
                 }
             }
+        } else {
+            self.cached_files.get(file).cloned()
         }
-
-        self.cached_files.get(span.file.as_str())
     }
 
-    ///Prints all errors to stdout that occurred till now. Also returns them as an collection
-    pub fn report_all(&mut self) -> SmallVec<[CommonError<E>; 10]> {
-        let mut errors: SmallVec<[CommonError<E>; 10]> = SmallVec::default();
-        std::mem::swap(&mut errors, &mut self.errors);
-        println!("{} Errors:", errors.len());
-        for error in &errors {
-            if let Some(span) = &error.span {
-                let span_lines = self.load_span_line(&span);
-                if span_lines.is_none() {
-                    //fall back to just printing E
-                    println!(
-                        "Error {}:{} .. {}:{}: {}",
-                        span.from.0, span.from.1, span.to.0, span.to.1, error.source,
-                    );
-                    if let Some(bt) = &error.backtrace {
-                        println!("Backtrace:\n{:?}", bt);
-                    }
-                } else {
-                    //otherwise use the pretty printer
-                    let bundle = ErrorPrintBundle {
-                        error: &error,
-                        src_lines: span_lines.unwrap(),
-                    };
-                    println!("{}", bundle);
-                }
-            } else {
-                //Simplest form, a span-less error
-                println!("Error: {}", error.source);
-                if let Some(bt) = &error.backtrace {
-                    println!("Backtrace:\n{:?}", bt);
-                }
+    pub fn report_on_file(&mut self, rep: impl Reportable, src_file: &str) {
+        if let Some(srccode) = self.ensure_file(src_file) {
+            let report = miette::ErrReport::new(rep).with_source_code(srccode);
+            println!("{:?}", report);
+
+            if std::env::var("VOLA_BACKTRACE").is_ok() {
+                println!("Backtrace: {:#?}", Backtrace::new())
             }
+        } else {
+            self.report(rep);
         }
-        errors
+    }
+
+    pub fn report(&mut self, rep: impl Reportable) {
+        let report = miette::ErrReport::new(rep);
+        println!("{:?}", report);
+        if std::env::var("VOLA_BACKTRACE").is_ok() {
+            println!("Backtrace: {:#?}", Backtrace::new())
+        }
+    }
+}
+
+///Sends a `err` reportable and reports the error, possibly based on some source-`file`.
+pub fn report(err: impl Reportable, file: Option<&str>) {
+    if let Some(f) = file {
+        match REPORTER.lock() {
+            Ok(mut lck) => lck.report_on_file(err, f),
+            Err(e) => println!("Failed to report error: {e}"),
+        }
+    } else {
+        match REPORTER.lock() {
+            Ok(mut lck) => lck.report(err),
+            Err(e) => println!("Failed to report error: {e}"),
+        }
     }
 }

@@ -1,29 +1,29 @@
 use smallvec::SmallVec;
-use vola_common::{CommonError, Span};
+use vola_common::{report, Span};
 
 use crate::{
-    alge::{AlgeExpr, AlgeExprTy},
+    alge::AlgeExpr,
     common::{CTArg, Call, Digit, Ident, Literal, Ty, TypedIdent},
     error::ParserError,
 };
 
-use super::FromTreeSitter;
+use super::{FromTreeSitter, ParserCtx};
 
 impl FromTreeSitter for Ident {
     fn parse(
-        reporter: &mut vola_common::ErrorReporter<crate::error::ParserError>,
+        ctx: &mut ParserCtx,
         dta: &[u8],
         node: &tree_sitter::Node,
     ) -> Result<Self, crate::error::ParserError>
     where
         Self: Sized,
     {
-        ParserError::assert_node_kind(reporter, node, "identifier")?;
+        ParserError::assert_node_kind(ctx, node, "identifier")?;
         let ident = match node.utf8_text(dta) {
             Ok(parsed) => parsed,
             Err(e) => {
                 let err = ParserError::Utf8ParseError(e);
-                reporter.push_error(CommonError::new_on_node(node, err.clone()));
+                report(err.clone(), ctx.get_file());
                 return Err(err);
             }
         };
@@ -33,19 +33,15 @@ impl FromTreeSitter for Ident {
 }
 
 impl FromTreeSitter for Digit {
-    fn parse(
-        reporter: &mut vola_common::ErrorReporter<ParserError>,
-        dta: &[u8],
-        node: &tree_sitter::Node,
-    ) -> Result<Self, ParserError>
+    fn parse(ctx: &mut ParserCtx, dta: &[u8], node: &tree_sitter::Node) -> Result<Self, ParserError>
     where
         Self: Sized,
     {
-        ParserError::assert_node_kind(reporter, node, "digit")?;
+        ParserError::assert_node_kind(ctx, node, "digit")?;
         let node_text = match node.utf8_text(dta) {
             Err(e) => {
                 let err = ParserError::Utf8ParseError(e);
-                reporter.push_error(CommonError::new_on_node(node, err.clone()));
+                report(err.clone(), ctx.get_file());
                 return Err(err);
             }
             Ok(s) => s.to_owned(),
@@ -55,7 +51,7 @@ impl FromTreeSitter for Digit {
             Ok(f) => f,
             Err(e) => {
                 let err = ParserError::ParseIntLiteral(e);
-                reporter.push_error(CommonError::new_on_node(node, err.clone()));
+                report(err.clone(), ctx.get_file());
                 return Err(err);
             }
         };
@@ -65,18 +61,14 @@ impl FromTreeSitter for Digit {
 }
 
 impl FromTreeSitter for Ty {
-    fn parse(
-        reporter: &mut vola_common::ErrorReporter<ParserError>,
-        dta: &[u8],
-        node: &tree_sitter::Node,
-    ) -> Result<Self, ParserError>
+    fn parse(ctx: &mut ParserCtx, dta: &[u8], node: &tree_sitter::Node) -> Result<Self, ParserError>
     where
         Self: Sized,
     {
         let node_text = match node.utf8_text(dta) {
             Err(e) => {
                 let err = ParserError::Utf8ParseError(e);
-                reporter.push_error(CommonError::new_on_node(node, err.clone()));
+                report(err.clone(), ctx.get_file());
                 return Err(err);
             }
             Ok(s) => s.to_owned(),
@@ -87,17 +79,17 @@ impl FromTreeSitter for Ty {
             return Ok(Ty::CSGTree);
         }
         //Otherwise this should be a alge_type
-        Self::parse_alge_ty(reporter, dta, node)
+        Self::parse_alge_ty(ctx, dta, node)
     }
 }
 
 impl Ty {
     pub fn parse_alge_ty(
-        reporter: &mut vola_common::ErrorReporter<ParserError>,
+        ctx: &mut ParserCtx,
         dta: &[u8],
         node: &tree_sitter::Node,
     ) -> Result<Self, ParserError> {
-        ParserError::assert_node_kind(reporter, node, "alge_type")?;
+        ParserError::assert_node_kind(ctx, node, "alge_type")?;
 
         match node.child(0).unwrap().kind() {
             "t_scalar" => {
@@ -106,7 +98,7 @@ impl Ty {
             }
             "t_vec" => {
                 //try to parse the first digit
-                let width = Digit::parse(reporter, dta, &node.child(0).unwrap().child(1).unwrap())?;
+                let width = Digit::parse(ctx, dta, &node.child(0).unwrap().child(1).unwrap())?;
                 Ok(Ty::Vec { width: width.0 })
             }
             "t_mat" => {
@@ -117,10 +109,11 @@ impl Ty {
             }
             _ => {
                 let err = ParserError::UnexpectedAstNode {
+                    span: ctx.span(&node).into(),
                     kind: node.child(0).unwrap().kind().to_string(),
                     expected: "t_scalar | t_vec | t_mat | t_tensor".to_owned(),
                 };
-                reporter.push_error(CommonError::new(Span::from(node), err.clone()));
+                report(err.clone(), ctx.get_file());
                 Err(err)
             }
         }
@@ -128,11 +121,7 @@ impl Ty {
 }
 
 impl FromTreeSitter for Literal {
-    fn parse(
-        reporter: &mut vola_common::ErrorReporter<ParserError>,
-        dta: &[u8],
-        node: &tree_sitter::Node,
-    ) -> Result<Self, ParserError>
+    fn parse(ctx: &mut ParserCtx, dta: &[u8], node: &tree_sitter::Node) -> Result<Self, ParserError>
     where
         Self: Sized,
     {
@@ -145,7 +134,7 @@ impl FromTreeSitter for Literal {
                 let node_text = match node.utf8_text(dta) {
                     Err(e) => {
                         let err = ParserError::Utf8ParseError(e);
-                        reporter.push_error(CommonError::new_on_node(node, err.clone()));
+                        report(err.clone(), ctx.get_file());
                         return Err(err);
                     }
                     Ok(s) => s.to_owned(),
@@ -155,47 +144,44 @@ impl FromTreeSitter for Literal {
                     Ok(f) => f,
                     Err(e) => {
                         let err = ParserError::ParseFloatLiteral(e);
-                        reporter.push_error(CommonError::new_on_node(node, err.clone()));
+                        report(err.clone(), ctx.get_file());
                         return Err(err);
                     }
                 };
 
-                ParserError::assert_node_no_error(reporter, node)?;
+                ParserError::assert_node_no_error(ctx, node)?;
                 Ok(Literal::FloatLiteral(float))
             }
             "integer_literal" => {
                 //reuse the digit parser, but unwrap the value
-                let digit = Digit::parse(reporter, dta, &node.child(0).unwrap())?;
+                let digit = Digit::parse(ctx, dta, &node.child(0).unwrap())?;
 
-                ParserError::assert_node_no_error(reporter, node)?;
+                ParserError::assert_node_no_error(ctx, node)?;
                 Ok(Literal::IntegerLiteral(digit.0))
             }
             _ => {
                 let err = ParserError::UnexpectedAstNode {
+                    span: ctx.span(&node).into(),
                     kind: node.kind().to_string(),
                     expected: "integer_literal | float_literal".to_owned(),
                 };
-                reporter.push_error(CommonError::new(Span::from(node), err.clone()));
+                report(err.clone(), ctx.get_file());
                 Err(err)
             }
         }
     }
 }
 impl FromTreeSitter for TypedIdent {
-    fn parse(
-        reporter: &mut vola_common::ErrorReporter<ParserError>,
-        dta: &[u8],
-        node: &tree_sitter::Node,
-    ) -> Result<Self, ParserError>
+    fn parse(ctx: &mut ParserCtx, dta: &[u8], node: &tree_sitter::Node) -> Result<Self, ParserError>
     where
         Self: Sized,
     {
-        ParserError::assert_node_kind(reporter, node, "typed_arg")?;
-        let ident = Ident::parse(reporter, dta, node.child(0).as_ref().unwrap())?;
-        ParserError::consume_expected_node_kind(reporter, node.child(1), ":")?;
-        let ty = Ty::parse_alge_ty(reporter, dta, node.child(2).as_ref().unwrap())?;
+        ParserError::assert_node_kind(ctx, node, "typed_arg")?;
+        let ident = Ident::parse(ctx, dta, node.child(0).as_ref().unwrap())?;
+        ParserError::consume_expected_node_kind(ctx, node.child(1), ":")?;
+        let ty = Ty::parse_alge_ty(ctx, dta, node.child(2).as_ref().unwrap())?;
 
-        ParserError::assert_node_no_error(reporter, node)?;
+        ParserError::assert_node_no_error(ctx, node)?;
         Ok(TypedIdent {
             span: Span::from(node),
             ident,
@@ -205,20 +191,16 @@ impl FromTreeSitter for TypedIdent {
 }
 
 impl FromTreeSitter for Call {
-    fn parse(
-        reporter: &mut vola_common::ErrorReporter<ParserError>,
-        dta: &[u8],
-        node: &tree_sitter::Node,
-    ) -> Result<Self, ParserError>
+    fn parse(ctx: &mut ParserCtx, dta: &[u8], node: &tree_sitter::Node) -> Result<Self, ParserError>
     where
         Self: Sized,
     {
-        ParserError::assert_node_kind(reporter, node, "fn_call")?;
+        ParserError::assert_node_kind(ctx, node, "fn_call")?;
         let mut walker = node.walk();
         let mut children = node.children(&mut walker);
 
-        let ident = Ident::parse(reporter, dta, &children.next().unwrap())?;
-        ParserError::consume_expected_node_kind(reporter, children.next(), "(")?;
+        let ident = Ident::parse(ctx, dta, &children.next().unwrap())?;
+        ParserError::consume_expected_node_kind(ctx, children.next(), "(")?;
 
         let mut args = SmallVec::new();
 
@@ -226,19 +208,20 @@ impl FromTreeSitter for Call {
             match next_node.kind() {
                 ")" => break,
                 "," => {}
-                "alge_expr" => args.push(AlgeExpr::parse(reporter, dta, &next_node)?),
+                "alge_expr" => args.push(AlgeExpr::parse(ctx, dta, &next_node)?),
                 _ => {
                     let err = ParserError::UnexpectedAstNode {
+                        span: ctx.span(&next_node).into(),
                         kind: next_node.kind().to_string(),
                         expected: "alge_expr".to_owned(),
                     };
-                    reporter.push_error(CommonError::new(Span::from(&next_node), err.clone()));
+                    report(err.clone(), ctx.get_file());
                     return Err(err);
                 }
             }
         }
 
-        ParserError::assert_node_no_error(reporter, node)?;
+        ParserError::assert_node_no_error(ctx, node)?;
         Ok(Call {
             span: Span::from(node),
             ident,
@@ -248,30 +231,26 @@ impl FromTreeSitter for Call {
 }
 
 impl FromTreeSitter for CTArg {
-    fn parse(
-        reporter: &mut vola_common::ErrorReporter<ParserError>,
-        dta: &[u8],
-        node: &tree_sitter::Node,
-    ) -> Result<Self, ParserError>
+    fn parse(ctx: &mut ParserCtx, dta: &[u8], node: &tree_sitter::Node) -> Result<Self, ParserError>
     where
         Self: Sized,
     {
-        ParserError::assert_node_kind(reporter, node, "ct_attrib")?;
+        ParserError::assert_node_kind(ctx, node, "ct_attrib")?;
         let mut walker = node.walk();
         let mut children = node.children(&mut walker);
 
-        ParserError::consume_expected_node_kind(reporter, children.next(), "#")?;
-        ParserError::consume_expected_node_kind(reporter, children.next(), "[")?;
+        ParserError::consume_expected_node_kind(ctx, children.next(), "#")?;
+        ParserError::consume_expected_node_kind(ctx, children.next(), "[")?;
 
         //NOTE: Right now we reuse the call parser.
-        let call = Call::parse(reporter, dta, &children.next().unwrap())?;
+        let call = Call::parse(ctx, dta, &children.next().unwrap())?;
 
         let Call { span, ident, args } = call;
 
-        ParserError::consume_expected_node_kind(reporter, children.next(), "]")?;
+        ParserError::consume_expected_node_kind(ctx, children.next(), "]")?;
 
-        ParserError::assert_ast_level_empty(reporter, children.next())?;
-        ParserError::assert_node_no_error(reporter, node)?;
+        ParserError::assert_ast_level_empty(ctx, children.next())?;
+        ParserError::assert_node_no_error(ctx, node)?;
 
         Ok(CTArg { span, ident, args })
     }
