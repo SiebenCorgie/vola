@@ -22,6 +22,9 @@ use slotmap::{new_key_type, SlotMap};
 pub use smallvec;
 use smallvec::SmallVec;
 
+#[cfg(feature = "derive")]
+pub use rvsdg_derive_lang;
+
 pub mod analyze;
 pub mod attrib;
 pub mod builder;

@@ -66,16 +66,16 @@ impl LNode {
 
 impl LangNode for LNode {
     fn inputs(&self) -> &[Input] {
-        &self.inputs
+        self.inputs.as_slice()
     }
     fn outputs(&self) -> &[Output] {
-        &self.outputs
+        self.outputs.as_slice()
     }
     fn inputs_mut(&mut self) -> &mut [Input] {
-        &mut self.inputs
+        self.inputs.as_mut_slice()
     }
     fn outputs_mut(&mut self) -> &mut [Output] {
-        &mut self.outputs
+        self.outputs.as_mut_slice()
     }
 }
 

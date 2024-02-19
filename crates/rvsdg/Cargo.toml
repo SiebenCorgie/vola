@@ -6,8 +6,9 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-default = ["dot"]
+default = ["dot", "derive"]
 dot = ["graphviz-rust"]
+derive = ["rvsdg-derive-lang"]
 
 
 [dependencies]
@@ -16,3 +17,4 @@ ahash.workspace = true
 slotmap.workspace = true
 graphviz-rust = {workspace = true, optional = true}
 smallvec.workspace = true
+rvsdg-derive-lang = {path = "../rvsdg-derive-lang", optional = true}

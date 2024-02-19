@@ -22,6 +22,9 @@ use rvsdg_viewer::View;
 pub use vola_ast::common::Ty;
 use vola_common::Span;
 
+mod common;
+mod csg;
+
 ///A node of some dialect
 pub trait DialectNode: LangNode + View {
     ///Dialect identifier of this node.
@@ -33,7 +36,7 @@ pub struct OptNode {
     ///The source span this node originated from
     pub span: Span,
     ///The inner node that is being represented
-    pub node: Box<dyn DialectNode + Send + Sync + 'static>,
+    node: Box<dyn DialectNode + Send + Sync + 'static>,
 }
 
 impl View for OptNode {
