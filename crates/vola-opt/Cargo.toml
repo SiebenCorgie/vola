@@ -1,0 +1,16 @@
+[package]
+name = "vola-opt"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[features]
+default = ["viewer"]
+viewer = ["rvsdg-viewer"]
+
+[dependencies]
+rvsdg = {path = "../rvsdg"}
+rvsdg-viewer = {path = "../rvsdg-viewer", optional = true}
+vola-ast = {path = "../vola-ast"}
+vola-common = {path = "../vola-common"}

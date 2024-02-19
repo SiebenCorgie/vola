@@ -4,7 +4,7 @@ members = [
 "crates/rvsdg",
 "crates/rvsdg-viewer",
 "crates/vola-common",
-
+"crates/vola-opt",
 "examples/runtime-patch",
 "examples/rvsdg-simple",
 ]

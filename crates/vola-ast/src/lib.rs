@@ -13,11 +13,13 @@ use alge::ImplBlock;
 use common::CTArg;
 use csg::{CSGConcept, CSGNodeDef, ExportFn, FieldDef};
 
-mod alge;
-mod common;
-mod csg;
+pub mod alge;
+pub mod common;
+pub mod csg;
 mod error;
 mod parser;
+
+pub use error::ParserError;
 
 #[cfg(feature = "dot")]
 pub mod dot;

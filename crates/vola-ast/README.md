@@ -26,3 +26,4 @@ The main structures are defined in `src/lib.rs` and most `src/*` files. The tree
 ## Hints
 
 - There is a `dot` feature in the `dot` module, which lets you translate an AST to a DOT-Graph and safe it as SVG.
+- export `VOLA_BACKTRACE=1` to enable backtraces whenever the AST parser fails. Thats really helpful whenever the parser panics, instead of correctly reporting an error.
