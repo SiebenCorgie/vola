@@ -1,6 +1,6 @@
 use rvsdg::{
-    nodes::LangNode,
     region::{Input, Output},
+    rvsdg_derive_lang::LangNode,
 };
 pub use rvsdg_viewer::macroquad;
 use rvsdg_viewer::View;
@@ -31,10 +31,14 @@ pub enum MyNodes {
     Sub,
 }
 
-#[derive(Clone, Debug)]
+//NOTE: Uses the LangNode derive macro. You could also implement the
+// trait yourself if you want
+#[derive(Clone, Debug, LangNode)]
 pub struct LNode {
     node: MyNodes,
+    #[inputs]
     inputs: Vec<Input>,
+    #[outputs]
     outputs: Vec<Output>,
 }
 
@@ -61,21 +65,6 @@ impl LNode {
             inputs: vec![Input::default(); n_inputs],
             outputs: vec![Output::default(); n_outputs],
         }
-    }
-}
-
-impl LangNode for LNode {
-    fn inputs(&self) -> &[Input] {
-        self.inputs.as_slice()
-    }
-    fn outputs(&self) -> &[Output] {
-        self.outputs.as_slice()
-    }
-    fn inputs_mut(&mut self) -> &mut [Input] {
-        self.inputs.as_mut_slice()
-    }
-    fn outputs_mut(&mut self) -> &mut [Output] {
-        self.outputs.as_mut_slice()
     }
 }
 

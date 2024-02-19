@@ -6,8 +6,26 @@
 //!
 
 use proc_macro::TokenStream;
-use syn::{spanned::Spanned, Data, Field, Fields, Ident};
+use syn::{spanned::Spanned, Data, Fields, Ident};
 
+/// Implements the [LangNode](rvsdg::nodes::LangNode) trait for you.
+///
+/// Tag the input field with `[inputs]` if its a type that implements `as_slice` or `[input]` if its a single [Input](rvsdg::common::Input).
+/// Similarly tag the `output` / `outputs` field.
+///
+/// In the case that you want to inherit the [LangNode](rvsdg::nodes::LangNode) implementation of some field, use `[expose]` on the field.
+///
+///
+/// # Example
+/// ```rust, ignore
+///#[derive(LangNode)]
+///pub struct VecNode {
+///    #[input]
+///    inp: Input,
+///    #[outputs]
+///    outp: Vec<Output>,
+///}
+/// ```
 #[proc_macro_derive(LangNode, attributes(inputs, outputs, input, output, expose))]
 pub fn derive_lang_node(item: TokenStream) -> TokenStream {
     let ast = syn::parse(item).expect("failed to parse input stream");
@@ -211,9 +229,4 @@ fn impl_lang_node_inout(
         }
     )
     .into()
-}
-
-#[proc_macro_derive(LangEdge, attributes(state_edge, value_edge))]
-pub fn derive_lang_edge(_item: TokenStream) -> TokenStream {
-    "fn yay() {println!(\"yay\");}".parse().unwrap()
 }

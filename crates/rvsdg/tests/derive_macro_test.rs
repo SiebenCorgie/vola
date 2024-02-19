@@ -97,6 +97,7 @@ fn derive_lang_node_expose() {
     pub struct VecNode {
         #[expose]
         exp: ExposeContainer,
+        #[allow(unused)]
         payload: String,
     }
 
