@@ -1,9 +1,8 @@
 //! Generic Dot-Graph transformer.
 //!
 
-use ahash::AHashSet;
 use graphviz_rust::{
-    attributes::{color, NodeAttributes},
+    attributes::NodeAttributes,
     dot_structures::{Edge, Node, NodeId, Subgraph},
 };
 

@@ -23,3 +23,6 @@ frontends like [openSCAD](https://openscad.org/) as well.
 The main structures are defined in `src/lib.rs` and most `src/*` files. The tree-sitter parser is implemented in `src/parser.rs` and all sibling modules.
 
 
+## Hints
+
+- There is a `dot` feature in the `dot` module, which lets you translate an AST to a DOT-Graph and safe it as SVG.

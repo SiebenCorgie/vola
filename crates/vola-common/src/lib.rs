@@ -1,17 +1,9 @@
 //! Common diagnosis helper. This is mostly Span of nodes, as well their reporting.
 
-use std::fmt::Display;
-
-use annotate_snippets::{
-    display_list::{DisplayList, FormatOptions},
-    snippet::{Annotation, AnnotationType, Slice, Snippet, SourceAnnotation},
-};
-use backtrace::Backtrace;
 use miette::{SourceOffset, SourceSpan};
 pub use reporter::ErrorReporter;
 use serde::{Deserialize, Serialize};
 use smallstr::SmallString;
-use tree_sitter::Node;
 
 pub use serde;
 pub use serde_lexpr;

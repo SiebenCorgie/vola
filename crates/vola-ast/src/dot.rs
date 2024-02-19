@@ -418,7 +418,7 @@ impl DotNode for AlgeExpr {
 
     fn build_children(&self, mut builder: GraphvizBuilder) -> GraphvizBuilder {
         match &self.expr_ty {
-            AlgeExprTy::Binary { left, right, op } => {
+            AlgeExprTy::Binary { left, right, op: _ } => {
                 builder.add_node(left.as_ref());
                 builder.add_node(right.as_ref());
                 builder.connect(self, left.as_ref());
@@ -428,7 +428,7 @@ impl DotNode for AlgeExpr {
                 builder = right.build_children(builder);
                 builder
             }
-            AlgeExprTy::Unary { op, operand } => {
+            AlgeExprTy::Unary { op: _, operand } => {
                 builder.add_node(operand.as_ref());
                 builder.connect(self, operand.as_ref());
                 operand.build_children(builder)

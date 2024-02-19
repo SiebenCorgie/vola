@@ -12,7 +12,6 @@ dot = ["graphviz-rust"]
 [dependencies]
 thiserror.workspace = true
 backtrace.workspace = true
-annotate-snippets.workspace = true
 tree-sitter.workspace = true
 ahash.workspace = true
 smallvec.workspace = true
