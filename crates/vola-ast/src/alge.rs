@@ -74,7 +74,10 @@ pub struct LetStmt {
 #[derive(Clone, Debug)]
 pub struct EvalExpr {
     pub span: Span,
+    ///The operand that is being evaluated.
     pub evaluator: Ident,
+    ///The concept that is being evaluated.
+    pub concept: Ident,
     pub params: Vec<AlgeExpr>,
 }
 

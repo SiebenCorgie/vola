@@ -23,14 +23,14 @@ operation Translate(trans: vec3);
 //field
 impl Translate<sub> for SDF3D(at){
     at = at - trans;
-    eval sub(at)
+    eval sub.SDF3D(at)
 }
 
 ///Simple union operation
 operation Union();
 impl Union<left, right> for SDF3D(at) {
-    let left = eval l(at);
-    let right = eval r(at);
+    let left = eval l.SDF3D(at);
+    let right = eval r.SDF3D(at);
     let new_result = min(left, right);
     new_result
 }
@@ -38,8 +38,8 @@ impl Union<left, right> for SDF3D(at) {
 //SmoothUnion
 operation SmoothUnion(suradius: s);
 impl SmoothUnion<left, right> for SDF3D(at){
-    let l = eval left(at);
-    let r = eval right(at);
+    let l = eval left.SDF3D(at);
+    let r = eval right.SDF3D(at);
     let h = clamp( 0.5 + 0.5 * (r-l) / suradius, 0.0, 1.0);
     let dist = mix(l, r, h) * - suradius * h * (1.0 - h);
     dist
@@ -48,7 +48,7 @@ impl SmoothUnion<left, right> for SDF3D(at){
 //Color overwrite operation
 operation ColorOw(owcol: vec3);
 impl ColorOw<sub> for Color{
-    eval sub();
+    eval sub.Color();
     owcol
 }
 

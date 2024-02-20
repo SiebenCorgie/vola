@@ -22,6 +22,7 @@ use rvsdg_viewer::View;
 pub use vola_ast::common::Ty;
 use vola_common::Span;
 
+mod alge;
 mod common;
 mod csg;
 

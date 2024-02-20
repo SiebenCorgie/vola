@@ -296,7 +296,9 @@ impl FromTreeSitter for EvalExpr {
         let mut walker = node.walk();
         let mut children = node.children(&mut walker);
         ParserError::consume_expected_node_string(ctx, dta, children.next(), "eval")?;
-        let evaluated = Ident::parse(ctx, dta, &children.next().unwrap())?;
+        let evaluator = Ident::parse(ctx, dta, &children.next().unwrap())?;
+        ParserError::consume_expected_node_string(ctx, dta, children.next(), ".")?;
+        let concept = Ident::parse(ctx, dta, &children.next().unwrap())?;
         ParserError::consume_expected_node_string(ctx, dta, children.next(), "(")?;
 
         let mut eval_params = Vec::new();
@@ -343,7 +345,8 @@ impl FromTreeSitter for EvalExpr {
 
         Ok(EvalExpr {
             span: Span::from(node),
-            evaluator: evaluated,
+            evaluator,
+            concept,
             params: eval_params,
         })
     }
