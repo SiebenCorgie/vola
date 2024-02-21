@@ -15,16 +15,25 @@
 //!
 //! Used to represent algebraic expressions.
 
+use ahash::AHashMap;
+use alge::{ConceptImpl, ConceptImplKey};
+use error::OptError;
 use rvsdg::{edge::LangEdge, nodes::LangNode, Rvsdg};
 
 use rvsdg_viewer::View;
 ///Type in the vola type-system.
 pub use vola_ast::common::Ty;
+use vola_ast::{
+    csg::{CSGConcept, CSGNodeDef},
+    VolaAst,
+};
 use vola_common::Span;
 
 mod alge;
+mod ast;
 mod common;
 mod csg;
+mod error;
 
 ///A node of some dialect
 pub trait DialectNode: LangNode + View {
@@ -103,6 +112,40 @@ impl LangEdge for OptEdge {
     }
 }
 
+///The _whole_ optimizer. Mostly ties together the RVSDG and some auxiliary structures that
+/// make wiring the the correct nodes together possible.
 pub struct Optimizer {
-    graph: Rvsdg<OptNode, OptEdge>,
+    pub(crate) graph: Rvsdg<OptNode, OptEdge>,
+
+    ///All known concept definitions keyed by their name
+    //NOTE: using the name, since thats how we reference them all the time.
+    pub(crate) concepts: AHashMap<String, CSGConcept>,
+    ///All known entity and operation defs
+    pub(crate) csg_node_defs: AHashMap<String, CSGNodeDef>,
+
+    ///lookup table for the λ-Nodes of entity implementation of concepts
+    pub(crate) concept_impl: AHashMap<ConceptImplKey, ConceptImpl>,
+}
+
+impl Optimizer {
+    pub fn new() -> Self {
+        Optimizer {
+            graph: Rvsdg::new(),
+            concepts: AHashMap::default(),
+            csg_node_defs: AHashMap::default(),
+            concept_impl: AHashMap::default(),
+        }
+    }
+
+    ///Adds a [VolaAst](vola_ast::VolaAst) to the optimizer. Might emit errors if the
+    /// semantic analysis fails immediately while adding.
+    ///
+    /// Stops whenever an error occurs.
+    pub fn add_ast(&mut self, ast: VolaAst) -> Result<(), OptError> {
+        for tl in ast.entries {
+            self.add_tl_node(tl)?;
+        }
+
+        Ok(())
+    }
 }

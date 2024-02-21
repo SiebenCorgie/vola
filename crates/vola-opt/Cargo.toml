@@ -14,3 +14,4 @@ rvsdg = {path = "../rvsdg"}
 rvsdg-viewer = {path = "../rvsdg-viewer", optional = true}
 vola-ast = {path = "../vola-ast"}
 vola-common = {path = "../vola-common"}
+ahash.workspace = true

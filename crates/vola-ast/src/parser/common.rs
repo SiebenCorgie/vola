@@ -220,7 +220,7 @@ impl FromTreeSitter for TypedIdent {
 
         ParserError::assert_node_no_error(ctx, node)?;
         Ok(TypedIdent {
-            span: Span::from(node),
+            span: Span::from(node).with_file_maybe(ctx.get_file()),
             ident,
             ty,
         })
@@ -266,7 +266,7 @@ impl FromTreeSitter for Call {
         ParserError::assert_ast_level_empty(ctx, children.next())?;
         ParserError::assert_node_no_error(ctx, node)?;
         Ok(Call {
-            span: Span::from(node),
+            span: Span::from(node).with_file_maybe(ctx.get_file()),
             ident,
             args,
         })

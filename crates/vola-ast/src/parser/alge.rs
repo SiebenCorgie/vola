@@ -205,7 +205,7 @@ impl FromTreeSitter for AlgeExpr {
 
         ParserError::assert_node_no_error(ctx, node)?;
         Ok(AlgeExpr {
-            span: Span::from(node),
+            span: Span::from(node).with_file_maybe(ctx.get_file()),
             expr_ty,
         })
     }
@@ -218,11 +218,11 @@ impl FromTreeSitter for FieldAccessor {
     {
         match node.kind() {
             "digit" => Ok(FieldAccessor::Digit {
-                span: Span::from(node),
+                span: Span::from(node).with_file_maybe(ctx.get_file()),
                 digit: Digit::parse(ctx, dta, node)?.0,
             }),
             "identifier" => Ok(FieldAccessor::Ident {
-                span: Span::from(node),
+                span: Span::from(node).with_file_maybe(ctx.get_file()),
                 ident: Ident::parse(ctx, dta, node)?,
             }),
             _ => {
@@ -255,7 +255,7 @@ impl FromTreeSitter for LetStmt {
 
         ParserError::assert_node_no_error(ctx, node)?;
         Ok(LetStmt {
-            span: Span::from(node),
+            span: Span::from(node).with_file_maybe(ctx.get_file()),
             decl_name: ident,
             expr: alge_expr,
         })
@@ -279,7 +279,7 @@ impl FromTreeSitter for AssignStmt {
         ParserError::assert_ast_level_empty(ctx, children.next())?;
         ParserError::assert_node_no_error(ctx, node)?;
         Ok(AssignStmt {
-            span: Span::from(node),
+            span: Span::from(node).with_file_maybe(ctx.get_file()),
             dst: ident,
             expr: alge_expr,
         })
@@ -344,7 +344,7 @@ impl FromTreeSitter for EvalExpr {
         ParserError::assert_node_no_error(ctx, node)?;
 
         Ok(EvalExpr {
-            span: Span::from(node),
+            span: Span::from(node).with_file_maybe(ctx.get_file()),
             evaluator,
             concept,
             params: eval_params,
@@ -577,7 +577,7 @@ impl FromTreeSitter for ImplBlock {
         */
 
         Ok(ImplBlock {
-            span: Span::from(node),
+            span: Span::from(node).with_file_maybe(ctx.get_file()),
             dst,
             operands,
             concept,

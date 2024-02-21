@@ -8,6 +8,7 @@ concept SDF2D: vec2 -> s;
 concept SDF3D: vec3 -> s;
 concept Color: -> vec3;
 
+
 concept MultiConcept: (vec3, s, vec3) -> vec3;
 
 //Declares that we need the parameter `@` to define SDF3D of Sphere

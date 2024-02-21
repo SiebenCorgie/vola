@@ -49,6 +49,24 @@ impl Span {
         self.file = FileString::from_str(file_name);
         self
     }
+
+    ///Basically [with_file], but for an option. Makes it easy to combine `Span::from(Node).with_file_myabe(parser_context.get_file())`.
+    pub fn with_file_maybe(self, file_name: Option<&str>) -> Self {
+        if let Some(file) = file_name {
+            self.with_file(file)
+        } else {
+            self
+        }
+    }
+
+    ///Returns a non-empty file string, if one was set
+    pub fn get_file(&self) -> Option<&str> {
+        if self.file.is_empty() {
+            None
+        } else {
+            Some(&self.file)
+        }
+    }
 }
 
 impl Into<SourceSpan> for Span {

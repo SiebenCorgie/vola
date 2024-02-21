@@ -23,7 +23,7 @@ impl FromTreeSitter for AccessDesc {
 
         ParserError::assert_node_no_error(ctx, node)?;
         Ok(AccessDesc {
-            span: Span::from(node),
+            span: Span::from(node).with_file_maybe(ctx.get_file()),
             tree_ref: src_tree,
             call: concept_call,
         })
@@ -50,7 +50,7 @@ impl FromTreeSitter for CSGBinding {
         ParserError::assert_ast_level_empty(ctx, children.next())?;
         ParserError::assert_node_no_error(ctx, node)?;
         Ok(CSGBinding {
-            span: Span::from(node),
+            span: Span::from(node).with_file_maybe(ctx.get_file()),
             decl_name: csg_ident,
             tree,
         })
@@ -164,7 +164,7 @@ impl FromTreeSitter for CSGOp {
         ParserError::assert_ast_level_empty(ctx, children.next())?;
         ParserError::assert_node_no_error(ctx, node)?;
         Ok(CSGOp {
-            span: Span::from(node),
+            span: Span::from(node).with_file_maybe(ctx.get_file()),
             op: ident,
             args: params,
             sub_trees,
@@ -260,7 +260,7 @@ impl FromTreeSitter for CSGNodeDef {
         ParserError::assert_node_no_error(ctx, node)?;
 
         Ok(CSGNodeDef {
-            span: Span::from(node),
+            span: Span::from(node).with_file_maybe(ctx.get_file()),
             ty,
             name,
             args,
@@ -374,7 +374,7 @@ impl FromTreeSitter for CSGConcept {
         ParserError::assert_node_no_error(ctx, node)?;
 
         Ok(CSGConcept {
-            span: Span::from(node),
+            span: Span::from(node).with_file_maybe(ctx.get_file()),
             name,
             src_ty: arg,
             dst_ty: result_ty,

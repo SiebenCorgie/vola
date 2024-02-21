@@ -142,7 +142,7 @@ impl FromTreeSitter for FieldDef {
         }
 
         Ok(FieldDef {
-            span: Span::from(node),
+            span: Span::from(node).with_file_maybe(ctx.get_file()),
             name: field_ident,
             inputs: args,
             stmts,
@@ -290,7 +290,7 @@ impl FromTreeSitter for ExportFn {
 
         ParserError::assert_node_no_error(ctx, node)?;
         Ok(ExportFn {
-            span: Span::from(node),
+            span: Span::from(node).with_file_maybe(ctx.get_file()),
             name: field_ident,
             inputs: args,
             stmts,
