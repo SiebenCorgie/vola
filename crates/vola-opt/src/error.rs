@@ -31,4 +31,10 @@ pub enum OptError {
         span: SourceSpan,
         span_text: String,
     },
+
+    #[error("Cannot convert AstType {srcty:?} to a valid optimizer type")]
+    TypeConversionError { srcty: vola_ast::common::Ty },
+
+    #[error("At least {0} errors occurred while running optimizer.")]
+    ErrorsOccurred(usize),
 }

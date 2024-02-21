@@ -71,7 +71,7 @@ pub struct AccessDesc {
 
 ///All types of nodes in a CSGTree
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum CSGNodeTy {
     Entity,
     Operation,

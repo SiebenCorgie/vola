@@ -17,12 +17,11 @@
 
 use ahash::AHashMap;
 use alge::{ConceptImpl, ConceptImplKey};
+use common::Ty;
 use error::OptError;
-use rvsdg::{edge::LangEdge, nodes::LangNode, Rvsdg};
+use rvsdg::{attrib::AttribStore, edge::LangEdge, nodes::LangNode, Rvsdg};
 
 use rvsdg_viewer::View;
-///Type in the vola type-system.
-pub use vola_ast::common::Ty;
 use vola_ast::{
     csg::{CSGConcept, CSGNodeDef},
     VolaAst,
@@ -125,6 +124,9 @@ pub struct Optimizer {
 
     ///lookup table for the λ-Nodes of entity implementation of concepts
     pub(crate) concept_impl: AHashMap<ConceptImplKey, ConceptImpl>,
+
+    ///All known type tags of ports and nodes. Can be used to do type checking, or infer edge types.
+    pub(crate) typemap: AttribStore<Ty>,
 }
 
 impl Optimizer {
@@ -134,6 +136,7 @@ impl Optimizer {
             concepts: AHashMap::default(),
             csg_node_defs: AHashMap::default(),
             concept_impl: AHashMap::default(),
+            typemap: AttribStore::new(),
         }
     }
 
@@ -142,10 +145,37 @@ impl Optimizer {
     ///
     /// Stops whenever an error occurs.
     pub fn add_ast(&mut self, ast: VolaAst) -> Result<(), OptError> {
-        for tl in ast.entries {
-            self.add_tl_node(tl)?;
+        //NOTE we first add all def nodes, since those don't depend on anything else, and without those
+        // some of the other nodes might not build, even though they could.
+
+        let mut error_counter = 0;
+
+        let heavy_entries = ast
+            .entries
+            .into_iter()
+            .filter_map(|ast_entry| {
+                if ast_entry.entry.is_def_node() {
+                    //Early add def
+                    if let Err(_e) = self.add_tl_node(ast_entry) {
+                        error_counter += 1;
+                    }
+                    None
+                } else {
+                    Some(ast_entry)
+                }
+            })
+            .collect::<Vec<_>>();
+
+        for tl in heavy_entries {
+            if let Err(_e) = self.add_tl_node(tl) {
+                error_counter += 1;
+            }
         }
 
-        Ok(())
+        if error_counter > 0 {
+            Err(OptError::ErrorsOccurred(error_counter))
+        } else {
+            Ok(())
+        }
     }
 }

@@ -41,6 +41,16 @@ pub enum AstEntry {
     ExportFn(ExportFn),
 }
 
+impl AstEntry {
+    ///Returns true for CSGNodeDef and Concept
+    pub fn is_def_node(&self) -> bool {
+        match self {
+            Self::Concept(_) | Self::CSGNodeDef(_) => true,
+            _ => false,
+        }
+    }
+}
+
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Clone, Debug)]
 pub struct TopLevelNode {
