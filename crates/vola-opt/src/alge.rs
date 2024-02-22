@@ -123,7 +123,7 @@ macro_rules! implViewAlgeOp {
     ($opname:ident, $str:expr) =>{
         impl rvsdg_viewer::View for $opname {
             fn color(&self) -> rvsdg_viewer::macroquad::color::Color {
-                rvsdg_viewer::macroquad::color::Color::from_rgba(250, 64, 64, 255)
+                rvsdg_viewer::macroquad::color::Color::from_rgba(200, 170, 170, 255)
             }
 
             fn name(&self) -> String {

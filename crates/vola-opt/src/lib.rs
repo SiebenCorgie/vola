@@ -25,7 +25,7 @@ use rvsdg::{
     attrib::AttribStore, edge::LangEdge, nodes::LangNode, rvsdg_derive_lang::LangNode, Rvsdg,
 };
 
-use rvsdg_viewer::View;
+use rvsdg_viewer::{layout::LayoutConfig, View};
 use vola_ast::{
     csg::{CSGConcept, CSGNodeDef},
     VolaAst,
@@ -121,7 +121,15 @@ impl View for OptEdge {
     fn color(&self) -> rvsdg_viewer::macroquad::color::Color {
         match self {
             Self::State => rvsdg_viewer::macroquad::color::Color::from_rgba(255, 0, 0, 255),
-            Self::Value { .. } => rvsdg_viewer::macroquad::color::Color::from_rgba(0, 0, 0, 255),
+            Self::Value { ty } => match ty {
+                TypeState::Unset => rvsdg_viewer::macroquad::color::Color::from_rgba(0, 0, 0, 255),
+                TypeState::Set(_) => {
+                    rvsdg_viewer::macroquad::color::Color::from_rgba(0, 255, 0, 255)
+                }
+                TypeState::Derived(_) => {
+                    rvsdg_viewer::macroquad::color::Color::from_rgba(0, 0, 255, 255)
+                }
+            },
         }
     }
     fn name(&self) -> String {
@@ -137,11 +145,7 @@ impl View for OptEdge {
     fn stroke(&self) -> rvsdg_viewer::Stroke {
         match self {
             Self::State => rvsdg_viewer::Stroke::Line,
-            Self::Value { ty } => match ty {
-                TypeState::Derived(_) => rvsdg_viewer::Stroke::Dashs,
-                TypeState::Set(_) => rvsdg_viewer::Stroke::Line,
-                TypeState::Unset => rvsdg_viewer::Stroke::Dots,
-            },
+            Self::Value { .. } => rvsdg_viewer::Stroke::Line,
         }
     }
 }
@@ -215,6 +219,11 @@ impl Optimizer {
     }
 
     pub fn dump_svg(&self, name: &str) {
-        rvsdg_viewer::into_svg(&self.graph, name)
+        let conf = LayoutConfig {
+            grid_padding: 30,
+            grid_empty_spacing: 15,
+            ..Default::default()
+        };
+        rvsdg_viewer::into_svg_with_config(&self.graph, name, &conf)
     }
 }
