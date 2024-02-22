@@ -5,10 +5,10 @@ use crate::{
 };
 use ahash::{AHashMap, AHashSet};
 use rvsdg::{
-    edge::{InportLocation, InputType, OutportLocation},
+    edge::{InportLocation, InputType, OutportLocation, OutputType},
     nodes::LambdaNode,
-    region::RegionLocation,
-    smallvec::SmallVec,
+    region::{Input, RegionLocation},
+    smallvec::{smallvec, SmallVec},
     NodeRef,
 };
 use vola_ast::{
@@ -18,7 +18,7 @@ use vola_ast::{
 };
 use vola_common::{report, Span};
 
-use super::{CallOp, DummyNode, WkOp};
+use super::{CallOp, DummyNode, EvalNode, FieldAccess, Imm, ListConst, WkOp};
 
 #[derive(Debug, Clone, PartialEq, Hash, Eq)]
 pub struct ConceptImplKey {
@@ -286,44 +286,93 @@ Note that vola does not support shadowing. If you just want to change the value 
                 Ok(opnode)
             }
             AlgeExprTy::EvalExpr(evalexpr) => {
+                //For the eval expression, first find / insert the cv_import we need.
+                // then setup all arguments, and finally add the call.
+                let eval_cv = self.get_cv_for_eval(opt, &evalexpr);
+                let mut inputs: SmallVec<[OutportLocation; 3]> = smallvec![eval_cv];
+                for arg in evalexpr.params.into_iter() {
+                    inputs.push(self.setup_alge_expr(opt, arg, lmd_context)?);
+                }
+
+                //Now setup the eval node
                 let opnode = opt
                     .graph
                     .on_region(&self.lambda_region, |regbuilder| {
-                        let opnode =
-                            regbuilder.insert_node(OptNode::new(DummyNode::new(), expr_span));
+                        let (opnode, _) = regbuilder
+                            .connect_node(OptNode::new(EvalNode::new(), expr_span), &inputs)
+                            .unwrap();
                         opnode.output(0)
                     })
                     .unwrap();
                 Ok(opnode)
             }
             AlgeExprTy::FieldAccess { src, accessors } => {
+                //Try to find the access source, if successful, hook the source up to this and
+                // return the value
+
+                let src = if let Some(access) = lmd_context.defined_vars.get(&src.0) {
+                    access.port
+                } else {
+                    let err = OptError::AnySpanned {
+                        span: expr_span.clone().into(),
+                        text: format!("could not find {} in scope", src.0),
+                        span_text: "try to define this before using it".to_owned(),
+                    };
+                    report(err.clone(), expr_span.get_file());
+                    return Err(err);
+                };
+
                 let opnode = opt
                     .graph
                     .on_region(&self.lambda_region, |regbuilder| {
-                        let opnode =
-                            regbuilder.insert_node(OptNode::new(DummyNode::new(), expr_span));
+                        let (opnode, _) = regbuilder
+                            .connect_node(
+                                OptNode::new(FieldAccess::new(accessors), expr_span),
+                                &[src],
+                            )
+                            .unwrap();
                         opnode.output(0)
                     })
                     .unwrap();
                 Ok(opnode)
             }
             AlgeExprTy::Ident(i) => {
-                let opnode = opt
-                    .graph
-                    .on_region(&self.lambda_region, |regbuilder| {
-                        let opnode =
-                            regbuilder.insert_node(OptNode::new(DummyNode::new(), expr_span));
-                        opnode.output(0)
-                    })
-                    .unwrap();
-                Ok(opnode)
+                //try to resolve the ident, or throw an error if not possible
+                let ident_node = if let Some(noderef) = lmd_context.defined_vars.get(&i.0) {
+                    noderef
+                } else {
+                    let err = OptError::AnySpanned {
+                        span: expr_span.clone().into(),
+                        text: format!("could not find {} in scope", i.0),
+                        span_text: "try to define this before using it".to_owned(),
+                    };
+                    report(err.clone(), expr_span.get_file());
+                    return Err(err);
+                };
+
+                Ok(ident_node.port)
             }
             AlgeExprTy::List(lst) => {
+                //For now we just have a special "list" constructor that connects as many srcs as there are
+                // list elements.
+
+                //For it to not panic we first collect all items, then calculate how many
+                // list items we need, resize the inputs array and then connect them
+
+                let mut items: SmallVec<[OutportLocation; 3]> = SmallVec::new();
+                for itm in lst {
+                    items.push(self.setup_alge_expr(opt, itm, lmd_context)?);
+                }
+
+                let mut node = ListConst::new();
+                node.inputs = smallvec![Input::default(); items.len()];
+
                 let opnode = opt
                     .graph
                     .on_region(&self.lambda_region, |regbuilder| {
-                        let opnode =
-                            regbuilder.insert_node(OptNode::new(DummyNode::new(), expr_span));
+                        let (opnode, _) = regbuilder
+                            .connect_node(OptNode::new(node, expr_span), &items)
+                            .unwrap();
                         opnode.output(0)
                     })
                     .unwrap();
@@ -333,14 +382,50 @@ Note that vola does not support shadowing. If you just want to change the value 
                 let opnode = opt
                     .graph
                     .on_region(&self.lambda_region, |regbuilder| {
-                        let opnode =
-                            regbuilder.insert_node(OptNode::new(DummyNode::new(), expr_span));
+                        let opnode = regbuilder.insert_node(OptNode::new(Imm::new(lit), expr_span));
                         opnode.output(0)
                     })
                     .unwrap();
                 Ok(opnode)
             }
         }
+    }
+
+    fn get_cv_for_eval(&mut self, opt: &mut Optimizer, eval_expr: &EvalExpr) -> OutportLocation {
+        let key = OperandAccessKey {
+            operand: eval_expr.evaluator.0.clone(),
+            concept: eval_expr.concept.0.clone(),
+        };
+        if let Some(registered) = self.cv_desc.get_mut(&key) {
+            //Note that we use that
+            registered.access.push(eval_expr.span.clone());
+            return registered.outport.clone();
+        }
+
+        //Not found, therefore add
+        let cv = opt
+            .graph
+            .node_mut(self.lambda)
+            .node_type
+            .unwrap_lambda_mut()
+            .add_context_variable();
+        let port = OutportLocation {
+            node: self.lambda,
+            output: OutputType::ContextVariableArgument(cv),
+        };
+
+        let old = self.cv_desc.insert(
+            key,
+            OperandAccess {
+                outport: port.clone(),
+                cv_index: cv,
+                access: smallvec![eval_expr.span.clone()],
+            },
+        );
+        //there shouldn't be one in here
+        assert!(old.is_none());
+
+        port
     }
 }
 

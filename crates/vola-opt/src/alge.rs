@@ -4,8 +4,9 @@
 use rvsdg::{
     region::{Input, Output},
     rvsdg_derive_lang::LangNode,
-    smallvec::SmallVec,
+    smallvec::{smallvec, SmallVec},
 };
+use vola_ast::alge::FieldAccessor;
 
 use crate::DialectNode;
 
@@ -34,6 +35,10 @@ pub enum WkOp {
     Length,
     SquareRoot,
     Exp,
+    Min,
+    Max,
+    Mix,
+    Clamp,
 }
 
 impl WkOp {
@@ -54,6 +59,10 @@ impl WkOp {
             WkOp::Length => 1,
             WkOp::SquareRoot => 1,
             WkOp::Exp => 2,
+            WkOp::Min => 2,
+            WkOp::Max => 2,
+            WkOp::Mix => 3,
+            WkOp::Clamp => 3,
         }
     }
 
@@ -64,6 +73,10 @@ impl WkOp {
             "length" => Some(Self::Length),
             "sqrt" => Some(Self::SquareRoot),
             "exp" => Some(Self::Exp),
+            "min" => Some(Self::Min),
+            "max" => Some(Self::Max),
+            "mix" | "lerp" => Some(Self::Mix),
+            "clamp" => Some(Self::Clamp),
             _ => None,
         }
     }
@@ -185,7 +198,10 @@ impl DialectNode for DummyNode {
     }
 }
 
-///The Eval node in itself is a call-site to some connected λ-node, when specialized.
+///The Eval node in itself is a call-site to some connected λ-node, when specialised.
+///
+/// By definition the first argument is the callable that will be called, and all following ports are arguments
+/// to that call.
 #[derive(LangNode, Debug)]
 pub struct EvalNode {
     #[inputs]
@@ -193,4 +209,96 @@ pub struct EvalNode {
     ///The eval node itsel has only one output, the state that is produced by the called concept.
     #[output]
     out: Output,
+}
+
+impl EvalNode {
+    pub fn new() -> Self {
+        EvalNode {
+            inputs: smallvec![Input::default(); 3],
+            out: Output::default(),
+        }
+    }
+}
+
+implViewAlgeOp!(EvalNode, "Eval");
+impl DialectNode for EvalNode {
+    fn dialect(&self) -> &'static str {
+        "alge"
+    }
+}
+
+#[derive(LangNode, Debug)]
+pub struct Imm {
+    ///The immediate value
+    pub lit: vola_ast::common::Literal,
+    ///the output port the `lit` value is passed down to.
+    #[output]
+    out: Output,
+}
+
+impl Imm {
+    pub fn new(lit: vola_ast::common::Literal) -> Self {
+        Imm {
+            lit,
+            out: Output::default(),
+        }
+    }
+}
+
+implViewAlgeOp!(Imm, "Imm({:?})", lit);
+impl DialectNode for Imm {
+    fn dialect(&self) -> &'static str {
+        "alge"
+    }
+}
+
+///Highlevel "field access" node. Can only be legalized when all types are resolved and the field is specialized.
+#[derive(LangNode, Debug)]
+pub struct FieldAccess {
+    #[input]
+    access_src: Input,
+    access_list: SmallVec<[FieldAccessor; 1]>,
+    #[output]
+    output: Output,
+}
+
+impl FieldAccess {
+    pub fn new(access_list: SmallVec<[FieldAccessor; 1]>) -> Self {
+        FieldAccess {
+            access_src: Input::default(),
+            access_list,
+            output: Output::default(),
+        }
+    }
+}
+
+implViewAlgeOp!(FieldAccess, "FieldAcces: ({:?})", access_list);
+impl DialectNode for FieldAccess {
+    fn dialect(&self) -> &'static str {
+        "alge"
+    }
+}
+
+#[derive(LangNode, Debug)]
+pub struct ListConst {
+    #[inputs]
+    inputs: SmallVec<[Input; 3]>,
+    #[output]
+    output: Output,
+}
+
+impl ListConst {
+    pub fn new() -> Self {
+        ListConst {
+            inputs: SmallVec::new(),
+            output: Output::default(),
+        }
+    }
+}
+
+implViewAlgeOp!(ListConst, "ListConst");
+impl DialectNode for ListConst {
+    fn dialect(&self) -> &'static str {
+        "alge"
+    }
 }
