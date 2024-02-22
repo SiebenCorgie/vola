@@ -49,7 +49,6 @@ impl SmoothUnion<left, right> for SDF3D(at){
 //Color overwrite operation
 operation ColorOw(owcol: vec3);
 impl ColorOw<sub> for Color{
-    eval sub.Color();
     owcol
 }
 

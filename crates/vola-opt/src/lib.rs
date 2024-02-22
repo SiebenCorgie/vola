@@ -117,6 +117,35 @@ impl LangEdge for OptEdge {
     }
 }
 
+impl View for OptEdge {
+    fn color(&self) -> rvsdg_viewer::macroquad::color::Color {
+        match self {
+            Self::State => rvsdg_viewer::macroquad::color::Color::from_rgba(255, 0, 0, 255),
+            Self::Value { .. } => rvsdg_viewer::macroquad::color::Color::from_rgba(0, 0, 0, 255),
+        }
+    }
+    fn name(&self) -> String {
+        match self {
+            Self::State => "State".to_owned(),
+            Self::Value { ty } => match ty {
+                TypeState::Derived(t) => format!("Value(derived {:?})", t),
+                TypeState::Set(t) => format!("Value(set {:?})", t),
+                TypeState::Unset => format!("Value(unset)"),
+            },
+        }
+    }
+    fn stroke(&self) -> rvsdg_viewer::Stroke {
+        match self {
+            Self::State => rvsdg_viewer::Stroke::Line,
+            Self::Value { ty } => match ty {
+                TypeState::Derived(_) => rvsdg_viewer::Stroke::Dashs,
+                TypeState::Set(_) => rvsdg_viewer::Stroke::Line,
+                TypeState::Unset => rvsdg_viewer::Stroke::Dots,
+            },
+        }
+    }
+}
+
 ///The _whole_ optimizer. Mostly ties together the RVSDG and some auxiliary structures that
 /// make wiring the the correct nodes together possible.
 pub struct Optimizer {
@@ -183,5 +212,9 @@ impl Optimizer {
         } else {
             Ok(())
         }
+    }
+
+    pub fn dump_svg(&self, name: &str) {
+        rvsdg_viewer::into_svg(&self.graph, name)
     }
 }

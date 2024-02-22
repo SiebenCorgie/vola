@@ -112,3 +112,30 @@ fn derive_lang_node_expose() {
     assert!(node.inputs().len() == 1);
     assert!(node.outputs().len() == 1);
 }
+
+#[test]
+fn derive_lang_node_no_input() {
+    #[derive(LangNode)]
+    struct ExposeContainer {
+        #[output]
+        outp: Output,
+    }
+
+    #[derive(LangNode)]
+    pub struct VecNode {
+        #[expose]
+        exp: ExposeContainer,
+        #[allow(unused)]
+        payload: String,
+    }
+
+    let node = VecNode {
+        exp: ExposeContainer {
+            outp: Output::default(),
+        },
+        payload: "teddy!".to_owned(),
+    };
+
+    assert!(node.inputs().len() == 0);
+    assert!(node.outputs().len() == 1);
+}

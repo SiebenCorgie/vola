@@ -233,21 +233,18 @@ impl DotNode for AlgeStmt {
     fn id(&self) -> String {
         match &self {
             AlgeStmt::Assign(a) => a.id(),
-            AlgeStmt::DeadEval(eval) => eval.id(),
             AlgeStmt::Let(l) => l.id(),
         }
     }
     fn content(&self) -> String {
         match self {
             AlgeStmt::Assign(a) => a.content(),
-            AlgeStmt::DeadEval(a) => a.content(),
             AlgeStmt::Let(a) => a.content(),
         }
     }
     fn build_children(&self, builder: GraphvizBuilder) -> GraphvizBuilder {
         match self {
             AlgeStmt::Assign(a) => a.build_children(builder),
-            AlgeStmt::DeadEval(a) => a.build_children(builder),
             AlgeStmt::Let(l) => l.build_children(builder),
         }
     }

@@ -13,4 +13,6 @@ pub fn main() {
     if opt.add_ast(ast).is_err() {
         println!("Opt did not parse AST successfully :(");
     }
+
+    opt.dump_svg("dump.svg");
 }

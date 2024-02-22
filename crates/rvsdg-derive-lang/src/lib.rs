@@ -140,15 +140,19 @@ fn impl_lang_node(ast: &syn::DeriveInput) -> TokenStream {
             inp.span().unwrap().error("Input is defined here, but no #[outputs] field was declared. Consider adding one!").emit();
             return TokenStream::new();
         }
+        //NOTE we support no-input nodes, for things like literals
+        /*
         (None, Some((outp, _is_multiple))) => {
             outp.span().unwrap().error("Output is defined here, but no #[inputs] field was declared. Consider adding one!").emit();
             return TokenStream::new();
         }
+        */
         _ => {}
     }
 
     match (expose_field, inputs_field, outputs_field) {
         (Some(exp), None, None) => impl_lang_node_expose(ast.ident.clone(), exp),
+        (None, None, Some(outp)) => impl_lang_node_out(ast.ident.clone(), outp),
         (None, Some(inp), Some(outp)) => impl_lang_node_inout(ast.ident.clone(), inp, outp),
         _ => {
             ast.span()
@@ -219,6 +223,39 @@ fn impl_lang_node_inout(
             }
             fn inputs_mut(&mut self) -> &mut [rvsdg::region::Input]{
                 #inputmutfrag
+            }
+            fn outputs(&self) -> &[rvsdg::region::Output]{
+                #outputfrag
+            }
+            fn outputs_mut(&mut self) -> &mut [rvsdg::region::Output]{
+                #outputmutfrag
+            }
+        }
+    )
+    .into()
+}
+
+fn impl_lang_node_out(struct_ident: Ident, outputs: (Ident, bool)) -> TokenStream {
+    let (outputs, is_outputs_slice) = outputs;
+    let (outputfrag, outputmutfrag) = if is_outputs_slice {
+        (
+            quote::quote!(self.#outputs.as_slice()),
+            quote::quote!(self.#outputs.as_mut_slice()),
+        )
+    } else {
+        (
+            quote::quote!(std::slice::from_ref(&self.#outputs)),
+            quote::quote!(std::slice::from_mut(&mut self.#outputs)),
+        )
+    };
+
+    quote::quote!(
+        impl rvsdg::nodes::LangNode for #struct_ident{
+            fn inputs(&self) -> &[rvsdg::region::Input]{
+                &[]
+            }
+            fn inputs_mut(&mut self) -> &mut [rvsdg::region::Input]{
+                &mut []
             }
             fn outputs(&self) -> &[rvsdg::region::Output]{
                 #outputfrag

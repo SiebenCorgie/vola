@@ -54,7 +54,16 @@ impl AlgeExpr {
                 span.to = right.span.from;
                 span
             }
-            AlgeExprTy::Call(c) => c.span.clone(),
+            AlgeExprTy::Call(c) => {
+                if c.args.len() > 0 {
+                    let mut span = c.span.clone();
+                    span.byte_end = c.args[0].span.byte_start;
+                    span.to = c.args[0].span.from;
+                    span
+                } else {
+                    c.span.clone()
+                }
+            }
             AlgeExprTy::EvalExpr(eexpr) => eexpr.span.clone(),
             AlgeExprTy::FieldAccess { .. } => self.span.clone(),
             AlgeExprTy::Ident(_i) => self.span.clone(),
@@ -127,7 +136,6 @@ pub struct AssignStmt {
 pub enum AlgeStmt {
     Let(LetStmt),
     Assign(AssignStmt),
-    DeadEval(EvalExpr),
 }
 
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]

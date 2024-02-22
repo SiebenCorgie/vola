@@ -517,11 +517,11 @@ impl FromTreeSitter for ImplBlock {
                             let ret = AlgeExpr::parse(ctx, dta, &next_node)?;
                             return_expr = Some(ret);
                             ParserError::assert_ast_level_empty(ctx, children.next())?;
-                            ParserError::assert_node_no_error(ctx, node)?;
+                            ParserError::assert_node_no_error(ctx, &next_node)?;
 
                             break;
                         }
-                        "let_stmt" | "assign_stmt" | "dead_eval_stmt" => {
+                        "let_stmt" | "assign_stmt" => {
                             stmts.push(AlgeStmt::parse(ctx, dta, &next_node)?);
                             ParserError::consume_expected_node_string(
                                 ctx,
@@ -534,8 +534,7 @@ impl FromTreeSitter for ImplBlock {
                             let err = ParserError::UnexpectedAstNode {
                                 span: ctx.span(&next_node).into(),
                                 kind: next_node.kind().to_owned(),
-                                expected: "alge_stmt | alge_expr | dead_eval_stmt | comment"
-                                    .to_owned(),
+                                expected: "alge_stmt | alge_expr  | comment".to_owned(),
                             };
                             report(err.clone(), ctx.get_file());
                             return Err(err);
@@ -596,16 +595,11 @@ impl FromTreeSitter for AlgeStmt {
         match node.kind() {
             "let_stmt" => Ok(Self::Let(LetStmt::parse(ctx, dta, node)?)),
             "assign_stmt" => Ok(Self::Assign(AssignStmt::parse(ctx, dta, node)?)),
-            "dead_eval_stmt" => Ok(Self::DeadEval(EvalExpr::parse(
-                ctx,
-                dta,
-                node.child(0).as_ref().unwrap(),
-            )?)),
             _ => {
                 let err = ParserError::UnexpectedAstNode {
                     span: ctx.span(&node).into(),
                     kind: node.kind().to_owned(),
-                    expected: "let_stmt | assign_stmt | dead_eval_stmt".to_owned(),
+                    expected: "let_stmt | assign_stmt".to_owned(),
                 };
                 report(err.clone(), ctx.get_file());
                 return Err(err);
