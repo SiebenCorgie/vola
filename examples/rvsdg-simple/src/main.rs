@@ -73,19 +73,19 @@ impl View for LNode {
         macroquad::prelude::Color::from_rgba(255, 255, 128, 255)
     }
 
-    fn name(&self) -> &str {
+    fn name(&self) -> String {
         match self.node {
-            MyNodes::Add => "add",
-            MyNodes::AryConst(_) => "ArrayConst",
-            MyNodes::Gt => "gt",
-            MyNodes::ImmChar(_) => "ImmChar",
-            MyNodes::ImmI32(_) => "ImmI32",
-            MyNodes::Load => "Load",
-            MyNodes::Lt => "lt",
-            MyNodes::UnEq => "UnEq",
-            MyNodes::Mul => "mul",
-            MyNodes::Store => "store",
-            MyNodes::Sub => "Sub",
+            MyNodes::Add => "add".to_owned(),
+            MyNodes::AryConst(size) => format!("ArrayConst({size})"),
+            MyNodes::Gt => "gt".to_owned(),
+            MyNodes::ImmChar(c) => format!("ImmChar {:?} ", c.to_string()),
+            MyNodes::ImmI32(imm) => format!("ImmI32({imm})"),
+            MyNodes::Load => "Load".to_owned(),
+            MyNodes::Lt => "lt".to_owned(),
+            MyNodes::UnEq => "UnEq".to_owned(),
+            MyNodes::Mul => "mul".to_owned(),
+            MyNodes::Store => "store".to_owned(),
+            MyNodes::Sub => "Sub".to_owned(),
         }
     }
 }

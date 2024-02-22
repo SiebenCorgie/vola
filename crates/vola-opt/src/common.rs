@@ -51,11 +51,17 @@ impl TryFrom<vola_ast::common::Ty> for Ty {
     }
 }
 
+#[derive(Debug)]
+pub struct VarDef {
+    pub port: OutportLocation,
+    pub span: vola_common::Span,
+}
+
 ///Helper utility that keeps track of defined variables.
 #[derive(Debug)]
 pub struct LmdContext {
     ///Maps a variable name to an Value outport.
-    pub defined_vars: AHashMap<String, OutportLocation>,
+    pub defined_vars: AHashMap<String, VarDef>,
 }
 
 impl LmdContext {
@@ -82,7 +88,13 @@ impl LmdContext {
                 node: lmd,
                 output: rvsdg::edge::OutputType::Argument(arg_idx),
             };
-            defmap.insert(arg.ident.0.clone(), argport.clone());
+            defmap.insert(
+                arg.ident.0.clone(),
+                VarDef {
+                    port: argport.clone(),
+                    span: arg.span.clone(),
+                },
+            );
             //tag the type as well
             type_map.push_attrib(
                 &argport.into(),
@@ -108,7 +120,14 @@ impl LmdContext {
                 output: rvsdg::edge::OutputType::Argument(arg_idx),
             };
 
-            defmap.insert(renamed.0.clone(), argport.clone());
+            //TODO use the actual correct span.
+            defmap.insert(
+                renamed.0.clone(),
+                VarDef {
+                    port: argport.clone(),
+                    span: block.span.clone(),
+                },
+            );
             //tag the type as well
             type_map.push_attrib(
                 &argport.into(),
@@ -121,4 +140,34 @@ impl LmdContext {
             defined_vars: defmap,
         }
     }
+
+    ///Checks if a variable with "name" already exists.
+    pub fn var_exists(&self, name: &str) -> bool {
+        self.defined_vars.contains_key(name)
+    }
+
+    ///Adds the VarDef. Panics if the var already existed, since we don't support shadowing atm.
+    pub fn add_define(&mut self, name: String, def: VarDef) {
+        let old = self.defined_vars.insert(name, def);
+        assert!(old.is_none(), "Variable with that name already existed!");
+    }
+}
+
+//Macro that implements the "View" trait for an AlgeDialect op
+macro_rules! implViewAlgeOp {
+    ($opname:ident, $str:expr, $($arg:ident),*) => {
+        impl rvsdg_viewer::View for $opname {
+            fn color(&self) -> rvsdg_viewer::macroquad::color::Color {
+                rvsdg_viewer::macroquad::color::Color::from_rgba(128, 64, 64, 255)
+            }
+
+            fn name(&self) -> &str {
+                &format!($str, $(self.$arg)*,)
+            }
+
+            fn stroke(&self) -> rvsdg_viewer::Stroke {
+                rvsdg_viewer::Stroke::Line
+            }
+        }
+    };
 }

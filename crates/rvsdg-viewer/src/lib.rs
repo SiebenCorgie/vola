@@ -31,7 +31,7 @@ use rvsdg::{
 use std::{fmt::Debug, path::Path};
 
 pub trait View {
-    fn name(&self) -> &str;
+    fn name(&self) -> String;
     fn color(&self) -> macroquad::color::Color;
     fn stroke(&self) -> Stroke {
         Stroke::Line
@@ -56,10 +56,10 @@ impl Stroke {
 }
 
 impl View for rvsdg::common::VSEdge {
-    fn name(&self) -> &str {
+    fn name(&self) -> String {
         match self {
-            VSEdge::State { .. } => "StateEdge",
-            VSEdge::Value { .. } => "ValueEdge",
+            VSEdge::State { .. } => "StateEdge".to_owned(),
+            VSEdge::Value { .. } => "ValueEdge".to_owned(),
         }
     }
     fn color(&self) -> macroquad::color::Color {
@@ -89,16 +89,16 @@ impl<N: View + LangNode + 'static> View for rvsdg::nodes::Node<N> {
             NodeType::Theta(_) => Color::from_rgba(255, 128, 128, 255),
         }
     }
-    fn name(&self) -> &str {
+    fn name(&self) -> String {
         match &self.node_type {
-            NodeType::Apply(_) => "Apply",
-            NodeType::Delta(_) => "Delta",
-            NodeType::Gamma(_) => "Gamma",
-            NodeType::Lambda(_) => "Lambda",
-            NodeType::Omega(_) => "Omega",
-            NodeType::Phi(_) => "Phi",
-            NodeType::Simple(n) => n.name(),
-            NodeType::Theta(_) => "Theta",
+            NodeType::Apply(_) => "Apply".to_owned(),
+            NodeType::Delta(_) => "Delta".to_owned(),
+            NodeType::Gamma(_) => "Gamma".to_owned(),
+            NodeType::Lambda(_) => "Lambda".to_owned(),
+            NodeType::Omega(_) => "Omega".to_owned(),
+            NodeType::Phi(_) => "Phi".to_owned(),
+            NodeType::Simple(n) => n.name().to_owned(),
+            NodeType::Theta(_) => "Theta".to_owned(),
         }
     }
 }

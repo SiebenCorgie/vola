@@ -15,11 +15,15 @@
 //!
 //! Used to represent algebraic expressions.
 
+use std::fmt::Debug;
+
 use ahash::AHashMap;
-use alge::{ConceptImpl, ConceptImplKey};
+use alge::implblock::{ConceptImpl, ConceptImplKey};
 use common::Ty;
 use error::OptError;
-use rvsdg::{attrib::AttribStore, edge::LangEdge, nodes::LangNode, Rvsdg};
+use rvsdg::{
+    attrib::AttribStore, edge::LangEdge, nodes::LangNode, rvsdg_derive_lang::LangNode, Rvsdg,
+};
 
 use rvsdg_viewer::View;
 use vola_ast::{
@@ -41,18 +45,29 @@ pub trait DialectNode: LangNode + View {
 }
 
 ///Single optimizer node of some dialect.
+#[derive(LangNode)]
 pub struct OptNode {
     ///The source span this node originated from
     pub span: Span,
     ///The inner node that is being represented
+    #[expose]
     node: Box<dyn DialectNode + Send + Sync + 'static>,
+}
+
+impl OptNode {
+    pub fn new(node: impl DialectNode + Send + Sync + 'static, span: Span) -> Self {
+        OptNode {
+            span,
+            node: Box::new(node),
+        }
+    }
 }
 
 impl View for OptNode {
     fn color(&self) -> rvsdg_viewer::macroquad::color::Color {
         self.node.color()
     }
-    fn name(&self) -> &str {
+    fn name(&self) -> String {
         self.node.name()
     }
     fn stroke(&self) -> rvsdg_viewer::Stroke {
@@ -60,18 +75,9 @@ impl View for OptNode {
     }
 }
 
-impl LangNode for OptNode {
-    fn inputs(&self) -> &[rvsdg::region::Input] {
-        self.node.inputs()
-    }
-    fn inputs_mut(&mut self) -> &mut [rvsdg::region::Input] {
-        self.node.inputs_mut()
-    }
-    fn outputs(&self) -> &[rvsdg::region::Output] {
-        self.node.outputs()
-    }
-    fn outputs_mut(&mut self) -> &mut [rvsdg::region::Output] {
-        self.node.outputs_mut()
+impl Debug for OptNode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} . {}", self.node.dialect(), self.node.name())
     }
 }
 

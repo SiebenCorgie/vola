@@ -31,6 +31,39 @@ pub struct AlgeExpr {
     pub expr_ty: AlgeExprTy,
 }
 
+impl AlgeExpr {
+    ///By default the `span` contains the whole space of the sub expressions.
+    /// That is technically correct, but hard to read when reporting errors.
+    ///
+    /// Consider `(some_long_expr) + (some_other_long_expr)`. The span of `+` contains the whole
+    /// line, however, when reporting an error on `+` you might only want the single char to be highlighted.
+    /// Thats what this function is for.
+    pub fn op_span(&self) -> Span {
+        match &self.expr_ty {
+            AlgeExprTy::Unary { op: _, operand } => {
+                let mut subspan = self.span.clone();
+                subspan.byte_end = operand.span.byte_start;
+                subspan.to = operand.span.from;
+                subspan
+            }
+            AlgeExprTy::Binary { left, right, op: _ } => {
+                let mut span = self.span.clone();
+                span.byte_start = left.span.byte_end;
+                span.from = left.span.to;
+                span.byte_end = right.span.byte_start;
+                span.to = right.span.from;
+                span
+            }
+            AlgeExprTy::Call(c) => c.span.clone(),
+            AlgeExprTy::EvalExpr(eexpr) => eexpr.span.clone(),
+            AlgeExprTy::FieldAccess { .. } => self.span.clone(),
+            AlgeExprTy::Ident(_i) => self.span.clone(),
+            AlgeExprTy::List(_) => self.span.clone(),
+            AlgeExprTy::Literal(_) => self.span.clone(),
+        }
+    }
+}
+
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum FieldAccessor {
