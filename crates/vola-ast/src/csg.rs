@@ -17,6 +17,9 @@ pub struct CSGOp {
     pub args: SmallVec<[AlgeExpr; 3]>,
     ///Sub trees this CSGOp evaluates. Mostly this is either 0, 1 or 2.
     pub sub_trees: Vec<CSGOp>,
+    ///Needed to distinguish a local variable reference from a call to a field def with
+    /// no arguments
+    pub is_local_reference: bool,
 }
 
 impl CSGOp {

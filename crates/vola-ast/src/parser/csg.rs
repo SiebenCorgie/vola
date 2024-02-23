@@ -62,11 +62,15 @@ impl FromTreeSitter for CSGOp {
     where
         Self: Sized,
     {
-        if node.kind() != "csg_unary" && node.kind() != "csg_binary" && node.kind() != "fn_call" {
+        if node.kind() != "csg_unary"
+            && node.kind() != "csg_binary"
+            && node.kind() != "fn_call"
+            && node.kind() != "identifier"
+        {
             let err = ParserError::UnexpectedAstNode {
                 span: ctx.span(&node).into(),
                 kind: node.kind().to_owned(),
-                expected: "csg_unary | csg_binary | fn_call".to_owned(),
+                expected: "csg_unary | csg_binary | fn_call | identifier".to_owned(),
             };
             report(err.clone(), ctx.get_file());
             return Err(err);
@@ -86,6 +90,22 @@ impl FromTreeSitter for CSGOp {
 
         let mut walker = node.walk();
         let mut children = node.children(&mut walker);
+
+        //If this is a identifier only call, early return with just that.
+        // This is the case when referencing a local variable.
+        if node.kind() == "identifier" {
+            let ident = Ident::parse(ctx, dta, node)?;
+            ParserError::assert_ast_level_empty(ctx, children.next())?;
+            ParserError::assert_node_no_error(ctx, node)?;
+            return Ok(CSGOp {
+                span: Span::from(node).with_file_maybe(ctx.get_file()),
+                op: ident,
+                args: SmallVec::new(),
+                sub_trees: Vec::with_capacity(0),
+                is_local_reference: true,
+            });
+        }
+
         let ident = Ident::parse(ctx, dta, &children.next().unwrap())?;
 
         ParserError::consume_expected_node_string(ctx, dta, children.next(), "(")?;
@@ -168,6 +188,7 @@ impl FromTreeSitter for CSGOp {
             op: ident,
             args: params,
             sub_trees,
+            is_local_reference: false,
         })
     }
 }

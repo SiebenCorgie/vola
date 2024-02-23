@@ -249,7 +249,8 @@ impl Optimizer {
         &mut self,
         exportfn: vola_ast::csg::ExportFn,
     ) -> Result<NodeRef, OptError> {
-        //This is the top_level_node
+        //TODO right now we can _kind_shadow_ concepts, operations, entities and filed
+        // defs. So I guess it would be nice if we couldn't ?
 
         let mut input_signature = SmallVec::new();
         for typed_ident in exportfn.inputs.iter() {

@@ -8,7 +8,7 @@ use rvsdg::{
 };
 use vola_ast::{
     alge::{AlgeExpr, AlgeExprTy, EvalExpr},
-    csg::CSGNodeTy,
+    csg::{CSGNodeDef, CSGNodeTy},
     AstEntry, TopLevelNode,
 };
 use vola_common::report;
@@ -16,7 +16,7 @@ use vola_common::report;
 use crate::{
     alge::{CallOp, EvalNode, FieldAccess, Imm, ListConst, WkOp},
     common::LmdContext,
-    csg::CsgOp,
+    csg::{CsgCall, CsgOp},
     error::OptError,
     OptNode, Optimizer,
 };
@@ -303,29 +303,76 @@ impl<'a> AstLambdaBuilder<'a> {
         tree: vola_ast::csg::CSGOp,
         parent: &mut impl LambdaBuilderCtx,
     ) -> Result<OutportLocation, OptError> {
-        //Check, that based on the sub tree count we have either an entity/field def with the given name,
-        // or a operation.
-        match tree.sub_trees.len() {
+        //Based on the number of sub trees, decide which CSG Node to build.
+        // There are largely three categories.
+        //
+        // 1. an op with 1..n sub trees
+        // 2. an entity with no subtree
+        // 3. a csg reference with no subtree. (set within the scope)
+        // 4. a call to a field definition
+
+        //tmp enum that lets us return the correct type of node
+        // in a concrete type
+        enum CSGConnectionType {
+            CSGOp(CsgOp),
+            CSGCall(CsgCall),
+        }
+
+        let (node, span) = match tree.sub_trees.len() {
             0 => {
-                //must be entity or field-def
-                match (
-                    self.opt.csg_node_defs.get(&tree.op.0),
-                    self.opt.field_def.get(&tree.op.0),
-                ) {
-                    (Some(ent), Some(fdef)) => {
-                        if ent.ty == CSGNodeTy::Entity {
-                            //Found entity with name & a field def. Thats ambiguous. throw an error.
+                //Uses a local csg reference. Therefore check if we have that, and if so, inline
+                // it here
+                if tree.is_local_reference {
+                    if let Some(localcsg) = self.lmd_context.defined_vars.get(&tree.op.0) {
+                        //If found, return that port
+                        return Ok(localcsg.port);
+                    } else {
+                        //Throw an error
+                        return Err(OptError::report_variable_not_found(&tree.span, &tree.op.0));
+                    }
+                } else {
+                    //Must be an entity call, or a field call. Try to find an entity with that name, and make
+                    // sure the parameter count matches the entity
+
+                    if let Some(csgdef) = self.opt.csg_node_defs.get(&tree.op.0) {
+                        if csgdef.ty != CSGNodeTy::Entity {
+                            //Is not an entity definition
                             let err = OptError::AnySpannedWithSource {
-                                source_span: ent.span.clone().into(),
-                                source_text: format!("{} defined as entity here", ent.name.0),
-                                text: format!("Found entity & field-def with the same name \"{}\". Cannot decide which to use.\nConsider renaming one of them.", tree.op.0),
-                                span: fdef.span.clone().into(),
-                                span_text: format!("Defined \"{}\" as field here.", fdef.name.0)
+                                source_span: csgdef.span.clone().into(),
+                                source_text: "Defined as operation here".to_owned(),
+                                text: format!("{} is not an entity", tree.op.0),
+                                span: tree.head_span().into(),
+                                span_text: format!(
+                                    "Used in the place of an entity, or local field def here"
+                                ),
                             };
+
                             report(err.clone(), tree.span.get_file());
                             return Err(err);
-                        } else {
-                            //using fdef, make sure the argument count matches
+                        }
+
+                        if csgdef.args.len() != tree.args.len() {
+                            return Err(OptError::report_argument_missmatch(
+                                &csgdef.span,
+                                csgdef.args.len(),
+                                &tree.head_span(),
+                                tree.args.len(),
+                            ));
+                        }
+
+                        //looks good, construct the CSGOp
+                        (
+                            CSGConnectionType::CSGOp(CsgOp::new(
+                                csgdef.name.clone(),
+                                0,
+                                tree.args.len(),
+                            )),
+                            tree.span.clone(),
+                        )
+                    } else {
+                        //Is not defined as csg_op, so try to find a field def with that name
+
+                        if let Some(fdef) = self.opt.field_def.get(&tree.op.0) {
                             if fdef.input_signature.len() != tree.args.len() {
                                 return Err(OptError::report_argument_missmatch(
                                     &fdef.span,
@@ -334,42 +381,24 @@ impl<'a> AstLambdaBuilder<'a> {
                                     tree.args.len(),
                                 ));
                             }
-                        }
-                    }
-                    (None, None) => {
-                        //Didn't find a entity or field def. Try using one of our local variables
-                        if !self.lmd_context.defined_vars.contains_key(&tree.op.0) {
-                            //Found neither a entity nor a fielddef
-                            return Err(OptError::report_variable_not_found(
-                                &tree.head_span(),
-                                &tree.op.0,
-                            ));
-                        }
-                    }
-                    (Some(entity_def), None) => {
-                        if entity_def.args.len() != tree.args.len() {
-                            return Err(OptError::report_argument_missmatch(
-                                &entity_def.span,
-                                entity_def.args.len(),
-                                &tree.head_span(),
-                                tree.args.len(),
-                            ));
-                        }
-                    }
-                    (None, Some(fdef)) => {
-                        if fdef.input_signature.len() != tree.args.len() {
-                            return Err(OptError::report_argument_missmatch(
-                                &fdef.span,
-                                fdef.input_signature.len(),
-                                &tree.head_span(),
-                                tree.args.len(),
-                            ));
+
+                            //looks good, construct a call instead
+                            (
+                                CSGConnectionType::CSGCall(CsgCall::new(
+                                    fdef.name.clone(),
+                                    tree.args.len(),
+                                )),
+                                tree.span.clone(),
+                            )
+                        } else {
+                            let err = OptError::AnySpanned { span: tree.head_span().into(), text: format!("{} does not name an entity, local csg variable or field def", tree.op.0), span_text: "try defining a local variable, an entity or a field with that name".to_owned() };
+                            report(err.clone(), tree.span.get_file());
+                            return Err(err);
                         }
                     }
                 }
             }
-            _ => {
-                //must be operation
+            subcount => {
                 if let Some(opdef) = self.opt.csg_node_defs.get(&tree.op.0) {
                     if opdef.ty == CSGNodeTy::Operation {
                         //found an operation with that name. So make sure the parameter count matches
@@ -381,6 +410,16 @@ impl<'a> AstLambdaBuilder<'a> {
                                 tree.args.len(),
                             ));
                         }
+
+                        //Aight, looks good, using that.
+                        (
+                            CSGConnectionType::CSGOp(CsgOp::new(
+                                opdef.name.clone(),
+                                subcount,
+                                tree.args.len() + subcount,
+                            )),
+                            tree.span.clone(),
+                        )
                     } else {
                         let err = OptError::AnySpanned {
                             span: tree.head_span().into(),
@@ -397,10 +436,9 @@ impl<'a> AstLambdaBuilder<'a> {
                     ));
                 }
             }
-        }
+        };
 
         let mut args: SmallVec<[OutportLocation; 3]> = SmallVec::new();
-        let subtree_count = tree.sub_trees.len();
         for subtree in tree.sub_trees {
             args.push(self.setup_csg_tree(subtree, parent)?);
         }
@@ -414,17 +452,19 @@ impl<'a> AstLambdaBuilder<'a> {
         let opnode = self
             .opt
             .graph
-            .on_region(&self.lambda_region, |regbuilder| {
-                let (opnode, _) = regbuilder
-                    .connect_node(
-                        OptNode::new(
-                            CsgOp::new(tree.op, subtree_count, args.len()),
-                            tree.span.clone(),
-                        ),
-                        &args,
-                    )
-                    .unwrap();
-                opnode.output(0)
+            .on_region(&self.lambda_region, |regbuilder| match node {
+                CSGConnectionType::CSGCall(call) => {
+                    let (opnode, _) = regbuilder
+                        .connect_node(OptNode::new(call, span), &args)
+                        .unwrap();
+                    opnode.output(0)
+                }
+                CSGConnectionType::CSGOp(op) => {
+                    let (opnode, _) = regbuilder
+                        .connect_node(OptNode::new(op, span), &args)
+                        .unwrap();
+                    opnode.output(0)
+                }
             })
             .unwrap();
         Ok(opnode)

@@ -80,6 +80,7 @@ impl FieldDef {
 
         if builder.lmd_context.var_exists(&decl_name.0) {
             let existing = builder.lmd_context.defined_vars.get(&decl_name.0).unwrap();
+
             let err = OptError::AnySpannedWithSource {
                 source_span: existing.span.clone().into(),
                 source_text: "first defined here".to_owned(),
@@ -93,6 +94,8 @@ Note that vola does not support shadowing. If you just want to change the value 
             report(err.clone(), span.get_file());
             return Err(err);
         }
+
+        //in a similar fashion, make sure there is no field def with that name
 
         let def_port = builder.setup_csg_tree(tree, self)?;
 
@@ -156,6 +159,58 @@ impl Optimizer {
         &mut self,
         fielddef: vola_ast::csg::FieldDef,
     ) -> Result<NodeRef, OptError> {
+        //Before starting, make sure we don't shadow a csgdef
+        // or concept.
+        //
+        // NOTE: we _could_ shadow a concept, since they are in different namespaces
+        // entirly. But I think that wouldn't be nice usability wise.
+
+        if let Some(conceptdef) = self.concepts.get(&fielddef.name.0) {
+            let err = OptError::AnySpannedWithSource {
+                source_span: conceptdef.span.clone().into(),
+                source_text: "first defined here".to_owned(),
+                text: format!(
+                    "Cannot define a field \"{}\" if there is already a concept with that name!",
+                    fielddef.name.0
+                ),
+                span: fielddef.span.clone().into(),
+                span_text: "tried to use the same name here".to_owned(),
+            };
+            report(err.clone(), conceptdef.span.get_file());
+            return Err(err);
+        }
+
+        if let Some(csgdef) = self.csg_node_defs.get(&fielddef.name.0) {
+            let err = OptError::AnySpannedWithSource {
+                source_span: csgdef.span.clone().into(),
+                source_text: "first defined here".to_owned(),
+                text: format!(
+                    "Cannot define a field \"{}\" if there is already a entity or operation with that name!",
+                    fielddef.name.0
+                ),
+                span: fielddef.span.clone().into(),
+                span_text: "tried to use the same name here".to_owned(),
+            };
+            report(err.clone(), csgdef.span.get_file());
+            return Err(err);
+        }
+
+        //finally make sure there is no such field as well
+        if let Some(fdef) = self.field_def.get(&fielddef.name.0) {
+            let err = OptError::AnySpannedWithSource {
+                source_span: fdef.span.clone().into(),
+                source_text: "first defined here".to_owned(),
+                text: format!(
+                    "Cannot define a field \"{}\" if there is already another field with that name!",
+                    fielddef.name.0
+                ),
+                span: fielddef.span.clone().into(),
+                span_text: "tried to use the same name here".to_owned(),
+            };
+            report(err.clone(), fdef.span.get_file());
+            return Err(err);
+        }
+
         let mut input_signature = SmallVec::new();
         for typed_ident in fielddef.inputs.iter() {
             let ty: Ty = match typed_ident.ty.clone().try_into() {

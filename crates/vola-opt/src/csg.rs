@@ -18,7 +18,7 @@ macro_rules! implViewCsgOp {
     ($opname:ident, $str:expr, $($arg:ident),*) => {
         impl rvsdg_viewer::View for $opname {
             fn color(&self) -> rvsdg_viewer::macroquad::color::Color {
-                rvsdg_viewer::macroquad::color::Color::from_rgba(200, 170, 170, 255)
+                rvsdg_viewer::macroquad::color::Color::from_rgba(170, 200, 170, 255)
             }
 
             fn name(&self) -> String {
@@ -33,7 +33,7 @@ macro_rules! implViewCsgOp {
     ($opname:ident, $str:expr) =>{
         impl rvsdg_viewer::View for $opname {
             fn color(&self) -> rvsdg_viewer::macroquad::color::Color {
-                rvsdg_viewer::macroquad::color::Color::from_rgba(200, 170, 170, 255)
+                rvsdg_viewer::macroquad::color::Color::from_rgba(170, 200, 170, 255)
             }
 
             fn name(&self) -> String {
@@ -81,6 +81,7 @@ impl DialectNode for CsgOp {
 ///CsgTree call into a defined sub tree. Akin to a function call, but gets inlined at specialization-time.
 #[derive(LangNode, Debug)]
 pub struct CsgCall {
+    ///The field that thas is called
     pub op: String,
 
     #[inputs]
@@ -89,7 +90,17 @@ pub struct CsgCall {
     pub output: Output,
 }
 
-implViewCsgOp!(CsgCall, "{:?}", op);
+impl CsgCall {
+    pub fn new(op: Ident, argcount: usize) -> Self {
+        CsgCall {
+            op: op.0,
+            inputs: smallvec![Input::default(); argcount],
+            output: Output::default(),
+        }
+    }
+}
+
+implViewCsgOp!(CsgCall, "fieldcall {:?}", op);
 impl DialectNode for CsgCall {
     fn dialect(&self) -> &'static str {
         "csg"
