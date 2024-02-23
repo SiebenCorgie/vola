@@ -59,7 +59,7 @@ impl ExportFn {
         }
 
         //Now wire up all access descriptors
-        for access in &exportfn.access_descriptors {
+        for access in exportfn.access_descriptors {
             self.wire_access(&mut lmd_builder, access)?;
         }
 
@@ -69,7 +69,7 @@ impl ExportFn {
     fn wire_access(
         &mut self,
         builder: &mut AstLambdaBuilder,
-        access: &vola_ast::csg::AccessDesc,
+        access: vola_ast::csg::AccessDesc,
     ) -> Result<(), OptError> {
         //check if we can find the tree.
         let field_src = match builder.lmd_context.defined_vars.get(&access.tree_ref.0) {
@@ -102,6 +102,8 @@ impl ExportFn {
             ));
         }
 
+        let concept_name = concept.name.clone();
+
         //We use the concept's return type to infer the output signature.
         let return_type: Ty = match concept.dst_ty.clone().try_into() {
             Ok(ty) => ty,
@@ -124,6 +126,12 @@ impl ExportFn {
         let mut wires: SmallVec<[OutportLocation; 3]> = SmallVec::new();
         wires.push(field_src.port.clone());
 
+        let access_call_args_count = access.call.args.len();
+        for arg in access.call.args {
+            let arg_port = builder.setup_alge_expr(arg, self)?;
+            wires.push(arg_port)
+        }
+
         //add an result port to the lambda node
         let resultidx = builder
             .opt
@@ -140,7 +148,7 @@ impl ExportFn {
                 let (node, _) = reg
                     .connect_node(
                         OptNode::new(
-                            TreeAccess::new(concept.name.clone(), 1 + access.call.args.len()),
+                            TreeAccess::new(concept_name, 1 + access_call_args_count),
                             access.span.clone(),
                         ),
                         &wires,
