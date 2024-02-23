@@ -6,7 +6,6 @@ use rvsdg::{
     smallvec::{smallvec, SmallVec},
 };
 use vola_ast::common::Ident;
-use vola_common::Span;
 
 use crate::DialectNode;
 

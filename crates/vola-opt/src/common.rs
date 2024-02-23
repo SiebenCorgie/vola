@@ -1,17 +1,11 @@
 use ahash::AHashMap;
-use rvsdg::{
-    attrib::AttribStore,
-    edge::{InportLocation, OutportLocation},
-    nodes::LambdaNode,
-    smallvec::SmallVec,
-    NodeRef, Rvsdg,
-};
+use rvsdg::{attrib::AttribStore, edge::OutportLocation, smallvec::SmallVec, NodeRef, Rvsdg};
 use vola_ast::{
     alge::ImplBlock,
     csg::{CSGConcept, CSGNodeDef},
 };
 
-use crate::{error::OptError, OptEdge, OptNode, Optimizer};
+use crate::{error::OptError, OptEdge, OptNode};
 
 ///Optimizer types. Those are the AST types, as well as the higher-order-function like types we use to identify
 /// CV-Inputs of nodes. They basically make sure that we connect λ-Nodes with the right output type _when called_.

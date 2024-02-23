@@ -1,6 +1,5 @@
 use rvsdg::{
-    builder::LambdaBuilder,
-    edge::{InportLocation, InputType, OutportLocation},
+    edge::{InputType, OutportLocation},
     region::RegionLocation,
     smallvec::SmallVec,
     NodeRef,

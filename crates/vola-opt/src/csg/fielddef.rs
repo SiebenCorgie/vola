@@ -1,7 +1,7 @@
 use rvsdg::{edge::InputType, region::RegionLocation, smallvec::SmallVec, NodeRef};
 use vola_ast::{
     alge::LetStmt,
-    common::{Ident, TypedIdent},
+    common::Ident,
     csg::{CSGBinding, CSGStmt},
 };
 use vola_common::{report, Span};

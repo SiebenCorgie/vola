@@ -1,8 +1,6 @@
 //! # Alge dialect
 //!
 
-use std::fmt::write;
-
 use rvsdg::{
     region::{Input, Output},
     rvsdg_derive_lang::LangNode,
@@ -194,6 +192,7 @@ pub struct DummyNode {
 }
 
 impl DummyNode {
+    #[allow(unused)]
     pub fn new() -> Self {
         DummyNode {
             out: Output::default(),

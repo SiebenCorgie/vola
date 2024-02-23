@@ -8,7 +8,7 @@ use rvsdg::{
 };
 use vola_ast::{
     alge::{AlgeExpr, AlgeExprTy, EvalExpr},
-    csg::{CSGNodeDef, CSGNodeTy},
+    csg::CSGNodeTy,
     AstEntry, TopLevelNode,
 };
 use vola_common::report;
@@ -88,7 +88,7 @@ pub trait LambdaBuilderCtx {
     ///Registers the `eval_expr` in the lambda's context_variable set, and returns the Outport of said cv.
     fn get_cv_for_eval(
         &mut self,
-        builder: &mut AstLambdaBuilder,
+        _builder: &mut AstLambdaBuilder,
         eval_expr: &EvalExpr,
     ) -> Result<OutportLocation, OptError> {
         let err = OptError::AnySpanned { span: eval_expr.span.clone().into(), text: format!("Cannot use eval expression in this context.\nEval expressions are only allowed in concept implementations!"), span_text: format!("consider moving this eval into a concept implementation") };
