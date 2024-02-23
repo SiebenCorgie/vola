@@ -6,8 +6,9 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-default = ["viewer"]
+default = ["viewer", "profile"]
 viewer = ["rvsdg-viewer"]
+profile = []
 
 [dependencies]
 rvsdg = {path = "../rvsdg"}
@@ -15,3 +16,6 @@ rvsdg-viewer = {path = "../rvsdg-viewer", optional = true}
 vola-ast = {path = "../vola-ast"}
 vola-common = {path = "../vola-common"}
 ahash.workspace = true
+
+[dev-dependencies]
+pretty_env_logger.workspace = true

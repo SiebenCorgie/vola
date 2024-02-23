@@ -4,10 +4,11 @@ use rvsdg::{
     edge::OutportLocation,
     region::{Input, RegionLocation},
     smallvec::{smallvec, SmallVec},
-    NodeRef, Rvsdg,
+    NodeRef,
 };
 use vola_ast::{
     alge::{AlgeExpr, AlgeExprTy, EvalExpr},
+    csg::CSGNodeTy,
     AstEntry, TopLevelNode,
 };
 use vola_common::report;
@@ -15,8 +16,9 @@ use vola_common::report;
 use crate::{
     alge::{CallOp, EvalNode, FieldAccess, Imm, ListConst, WkOp},
     common::LmdContext,
+    csg::CsgOp,
     error::OptError,
-    OptEdge, OptNode, Optimizer,
+    OptNode, Optimizer,
 };
 
 impl Optimizer {
@@ -65,8 +67,8 @@ impl Optimizer {
                 }
             }
             AstEntry::ImplBlock(implblock) => self.add_impl_block(implblock).map(|t| Some(t)),
-            AstEntry::FieldDefine(fdef) => Ok(None),
-            AstEntry::ExportFn(expfn) => Ok(None),
+            AstEntry::FieldDefine(fdef) => self.add_field_def(fdef).map(|t| Some(t)),
+            AstEntry::ExportFn(expfn) => self.add_export_fn(expfn).map(|t| Some(t)),
         }
     }
 }
@@ -76,7 +78,7 @@ impl Optimizer {
 /// NOTE: If we'd have a non-structured language this would be the structurizer. But we are structured, we can
 /// build the graph directly. See [the RVSDG paper](https://arxiv.org/pdf/1912.05036.pdf) 5.1 _Construction_.
 pub struct AstLambdaBuilder<'a> {
-    pub graph: &'a mut Rvsdg<OptNode, OptEdge>,
+    pub opt: &'a mut Optimizer,
     pub lambda: NodeRef,
     pub lambda_region: RegionLocation,
     pub lmd_context: LmdContext,
@@ -110,6 +112,7 @@ impl<'a> AstLambdaBuilder<'a> {
                 //setup the unary node, than recurse, setup the subexpression and hook it up to our unary expression
                 let sub_output = self.setup_alge_expr(*operand, parent)?;
                 let opnode = self
+                    .opt
                     .graph
                     .on_region(&self.lambda_region, |regbuilder| {
                         let (opnode, _) = regbuilder
@@ -132,6 +135,7 @@ impl<'a> AstLambdaBuilder<'a> {
                 let right_out = self.setup_alge_expr(*right, parent)?;
 
                 let opnode = self
+                    .opt
                     .graph
                     .on_region(&self.lambda_region, |regbuilder| {
                         let (opnode, _) = regbuilder
@@ -157,7 +161,7 @@ impl<'a> AstLambdaBuilder<'a> {
                 } else {
                     let err = OptError::AnySpanned {
                         span: expr_span.clone().into(),
-                        text: format!("Unknown function {} called!", c.ident.0),
+                        text: format!("Unknown function \"{}\" called.", c.ident.0),
                         span_text: "here".to_owned(),
                     };
                     report(err.clone(), c.span.get_file());
@@ -172,6 +176,7 @@ impl<'a> AstLambdaBuilder<'a> {
                 }
 
                 let opnode = self
+                    .opt
                     .graph
                     .on_region(&self.lambda_region, |regbuilder| {
                         let (opnode, _) = regbuilder
@@ -194,6 +199,7 @@ impl<'a> AstLambdaBuilder<'a> {
 
                 //Now setup the eval node
                 let opnode = self
+                    .opt
                     .graph
                     .on_region(&self.lambda_region, |regbuilder| {
                         let (opnode, _) = regbuilder
@@ -221,6 +227,7 @@ impl<'a> AstLambdaBuilder<'a> {
                 };
 
                 let opnode = self
+                    .opt
                     .graph
                     .on_region(&self.lambda_region, |regbuilder| {
                         let (opnode, _) = regbuilder
@@ -266,6 +273,7 @@ impl<'a> AstLambdaBuilder<'a> {
                 node.inputs = smallvec![Input::default(); items.len()];
 
                 let opnode = self
+                    .opt
                     .graph
                     .on_region(&self.lambda_region, |regbuilder| {
                         let (opnode, _) = regbuilder
@@ -278,6 +286,7 @@ impl<'a> AstLambdaBuilder<'a> {
             }
             AlgeExprTy::Literal(lit) => {
                 let opnode = self
+                    .opt
                     .graph
                     .on_region(&self.lambda_region, |regbuilder| {
                         let opnode = regbuilder.insert_node(OptNode::new(Imm::new(lit), expr_span));
@@ -287,5 +296,137 @@ impl<'a> AstLambdaBuilder<'a> {
                 Ok(opnode)
             }
         }
+    }
+
+    pub fn setup_csg_tree(
+        &mut self,
+        tree: vola_ast::csg::CSGOp,
+        parent: &mut impl LambdaBuilderCtx,
+    ) -> Result<OutportLocation, OptError> {
+        //Check, that based on the sub tree count we have either an entity/field def with the given name,
+        // or a operation.
+        match tree.sub_trees.len() {
+            0 => {
+                //must be entity or field-def
+                match (
+                    self.opt.csg_node_defs.get(&tree.op.0),
+                    self.opt.field_def.get(&tree.op.0),
+                ) {
+                    (Some(ent), Some(fdef)) => {
+                        if ent.ty == CSGNodeTy::Entity {
+                            //Found entity with name & a field def. Thats ambiguous. throw an error.
+                            let err = OptError::AnySpannedWithSource {
+                                source_span: ent.span.clone().into(),
+                                source_text: format!("{} defined as entity here", ent.name.0),
+                                text: format!("Found entity & field-def with the same name \"{}\". Cannot decide which to use.\nConsider renaming one of them.", tree.op.0),
+                                span: fdef.span.clone().into(),
+                                span_text: format!("Defined \"{}\" as field here.", fdef.name.0)
+                            };
+                            report(err.clone(), tree.span.get_file());
+                            return Err(err);
+                        } else {
+                            //using fdef, make sure the argument count matches
+                            if fdef.input_signature.len() != tree.args.len() {
+                                return Err(OptError::report_argument_missmatch(
+                                    &fdef.span,
+                                    fdef.input_signature.len(),
+                                    &tree.head_span(),
+                                    tree.args.len(),
+                                ));
+                            }
+                        }
+                    }
+                    (None, None) => {
+                        //Didn't find a entity or field def. Try using one of our local variables
+                        if !self.lmd_context.defined_vars.contains_key(&tree.op.0) {
+                            //Found neither a entity nor a fielddef
+                            return Err(OptError::report_variable_not_found(
+                                &tree.head_span(),
+                                &tree.op.0,
+                            ));
+                        }
+                    }
+                    (Some(entity_def), None) => {
+                        if entity_def.args.len() != tree.args.len() {
+                            return Err(OptError::report_argument_missmatch(
+                                &entity_def.span,
+                                entity_def.args.len(),
+                                &tree.head_span(),
+                                tree.args.len(),
+                            ));
+                        }
+                    }
+                    (None, Some(fdef)) => {
+                        if fdef.input_signature.len() != tree.args.len() {
+                            return Err(OptError::report_argument_missmatch(
+                                &fdef.span,
+                                fdef.input_signature.len(),
+                                &tree.head_span(),
+                                tree.args.len(),
+                            ));
+                        }
+                    }
+                }
+            }
+            _ => {
+                //must be operation
+                if let Some(opdef) = self.opt.csg_node_defs.get(&tree.op.0) {
+                    if opdef.ty == CSGNodeTy::Operation {
+                        //found an operation with that name. So make sure the parameter count matches
+                        if opdef.args.len() != tree.args.len() {
+                            return Err(OptError::report_argument_missmatch(
+                                &opdef.span,
+                                opdef.args.len(),
+                                &tree.head_span(),
+                                tree.args.len(),
+                            ));
+                        }
+                    } else {
+                        let err = OptError::AnySpanned {
+                            span: tree.head_span().into(),
+                            text: format!("Could not find operation named \"{}\"", tree.op.0),
+                            span_text: "Consider adding such an operation".to_owned(),
+                        };
+                        report(err.clone(), tree.span.get_file());
+                        return Err(err);
+                    }
+                } else {
+                    return Err(OptError::report_variable_not_found(
+                        &tree.head_span(),
+                        &tree.op.0,
+                    ));
+                }
+            }
+        }
+
+        let mut args: SmallVec<[OutportLocation; 3]> = SmallVec::new();
+        let subtree_count = tree.sub_trees.len();
+        for subtree in tree.sub_trees {
+            args.push(self.setup_csg_tree(subtree, parent)?);
+        }
+
+        //then build all argument expressions
+        for arg in tree.args {
+            args.push(self.setup_alge_expr(arg, parent)?);
+        }
+
+        //finally setup the node an connect all sub-trees and argumets to it
+        let opnode = self
+            .opt
+            .graph
+            .on_region(&self.lambda_region, |regbuilder| {
+                let (opnode, _) = regbuilder
+                    .connect_node(
+                        OptNode::new(
+                            CsgOp::new(tree.op, subtree_count, args.len()),
+                            tree.span.clone(),
+                        ),
+                        &args,
+                    )
+                    .unwrap();
+                opnode.output(0)
+            })
+            .unwrap();
+        Ok(opnode)
     }
 }

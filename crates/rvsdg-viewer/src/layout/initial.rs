@@ -29,6 +29,8 @@ impl RegionLayout {
         rvsdg: &Rvsdg<N, E>,
         ignore_dead_nodes: bool,
     ) {
+        log::trace!("Setting up initial layouting");
+
         #[derive(Debug, PartialEq, Eq, Hash)]
         struct WaitingNode {
             node: NodeRef,
@@ -112,7 +114,7 @@ impl RegionLayout {
             }
 
             if !layouted_any && !waiting.is_empty() {
-                println!(
+                log::error!(
                     "error: Could not layout all nodes, there are still {} nodes!",
                     waiting.len()
                 );
@@ -150,6 +152,7 @@ impl RegionLayout {
         rvsdg: &Rvsdg<N, E>,
         config: &LayoutConfig,
     ) {
+        log::trace!("Setup Bottom-Up transfer grid");
         //first gather all node extents in this region, by recursively building sub regions,
         // then using that information to build the node's extent
         for node in self.nodes.values_mut() {

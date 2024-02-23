@@ -37,6 +37,7 @@ impl LayoutEdge {
 
 impl<'a, N: LangNode + View + 'static, E: LangEdge + View + 'static> Layout<'a, N, E> {
     fn node_to_prim_tree(&self, node: &LayoutNode, config: &LayoutConfig) -> PrimTree {
+        log::trace!("Transfer nodes to primitive tree");
         //build a prim tree for this node. This will contain the colored box of the node at top-level,
         //children will first be the label, followed by all sub-regions,
         // and finally all ports.

@@ -19,6 +19,27 @@ pub struct CSGOp {
     pub sub_trees: Vec<CSGOp>,
 }
 
+impl CSGOp {
+    ///Returns the span that only identifies the head of this operation
+    pub fn head_span(&self) -> Span {
+        let mut span = self.span.clone();
+        if self.args.len() > 0 {
+            span.byte_end = self.args[0].span.byte_start;
+            span.to = self.args[0].span.from;
+            return span;
+        }
+
+        //No args, but at least a subtree
+        if self.sub_trees.len() > 0 {
+            span.byte_end = self.sub_trees[0].span.byte_start;
+            span.to = self.sub_trees[0].span.from;
+            return span;
+        }
+        //no args and subtree, use the whole span
+        span
+    }
+}
+
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Clone, Debug)]
 pub enum CSGStmt {

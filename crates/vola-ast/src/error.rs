@@ -36,7 +36,7 @@ pub enum ParserError {
         expected: String,
     },
 
-    #[error("Unexpected value \"{val}\" expected it to be {exp}")]
+    #[error("Unexpected value {val} expected it to be {exp}")]
     UnexpectedNodeValue {
         #[label("This should be {exp}")]
         span: SourceSpan,

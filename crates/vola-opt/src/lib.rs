@@ -20,6 +20,7 @@ use std::fmt::Debug;
 use ahash::AHashMap;
 use alge::implblock::{ConceptImpl, ConceptImplKey};
 use common::Ty;
+use csg::{exportfn::ExportFn, fielddef::FieldDef};
 use error::OptError;
 use rvsdg::{
     attrib::AttribStore, edge::LangEdge, nodes::LangNode, rvsdg_derive_lang::LangNode, Rvsdg,
@@ -164,6 +165,12 @@ pub struct Optimizer {
     ///lookup table for the λ-Nodes of entity implementation of concepts
     pub(crate) concept_impl: AHashMap<ConceptImplKey, ConceptImpl>,
 
+    ///Lookup table for all λ-Nodes that are export_fn.
+    pub(crate) export_fn: AHashMap<String, ExportFn>,
+
+    ///Lookup table for all field-defs
+    pub(crate) field_def: AHashMap<String, FieldDef>,
+
     ///All known type tags of ports and nodes. Can be used to do type checking, or infer edge types.
     pub(crate) typemap: AttribStore<Ty>,
 }
@@ -175,17 +182,20 @@ impl Optimizer {
             concepts: AHashMap::default(),
             csg_node_defs: AHashMap::default(),
             concept_impl: AHashMap::default(),
+            export_fn: AHashMap::default(),
+            field_def: AHashMap::default(),
             typemap: AttribStore::new(),
         }
     }
 
     ///Adds a [VolaAst](vola_ast::VolaAst) to the optimizer. Might emit errors if the
     /// semantic analysis fails immediately while adding.
-    ///
-    /// Stops whenever an error occurs.
     pub fn add_ast(&mut self, ast: VolaAst) -> Result<(), OptError> {
         //NOTE we first add all def nodes, since those don't depend on anything else, and without those
         // some of the other nodes might not build, even though they could.
+
+        #[cfg(feature = "profile")]
+        let ast_add_start = std::time::Instant::now();
 
         let mut error_counter = 0;
 
@@ -205,11 +215,20 @@ impl Optimizer {
             })
             .collect::<Vec<_>>();
 
+        //TODO:
+
         for tl in heavy_entries {
             if let Err(_e) = self.add_tl_node(tl) {
                 error_counter += 1;
             }
         }
+
+        #[cfg(feature = "profile")]
+        println!(
+            "Adding AST took {}ms / {}ns",
+            ast_add_start.elapsed().as_millis(),
+            ast_add_start.elapsed().as_nanos()
+        );
 
         if error_counter > 0 {
             Err(OptError::ErrorsOccurred(error_counter))

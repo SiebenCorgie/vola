@@ -1,6 +1,8 @@
 //! # Alge dialect
 //!
 
+use std::fmt::write;
+
 use rvsdg::{
     region::{Input, Output},
     rvsdg_derive_lang::LangNode,
@@ -39,6 +41,9 @@ pub enum WkOp {
     Max,
     Mix,
     Clamp,
+
+    Abs,
+    Frac,
 }
 
 impl WkOp {
@@ -63,6 +68,9 @@ impl WkOp {
             WkOp::Max => 2,
             WkOp::Mix => 3,
             WkOp::Clamp => 3,
+
+            WkOp::Abs => 1,
+            WkOp::Frac => 1,
         }
     }
 
@@ -77,6 +85,8 @@ impl WkOp {
             "max" => Some(Self::Max),
             "mix" | "lerp" => Some(Self::Mix),
             "clamp" => Some(Self::Clamp),
+            "frac" => Some(Self::Frac),
+            "abs" => Some(Self::Abs),
             _ => None,
         }
     }
@@ -245,7 +255,7 @@ impl Imm {
     }
 }
 
-implViewAlgeOp!(Imm, "Imm({:?})", lit);
+implViewAlgeOp!(Imm, "{}", lit);
 impl DialectNode for Imm {
     fn dialect(&self) -> &'static str {
         "alge"
@@ -272,7 +282,30 @@ impl FieldAccess {
     }
 }
 
-implViewAlgeOp!(FieldAccess, "FieldAcces: ({:?})", access_list);
+//NOTE hand implementing for nicer field_acces_list
+impl rvsdg_viewer::View for FieldAccess {
+    fn color(&self) -> rvsdg_viewer::macroquad::color::Color {
+        rvsdg_viewer::macroquad::color::Color::from_rgba(200, 170, 170, 255)
+    }
+
+    fn name(&self) -> String {
+        use std::fmt::Write;
+        let mut string = format!("FieldAccess: ");
+        for acc in &self.access_list {
+            match acc {
+                FieldAccessor::Digit { digit, .. } => write!(string, ".{}", digit).unwrap(),
+                FieldAccessor::Ident { ident, .. } => write!(string, ".{}", ident.0).unwrap(),
+            }
+        }
+
+        string
+    }
+
+    fn stroke(&self) -> rvsdg_viewer::Stroke {
+        rvsdg_viewer::Stroke::Line
+    }
+}
+
 impl DialectNode for FieldAccess {
     fn dialect(&self) -> &'static str {
         "alge"

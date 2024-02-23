@@ -250,6 +250,12 @@ impl EdgeLayoutGrid {
         let resolution = (reg.extent / config.routing_cell_size).ceil() + 1.0;
         let resolution = (resolution.x as usize, resolution.y as usize);
 
+        log::trace!(
+            "Setup edge layout grid for {}x{}",
+            resolution.0,
+            resolution.1
+        );
+
         let mut grid = vec![vec![ELCell::default(); resolution.1]; resolution.0];
 
         //mark all "outer" cells as "inactive, to prevent edges from clipping to the
@@ -273,6 +279,7 @@ impl EdgeLayoutGrid {
     }
 
     fn deactivate(&mut self, node: &LayoutNode, config: &LayoutConfig) {
+        log::trace!("deactivate node: {} {}", node.src, node.extent);
         let mut off = Vec2::ZERO;
         while off.x < (node.extent.x + config.routing_dead_padding) {
             off.y = 0.0;
@@ -280,11 +287,13 @@ impl EdgeLayoutGrid {
                 let cell =
                     self.loc_to_cell(node.location + off - (config.routing_dead_padding / 2.0));
 
-                if !self.in_bound((cell.0 as isize, cell.1 as isize)) {
+                if self.in_bound((cell.0 as isize, cell.1 as isize)) {
+                    self.grid[cell.0][cell.1].active = false;
+                } else {
+                    off.y += self.cell_size;
                     continue;
                 }
 
-                self.grid[cell.0][cell.1].active = false;
                 off.y += self.cell_size;
             }
             off.x += self.cell_size;
@@ -442,6 +451,7 @@ impl EdgeLayoutGrid {
     }
 
     fn route_edge(&mut self, src: EdgeRef, start: GridCoord, end: GridCoord) -> Option<LayoutEdge> {
+        log::trace!("Routing {} from {:?} to {:?} ", src, start, end);
         let gridcoord_path = self
             .search_helper
             .search(&self.grid, self.resolution, start, end)?;
@@ -531,6 +541,11 @@ impl RegionLayout {
         rvsdg: &Rvsdg<N, E>,
         config: &LayoutConfig,
     ) {
+        log::info!(
+            "Start routing region for {} edges, this might take some time 👀",
+            rvsdg.region(&self.src).unwrap().edges.len()
+        );
+
         for node in self.nodes.values_mut() {
             for sr in node.sub_regions.iter_mut() {
                 sr.route_region(rvsdg, config);
@@ -588,6 +603,11 @@ impl RegionLayout {
                 if let Some(mut edge) =
                     grid.route_edge(*edgeref, grid.loc_to_cell(start), grid.loc_to_cell(end))
                 {
+                    log::warn!(
+                        "Could not route edge {} - {}, falling back to direct connect",
+                        start_port_location,
+                        end_port_location
+                    );
                     grid.set_in_use(&edge);
 
                     //edge.path[0].x = end_port_location.x;

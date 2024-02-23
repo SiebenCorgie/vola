@@ -1,5 +1,6 @@
 use vola_common::{
     miette::{self, Diagnostic, SourceSpan},
+    report,
     thiserror::{self, Error},
     Reportable,
 };
@@ -37,4 +38,47 @@ pub enum OptError {
 
     #[error("At least {0} errors occurred while running optimizer.")]
     ErrorsOccurred(usize),
+}
+
+impl OptError {
+    pub fn report_no_concept(span: &vola_common::Span, concept_name: &str) -> Self {
+        let err = OptError::AnySpanned {
+            span: span.clone().into(),
+            text: format!("Could not find concept \"{}\" in scope!", concept_name),
+            span_text: "Consider defining this concept".to_owned(),
+        };
+        report(err.clone(), span.get_file());
+        err
+    }
+
+    pub fn report_argument_missmatch(
+        def_span: &vola_common::Span,
+        right_count: usize,
+        wrong_span: &vola_common::Span,
+        is_count: usize,
+    ) -> Self {
+        let err = OptError::AnySpannedWithSource {
+            source_span: def_span.clone().into(),
+            source_text: format!("defined with {} arguments", right_count),
+            text: format!(
+                "call takes {} arguments, but {} are supplied",
+                right_count, is_count
+            ),
+            span: wrong_span.clone().into(),
+            span_text: format!("This should have {} arguments.", right_count),
+        };
+
+        report(err.clone(), def_span.get_file());
+        err
+    }
+
+    pub fn report_variable_not_found(def_span: &vola_common::Span, searched_for: &str) -> Self {
+        let err = OptError::AnySpanned {
+            span: def_span.clone().into(),
+            text: format!("Could not find \"{}\" in scope!", searched_for),
+            span_text: format!("found here"),
+        };
+        report(err.clone(), def_span.get_file());
+        err
+    }
 }

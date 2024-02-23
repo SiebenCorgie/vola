@@ -1,6 +1,9 @@
+use pretty_env_logger;
 use vola_opt::Optimizer;
 
 pub fn main() {
+    pretty_env_logger::init();
+
     let ast = match vola_ast::parse_file("crates/vola-ast/examples/csg.vola") {
         Ok(ast) => ast,
         Err((partial_ast, _errors_reporter)) => {

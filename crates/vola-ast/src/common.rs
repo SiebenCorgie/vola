@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use crate::alge::AlgeExpr;
 use smallvec::SmallVec;
 
@@ -32,6 +34,15 @@ pub struct Digit(pub usize);
 pub enum Literal {
     IntegerLiteral(usize),
     FloatLiteral(f64),
+}
+
+impl Display for Literal {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Literal::FloatLiteral(fl) => write!(f, "{}f", fl),
+            Literal::IntegerLiteral(i) => write!(f, "{}", i),
+        }
+    }
 }
 
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]

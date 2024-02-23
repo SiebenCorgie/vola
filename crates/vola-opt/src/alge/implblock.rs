@@ -74,6 +74,27 @@ impl LambdaBuilderCtx for ConceptImpl {
         builder: &mut AstLambdaBuilder,
         eval_expr: &EvalExpr,
     ) -> Result<OutportLocation, OptError> {
+        //Before doing anything, check that the concept exists and has the right ammount of
+        // arguments
+        let concept = match builder.opt.concepts.get(&eval_expr.concept.0) {
+            Some(c) => c,
+            None => {
+                return Err(OptError::report_no_concept(
+                    &eval_expr.span,
+                    &eval_expr.concept.0,
+                ));
+            }
+        };
+
+        if concept.src_ty.len() != eval_expr.params.len() {
+            return Err(OptError::report_argument_missmatch(
+                &concept.span,
+                concept.src_ty.len(),
+                &eval_expr.span,
+                eval_expr.params.len(),
+            ));
+        }
+
         let key = OperandAccessKey {
             operand: eval_expr.evaluator.0.clone(),
             concept: eval_expr.concept.0.clone(),
@@ -86,6 +107,7 @@ impl LambdaBuilderCtx for ConceptImpl {
 
         //Not found, therefore add
         let cv = builder
+            .opt
             .graph
             .node_mut(builder.lambda)
             .node_type
@@ -139,6 +161,7 @@ impl ConceptImpl {
         let return_expr_port = builder.setup_alge_expr(return_expr, &mut self)?;
         //add the output port and connect
         let result_port = builder
+            .opt
             .graph
             .node_mut(builder.lambda)
             .node_type
@@ -150,7 +173,7 @@ impl ConceptImpl {
         );
 
         //now connect to it
-        builder.graph.on_region(&builder.lambda_region, |reg| {
+        builder.opt.graph.on_region(&builder.lambda_region, |reg| {
             reg.connect_to_result(return_expr_port, InputType::Result(result_port))
                 .expect("Could not connect to result!")
         });
@@ -282,7 +305,7 @@ impl Optimizer {
         };
 
         let src_csg_def = if let Some(src_csg_def) = self.csg_node_defs.get(&implblock.dst.0) {
-            src_csg_def
+            src_csg_def.clone()
         } else {
             let err = OptError::AnySpanned {
                 span: implblock.span.clone().into(),
@@ -365,7 +388,7 @@ impl Optimizer {
         //Temporary builder that tracks things like the defined variables etc.
         // Is dropped within the concept_impl.build_block()
         let lmd_builder = AstLambdaBuilder {
-            graph: &mut self.graph,
+            opt: self,
             lmd_context,
             lambda: lmd,
             lambda_region: lmd_region,

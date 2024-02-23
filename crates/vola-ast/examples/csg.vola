@@ -3,22 +3,37 @@
 
 #[derive(LocalLipshitz)]
 entity Sphere(radius: vec3);
+entity Box(extent: vec3);
 
 concept SDF2D: vec2 -> s;
 concept SDF3D: vec3 -> s;
-concept Color: -> vec3;
-
-
+concept Color: vec3 -> vec3;
 concept MultiConcept: (vec3, s, vec3) -> vec3;
+
+
+///Simple union operation
+operation Union();
+
+
+///Translation operation, with explicitly no identity implementation
+#[define(no_identity)]
+operation Translate(trans: vec3);
+//SmoothUnion
+operation SmoothUnion(suradius: s);
+//Color overwrite operation
+operation ColorOw(owcol: vec3);
+operation Round(rad: s);
 
 //Declares that we need the parameter `@` to define SDF3D of Sphere
 impl Sphere for SDF3D(at){
      length(at) - radius
 }
 
-///Translation operation, with explicitly no identity implementation
-#[define(no_identity)]
-operation Translate(trans: vec3);
+impl Box for SDF3D(at){
+     let q = abs(at) - extent;
+     length(max(q, 0.0)) + min(max(q.x, max(q.y, q.z)), 0.0)
+}
+
 
 //declares that `translate` takes a sub-expression and the
 //field
@@ -27,8 +42,6 @@ impl Translate<sub> for SDF3D(at){
     eval sub.SDF3D(at)
 }
 
-///Simple union operation
-operation Union();
 impl Union<left, right> for SDF3D(at) {
     let left = eval l.SDF3D(at);
     let right = eval r.SDF3D(at);
@@ -36,8 +49,6 @@ impl Union<left, right> for SDF3D(at) {
     new_result
 }
 
-//SmoothUnion
-operation SmoothUnion(suradius: s);
 impl SmoothUnion<left, right> for SDF3D(at){
     let l = eval left.SDF3D(at);
     let r = eval right.SDF3D(at);
@@ -46,10 +57,10 @@ impl SmoothUnion<left, right> for SDF3D(at){
     dist
 }
 
-//Color overwrite operation
-operation ColorOw(owcol: vec3);
-impl ColorOw<sub> for Color{
-    owcol
+impl ColorOw<sub> for Color(at){
+    let dist = eval sub.SDF3D(at);
+    let color = [frac(length(dist)), 1.0, 1.0];
+    color
 }
 
 
@@ -59,7 +70,7 @@ define subField(trans: vec3){
 
     Union(){
         Translate(trans){
-            Sphere(2.0)
+            sphere()
         }
     }{
         Box([1.0, 0.0, 3.0])
@@ -67,14 +78,14 @@ define subField(trans: vec3){
 }
 
 //Export interface of the SDF
-export myField(p: vec3, translation: vec3){
+export myField(p: vec3, translation: vec3, some_lerp: s){
     let some_formula = translation.x * 2.0;
 
     csg all_field = SmoothUnion(1.0){
         subField(translation)
     }{
-        Rotate([30.0, 30.0, some_formula]){
-            Round(1.0, 3, 23){
+        Translate([30.0, 30.0, some_formula]){
+            Round(1.0){
                 Box([1.0, 0.5, 3.0])
             }
         }

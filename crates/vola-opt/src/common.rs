@@ -142,6 +142,92 @@ impl LmdContext {
         }
     }
 
+    pub fn new_for_exportfn(
+        graph: &mut Rvsdg<OptNode, OptEdge>,
+        type_map: &mut AttribStore<Ty>,
+        lmd: NodeRef,
+        exportfn: &vola_ast::csg::ExportFn,
+    ) -> Self {
+        //exportfn are basically a normal function call. So we don't have to do any
+        // _context_ analysis.
+
+        let mut defined_vars = AHashMap::new();
+
+        for arg in exportfn.inputs.iter() {
+            let arg_idx = graph
+                .node_mut(lmd)
+                .node_type
+                .unwrap_lambda_mut()
+                .add_argument();
+            let argport = OutportLocation {
+                node: lmd,
+                output: rvsdg::edge::OutputType::Argument(arg_idx),
+            };
+
+            //TODO use the actual correct span.
+            defined_vars.insert(
+                arg.ident.0.clone(),
+                VarDef {
+                    port: argport.clone(),
+                    span: arg.span.clone(),
+                },
+            );
+            //tag the type as well
+            type_map.push_attrib(
+                &argport.into(),
+                arg.ty
+                    .clone()
+                    .try_into()
+                    .expect("Could not convert impl block's arg to an opt-type"),
+            );
+        }
+
+        LmdContext { defined_vars }
+    }
+
+    pub fn new_for_fielddef(
+        graph: &mut Rvsdg<OptNode, OptEdge>,
+        type_map: &mut AttribStore<Ty>,
+        lmd: NodeRef,
+        fielddef: &vola_ast::csg::FieldDef,
+    ) -> Self {
+        //fielddef are basically a normal function call. So we don't have to do any
+        // _context_ analysis.
+
+        let mut defined_vars = AHashMap::new();
+
+        for arg in fielddef.inputs.iter() {
+            let arg_idx = graph
+                .node_mut(lmd)
+                .node_type
+                .unwrap_lambda_mut()
+                .add_argument();
+            let argport = OutportLocation {
+                node: lmd,
+                output: rvsdg::edge::OutputType::Argument(arg_idx),
+            };
+
+            //TODO use the actual correct span.
+            defined_vars.insert(
+                arg.ident.0.clone(),
+                VarDef {
+                    port: argport.clone(),
+                    span: arg.span.clone(),
+                },
+            );
+            //tag the type as well
+            type_map.push_attrib(
+                &argport.into(),
+                arg.ty
+                    .clone()
+                    .try_into()
+                    .expect("Could not convert fielddef's arg to an opt-type"),
+            );
+        }
+
+        LmdContext { defined_vars }
+    }
+
     ///Checks if a variable with "name" already exists.
     pub fn var_exists(&self, name: &str) -> bool {
         self.defined_vars.contains_key(name)
@@ -152,23 +238,4 @@ impl LmdContext {
         let old = self.defined_vars.insert(name, def);
         assert!(old.is_none(), "Variable with that name already existed!");
     }
-}
-
-//Macro that implements the "View" trait for an AlgeDialect op
-macro_rules! implViewAlgeOp {
-    ($opname:ident, $str:expr, $($arg:ident),*) => {
-        impl rvsdg_viewer::View for $opname {
-            fn color(&self) -> rvsdg_viewer::macroquad::color::Color {
-                rvsdg_viewer::macroquad::color::Color::from_rgba(128, 64, 64, 255)
-            }
-
-            fn name(&self) -> &str {
-                &format!($str, $(self.$arg)*,)
-            }
-
-            fn stroke(&self) -> rvsdg_viewer::Stroke {
-                rvsdg_viewer::Stroke::Line
-            }
-        }
-    };
 }
