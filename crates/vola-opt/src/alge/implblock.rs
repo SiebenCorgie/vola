@@ -1,24 +1,22 @@
 use crate::{
+    ast::{AstLambdaBuilder, LambdaBuilderCtx},
     common::{LmdContext, VarDef},
     error::OptError,
-    OptNode, Optimizer,
+    Optimizer,
 };
-use ahash::{AHashMap, AHashSet};
+use ahash::AHashMap;
 use rvsdg::{
-    edge::{InportLocation, InputType, OutportLocation, OutputType},
-    nodes::LambdaNode,
-    region::{Input, RegionLocation},
+    edge::{InputType, OutportLocation, OutputType},
+    region::RegionLocation,
     smallvec::{smallvec, SmallVec},
     NodeRef,
 };
 use vola_ast::{
-    alge::{AlgeExpr, AlgeExprTy, AlgeStmt, AssignStmt, EvalExpr, ImplBlock, LetStmt},
+    alge::{AlgeStmt, AssignStmt, EvalExpr, ImplBlock, LetStmt},
     common::Ident,
     csg::CSGNodeTy,
 };
 use vola_common::{report, Span};
-
-use super::{CallOp, DummyNode, EvalNode, FieldAccess, Imm, ListConst, WkOp};
 
 #[derive(Debug, Clone, PartialEq, Hash, Eq)]
 pub struct ConceptImplKey {
@@ -32,16 +30,16 @@ pub struct ConceptImplKey {
 /// for instance in the expression `eval a.color();` we access `operand` "a" and access the concept `color`.
 #[derive(Debug, Clone, PartialEq, Hash, Eq)]
 pub struct OperandAccessKey {
-    operand: String,
-    concept: String,
+    pub operand: String,
+    pub concept: String,
 }
 
 ///Tracks Operand access in a concept impl. For later use and debug purposes.
 pub struct OperandAccess {
     ///the port that is register for that operand access
-    outport: OutportLocation,
-    cv_index: usize,
-    access: SmallVec<[Span; 1]>,
+    pub outport: OutportLocation,
+    pub cv_index: usize,
+    pub access: SmallVec<[Span; 1]>,
 }
 
 ///Contains the meta data of a concept implementation
@@ -64,42 +62,85 @@ pub struct ConceptImpl {
     // This is a 1..2 long hashmap usually. So this is really not worth it lol.
     pub cv_desc: AHashMap<OperandAccessKey, OperandAccess>,
 
-    ///The lambda node representing this expression
+    ///The λ-Node of this concept
     pub lambda: NodeRef,
+    ///Shortcut to the λ-Node's inner region.
     pub lambda_region: RegionLocation,
+}
+
+impl LambdaBuilderCtx for ConceptImpl {
+    fn get_cv_for_eval(
+        &mut self,
+        builder: &mut AstLambdaBuilder,
+        eval_expr: &EvalExpr,
+    ) -> Result<OutportLocation, OptError> {
+        let key = OperandAccessKey {
+            operand: eval_expr.evaluator.0.clone(),
+            concept: eval_expr.concept.0.clone(),
+        };
+        if let Some(registered) = self.cv_desc.get_mut(&key) {
+            //Note that we use that
+            registered.access.push(eval_expr.span.clone());
+            return Ok(registered.outport.clone());
+        }
+
+        //Not found, therefore add
+        let cv = builder
+            .graph
+            .node_mut(builder.lambda)
+            .node_type
+            .unwrap_lambda_mut()
+            .add_context_variable();
+        let port = OutportLocation {
+            node: builder.lambda,
+            output: OutputType::ContextVariableArgument(cv),
+        };
+
+        let old = self.cv_desc.insert(
+            key,
+            OperandAccess {
+                outport: port.clone(),
+                cv_index: cv,
+                access: smallvec![eval_expr.span.clone()],
+            },
+        );
+        //there shouldn't be one in here
+        assert!(old.is_none());
+
+        Ok(port)
+    }
 }
 
 impl ConceptImpl {
     fn build_block(
         mut self,
-        opt: &mut Optimizer,
+        mut builder: AstLambdaBuilder,
         block: ImplBlock,
-        mut lmd_context: LmdContext,
     ) -> Result<Self, OptError> {
         let ImplBlock {
-            span,
-            dst,
-            operands,
-            concept,
-            concept_arg_naming,
+            span: _,
+            dst: _,
+            operands: _,
+            concept: _,
+            concept_arg_naming: _,
             stmts,
             return_expr,
         } = block;
 
         for stmt in stmts {
             match stmt {
-                AlgeStmt::Assign(assign) => self.setup_assign(opt, assign, &mut lmd_context)?,
-                AlgeStmt::Let(letstmt) => self.setup_let(opt, letstmt, &mut lmd_context)?,
+                AlgeStmt::Assign(assign) => self.setup_assign(&mut builder, assign)?,
+                AlgeStmt::Let(letstmt) => self.setup_let(&mut builder, letstmt)?,
             }
         }
 
         //after setting up stmts in order, build the port of the final expr and connect that to the output of our
         // concept impl
-        let return_expr_port = self.setup_alge_expr(opt, return_expr, &mut lmd_context)?;
+        let return_expr_port = builder.setup_alge_expr(return_expr, &mut self)?;
         //add the output port and connect
-        let result_port = opt
+        let result_port = builder
             .graph
-            .node_mut(self.lambda)
+            .node_mut(builder.lambda)
             .node_type
             .unwrap_lambda_mut()
             .add_result();
@@ -109,7 +150,7 @@ impl ConceptImpl {
         );
 
         //now connect to it
-        opt.graph.on_region(&self.lambda_region, |reg| {
+        builder.graph.on_region(&builder.lambda_region, |reg| {
             reg.connect_to_result(return_expr_port, InputType::Result(result_port))
                 .expect("Could not connect to result!")
         });
@@ -119,16 +160,15 @@ impl ConceptImpl {
 
     fn setup_assign(
         &mut self,
-        opt: &mut Optimizer,
+        builder: &mut AstLambdaBuilder,
         assignstmt: AssignStmt,
-        lmd_context: &mut LmdContext,
     ) -> Result<(), OptError> {
         let AssignStmt { span, dst, expr } = assignstmt;
 
         //Assign stmt, similar to the let stmt works, by setting up the expr on the left hand site, but
         // then overwriting the last known definition of dst.
 
-        if !lmd_context.var_exists(&dst.0) {
+        if !builder.lmd_context.var_exists(&dst.0) {
             let err = OptError::AnySpanned {
                 span: span.clone().into(),
                 text: format!(
@@ -147,17 +187,16 @@ Consider using `let {} = ...;` instead, or using an defined variable.
 
         //build the sub tree and overwrite the last_def output
 
-        let sub_tree_output = self.setup_alge_expr(opt, expr, lmd_context)?;
-        let last_def = lmd_context.defined_vars.get_mut(&dst.0).unwrap();
+        let sub_tree_output = builder.setup_alge_expr(expr, self)?;
+        let last_def = builder.lmd_context.defined_vars.get_mut(&dst.0).unwrap();
         last_def.port = sub_tree_output;
         Ok(())
     }
 
     fn setup_let(
         &mut self,
-        opt: &mut Optimizer,
+        builder: &mut AstLambdaBuilder,
         let_stmt: LetStmt,
-        lmd_context: &mut LmdContext,
     ) -> Result<(), OptError> {
         //for a let stmt we have to define the new variable _after_ we parsed the rhs expression.
 
@@ -167,8 +206,8 @@ Consider using `let {} = ...;` instead, or using an defined variable.
             expr,
         } = let_stmt;
 
-        if lmd_context.var_exists(&decl_name.0) {
-            let existing = lmd_context.defined_vars.get(&decl_name.0).unwrap();
+        if builder.lmd_context.var_exists(&decl_name.0) {
+            let existing = builder.lmd_context.defined_vars.get(&decl_name.0).unwrap();
             let err = OptError::AnySpannedWithSource {
                 source_span: existing.span.clone().into(),
                 source_text: "first defined here".to_owned(),
@@ -183,10 +222,10 @@ Note that vola does not support shadowing. If you just want to change the value 
             return Err(err);
         }
 
-        let def_port = self.setup_alge_expr(opt, expr, lmd_context)?;
+        let def_port = builder.setup_alge_expr(expr, self)?;
 
         //register in the lmd context
-        lmd_context.add_define(
+        builder.lmd_context.add_define(
             decl_name.0,
             VarDef {
                 port: def_port,
@@ -195,237 +234,6 @@ Note that vola does not support shadowing. If you just want to change the value 
         );
 
         Ok(())
-    }
-
-    //Sets up the alge expression, and if successful, return the output port that defines the final value.
-    // TODO: Right now we don't have anything stateful, so a simple Outport location is enough. Hover, this might change whenever we introduce
-    // buffer and image reads at a later stage.
-    fn setup_alge_expr(
-        &mut self,
-        opt: &mut Optimizer,
-        expr: AlgeExpr,
-        lmd_context: &mut LmdContext,
-    ) -> Result<OutportLocation, OptError> {
-        let expr_span = expr.op_span();
-        match expr.expr_ty {
-            AlgeExprTy::Unary { op, operand } => {
-                //setup the unary node, than recurse, setup the subexpression and hook it up to our unary expression
-                let sub_output = self.setup_alge_expr(opt, *operand, lmd_context)?;
-                let opnode = opt
-                    .graph
-                    .on_region(&self.lambda_region, |regbuilder| {
-                        let (opnode, _) = regbuilder
-                            .connect_node(
-                                OptNode::new(CallOp::new(op.into()), expr_span),
-                                &[sub_output],
-                            )
-                            .unwrap();
-                        //NOTE we _know_ that the node has only one output
-                        opnode.output(0)
-                    })
-                    .unwrap();
-
-                Ok(opnode)
-            }
-            AlgeExprTy::Binary { left, right, op } => {
-                //Similar to the unary op, first parse both sub_trees, then hook them up to the
-                // inputs and return the output.
-                let left_out = self.setup_alge_expr(opt, *left, lmd_context)?;
-                let right_out = self.setup_alge_expr(opt, *right, lmd_context)?;
-
-                let opnode = opt
-                    .graph
-                    .on_region(&self.lambda_region, |regbuilder| {
-                        let (opnode, _) = regbuilder
-                            .connect_node(
-                                OptNode::new(CallOp::new(op.into()), expr_span),
-                                &[left_out, right_out],
-                            )
-                            .unwrap();
-                        opnode.output(0)
-                    })
-                    .unwrap();
-                Ok(opnode)
-            }
-            AlgeExprTy::Call(c) => {
-                //For the call node we try to parse the well known ops.
-                // Since the language currently has no arbritray _functions_ a call must always resolve to one of those.
-                //
-                // NOTE: We could probably implement a subset of the glsl language, which would allow us to let people copy
-                // paste glsl expressions into vola :D
-
-                let wknode = if let Some(wknode) = WkOp::try_parse(&c.ident.0) {
-                    wknode
-                } else {
-                    let err = OptError::AnySpanned {
-                        span: expr_span.clone().into(),
-                        text: format!("Unknown function {} called!", c.ident.0),
-                        span_text: "here".to_owned(),
-                    };
-                    report(err.clone(), c.span.get_file());
-                    return Err(err);
-                };
-
-                //Build the call node with its sub args
-                let mut subargs: SmallVec<[OutportLocation; 3]> = SmallVec::new();
-                for arg in c.args {
-                    let arg = self.setup_alge_expr(opt, arg, lmd_context)?;
-                    subargs.push(arg);
-                }
-
-                let opnode = opt
-                    .graph
-                    .on_region(&self.lambda_region, |regbuilder| {
-                        let (opnode, _) = regbuilder
-                            .connect_node(OptNode::new(CallOp::new(wknode), expr_span), &subargs)
-                            .unwrap();
-                        opnode.output(0)
-                    })
-                    .unwrap();
-
-                Ok(opnode)
-            }
-            AlgeExprTy::EvalExpr(evalexpr) => {
-                //For the eval expression, first find / insert the cv_import we need.
-                // then setup all arguments, and finally add the call.
-                let eval_cv = self.get_cv_for_eval(opt, &evalexpr);
-                let mut inputs: SmallVec<[OutportLocation; 3]> = smallvec![eval_cv];
-                for arg in evalexpr.params.into_iter() {
-                    inputs.push(self.setup_alge_expr(opt, arg, lmd_context)?);
-                }
-
-                //Now setup the eval node
-                let opnode = opt
-                    .graph
-                    .on_region(&self.lambda_region, |regbuilder| {
-                        let (opnode, _) = regbuilder
-                            .connect_node(OptNode::new(EvalNode::new(), expr_span), &inputs)
-                            .unwrap();
-                        opnode.output(0)
-                    })
-                    .unwrap();
-                Ok(opnode)
-            }
-            AlgeExprTy::FieldAccess { src, accessors } => {
-                //Try to find the access source, if successful, hook the source up to this and
-                // return the value
-
-                let src = if let Some(access) = lmd_context.defined_vars.get(&src.0) {
-                    access.port
-                } else {
-                    let err = OptError::AnySpanned {
-                        span: expr_span.clone().into(),
-                        text: format!("could not find {} in scope", src.0),
-                        span_text: "try to define this before using it".to_owned(),
-                    };
-                    report(err.clone(), expr_span.get_file());
-                    return Err(err);
-                };
-
-                let opnode = opt
-                    .graph
-                    .on_region(&self.lambda_region, |regbuilder| {
-                        let (opnode, _) = regbuilder
-                            .connect_node(
-                                OptNode::new(FieldAccess::new(accessors), expr_span),
-                                &[src],
-                            )
-                            .unwrap();
-                        opnode.output(0)
-                    })
-                    .unwrap();
-                Ok(opnode)
-            }
-            AlgeExprTy::Ident(i) => {
-                //try to resolve the ident, or throw an error if not possible
-                let ident_node = if let Some(noderef) = lmd_context.defined_vars.get(&i.0) {
-                    noderef
-                } else {
-                    let err = OptError::AnySpanned {
-                        span: expr_span.clone().into(),
-                        text: format!("could not find {} in scope", i.0),
-                        span_text: "try to define this before using it".to_owned(),
-                    };
-                    report(err.clone(), expr_span.get_file());
-                    return Err(err);
-                };
-
-                Ok(ident_node.port)
-            }
-            AlgeExprTy::List(lst) => {
-                //For now we just have a special "list" constructor that connects as many srcs as there are
-                // list elements.
-
-                //For it to not panic we first collect all items, then calculate how many
-                // list items we need, resize the inputs array and then connect them
-
-                let mut items: SmallVec<[OutportLocation; 3]> = SmallVec::new();
-                for itm in lst {
-                    items.push(self.setup_alge_expr(opt, itm, lmd_context)?);
-                }
-
-                let mut node = ListConst::new();
-                node.inputs = smallvec![Input::default(); items.len()];
-
-                let opnode = opt
-                    .graph
-                    .on_region(&self.lambda_region, |regbuilder| {
-                        let (opnode, _) = regbuilder
-                            .connect_node(OptNode::new(node, expr_span), &items)
-                            .unwrap();
-                        opnode.output(0)
-                    })
-                    .unwrap();
-                Ok(opnode)
-            }
-            AlgeExprTy::Literal(lit) => {
-                let opnode = opt
-                    .graph
-                    .on_region(&self.lambda_region, |regbuilder| {
-                        let opnode = regbuilder.insert_node(OptNode::new(Imm::new(lit), expr_span));
-                        opnode.output(0)
-                    })
-                    .unwrap();
-                Ok(opnode)
-            }
-        }
-    }
-
-    fn get_cv_for_eval(&mut self, opt: &mut Optimizer, eval_expr: &EvalExpr) -> OutportLocation {
-        let key = OperandAccessKey {
-            operand: eval_expr.evaluator.0.clone(),
-            concept: eval_expr.concept.0.clone(),
-        };
-        if let Some(registered) = self.cv_desc.get_mut(&key) {
-            //Note that we use that
-            registered.access.push(eval_expr.span.clone());
-            return registered.outport.clone();
-        }
-
-        //Not found, therefore add
-        let cv = opt
-            .graph
-            .node_mut(self.lambda)
-            .node_type
-            .unwrap_lambda_mut()
-            .add_context_variable();
-        let port = OutportLocation {
-            node: self.lambda,
-            output: OutputType::ContextVariableArgument(cv),
-        };
-
-        let old = self.cv_desc.insert(
-            key,
-            OperandAccess {
-                outport: port.clone(),
-                cv_index: cv,
-                access: smallvec![eval_expr.span.clone()],
-            },
-        );
-        //there shouldn't be one in here
-        assert!(old.is_none());
-
-        port
     }
 }
 
@@ -545,8 +353,6 @@ impl Optimizer {
             })
         });
 
-        println!("Created lmd: {} with region {:?}", lmd, lmd_region);
-
         let lmd_context = LmdContext::new_for_impl_block(
             &mut self.graph,
             &mut self.typemap,
@@ -556,17 +362,27 @@ impl Optimizer {
             &src_concept,
         );
 
+        //Temporary builder that tracks things like the defined variables etc.
+        // Is dropped within the concept_impl.build_block()
+        let lmd_builder = AstLambdaBuilder {
+            graph: &mut self.graph,
+            lmd_context,
+            lambda: lmd,
+            lambda_region: lmd_region,
+        };
+
         //Now reverse the game by building the initial ConceptImpl and then letting it handle itself.
         let concept_impl = ConceptImpl {
             span: implblock.span.clone(),
             concept: implblock.concept.clone(),
             node_type: src_csg_def.ty.clone(),
             cv_desc: AHashMap::default(),
+
             lambda: lmd,
             lambda_region: lmd_region,
         };
 
-        let build_concept_impl = concept_impl.build_block(self, implblock, lmd_context)?;
+        let build_concept_impl = concept_impl.build_block(lmd_builder, implblock)?;
 
         //After finishing (successfully) add the impl description to the Optimizer so we can
         // find that later on if needed and return

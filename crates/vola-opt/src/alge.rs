@@ -282,9 +282,9 @@ impl DialectNode for FieldAccess {
 #[derive(LangNode, Debug)]
 pub struct ListConst {
     #[inputs]
-    inputs: SmallVec<[Input; 3]>,
+    pub inputs: SmallVec<[Input; 3]>,
     #[output]
-    output: Output,
+    pub output: Output,
 }
 
 impl ListConst {
