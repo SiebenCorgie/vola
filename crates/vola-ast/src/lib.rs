@@ -49,6 +49,27 @@ impl AstEntry {
             _ => false,
         }
     }
+
+    pub fn is_impl_block(&self) -> bool {
+        match self {
+            Self::ImplBlock(_) => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_field_def(&self) -> bool {
+        match self {
+            Self::FieldDefine(_) => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_exportfn(&self) -> bool {
+        match self {
+            Self::ExportFn(_) => true,
+            _ => false,
+        }
+    }
 }
 
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]

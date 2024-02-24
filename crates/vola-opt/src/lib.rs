@@ -206,13 +206,20 @@ impl Optimizer {
     pub fn add_ast(&mut self, ast: VolaAst) -> Result<(), OptError> {
         //NOTE we first add all def nodes, since those don't depend on anything else, and without those
         // some of the other nodes might not build, even though they could.
+        //
+        // After that we add all impl-blocks, since they only depend on the defs,
+        // then all field-def, since they need the impl-blocks, and last are all exportfn.
 
         #[cfg(feature = "profile")]
         let ast_add_start = std::time::Instant::now();
 
         let mut error_counter = 0;
 
-        let heavy_entries = ast
+        //NOTE yes collecting into a big'ol Vec all the time is kinda wasteful, but since
+        // we use `self` in the filter, we can't just connect multiple filter_maps :( .
+
+        //concept loop
+        let sans_defs = ast
             .entries
             .into_iter()
             .filter_map(|ast_entry| {
@@ -228,9 +235,44 @@ impl Optimizer {
             })
             .collect::<Vec<_>>();
 
-        //TODO:
+        //implblock loop
+        let sans_impl_block = sans_defs
+            .into_iter()
+            .filter_map(|ast_entry| {
+                if ast_entry.entry.is_impl_block() {
+                    //Early add def
+                    if let Err(_e) = self.add_tl_node(ast_entry) {
+                        error_counter += 1;
+                    }
+                    None
+                } else {
+                    Some(ast_entry)
+                }
+            })
+            .collect::<Vec<_>>();
 
-        for tl in heavy_entries {
+        //fielddefs
+        let sans_fielddef = sans_impl_block
+            .into_iter()
+            .filter_map(|ast_entry| {
+                if ast_entry.entry.is_field_def() {
+                    //Early add def
+                    if let Err(_e) = self.add_tl_node(ast_entry) {
+                        error_counter += 1;
+                    }
+                    None
+                } else {
+                    Some(ast_entry)
+                }
+            })
+            .collect::<Vec<_>>();
+
+        //now _the_rest_ which _should_ be only export_fn
+
+        for tl in sans_fielddef {
+            if !tl.entry.is_exportfn() {
+                println!("warning: found non-field-def in last top-level-node iterator");
+            }
             if let Err(_e) = self.add_tl_node(tl) {
                 error_counter += 1;
             }
