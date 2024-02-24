@@ -38,6 +38,13 @@ pub enum OptError {
 
     #[error("At least {0} errors occurred while running optimizer.")]
     ErrorsOccurred(usize),
+
+    #[error("Type derivation failed in λ-Node")]
+    TypDeriveFailed {
+        errorcount: usize,
+        #[label("failed with {errorcount} errors in this region")]
+        span: SourceSpan,
+    },
 }
 
 impl OptError {

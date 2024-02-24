@@ -17,5 +17,7 @@ pub fn main() {
         println!("Opt did not parse AST successfully :(");
     }
 
+    opt.type_derive().expect("Failed to run type-derive pass");
+
     opt.dump_svg("dump.svg");
 }

@@ -124,6 +124,14 @@ impl LambdaBuilderCtx for ConceptImpl {
             output: OutputType::ContextVariableArgument(cv),
         };
 
+        //now tag the port with the context type
+        builder.opt.typemap.push_attrib(
+            &port.clone().into(),
+            Ty::Callable {
+                concept: concept.name.0.clone(),
+            },
+        );
+
         let old = self.cv_desc.insert(
             key,
             OperandAccess {

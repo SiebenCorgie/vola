@@ -47,14 +47,9 @@ pub trait DialectNode: LangNode + View {
     ///Dialect identifier of this node.
     fn dialect(&self) -> &'static str;
 
-    fn try_derive_type(
-        &self,
-        _typemap: &AttribStore<Ty>,
-        _graph: &OptGraph,
-    ) -> Result<Ty, OptError> {
-        Err(OptError::Any {
-            text: format!("{} type_derive_unimplemented", self.name()),
-        })
+    ///When presented with the given type map and graph, lets the implementation choose a type, if possible.
+    fn try_derive_type(&self, _typemap: &AttribStore<Ty>, _graph: &OptGraph) -> Option<Ty> {
+        None
     }
 }
 
@@ -65,7 +60,7 @@ pub struct OptNode {
     pub span: Span,
     ///The inner node that is being represented
     #[expose]
-    node: Box<dyn DialectNode + Send + Sync + 'static>,
+    pub node: Box<dyn DialectNode + Send + Sync + 'static>,
 }
 
 impl OptNode {
@@ -95,6 +90,7 @@ impl Debug for OptNode {
     }
 }
 
+#[derive(Clone, Debug)]
 pub enum TypeState {
     Set(Ty),
     Derived(Ty),
@@ -103,6 +99,26 @@ pub enum TypeState {
 pub enum OptEdge {
     State,
     Value { ty: TypeState },
+}
+
+impl OptEdge {
+    ///Sets an unset edge to an derived edge. Does nothing if the state is already
+    /// `Set`.
+    ///
+    /// Panics if the state is already derived.
+    //TODO: Make that nicer. Shouldn't happen thought. However, better panic then creating invalid state.
+    pub fn set_derived_state(&mut self, ts: Ty) {
+        match self {
+            OptEdge::State => panic!("Cannot set type on state edge"),
+            OptEdge::Value { ty } => match ty {
+                TypeState::Unset => *ty = TypeState::Derived(ts),
+                TypeState::Derived(t) => {
+                    panic!("Type state was already derived as {t:?}, cannot overwrite as {ts:?}")
+                }
+                TypeState::Set(_) => {}
+            },
+        }
+    }
 }
 
 impl LangEdge for OptEdge {
