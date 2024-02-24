@@ -38,11 +38,24 @@ mod ast;
 mod common;
 mod csg;
 mod error;
+mod passes;
+
+pub type OptGraph = Rvsdg<OptNode, OptEdge>;
 
 ///A node of some dialect
 pub trait DialectNode: LangNode + View {
     ///Dialect identifier of this node.
     fn dialect(&self) -> &'static str;
+
+    fn try_derive_type(
+        &self,
+        _typemap: &AttribStore<Ty>,
+        _graph: &OptGraph,
+    ) -> Result<Ty, OptError> {
+        Err(OptError::Any {
+            text: format!("{} type_derive_unimplemented", self.name()),
+        })
+    }
 }
 
 ///Single optimizer node of some dialect.
@@ -154,7 +167,7 @@ impl View for OptEdge {
 ///The _whole_ optimizer. Mostly ties together the RVSDG and some auxiliary structures that
 /// make wiring the the correct nodes together possible.
 pub struct Optimizer {
-    pub(crate) graph: Rvsdg<OptNode, OptEdge>,
+    pub(crate) graph: OptGraph,
 
     ///All known concept definitions keyed by their name
     //NOTE: using the name, since thats how we reference them all the time.
@@ -238,9 +251,12 @@ impl Optimizer {
     }
 
     pub fn dump_svg(&self, name: &str) {
+        println!("Found {} type-tags", self.typemap.attribs.len());
+
         let conf = LayoutConfig {
             grid_padding: 30,
             grid_empty_spacing: 15,
+            ignore_dead_node: true,
             ..Default::default()
         };
         rvsdg_viewer::into_svg_with_config(&self.graph, name, &conf)

@@ -1,15 +1,15 @@
 use ahash::AHashMap;
-use rvsdg::{attrib::AttribStore, edge::OutportLocation, smallvec::SmallVec, NodeRef, Rvsdg};
+use rvsdg::{attrib::AttribStore, edge::OutportLocation, smallvec::SmallVec, NodeRef};
 use vola_ast::{
     alge::ImplBlock,
     csg::{CSGConcept, CSGNodeDef},
 };
 
-use crate::{error::OptError, OptEdge, OptNode};
+use crate::{error::OptError, OptGraph};
 
 ///Optimizer types. Those are the AST types, as well as the higher-order-function like types we use to identify
 /// CV-Inputs of nodes. They basically make sure that we connect λ-Nodes with the right output type _when called_.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Ty {
     Scalar,
     Vector {
@@ -22,6 +22,9 @@ pub enum Ty {
     Tensor {
         dim: SmallVec<[usize; 3]>,
     },
+
+    ///A tree of CSG operations in some form.
+    CSGTree,
 
     ///A callable which implements `concept`. Since the namespace of `concepts` is unique, we can be sure
     /// which one it is.
@@ -61,7 +64,7 @@ pub struct LmdContext {
 
 impl LmdContext {
     pub fn new_for_impl_block(
-        graph: &mut Rvsdg<OptNode, OptEdge>,
+        graph: &mut OptGraph,
         type_map: &mut AttribStore<Ty>,
         lmd: NodeRef,
         block: &ImplBlock,
@@ -137,7 +140,7 @@ impl LmdContext {
     }
 
     pub fn new_for_exportfn(
-        graph: &mut Rvsdg<OptNode, OptEdge>,
+        graph: &mut OptGraph,
         type_map: &mut AttribStore<Ty>,
         lmd: NodeRef,
         exportfn: &vola_ast::csg::ExportFn,
@@ -180,7 +183,7 @@ impl LmdContext {
     }
 
     pub fn new_for_fielddef(
-        graph: &mut Rvsdg<OptNode, OptEdge>,
+        graph: &mut OptGraph,
         type_map: &mut AttribStore<Ty>,
         lmd: NodeRef,
         fielddef: &vola_ast::csg::FieldDef,

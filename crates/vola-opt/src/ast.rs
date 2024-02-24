@@ -15,7 +15,7 @@ use vola_common::report;
 
 use crate::{
     alge::{CallOp, EvalNode, FieldAccess, Imm, ListConst, WkOp},
-    common::LmdContext,
+    common::{LmdContext, Ty},
     csg::{CsgCall, CsgOp},
     error::OptError,
     OptNode, Optimizer,
@@ -85,12 +85,12 @@ pub struct AstLambdaBuilder<'a> {
 }
 
 pub trait LambdaBuilderCtx {
-    ///Registers the `eval_expr` in the lambda's context_variable set, and returns the Outport of said cv.
+    ///Registers the `eval_expr` in the lambda's context_variable set, and returns the Outport of said cv and the return type of the eval call.
     fn get_cv_for_eval(
         &mut self,
         _builder: &mut AstLambdaBuilder,
         eval_expr: &EvalExpr,
-    ) -> Result<OutportLocation, OptError> {
+    ) -> Result<(OutportLocation, Ty), OptError> {
         let err = OptError::AnySpanned { span: eval_expr.span.clone().into(), text: format!("Cannot use eval expression in this context.\nEval expressions are only allowed in concept implementations!"), span_text: format!("consider moving this eval into a concept implementation") };
         report(err.clone(), eval_expr.span.get_file());
         Err(err)
@@ -191,7 +191,7 @@ impl<'a> AstLambdaBuilder<'a> {
             AlgeExprTy::EvalExpr(evalexpr) => {
                 //For the eval expression, first find / insert the cv_import we need.
                 // then setup all arguments, and finally add the call.
-                let eval_cv = parent.get_cv_for_eval(self, &evalexpr)?;
+                let (eval_cv, eval_cv_type) = parent.get_cv_for_eval(self, &evalexpr)?;
                 let mut inputs: SmallVec<[OutportLocation; 3]> = smallvec![eval_cv];
                 for arg in evalexpr.params.into_iter() {
                     inputs.push(self.setup_alge_expr(arg, parent)?);
@@ -208,6 +208,10 @@ impl<'a> AstLambdaBuilder<'a> {
                         opnode.output(0)
                     })
                     .unwrap();
+
+                //tag output type
+                self.opt.typemap.push_attrib(&opnode.into(), eval_cv_type);
+
                 Ok(opnode)
             }
             AlgeExprTy::FieldAccess { src, accessors } => {
@@ -324,6 +328,26 @@ impl<'a> AstLambdaBuilder<'a> {
                 // it here
                 if tree.is_local_reference {
                     if let Some(localcsg) = self.lmd_context.defined_vars.get(&tree.op.0) {
+                        //Make sure the local variable is a csg variable
+                        let err = OptError::AnySpannedWithSource {
+                            source_span: localcsg.span.clone().into(),
+                            source_text: "defined here".to_owned(),
+                            text: format!(
+                                "Using local variable in CSG tree, but was not a csg-tree variable"
+                            ),
+                            span: tree.head_span().into(),
+                            span_text: "used here".to_owned(),
+                        };
+                        if let Some(localcsgty) = self.opt.typemap.attrib(&localcsg.port.into()) {
+                            if localcsgty.get(0) != Some(&Ty::CSGTree) {
+                                report(err.clone(), tree.span.get_file());
+                                return Err(err);
+                            }
+                        } else {
+                            report(err.clone(), tree.span.get_file());
+                            return Err(err);
+                        }
+
                         //If found, return that port
                         return Ok(localcsg.port);
                     } else {

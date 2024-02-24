@@ -1,6 +1,6 @@
 use crate::{
     ast::{AstLambdaBuilder, LambdaBuilderCtx},
-    common::{LmdContext, VarDef},
+    common::{LmdContext, Ty, VarDef},
     error::OptError,
     Optimizer,
 };
@@ -73,7 +73,7 @@ impl LambdaBuilderCtx for ConceptImpl {
         &mut self,
         builder: &mut AstLambdaBuilder,
         eval_expr: &EvalExpr,
-    ) -> Result<OutportLocation, OptError> {
+    ) -> Result<(OutportLocation, Ty), OptError> {
         //Before doing anything, check that the concept exists and has the right ammount of
         // arguments
         let concept = match builder.opt.concepts.get(&eval_expr.concept.0) {
@@ -95,6 +95,12 @@ impl LambdaBuilderCtx for ConceptImpl {
             ));
         }
 
+        let concept_ret_type = concept
+            .dst_ty
+            .clone()
+            .try_into()
+            .expect("Could not convert ast-type to opt-type");
+
         let key = OperandAccessKey {
             operand: eval_expr.evaluator.0.clone(),
             concept: eval_expr.concept.0.clone(),
@@ -102,7 +108,7 @@ impl LambdaBuilderCtx for ConceptImpl {
         if let Some(registered) = self.cv_desc.get_mut(&key) {
             //Note that we use that
             registered.access.push(eval_expr.span.clone());
-            return Ok(registered.outport.clone());
+            return Ok((registered.outport.clone(), concept_ret_type));
         }
 
         //Not found, therefore add
@@ -129,7 +135,7 @@ impl LambdaBuilderCtx for ConceptImpl {
         //there shouldn't be one in here
         assert!(old.is_none());
 
-        Ok(port)
+        Ok((port, concept_ret_type))
     }
 }
 

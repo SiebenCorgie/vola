@@ -108,6 +108,12 @@ Note that vola does not support shadowing. If you just want to change the value 
             },
         );
 
+        //register type for port
+        builder
+            .opt
+            .typemap
+            .push_attrib(&def_port.into(), Ty::CSGTree);
+
         Ok(())
     }
 

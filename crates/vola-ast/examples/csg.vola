@@ -67,7 +67,6 @@ impl ColorOw<sub> for Color(at){
 //Some reusable field definition
 define subfield(trans: vec3){
     csg sphere = Sphere(42);
-
     Union(){
         Translate(trans){
             sphere
