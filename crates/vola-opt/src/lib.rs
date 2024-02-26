@@ -48,12 +48,22 @@ pub trait DialectNode: LangNode + View {
     fn dialect(&self) -> &'static str;
 
     ///When presented with the given type map and graph, lets the implementation choose a type, if possible.
-    fn try_derive_type(&self, _typemap: &AttribStore<Ty>, _graph: &OptGraph) -> Option<Ty> {
-        None
+    ///
+    /// Can return an error if an invalid configuration is detected. If the configuration is just incomplete, should return
+    /// Ok(None). In that case the type resolution will try again later.
+    fn try_derive_type(
+        &self,
+        _typemap: &AttribStore<Ty>,
+        _graph: &OptGraph,
+        _concepts: &AHashMap<String, CSGConcept>,
+    ) -> Result<Option<Ty>, OptError> {
+        Err(OptError::Any {
+            text: format!("Type resolution not implemented for {}", self.name()),
+        })
     }
 }
 
-///Single optimizer node of some dialect.
+///Single optimizer node of some dialect.4
 #[derive(LangNode)]
 pub struct OptNode {
     ///The source span this node originated from

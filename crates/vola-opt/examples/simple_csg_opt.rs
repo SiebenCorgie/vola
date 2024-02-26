@@ -17,7 +17,11 @@ pub fn main() {
         println!("Opt did not parse AST successfully :(");
     }
 
-    opt.type_derive().expect("Failed to run type-derive pass");
+    opt.dump_svg("before_type_resolution.svg");
 
-    opt.dump_svg("dump.svg");
+    if let Err(e) = opt.type_derive() {
+        println!("Type derive failed: {e}");
+    }
+
+    opt.dump_svg("after_type_resolution.svg");
 }

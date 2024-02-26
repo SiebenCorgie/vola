@@ -33,6 +33,13 @@ pub enum OptError {
         span_text: String,
     },
 
+    #[error("{err}")]
+    PostSpanned {
+        err: Box<OptError>,
+        #[label("here")]
+        span: SourceSpan,
+    },
+
     #[error("Cannot convert AstType {srcty:?} to a valid optimizer type")]
     TypeConversionError { srcty: vola_ast::common::Ty },
 
@@ -40,7 +47,7 @@ pub enum OptError {
     ErrorsOccurred(usize),
 
     #[error("Type derivation failed in λ-Node")]
-    TypDeriveFailed {
+    TypeDeriveFailed {
         errorcount: usize,
         #[label("failed with {errorcount} errors in this region")]
         span: SourceSpan,
@@ -48,6 +55,19 @@ pub enum OptError {
 }
 
 impl OptError {
+    ///Converts `self` into an spanned error, if it isn't already.
+    pub fn into_spanned(self, span: &vola_common::Span) -> Self {
+        match self {
+            OptError::AnySpanned { .. }
+            | OptError::AnySpannedWithSource { .. }
+            | OptError::TypeDeriveFailed { .. } => self,
+            e => OptError::PostSpanned {
+                err: Box::new(e),
+                span: span.clone().into(),
+            },
+        }
+    }
+
     pub fn report_no_concept(span: &vola_common::Span, concept_name: &str) -> Self {
         let err = OptError::AnySpanned {
             span: span.clone().into(),

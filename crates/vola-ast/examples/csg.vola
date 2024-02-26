@@ -2,7 +2,7 @@
 
 
 #[derive(LocalLipshitz)]
-entity Sphere(radius: vec3);
+entity Sphere(radius: s);
 entity Box(extent: vec3);
 
 concept SDF2D: vec2 -> s;
@@ -31,7 +31,7 @@ impl Sphere for SDF3D(at){
 
 impl Box for SDF3D(at){
      let q = abs(at) - extent;
-     length(max(q, 0.0)) + min(max(q.x, max(q.y, q.z)), 0.0)
+     length(max(q, [0.0, 0.0, 0.0])) + min(max(q.x, max(q.y, q.z)), 0.0)
 }
 
 
@@ -42,7 +42,7 @@ impl Translate<sub> for SDF3D(at){
     eval sub.SDF3D(at)
 }
 
-impl Union<left, right> for SDF3D(at) {
+impl Union<l, r> for SDF3D(at) {
     let left = eval l.SDF3D(at);
     let right = eval r.SDF3D(at);
     let new_result = min(left, right);
@@ -59,7 +59,7 @@ impl SmoothUnion<left, right> for SDF3D(at){
 
 impl ColorOw<sub> for Color(at){
     let dist = eval sub.SDF3D(at);
-    let color = [frac(length(dist)), 1.0, 1.0];
+    let color = [frac(dist), 1.0, 1.0];
     color
 }
 

@@ -193,6 +193,8 @@ impl<'a> AstLambdaBuilder<'a> {
                 // then setup all arguments, and finally add the call.
                 let (eval_cv, eval_cv_type) = parent.get_cv_for_eval(self, &evalexpr)?;
                 let mut inputs: SmallVec<[OutportLocation; 3]> = smallvec![eval_cv];
+
+                let argount = evalexpr.params.len();
                 for arg in evalexpr.params.into_iter() {
                     inputs.push(self.setup_alge_expr(arg, parent)?);
                 }
@@ -203,7 +205,7 @@ impl<'a> AstLambdaBuilder<'a> {
                     .graph
                     .on_region(&self.lambda_region, |regbuilder| {
                         let (opnode, _) = regbuilder
-                            .connect_node(OptNode::new(EvalNode::new(), expr_span), &inputs)
+                            .connect_node(OptNode::new(EvalNode::new(argount), expr_span), &inputs)
                             .unwrap();
                         opnode.output(0)
                     })

@@ -80,6 +80,21 @@ pub enum FieldAccessor {
     Ident { span: Span, ident: Ident },
 }
 
+impl FieldAccessor {
+    pub fn try_to_index(&self) -> Option<usize> {
+        match self {
+            Self::Digit { digit, .. } => Some(*digit),
+            Self::Ident { ident, .. } => match ident.0.as_str() {
+                "x" => Some(0),
+                "y" => Some(1),
+                "z" => Some(2),
+                "w" => Some(3),
+                _ => None,
+            },
+        }
+    }
+}
+
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Clone, Debug)]
 pub enum AlgeExprTy {

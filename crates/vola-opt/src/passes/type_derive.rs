@@ -10,17 +10,20 @@
 //! The pass itself just tries to find a fix-point style resolution, which basically comes down to calling try-derive on all _just changed nodes_ till
 //! either all are resolved, or nothing changes and we end in an _unresolved_ state.
 
-use std::{collections::VecDeque, ops::Deref};
+use std::{collections::VecDeque, fmt::format, ops::Deref};
 
 use rvsdg::{
     edge::{OutportLocation, OutputType},
     nodes::NodeType,
-    region::RegionLocation,
+    region::{self, RegionLocation},
+    smallvec::{smallvec, SmallVec},
     NodeRef,
 };
 use vola_common::{report, Span};
 
-use crate::{error::OptError, OptEdge, Optimizer, TypeState};
+use crate::{
+    alge::implblock::ConceptImpl, common::Ty, error::OptError, OptEdge, Optimizer, TypeState,
+};
 
 //NOTE: At the moment we rely on `eval` expressions being already tagged, as well as all inputs to an λ-Node being tagged as well.
 // This basically lets us "push-down" all definitions. The only somewhat _hard_ nodes are the eval-nodes, since those will be replaced
@@ -57,6 +60,10 @@ impl Optimizer {
             }
         }
 
+        for implblock in self.concept_impl.values() {
+            self.verify_imblblock(implblock)?;
+        }
+
         if error_count > 0 {
             Err(OptError::Any {
                 text: format!("Type derivation did not end successfully!"),
@@ -66,8 +73,72 @@ impl Optimizer {
         }
     }
 
-    fn verify_imblblock_output(&self, lambda: RegionLocation) -> Result<(), OptError> {
-        Ok(())
+    //Verifies that the implblock has the correct input and output signature set on all edges
+    fn verify_imblblock(&self, block: &ConceptImpl) -> Result<(), OptError> {
+        //NOTE: we currently only check that the return type matches, since the input types are
+        // always pre-set by the impblock builder, based on the concept's decleration. So there would be some
+        // kind of type conflict within the region.
+
+        let expected_result_type: Ty = self
+            .concepts
+            .get(&block.concept.0)
+            .unwrap()
+            .dst_ty
+            .clone()
+            .try_into()
+            .expect("Could not convert concept type into opttype");
+
+        //check the output for the correctly typed edge
+        if let Some(result_edg) = self.graph.region(&block.lambda_region).unwrap().results[0].edge {
+            match &self.graph.edge(result_edg).ty {
+                OptEdge::State => {
+                    let err = OptError::AnySpanned {
+                        span: block.span.clone().into(),
+                        text: format!("λ-Node had state edge as output"),
+                        span_text: "in this region".to_owned(),
+                    };
+                    report(err.clone(), block.span.get_file());
+                    Err(err)
+                }
+                OptEdge::Value {
+                    ty: TypeState::Unset,
+                } => {
+                    let err = OptError::AnySpanned {
+                        span: block.span.clone().into(),
+                        text: format!("λ-Node's output was untyped"),
+                        span_text: "in this region".to_owned(),
+                    };
+                    report(err.clone(), block.span.get_file());
+                    Err(err)
+                }
+                OptEdge::Value {
+                    ty: TypeState::Derived(t) | TypeState::Set(t),
+                } => {
+                    if *t != expected_result_type {
+                        let err = OptError::AnySpanned {
+                            span: block.span.clone().into(),
+                            text: format!(
+                                "λ-Node's output was of type {:?} but expected {:?}",
+                                t, expected_result_type
+                            ),
+                            span_text: "in this region".to_owned(),
+                        };
+                        report(err.clone(), block.span.get_file());
+                        Err(err)
+                    } else {
+                        Ok(())
+                    }
+                }
+            }
+        } else {
+            let err = OptError::AnySpanned {
+                span: block.span.clone().into(),
+                text: format!("λ-Node's output was unconnected"),
+                span_text: "in this region".to_owned(),
+            };
+            report(err.clone(), block.span.get_file());
+            Err(err)
+        }
     }
 
     fn derive_lambda(&mut self, lambda: RegionLocation, lambda_span: Span) -> Result<(), OptError> {
@@ -83,6 +154,16 @@ impl Optimizer {
             })
             .expect("Failed to gather nodes in λ-Region");
 
+        //Preset all edges where we know the type already
+        for edg in &edges {
+            let src = self.graph.edge(*edg).src().clone();
+            if let Some([ty]) = self.typemap.attrib(&src.into()) {
+                self.graph.edge_mut(*edg).ty = OptEdge::Value {
+                    ty: TypeState::Set(ty.clone()),
+                };
+            }
+        }
+
         'resolution_loop: loop {
             //Flag that tells us _after_ touching all nodes,
             // if we made any advances. If not we are stuck and return with an error.
@@ -93,14 +174,55 @@ impl Optimizer {
             for node in local_stack {
                 //gather all inputs and let the node try to resolve itself
 
-                let optnode = self.graph.node(node);
-                match optnode
+                //if the node's output edge is already set, skip node.
+                match self.typemap.attrib(
+                    &OutportLocation {
+                        node,
+                        output: OutputType::Output(0),
+                    }
+                    .into(),
+                ) {
+                    Some([ty]) => {
+                        //has type set already, skip node but propagate type if needed
+                        for edg in self
+                            .graph
+                            .node(node)
+                            .outport(&OutputType::Output(0))
+                            .unwrap()
+                            .edges
+                            .clone()
+                            .iter()
+                        {
+                            self.graph.edge_mut(*edg).ty.set_derived_state(ty.clone());
+                        }
+                        continue;
+                    }
+                    Some(multiple_types) => {
+                        let span = self
+                            .graph
+                            .node(node)
+                            .node_type
+                            .unwrap_simple_ref()
+                            .span
+                            .clone();
+                        return Err(OptError::AnySpanned {
+                            span: span.into(),
+                            text: "Node hat multiple types set on output-port".to_owned(),
+                            span_text: "here".to_owned(),
+                        });
+                    }
+                    _ => {}
+                }
+
+                let type_resolve_try = self
+                    .graph
+                    .node(node)
                     .node_type
                     .unwrap_simple_ref()
                     .node
-                    .try_derive_type(&self.typemap, &self.graph)
-                {
-                    Some(ty) => {
+                    .try_derive_type(&self.typemap, &self.graph, &self.concepts);
+                match type_resolve_try {
+                    Ok(Some(ty)) => {
                         //flag change.
                         resolved_any_node = true;
 
@@ -116,12 +238,44 @@ impl Optimizer {
                                 output: OutputType::Output(0),
                             }
                             .into(),
-                            ty,
+                            ty.clone(),
                         );
+
+                        //And propagate to all edges
+                        for edg in self
+                            .graph
+                            .node(node)
+                            .outport(&OutputType::Output(0))
+                            .unwrap()
+                            .edges
+                            .clone()
+                            .iter()
+                        {
+                            self.graph.edge_mut(*edg).ty = OptEdge::Value {
+                                ty: TypeState::Derived(ty.clone()),
+                            };
+                        }
                     }
-                    None => {
+                    Ok(None) => {
                         //push back into build_stack
                         build_stack.push_front(node);
+                    }
+                    Err(e) => {
+                        let e = e.into_spanned(
+                            &self.graph.node(node).node_type.unwrap_simple_ref().span,
+                        );
+                        report(
+                            e.clone(),
+                            self.graph
+                                .node(node)
+                                .node_type
+                                .unwrap_simple_ref()
+                                .span
+                                .get_file(),
+                        );
+                        //Immediatly abort, since we have no way of finishing.
+                        // TODO: We could also collect all error at this point...
+                        return Err(e);
                     }
                 }
             }
@@ -144,12 +298,13 @@ impl Optimizer {
                 report(err, optnode.node_type.unwrap_simple_ref().span.get_file());
             }
 
-            return Err(OptError::TypDeriveFailed {
+            return Err(OptError::TypeDeriveFailed {
                 errorcount: build_stack.len(),
                 span: lambda_span.into(),
             });
         }
 
+        /*
         //Since all type have been derived, setup all edges with the newly found type information,
         // TODO build nicer error handling. However, in theory this _should_ fly
         for edgeref in edges {
@@ -190,6 +345,7 @@ impl Optimizer {
                 }
             }
         }
+        */
 
         Ok(())
     }
