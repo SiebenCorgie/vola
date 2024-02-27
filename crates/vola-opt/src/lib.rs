@@ -56,6 +56,7 @@ pub trait DialectNode: LangNode + View {
         _typemap: &AttribStore<Ty>,
         _graph: &OptGraph,
         _concepts: &AHashMap<String, CSGConcept>,
+        _csg_defs: &AHashMap<String, CSGNodeDef>,
     ) -> Result<Option<Ty>, OptError> {
         Err(OptError::Any {
             text: format!("Type resolution not implemented for {}", self.name()),
@@ -127,6 +128,19 @@ impl OptEdge {
                 }
                 TypeState::Set(_) => {}
             },
+        }
+    }
+
+    ///Returns the type of this edge, if possible. Is none for State edges and untyped value edges.
+    pub fn get_type(&self) -> Option<&Ty> {
+        match &self {
+            OptEdge::State
+            | OptEdge::Value {
+                ty: TypeState::Unset,
+            } => None,
+            OptEdge::Value {
+                ty: TypeState::Derived(t) | TypeState::Set(t),
+            } => Some(t),
         }
     }
 }

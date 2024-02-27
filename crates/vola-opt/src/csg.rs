@@ -5,9 +5,9 @@ use rvsdg::{
     rvsdg_derive_lang::LangNode,
     smallvec::{smallvec, SmallVec},
 };
-use vola_ast::common::Ident;
+use vola_ast::{common::Ident, csg::CSGNodeDef};
 
-use crate::DialectNode;
+use crate::{common::Ty, error::OptError, DialectNode};
 
 pub(crate) mod exportfn;
 pub(crate) mod fielddef;
@@ -46,7 +46,7 @@ macro_rules! implViewCsgOp {
     }
 }
 
-///Highlevel CSG Op where the concept identifier is verified, but not yet specialize.
+///Highlevel CSG Op where the concept identifier is verified, but not yet specialized.
 /// Used to build resolved.
 #[derive(LangNode, Debug)]
 pub struct CsgOp {
@@ -74,6 +74,92 @@ implViewCsgOp!(CsgOp, "{:?}", op);
 impl DialectNode for CsgOp {
     fn dialect(&self) -> &'static str {
         "csg"
+    }
+
+    fn try_derive_type(
+        &self,
+        typemap: &rvsdg::attrib::AttribStore<crate::common::Ty>,
+        graph: &crate::OptGraph,
+        _concepts: &ahash::AHashMap<String, vola_ast::csg::CSGConcept>,
+        csg_defs: &ahash::AHashMap<String, CSGNodeDef>,
+    ) -> Result<Option<crate::common::Ty>, crate::error::OptError> {
+        //We resole the CSG op by checking, that all inputs adher to the op's specification.
+        // Which means the arguments that are connected are equal to the one specified by the
+        // implemented operation or entity
+        let expected_signature = csg_defs
+            .get(&self.op)
+            .unwrap()
+            .args
+            .iter()
+            .map(|arg| {
+                arg.ty
+                    .clone()
+                    .try_into()
+                    .expect("Could not convert ty opt-type")
+            })
+            .collect::<SmallVec<[Ty; 3]>>();
+        //we always output a _CSGTree_ component.
+        let output: Ty = Ty::CSGTree;
+
+        //In practice we now iterate all connected inputs. The first 0..n migth be CSGTrees
+        // already, which are our sub_trees. We verify those against the `subtree_count`.
+        // All following connected nodes must be part of the `expected_signature`.
+
+        for i in 0..self.subtree_count {
+            if let Some(port) = self.inputs.get(i) {
+                if let Some(edg) = port.edge {
+                    match graph.edge(edg).ty.get_type() {
+                        Some(ty) => {
+                            //Check that its actually a csg tree
+                            if ty != &Ty::CSGTree {
+                                return Err(OptError::Any {
+                                    text: format!(
+                                        "Subtree {i} was not of type CSGTree for CSGOp {}",
+                                        self.op
+                                    ),
+                                });
+                            }
+                        }
+                        None => {
+                            //Not set
+                            return Ok(None);
+                        }
+                    }
+                }
+            } else {
+                //edge not yet set
+                return Ok(None);
+            }
+        }
+
+        //NOTE that there is the right amount of args is already checked at the building procedure!
+        let mut algearg = 0;
+        while let Some(arg) = self.inputs.get(self.subtree_count + algearg) {
+            if let Some(edg) = arg.edge {
+                match graph.edge(edg).ty.get_type() {
+                    Some(ty) => {
+                        //Check that its actually a csg tree
+                        if ty != &expected_signature[algearg] {
+                            return Err(OptError::Any {
+                                text: format!(
+                                    "expected {algearg}-th argument to be {:?} not {:?} for CSGOp {}",
+                                    expected_signature[algearg], ty, self.op
+                                ),
+                            });
+                        }
+                    }
+                    None => {
+                        //Not set
+                        return Ok(None);
+                    }
+                }
+            }
+            algearg += 1;
+        }
+
+        //todo!("do actual args now, and refactor alge module to use edge.get_type() as well");
+
+        Ok(Some(output))
     }
 }
 

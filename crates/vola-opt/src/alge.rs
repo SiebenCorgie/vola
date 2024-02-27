@@ -10,7 +10,10 @@ use rvsdg::{
     rvsdg_derive_lang::LangNode,
     smallvec::{smallvec, SmallVec},
 };
-use vola_ast::{alge::FieldAccessor, csg::CSGConcept};
+use vola_ast::{
+    alge::FieldAccessor,
+    csg::{CSGConcept, CSGNodeDef},
+};
 
 use crate::{common::Ty, error::OptError, DialectNode, OptEdge, OptGraph, TypeState};
 
@@ -406,6 +409,7 @@ impl DialectNode for CallOp {
         typemap: &AttribStore<Ty>,
         graph: &OptGraph,
         _concepts: &AHashMap<String, CSGConcept>,
+        _csg_defs: &AHashMap<String, CSGNodeDef>,
     ) -> Result<Option<Ty>, OptError> {
         //For all WKOps we first collect all inputs, then let the op check itself.
         // For now we already bail if any type is unset, since we currently don't have any ops that
@@ -491,6 +495,7 @@ impl DialectNode for EvalNode {
         typemap: &AttribStore<Ty>,
         graph: &OptGraph,
         concepts: &AHashMap<String, CSGConcept>,
+        _csg_defs: &AHashMap<String, CSGNodeDef>,
     ) -> Result<Option<Ty>, OptError> {
         //For eval nodes, the first type must be a callable, and all following must addher to the called concept's definition
         let mut signature: SmallVec<[Ty; 2]> = SmallVec::new();
@@ -610,6 +615,7 @@ impl DialectNode for Imm {
         _typemap: &AttribStore<Ty>,
         _graph: &OptGraph,
         _concepts: &AHashMap<String, CSGConcept>,
+        _csg_defs: &AHashMap<String, CSGNodeDef>,
     ) -> Result<Option<Ty>, OptError> {
         //NOTE: all literals are translated to a _scalar_
         Ok(Some(Ty::Scalar))
@@ -670,6 +676,7 @@ impl DialectNode for FieldAccess {
         _typemap: &AttribStore<Ty>,
         graph: &OptGraph,
         _concepts: &AHashMap<String, CSGConcept>,
+        _csg_defs: &AHashMap<String, CSGNodeDef>,
     ) -> Result<Option<Ty>, OptError> {
         if let Some(edg) = self.access_src.edge {
             //List access can only be done on algebraic types. The type can decide itself if it fits the access pattern.
@@ -714,6 +721,7 @@ impl DialectNode for ListConst {
         typemap: &AttribStore<Ty>,
         graph: &OptGraph,
         _concepts: &AHashMap<String, CSGConcept>,
+        _csg_defs: &AHashMap<String, CSGNodeDef>,
     ) -> Result<Option<Ty>, OptError> {
         //For the list constructor, we check that all inputs are of the same (algebraic) type, and then derive the
         // algebraic super(?)-type. So a list of scalars becomes a vector, a list of vectors a matrix, and a list of

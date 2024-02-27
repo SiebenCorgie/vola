@@ -54,8 +54,7 @@ impl Optimizer {
             .map(|v| (v.lambda_region, v.span.clone()))
             .collect::<Vec<_>>();
         for (implblock, span) in implblocks {
-            if let Err(err) = self.derive_lambda(implblock, span.clone()) {
-                report(err, span.get_file());
+            if let Err(err) = self.derive_region(implblock, span.clone()) {
                 error_count += 1;
             }
         }
@@ -63,6 +62,20 @@ impl Optimizer {
         for implblock in self.concept_impl.values() {
             self.verify_imblblock(implblock)?;
         }
+
+        let fregs = self
+            .field_def
+            .values()
+            .map(|fdef| (fdef.lambda_region.clone(), fdef.span.clone()))
+            .collect::<Vec<_>>();
+        //Now do the field def
+        for (def, srcspan) in fregs {
+            if let Err(err) = self.derive_region(def, srcspan.clone()) {
+                error_count += 1;
+            }
+        }
+
+        //TODO: make sure the fdef ends on a CSGTree variable
 
         if error_count > 0 {
             Err(OptError::Any {
@@ -141,11 +154,15 @@ impl Optimizer {
         }
     }
 
-    fn derive_lambda(&mut self, lambda: RegionLocation, lambda_span: Span) -> Result<(), OptError> {
+    fn derive_region(
+        &mut self,
+        reg: RegionLocation,
+        region_src_span: Span,
+    ) -> Result<(), OptError> {
         //First gather all nodes in the region
         let (mut build_stack, edges) = self
             .graph
-            .on_region(&lambda, |reg| {
+            .on_region(&reg, |reg| {
                 //The resolution stack
                 let build_stack: VecDeque<NodeRef> =
                     reg.region().nodes.iter().map(|n| *n).collect();
@@ -220,7 +237,12 @@ impl Optimizer {
                     .node_type
                     .unwrap_simple_ref()
                     .node
-                    .try_derive_type(&self.typemap, &self.graph, &self.concepts);
+                    .try_derive_type(
+                        &self.typemap,
+                        &self.graph,
+                        &self.concepts,
+                        &self.csg_node_defs,
+                    );
                 match type_resolve_try {
                     Ok(Some(ty)) => {
                         //flag change.
@@ -300,7 +322,7 @@ impl Optimizer {
 
             return Err(OptError::TypeDeriveFailed {
                 errorcount: build_stack.len(),
-                span: lambda_span.into(),
+                span: region_src_span.into(),
             });
         }
 
