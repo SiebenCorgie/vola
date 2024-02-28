@@ -414,19 +414,13 @@ impl DialectNode for CallOp {
         //For all WKOps we first collect all inputs, then let the op check itself.
         // For now we already bail if any type is unset, since we currently don't have any ops that
         // _don't_ care about any input.
-
         let mut signature: SmallVec<[Ty; 2]> = SmallVec::new();
         for (idx, inp) in self.inputs.iter().enumerate() {
             if let Some(edg) = inp.edge {
                 //resolve if there is a type set
-
-                if let OptEdge::Value {
-                    ty: TypeState::Derived(t) | TypeState::Set(t),
-                } = &graph.edge(edg).ty
-                {
+                if let Some(t) = graph.edge(edg).ty.get_type() {
                     signature.insert(idx, t.clone());
                 } else {
-                    //Edge no yet set, bail
                     return Ok(None);
                 }
             } else {
@@ -502,14 +496,9 @@ impl DialectNode for EvalNode {
         for (idx, inp) in self.inputs.iter().enumerate() {
             if let Some(edg) = inp.edge {
                 //resolve if there is a type set
-
-                if let OptEdge::Value {
-                    ty: TypeState::Derived(t) | TypeState::Set(t),
-                } = &graph.edge(edg).ty
-                {
+                if let Some(t) = graph.edge(edg).ty.get_type() {
                     signature.insert(idx, t.clone());
                 } else {
-                    //Edge no yet set, bail
                     return Ok(None);
                 }
             } else {
@@ -730,14 +719,9 @@ impl DialectNode for ListConst {
         for (idx, inp) in self.inputs.iter().enumerate() {
             if let Some(edg) = inp.edge {
                 //resolve if there is a type set
-
-                if let OptEdge::Value {
-                    ty: TypeState::Derived(t) | TypeState::Set(t),
-                } = &graph.edge(edg).ty
-                {
+                if let Some(t) = graph.edge(edg).ty.get_type() {
                     signature.insert(idx, t.clone());
                 } else {
-                    //Edge no yet set, bail
                     return Ok(None);
                 }
             } else {

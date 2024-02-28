@@ -157,8 +157,6 @@ impl DialectNode for CsgOp {
             algearg += 1;
         }
 
-        //todo!("do actual args now, and refactor alge module to use edge.get_type() as well");
-
         Ok(Some(output))
     }
 }
@@ -169,6 +167,9 @@ pub struct CsgCall {
     ///The field that thas is called
     pub op: String,
 
+    ///Expected signature for this call.
+    pub input_signature: SmallVec<[Ty; 2]>,
+
     #[inputs]
     pub inputs: SmallVec<[Input; 2]>,
     #[output]
@@ -176,10 +177,11 @@ pub struct CsgCall {
 }
 
 impl CsgCall {
-    pub fn new(op: Ident, argcount: usize) -> Self {
+    pub fn new(op: Ident, signature: SmallVec<[Ty; 2]>) -> Self {
         CsgCall {
             op: op.0,
-            inputs: smallvec![Input::default(); argcount],
+            inputs: smallvec![Input::default(); signature.len()],
+            input_signature: signature,
             output: Output::default(),
         }
     }
@@ -190,6 +192,45 @@ impl DialectNode for CsgCall {
     fn dialect(&self) -> &'static str {
         "csg"
     }
+
+    fn try_derive_type(
+        &self,
+        _typemap: &rvsdg::attrib::AttribStore<Ty>,
+        graph: &crate::OptGraph,
+        _concepts: &ahash::AHashMap<String, vola_ast::csg::CSGConcept>,
+        _csg_defs: &ahash::AHashMap<String, CSGNodeDef>,
+    ) -> Result<Option<Ty>, OptError> {
+        //We know the expected signature. Just check each input
+
+        for i in 0..self.input_signature.len() {
+            if let Some(port) = self.inputs.get(i) {
+                if let Some(edg) = port.edge {
+                    match graph.edge(edg).ty.get_type() {
+                        Some(ty) => {
+                            if ty != &self.input_signature[i] {
+                                return Err(OptError::Any {
+                                    text: format!(
+                                        "Field argument {i} was {:?} but expected {:?}",
+                                        ty, self.input_signature[i]
+                                    ),
+                                });
+                            }
+                        }
+                        None => {
+                            //Not set
+                            return Ok(None);
+                        }
+                    }
+                }
+            } else {
+                //edge not yet set
+                return Ok(None);
+            }
+        }
+
+        //If we made it till here, we known that the field-call always returns a CSGTree
+        Ok(Some(Ty::CSGTree))
+    }
 }
 
 ///Access description for a tree.
@@ -198,6 +239,9 @@ pub struct TreeAccess {
     ///The concept that is being called by the description.
     pub called_concept: String,
 
+    ///Expected signature for this call.
+    pub input_signature: SmallVec<[Ty; 2]>,
+    pub return_type: Ty,
     #[inputs]
     pub inputs: SmallVec<[Input; 3]>,
     #[output]
@@ -205,10 +249,12 @@ pub struct TreeAccess {
 }
 
 impl TreeAccess {
-    pub fn new(called_concept: Ident, arg_count: usize) -> Self {
+    pub fn new(called_concept: Ident, signature: SmallVec<[Ty; 2]>, return_type: Ty) -> Self {
         TreeAccess {
             called_concept: called_concept.0,
-            inputs: smallvec![Input::default(); arg_count],
+            inputs: smallvec![Input::default(); signature.len()],
+            return_type,
+            input_signature: signature,
             output: Output::default(),
         }
     }
@@ -218,5 +264,44 @@ implViewCsgOp!(TreeAccess, "TreeAccess({})", called_concept);
 impl DialectNode for TreeAccess {
     fn dialect(&self) -> &'static str {
         "csg"
+    }
+
+    fn try_derive_type(
+        &self,
+        _typemap: &rvsdg::attrib::AttribStore<Ty>,
+        graph: &crate::OptGraph,
+        _concepts: &ahash::AHashMap<String, vola_ast::csg::CSGConcept>,
+        _csg_defs: &ahash::AHashMap<String, CSGNodeDef>,
+    ) -> Result<Option<Ty>, OptError> {
+        //We know the expected signature. Just check each input
+
+        for i in 0..self.input_signature.len() {
+            if let Some(port) = self.inputs.get(i) {
+                if let Some(edg) = port.edge {
+                    match graph.edge(edg).ty.get_type() {
+                        Some(ty) => {
+                            if ty != &self.input_signature[i] {
+                                return Err(OptError::Any {
+                                    text: format!(
+                                        "Field argument {i} was {:?} but expected {:?}",
+                                        ty, self.input_signature[i]
+                                    ),
+                                });
+                            }
+                        }
+                        None => {
+                            //Not set
+                            return Ok(None);
+                        }
+                    }
+                }
+            } else {
+                //edge not yet set
+                return Ok(None);
+            }
+        }
+
+        //If we are here, all went well, return the actual return type
+        Ok(Some(self.return_type.clone()))
     }
 }

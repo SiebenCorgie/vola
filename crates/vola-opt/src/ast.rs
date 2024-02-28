@@ -39,7 +39,7 @@ impl Optimizer {
 
                     report(err.clone(), existing_concept.span.get_file());
 
-                    return Err(err);
+                    Err(err)
                 } else {
                     //No yet in collection, therefore push
                     self.concepts.insert(csgcon.name.0.clone(), csgcon);
@@ -59,7 +59,7 @@ impl Optimizer {
 
                     report(err.clone(), existing_csg.span.get_file());
 
-                    return Err(err);
+                    Err(err)
                 } else {
                     //No yet in collection, therefore push
                     self.csg_node_defs.insert(csgnd.name.0.clone(), csgnd);
@@ -408,11 +408,21 @@ impl<'a> AstLambdaBuilder<'a> {
                                 ));
                             }
 
+                            //Build the fdef based signature
+                            let mut signature = SmallVec::new();
+                            for arg in fdef.input_signature.iter() {
+                                signature.push(
+                                    arg.1.clone().try_into().expect(
+                                        "Could not connect tree call argument into opttype",
+                                    ),
+                                );
+                            }
+
                             //looks good, construct a call instead
                             (
                                 CSGConnectionType::CSGCall(CsgCall::new(
                                     fdef.name.clone(),
-                                    tree.args.len(),
+                                    signature,
                                 )),
                                 tree.span.clone(),
                             )

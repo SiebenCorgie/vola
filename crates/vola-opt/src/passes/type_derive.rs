@@ -22,7 +22,11 @@ use rvsdg::{
 use vola_common::{report, Span};
 
 use crate::{
-    alge::implblock::ConceptImpl, common::Ty, error::OptError, OptEdge, Optimizer, TypeState,
+    alge::implblock::ConceptImpl,
+    common::Ty,
+    csg::{exportfn::ExportFn, fielddef::FieldDef},
+    error::OptError,
+    OptEdge, Optimizer, TypeState,
 };
 
 //NOTE: At the moment we rely on `eval` expressions being already tagged, as well as all inputs to an λ-Node being tagged as well.
@@ -70,12 +74,29 @@ impl Optimizer {
             .collect::<Vec<_>>();
         //Now do the field def
         for (def, srcspan) in fregs {
-            if let Err(err) = self.derive_region(def, srcspan.clone()) {
+            if let Err(_err) = self.derive_region(def, srcspan.clone()) {
                 error_count += 1;
             }
         }
 
-        //TODO: make sure the fdef ends on a CSGTree variable
+        for fdef in self.field_def.values() {
+            self.verify_field_def(fdef)?;
+        }
+
+        let exports = self
+            .export_fn
+            .values()
+            .map(|exp| (exp.lambda_region.clone(), exp.span.clone()))
+            .collect::<Vec<_>>();
+        for (exp, span) in exports {
+            if let Err(_err) = self.derive_region(exp, span) {
+                error_count += 1;
+            }
+        }
+
+        for exp in self.export_fn.values() {
+            self.verify_export_fn(exp)?;
+        }
 
         if error_count > 0 {
             Err(OptError::Any {
@@ -152,6 +173,16 @@ impl Optimizer {
             report(err.clone(), block.span.get_file());
             Err(err)
         }
+    }
+
+    fn verify_field_def(&self, block: &FieldDef) -> Result<(), OptError> {
+        println!("TODO Verify that field def ends on CSGTree");
+        Ok(())
+    }
+
+    fn verify_export_fn(&self, export: &ExportFn) -> Result<(), OptError> {
+        println!("TODO Verify export");
+        Ok(())
     }
 
     fn derive_region(
@@ -325,49 +356,6 @@ impl Optimizer {
                 span: region_src_span.into(),
             });
         }
-
-        /*
-        //Since all type have been derived, setup all edges with the newly found type information,
-        // TODO build nicer error handling. However, in theory this _should_ fly
-        for edgeref in edges {
-            let edgesrc = *self.graph.edge(edgeref).src();
-
-            match self.typemap.attrib(&edgesrc.into()) {
-                Some([ty]) => {
-                    self.graph
-                        .edge_mut(edgeref)
-                        .ty
-                        .set_derived_state(ty.clone());
-                }
-                None => {
-                    //Check if the untyped port is on a simple node, if so we can emit an error with a span.
-                    // Otherwise just say "some lambda". Is not nice, but better than nothing
-                    match &self.graph.node(edgesrc.node).node_type {
-                        NodeType::Simple(s) => {
-                            return Err(OptError::AnySpanned {
-                                span: s.span.clone().into(),
-                                text: format!("Source port {:?} was untyped", edgesrc),
-                                span_text: "this is untyped".to_owned(),
-                            });
-                        }
-                        _ => {
-                            return Err(OptError::Any {
-                                text: format!("Source port {:?} was untyped", edgesrc),
-                            });
-                        }
-                    }
-                }
-                Some(more) => {
-                    return Err(OptError::Any {
-                        text: format!(
-                            "Source port {:?} had multiple type tags: {:?}",
-                            edgesrc, more
-                        ),
-                    });
-                }
-            }
-        }
-        */
 
         Ok(())
     }

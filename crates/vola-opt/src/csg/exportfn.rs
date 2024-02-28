@@ -113,7 +113,7 @@ impl ExportFn {
         };
 
         //register in output signature
-        self.output_signature.push(return_type);
+        self.output_signature.push(return_type.clone());
 
         //At this point we can be sure that the concept exists, and is at least called with the right amount
         // of arguments.
@@ -125,10 +125,20 @@ impl ExportFn {
         let mut wires: SmallVec<[OutportLocation; 3]> = SmallVec::new();
         wires.push(field_src.port.clone());
 
-        let access_call_args_count = access.call.args.len();
+        let mut signature = SmallVec::new();
+        //First argument must alwoas be the tree thats called.
+        signature.push(Ty::CSGTree);
+        //all following args are the callargs
+        for arg in concept.src_ty.iter() {
+            signature.push(
+                arg.clone()
+                    .try_into()
+                    .expect("Could not convert tree call arg to opttype"),
+            );
+        }
         for arg in access.call.args {
             let arg_port = builder.setup_alge_expr(arg, self)?;
-            wires.push(arg_port)
+            wires.push(arg_port);
         }
 
         //add an result port to the lambda node
@@ -147,7 +157,7 @@ impl ExportFn {
                 let (node, _) = reg
                     .connect_node(
                         OptNode::new(
-                            TreeAccess::new(concept_name, 1 + access_call_args_count),
+                            TreeAccess::new(concept_name, signature, return_type),
                             access.span.clone(),
                         ),
                         &wires,
