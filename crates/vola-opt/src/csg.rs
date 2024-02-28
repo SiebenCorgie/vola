@@ -78,7 +78,7 @@ impl DialectNode for CsgOp {
 
     fn try_derive_type(
         &self,
-        typemap: &rvsdg::attrib::AttribStore<crate::common::Ty>,
+        _typemap: &rvsdg::attrib::AttribStore<crate::common::Ty>,
         graph: &crate::OptGraph,
         _concepts: &ahash::AHashMap<String, vola_ast::csg::CSGConcept>,
         csg_defs: &ahash::AHashMap<String, CSGNodeDef>,

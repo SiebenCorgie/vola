@@ -161,7 +161,7 @@ impl Ty {
                         };
                         matrix_type.try_access_pattern(access_pattern)
                     }
-                    x => {
+                    _x => {
                         //pop of access if valid, check against last dim element. If valid as well, reduce tensor and recurse
                         if let Some(idx) = access_pattern[0].try_to_index() {
                             if idx < dim[0] {

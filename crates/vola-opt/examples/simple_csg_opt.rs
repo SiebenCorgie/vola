@@ -1,4 +1,3 @@
-use pretty_env_logger;
 use vola_opt::Optimizer;
 
 pub fn main() {

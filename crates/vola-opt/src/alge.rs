@@ -1,8 +1,6 @@
 //! # Alge dialect
 //!
 
-use std::fmt::format;
-
 use ahash::AHashMap;
 use rvsdg::{
     attrib::AttribStore,
@@ -406,7 +404,7 @@ impl DialectNode for CallOp {
 
     fn try_derive_type(
         &self,
-        typemap: &AttribStore<Ty>,
+        _typemap: &AttribStore<Ty>,
         graph: &OptGraph,
         _concepts: &AHashMap<String, CSGConcept>,
         _csg_defs: &AHashMap<String, CSGNodeDef>,
@@ -486,7 +484,7 @@ impl DialectNode for EvalNode {
 
     fn try_derive_type(
         &self,
-        typemap: &AttribStore<Ty>,
+        _typemap: &AttribStore<Ty>,
         graph: &OptGraph,
         concepts: &AHashMap<String, CSGConcept>,
         _csg_defs: &AHashMap<String, CSGNodeDef>,
@@ -707,7 +705,7 @@ impl DialectNode for ListConst {
     }
     fn try_derive_type(
         &self,
-        typemap: &AttribStore<Ty>,
+        _typemap: &AttribStore<Ty>,
         graph: &OptGraph,
         _concepts: &AHashMap<String, CSGConcept>,
         _csg_defs: &AHashMap<String, CSGNodeDef>,

@@ -10,13 +10,12 @@
 //! The pass itself just tries to find a fix-point style resolution, which basically comes down to calling try-derive on all _just changed nodes_ till
 //! either all are resolved, or nothing changes and we end in an _unresolved_ state.
 
-use std::{collections::VecDeque, fmt::format, ops::Deref};
+use std::collections::VecDeque;
 
 use rvsdg::{
     edge::{OutportLocation, OutputType},
     nodes::NodeType,
-    region::{self, RegionLocation},
-    smallvec::{smallvec, SmallVec},
+    region::RegionLocation,
     NodeRef,
 };
 use vola_common::{report, Span};
@@ -58,7 +57,7 @@ impl Optimizer {
             .map(|v| (v.lambda_region, v.span.clone()))
             .collect::<Vec<_>>();
         for (implblock, span) in implblocks {
-            if let Err(err) = self.derive_region(implblock, span.clone()) {
+            if let Err(_err) = self.derive_region(implblock, span.clone()) {
                 error_count += 1;
             }
         }
@@ -122,43 +121,61 @@ impl Optimizer {
             .try_into()
             .expect("Could not convert concept type into opttype");
 
+        //Try to find the src node's span. For better error reporting
+        let result_node_span = {
+            if let Some(srcnode) = self
+                .graph
+                .region(&block.lambda_region)
+                .unwrap()
+                .result_src(&self.graph, 0)
+            {
+                if let NodeType::Simple(s) = &self.graph.node(srcnode.node).node_type {
+                    Some(s.span.clone())
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        };
+
         //check the output for the correctly typed edge
         if let Some(result_edg) = self.graph.region(&block.lambda_region).unwrap().results[0].edge {
-            match &self.graph.edge(result_edg).ty {
-                OptEdge::State => {
+            match self.graph.edge(result_edg).ty.get_type() {
+                None => {
                     let err = OptError::AnySpanned {
                         span: block.span.clone().into(),
-                        text: format!("λ-Node had state edge as output"),
+                        text: format!("impl-block's output was untyped"),
                         span_text: "in this region".to_owned(),
                     };
                     report(err.clone(), block.span.get_file());
                     Err(err)
                 }
-                OptEdge::Value {
-                    ty: TypeState::Unset,
-                } => {
-                    let err = OptError::AnySpanned {
-                        span: block.span.clone().into(),
-                        text: format!("λ-Node's output was untyped"),
-                        span_text: "in this region".to_owned(),
-                    };
-                    report(err.clone(), block.span.get_file());
-                    Err(err)
-                }
-                OptEdge::Value {
-                    ty: TypeState::Derived(t) | TypeState::Set(t),
-                } => {
+                Some(t) => {
                     if *t != expected_result_type {
-                        let err = OptError::AnySpanned {
-                            span: block.span.clone().into(),
-                            text: format!(
-                                "λ-Node's output was of type {:?} but expected {:?}",
-                                t, expected_result_type
-                            ),
-                            span_text: "in this region".to_owned(),
-                        };
-                        report(err.clone(), block.span.get_file());
-                        Err(err)
+                        if let Some(s) = result_node_span {
+                            let err = OptError::AnySpanned {
+                                span: s.clone().into(),
+                                text: format!(
+                                    "ImplBlock's output was of type {:?} but expected {:?}",
+                                    t, expected_result_type
+                                ),
+                                span_text: "tried to return this".to_owned(),
+                            };
+                            report(err.clone(), s.get_file());
+                            Err(err)
+                        } else {
+                            let err = OptError::AnySpanned {
+                                span: block.span.clone().into(),
+                                text: format!(
+                                    "ImplBlock's output was of type {:?} but expected {:?}",
+                                    t, expected_result_type
+                                ),
+                                span_text: "in this region".to_owned(),
+                            };
+                            report(err.clone(), block.span.get_file());
+                            Err(err)
+                        }
                     } else {
                         Ok(())
                     }
@@ -167,7 +184,7 @@ impl Optimizer {
         } else {
             let err = OptError::AnySpanned {
                 span: block.span.clone().into(),
-                text: format!("λ-Node's output was unconnected"),
+                text: format!("ImplBlocks's output was not connected"),
                 span_text: "in this region".to_owned(),
             };
             report(err.clone(), block.span.get_file());
@@ -175,13 +192,92 @@ impl Optimizer {
         }
     }
 
-    fn verify_field_def(&self, block: &FieldDef) -> Result<(), OptError> {
-        println!("TODO Verify that field def ends on CSGTree");
-        Ok(())
+    fn verify_field_def(&self, fdef: &FieldDef) -> Result<(), OptError> {
+        //For the field def its pretty easy. We just have to check that it actually returns a CSGTree
+
+        if let Some(result_edge) = self.graph.region(&fdef.lambda_region).unwrap().results[0].edge {
+            if let Some(ty) = self.graph.edge(result_edge).ty.get_type() {
+                if ty != &Ty::CSGTree {
+                    let err = OptError::AnySpanned {
+                        span: fdef.span.clone().into(),
+                        text: format!(
+                            "field definition's output is expected to be a CSGTree, not {:?}",
+                            ty
+                        ),
+                        span_text: "in this region".to_owned(),
+                    };
+                    report(err.clone(), fdef.span.get_file());
+                    Err(err)
+                } else {
+                    Ok(())
+                }
+            } else {
+                let err = OptError::AnySpanned {
+                    span: fdef.span.clone().into(),
+                    text: format!("field definition's output was not typed"),
+                    span_text: "in this region".to_owned(),
+                };
+                report(err.clone(), fdef.span.get_file());
+                Err(err)
+            }
+        } else {
+            let err = OptError::AnySpanned {
+                span: fdef.span.clone().into(),
+                text: format!("field definition's output was not connected"),
+                span_text: "in this region".to_owned(),
+            };
+            report(err.clone(), fdef.span.get_file());
+            Err(err)
+        }
     }
 
     fn verify_export_fn(&self, export: &ExportFn) -> Result<(), OptError> {
-        println!("TODO Verify export");
+        //In this case, for every output, make sure that the type is correct as well.
+        // NOTE that the expected result type is also derived from the accessed concept.
+        // So this makes mostly sure that we in fact derived the correct output type.
+        for (i, expected_ty) in export.output_signature.iter().enumerate() {
+            if let Some(result_edge) = self
+                .graph
+                .region(&export.lambda_region)
+                .unwrap()
+                .results
+                .get(i)
+                .map(|res| res.edge)
+                .flatten()
+            {
+                if let Some(ty) = self.graph.edge(result_edge).ty.get_type() {
+                    if ty != expected_ty {
+                        let err = OptError::AnySpanned {
+                            span: export.span.clone().into(),
+                            text: format!(
+                                "field definition's output {} is expected to be a {:?}, not {:?}",
+                                i, expected_ty, ty
+                            ),
+                            span_text: "in this region".to_owned(),
+                        };
+                        report(err.clone(), export.span.get_file());
+                        return Err(err);
+                    }
+                } else {
+                    let err = OptError::AnySpanned {
+                        span: export.span.clone().into(),
+                        text: format!("field-export's output[{}] was not typed", i),
+                        span_text: "in this region".to_owned(),
+                    };
+                    report(err.clone(), export.span.get_file());
+                    return Err(err);
+                }
+            } else {
+                let err = OptError::AnySpanned {
+                    span: export.span.clone().into(),
+                    text: format!("field-export's output[{}] was not connected", i),
+                    span_text: "in this region".to_owned(),
+                };
+                report(err.clone(), export.span.get_file());
+                return Err(err);
+            }
+        }
+
         Ok(())
     }
 
@@ -245,7 +341,7 @@ impl Optimizer {
                         }
                         continue;
                     }
-                    Some(multiple_types) => {
+                    Some(_multiple_types) => {
                         let span = self
                             .graph
                             .node(node)
