@@ -7,8 +7,7 @@ The **A**bstract **S**yntax **T**ree definition for vola.
 The Vola-AST aims to be a generic description of CSG-Trees made up from operations and entities, as well as implementations of those Ops and Prims for certain concepts, like SDF, Color, or any other concept you can think of.
 
 [![dependency status](https://deps.rs/repo/gitlab/tendsinmende/vola/status.svg)](https://deps.rs/repo/gitlab/tendsinmende/vola)
-[![MIT](https://img.shields.io/badge/License-MIT-blue)](LICENSE-MIT)
-[![APACHE](https://img.shields.io/badge/License-Apache_2.0-blue)](LICENSE-APACHE)
+[![MPL 2.0](https://img.shields.io/badge/License-MPL_2.0-blue)](LICENSE)
 
 </div>
 

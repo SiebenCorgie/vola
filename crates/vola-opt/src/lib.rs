@@ -256,7 +256,7 @@ impl Optimizer {
         let mut error_counter = 0;
 
         //NOTE yes collecting into a big'ol Vec all the time is kinda wasteful, but since
-        // we use `self` in the filter, we can't just connect multiple filter_maps :( .
+        // we use `self` in the filter, we can't just connect multiple filter_maps :O .
 
         //concept loop
         let sans_defs = ast

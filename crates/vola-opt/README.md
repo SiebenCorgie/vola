@@ -8,8 +8,7 @@ There are multiple levels within opt, that get progressively lowered from an AST
 [RVSDG](https://gitlab.com/tendsinmende/vola/-/tree/main/crates/rvsdg) crate.
 
 [![dependency status](https://deps.rs/repo/gitlab/tendsinmende/vola/status.svg)](https://deps.rs/repo/gitlab/tendsinmende/vola)
-[![MIT](https://img.shields.io/badge/License-MIT-blue)](LICENSE-MIT)
-[![APACHE](https://img.shields.io/badge/License-Apache_2.0-blue)](LICENSE-APACHE)
+[![MPL2.0](https://img.shields.io/badge/License-MPL_2.0-blue)](LICENSE)
 
 </div>
 

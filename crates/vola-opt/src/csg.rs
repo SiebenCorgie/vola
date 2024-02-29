@@ -104,7 +104,6 @@ impl DialectNode for CsgOp {
         //In practice we now iterate all connected inputs. The first 0..n migth be CSGTrees
         // already, which are our sub_trees. We verify those against the `subtree_count`.
         // All following connected nodes must be part of the `expected_signature`.
-
         for i in 0..self.subtree_count {
             if let Some(port) = self.inputs.get(i) {
                 if let Some(edg) = port.edge {
