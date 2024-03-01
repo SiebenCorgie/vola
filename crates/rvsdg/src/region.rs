@@ -1,4 +1,5 @@
 use ahash::AHashSet;
+use smallvec::smallvec;
 
 use crate::{
     edge::{InportLocation, LangEdge, OutportLocation},
@@ -90,6 +91,27 @@ impl Region {
         } else {
             None
         }
+    }
+
+    ///Creates a copy of this region with the same argument/result setup, but no nodes or edges
+    pub fn copy_config(&self) -> Self {
+        Region {
+            arguments: smallvec![Argument::default(); self.arguments.len()],
+            results: smallvec![RegResult::default(); self.results.len()],
+            nodes: AHashSet::default(),
+            edges: AHashSet::default(),
+        }
+    }
+
+    pub(crate) fn clear(&mut self) {
+        for arg in &mut self.arguments {
+            arg.edges.clear();
+        }
+        for res in &mut self.results {
+            res.edge = None;
+        }
+        self.nodes.clear();
+        self.edges.clear();
     }
 }
 

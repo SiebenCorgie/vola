@@ -1,3 +1,10 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ *
+ * 2024 Tendsin Mende
+ */
 //! # Alge dialect
 //!
 
@@ -13,7 +20,7 @@ use vola_ast::{
     csg::{CSGConcept, CSGNodeDef},
 };
 
-use crate::{common::Ty, error::OptError, DialectNode, OptEdge, OptGraph, TypeState};
+use crate::{common::Ty, error::OptError, DialectNode, OptEdge, OptGraph, OptNode, TypeState};
 
 pub(crate) mod implblock;
 
@@ -429,6 +436,17 @@ impl DialectNode for CallOp {
 
         self.op.try_derive_type(signature)
     }
+
+    fn structural_copy(&self, span: vola_common::Span) -> crate::OptNode {
+        OptNode {
+            span,
+            node: Box::new(CallOp {
+                inputs: smallvec![Input::default(); self.inputs.len()],
+                output: Output::default(),
+                op: self.op.clone(),
+            }),
+        }
+    }
 }
 
 ///Dummy sink node for unimplemented stuff
@@ -451,6 +469,14 @@ implViewAlgeOp!(DummyNode, "Dummynode");
 impl DialectNode for DummyNode {
     fn dialect(&self) -> &'static str {
         "dummy"
+    }
+    fn structural_copy(&self, span: vola_common::Span) -> crate::OptNode {
+        OptNode {
+            span,
+            node: Box::new(DummyNode {
+                out: Output::default(),
+            }),
+        }
     }
 }
 
@@ -480,6 +506,15 @@ implViewAlgeOp!(EvalNode, "Eval");
 impl DialectNode for EvalNode {
     fn dialect(&self) -> &'static str {
         "alge"
+    }
+    fn structural_copy(&self, span: vola_common::Span) -> OptNode {
+        OptNode {
+            span,
+            node: Box::new(EvalNode {
+                inputs: smallvec![Input::default(); self.inputs.len()],
+                out: Output::default(),
+            }),
+        }
     }
 
     fn try_derive_type(
@@ -607,6 +642,16 @@ impl DialectNode for Imm {
         //NOTE: all literals are translated to a _scalar_
         Ok(Some(Ty::Scalar))
     }
+
+    fn structural_copy(&self, span: vola_common::Span) -> OptNode {
+        OptNode {
+            span,
+            node: Box::new(Imm {
+                lit: self.lit.clone(),
+                out: Output::default(),
+            }),
+        }
+    }
 }
 
 ///Highlevel "field access" node. Can only be legalized when all types are resolved and the field is specialized.
@@ -679,6 +724,17 @@ impl DialectNode for FieldAccess {
             Ok(None)
         }
     }
+
+    fn structural_copy(&self, span: vola_common::Span) -> OptNode {
+        OptNode {
+            span,
+            node: Box::new(FieldAccess {
+                access_list: self.access_list.clone(),
+                access_src: Input::default(),
+                output: Output::default(),
+            }),
+        }
+    }
 }
 
 #[derive(LangNode, Debug)]
@@ -703,6 +759,17 @@ impl DialectNode for ListConst {
     fn dialect(&self) -> &'static str {
         "alge"
     }
+
+    fn structural_copy(&self, span: vola_common::Span) -> OptNode {
+        OptNode {
+            span,
+            node: Box::new(ListConst {
+                inputs: smallvec![Input::default(); self.inputs.len()],
+                output: Output::default(),
+            }),
+        }
+    }
+
     fn try_derive_type(
         &self,
         _typemap: &AttribStore<Ty>,

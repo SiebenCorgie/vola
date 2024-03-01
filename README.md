@@ -130,12 +130,10 @@ If you are interested in the runtime SPIR-V patching, have a look at [spv-patche
 
 ## License
 
-Licensed under either of
+Licensed under
 
-- Apache License, Version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or <http://www.apache.org/licenses/LICENSE-2.0>)
-- MIT license ([LICENSE-MIT](LICENSE-MIT) or <http://opensource.org/licenses/MIT>)
+Mozilla Public License Version 2.0 ([LICENSE](LICENSE) or <https://www.mozilla.org/en-US/MPL/2.0/>)
 
-at your option.
 
 ### Contribution
 

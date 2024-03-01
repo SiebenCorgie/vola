@@ -23,4 +23,10 @@ pub fn main() {
     }
 
     opt.dump_svg("after_type_resolution.svg");
+
+    if let Err(e) = opt.dispatch_all_exports() {
+        println!("Dispatching exports failed!");
+    }
+
+    opt.dump_svg("after_dispatch.svg");
 }

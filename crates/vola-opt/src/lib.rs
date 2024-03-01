@@ -1,3 +1,10 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ *
+ * 2024 Tendsin Mende
+ */
 //! # Vola-Opt
 //!
 //! The vola optimizer.
@@ -15,7 +22,7 @@
 //!
 //! Used to represent algebraic expressions.
 
-use std::fmt::Debug;
+use std::{fmt::Debug, ops::Deref};
 
 use ahash::AHashMap;
 use alge::implblock::{ConceptImpl, ConceptImplKey};
@@ -23,7 +30,8 @@ use common::Ty;
 use csg::{exportfn::ExportFn, fielddef::FieldDef};
 use error::OptError;
 use rvsdg::{
-    attrib::AttribStore, edge::LangEdge, nodes::LangNode, rvsdg_derive_lang::LangNode, Rvsdg,
+    attrib::AttribStore, edge::LangEdge, nodes::LangNode, rvsdg_derive_lang::LangNode,
+    util::copy::StructuralClone, Rvsdg,
 };
 
 use rvsdg_viewer::{layout::LayoutConfig, View};
@@ -62,6 +70,10 @@ pub trait DialectNode: LangNode + View {
             text: format!("Type resolution not implemented for {}", self.name()),
         })
     }
+
+    ///Builds a structural copy of this node, where no inputs/outputs are connected.
+    /// Needed to break up the `dyn` indirection in OptNode.
+    fn structural_copy(&self, span: Span) -> OptNode;
 }
 
 ///Single optimizer node of some dialect.4
@@ -80,6 +92,18 @@ impl OptNode {
             span,
             node: Box::new(node),
         }
+    }
+}
+
+impl StructuralClone for OptNode {
+    fn structural_copy(&self) -> Self {
+        self.node.structural_copy(self.span.clone())
+    }
+}
+
+impl StructuralClone for OptEdge {
+    fn structural_copy(&self) -> Self {
+        self.clone()
     }
 }
 
@@ -107,6 +131,8 @@ pub enum TypeState {
     Derived(Ty),
     Unset,
 }
+
+#[derive(Clone, Debug)]
 pub enum OptEdge {
     State,
     Value { ty: TypeState },

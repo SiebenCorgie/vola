@@ -1,3 +1,10 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ *
+ * 2024 Tendsin Mende
+ */
 //! # CSG Dialect
 
 use rvsdg::{
@@ -7,7 +14,7 @@ use rvsdg::{
 };
 use vola_ast::{common::Ident, csg::CSGNodeDef};
 
-use crate::{common::Ty, error::OptError, DialectNode};
+use crate::{common::Ty, error::OptError, DialectNode, OptNode};
 
 pub(crate) mod exportfn;
 pub(crate) mod fielddef;
@@ -74,6 +81,18 @@ implViewCsgOp!(CsgOp, "{:?}", op);
 impl DialectNode for CsgOp {
     fn dialect(&self) -> &'static str {
         "csg"
+    }
+
+    fn structural_copy(&self, span: vola_common::Span) -> OptNode {
+        OptNode {
+            span,
+            node: Box::new(CsgOp {
+                op: self.op.clone(),
+                subtree_count: self.subtree_count,
+                inputs: smallvec![Input::default(); self.inputs.len()],
+                output: Output::default(),
+            }),
+        }
     }
 
     fn try_derive_type(
@@ -160,7 +179,10 @@ impl DialectNode for CsgOp {
     }
 }
 
-///CsgTree call into a defined sub tree. Akin to a function call, but gets inlined at specialization-time.
+///CsgTree call into a defined sub tree. Akin to a function call, but gets inlined at dispatch-time.
+///
+/// NOTE: We *don't* use a λ-Node+Apply node pair here, since we don't known _yet_ which concept on this CSGNode (Entity or Operation) is called.
+/// So in turn we can't known which λ-Node to import.
 #[derive(LangNode, Debug)]
 pub struct CsgCall {
     ///The field that thas is called
@@ -190,6 +212,18 @@ implViewCsgOp!(CsgCall, "fieldcall {:?}", op);
 impl DialectNode for CsgCall {
     fn dialect(&self) -> &'static str {
         "csg"
+    }
+
+    fn structural_copy(&self, span: vola_common::Span) -> OptNode {
+        OptNode {
+            span,
+            node: Box::new(CsgCall {
+                op: self.op.clone(),
+                input_signature: self.input_signature.clone(),
+                inputs: smallvec![Input::default(); self.inputs.len()],
+                output: Output::default(),
+            }),
+        }
     }
 
     fn try_derive_type(
@@ -263,6 +297,19 @@ implViewCsgOp!(TreeAccess, "TreeAccess({})", called_concept);
 impl DialectNode for TreeAccess {
     fn dialect(&self) -> &'static str {
         "csg"
+    }
+
+    fn structural_copy(&self, span: vola_common::Span) -> OptNode {
+        OptNode {
+            span,
+            node: Box::new(TreeAccess {
+                called_concept: self.called_concept.clone(),
+                input_signature: self.input_signature.clone(),
+                return_type: self.return_type.clone(),
+                inputs: smallvec![Input::default(); self.inputs.len()],
+                output: Output::default(),
+            }),
+        }
     }
 
     fn try_derive_type(

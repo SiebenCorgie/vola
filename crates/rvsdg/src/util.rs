@@ -10,6 +10,8 @@ use crate::{
     Rvsdg,
 };
 
+pub mod copy;
+
 impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
     ///Builds the import path from `src` down to `path`'s last region.
     ///
