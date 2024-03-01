@@ -22,7 +22,7 @@
 //!
 //! Used to represent algebraic expressions.
 
-use std::{fmt::Debug, ops::Deref};
+use std::{any::Any, fmt::Debug, ops::Deref};
 
 use ahash::AHashMap;
 use alge::implblock::{ConceptImpl, ConceptImplKey};
@@ -51,7 +51,7 @@ mod passes;
 pub type OptGraph = Rvsdg<OptNode, OptEdge>;
 
 ///A node of some dialect
-pub trait DialectNode: LangNode + View {
+pub trait DialectNode: LangNode + Any + View {
     ///Dialect identifier of this node.
     fn dialect(&self) -> &'static str;
 

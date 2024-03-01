@@ -34,10 +34,13 @@
 //
 //      Yet another idea is, to first specialise into a meta-tree that already resolved the sub-calls in each implblock, then resolve those to the actual lambda
 
+use std::fmt::format;
+
 use ahash::AHashMap;
 use rvsdg::{
     edge::{InportLocation, InputType, OutportLocation, OutputType},
     region::{Inport, RegionLocation},
+    smallvec::SmallVec,
     NodeRef,
 };
 use vola_common::report;
@@ -70,20 +73,60 @@ impl Optimizer {
     }
 
     fn trace_copy_node(&mut self, srcnode: NodeRef) -> NodeRef {
-        todo!()
-        /*
-        //Trace copy worst similar to the normal copy, but instead of copying _all_ nodes,
-        // we just copy all connected nodes.
+        let src_node_region = self.graph.node(srcnode).parent.unwrap();
 
-        let mut tbcopied_nodes = Vec::new();
-        //All edges we know of.
-        let mut edges = Vec::new();
-        //Frist push src node
-        tbcopied.push(srcnode);
-        //then iterate all conncted nodes
-        for pred in self.graph.walk_predecessors(srcnode) {
-            tbcopied.push(pred.node);
-        }*/
+        assert!(self.graph.node(src_node_region.node).node_type.is_lambda());
+
+        let parent_region = self.graph.node(src_node_region.node).parent.unwrap();
+        //Right now this _should_ hold true
+        assert!(parent_region == self.graph.toplevel_region());
+        let dst_region_lambda = self
+            .graph
+            .shallow_copy_node(src_node_region.node, parent_region);
+        let dst_region = RegionLocation {
+            node: dst_region_lambda,
+            region_index: 0,
+        };
+
+        let mut node_mapping = AHashMap::new();
+        //push λ-remap
+        node_mapping.insert(src_node_region.node, dst_region_lambda);
+        let mut predecessors: Vec<_> = self
+            .graph
+            .walk_predecessors(srcnode)
+            .map(|pred| pred.node.clone())
+            .collect();
+
+        //push our src node into the predecessors as well
+        predecessors.push(srcnode);
+
+        for pred in &predecessors {
+            //insert all predecessors into the new region, and add to mapping
+            if !node_mapping.contains_key(pred) {
+                let deep_copy = self.graph.deep_copy_node(*pred, dst_region);
+                node_mapping.insert(*pred, deep_copy);
+            }
+        }
+
+        //After deep_copying all nodes, rebuild the edges.
+        let all_src_edges = self.graph.region(&src_node_region).unwrap().edges.clone();
+        for edgeref in all_src_edges {
+            let (mut src, mut dst, ty) = {
+                let edg = self.graph.edge(edgeref);
+                (edg.src().clone(), edg.dst().clone(), edg.ty.clone())
+            };
+
+            //If we have the src of that edge in our mapping, copy the edge compleatly
+            if node_mapping.contains_key(&src.node) && node_mapping.contains_key(&dst.node) {
+                src.node = *node_mapping.get(&src.node).unwrap();
+                dst.node = *node_mapping.get(&dst.node).unwrap();
+                //Now connect
+                self.graph.connect(src, dst, ty).unwrap();
+            }
+        }
+
+        //return new lambda
+        dst_region_lambda
     }
 
     ///Dispatches the export_field with the given `ident`ifier.
@@ -91,8 +134,37 @@ impl Optimizer {
         //Find all TreeAccess nodes, replace the node with the
 
         //Right now just copy
-        if let Some(exp) = self.export_fn.get(ident) {
-            let new_node = self.trace_copy_node(exp.lambda);
+        let copy_node_list = if let Some(exp) = self.export_fn.get(ident) {
+            let mut copy_nodes: SmallVec<[NodeRef; 3]> = SmallVec::default();
+            let result_count = self.graph.region(&exp.lambda_region).unwrap().results.len();
+            for i in 0..result_count {
+                if let Some(port) = self
+                    .graph
+                    .region(&exp.lambda_region)
+                    .unwrap()
+                    .result_src(&self.graph, i)
+                {
+                    copy_nodes.push(port.node);
+                }
+            }
+
+            copy_nodes
+        } else {
+            //No such export fn
+            return Err(OptError::Any {
+                text: format!("No export function named {} found!", ident),
+            });
+        };
+
+        //TODO: instead reimport λ and replace `node` with a call to that lambda
+        //
+        //TODO: after trace copy, do the actual iterative replacement of the nodes with the impl-block content, based on the tree structure.
+        //
+        // special attention is required here, so that
+        // 1. subtree count is as expected
+        // 2. implementations exist, as requested by the imbl-block that is inlined.
+        for node in copy_node_list {
+            let new_lambda = self.trace_copy_node(node);
             let omega_node = self.graph.toplevel_region().node;
             //then hook up export
             let export_port = self.graph.on_omega_node(|omg| {
@@ -102,9 +174,8 @@ impl Optimizer {
                     input: InputType::Result(new_export),
                 }
             });
-
             self.graph
-                .connect(new_node.output(0), export_port, crate::OptEdge::State)
+                .connect(new_lambda.output(0), export_port, crate::OptEdge::State)
                 .unwrap();
         }
 
