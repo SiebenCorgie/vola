@@ -84,6 +84,12 @@ impl ApplyNode {
     pub fn return_value_mut(&mut self, n: usize) -> Option<&mut Output> {
         self.outputs.get_mut(n)
     }
+
+    ///Returns how many callargs the apply node expects. This is by definition `input_count - 1`. As
+    /// the first input is reserved for the callable that is called.
+    pub fn get_call_arg_count(&self) -> usize {
+        self.inputs.len() - 1
+    }
 }
 
 pub type FunctionNode = LambdaNode;

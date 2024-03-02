@@ -268,6 +268,9 @@ pub struct Optimizer {
 
     ///All known type tags of ports and nodes. Can be used to do type checking, or infer edge types.
     pub(crate) typemap: AttribStore<Ty>,
+
+    ///Can be used to tag source Spans for nodes that are no OptNodes
+    pub(crate) span_tags: AttribStore<Span>,
 }
 
 impl Optimizer {
@@ -280,6 +283,7 @@ impl Optimizer {
             export_fn: AHashMap::default(),
             field_def: AHashMap::default(),
             typemap: AttribStore::new(),
+            span_tags: AttribStore::new(),
         }
     }
 

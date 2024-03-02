@@ -20,9 +20,10 @@
 use std::collections::VecDeque;
 
 use rvsdg::{
-    edge::{OutportLocation, OutputType},
-    nodes::NodeType,
+    edge::{InportLocation, OutportLocation, OutputType},
+    nodes::{ApplyNode, NodeType},
     region::RegionLocation,
+    smallvec::{SmallVec, ToSmallVec},
     NodeRef,
 };
 use vola_common::{report, Span};
@@ -288,6 +289,120 @@ impl Optimizer {
         Ok(())
     }
 
+    fn try_apply_derive(
+        &self,
+        apply: &ApplyNode,
+        region_src_span: &Span,
+    ) -> Result<Option<Ty>, OptError> {
+        //for the apply node, we search for the src λ-Node, and call
+        if let Some(calldecl_edge) = apply.get_callabel_decl().edge {
+            let callable_src = self.graph.edge(calldecl_edge).src().clone();
+            if let Some(calldef) = self.graph.find_callabel_def(callable_src) {
+                //Now, to derive the output we first iterate the callable's arguments, and checkout the expected
+                //types. After that we match them to the apply_nodes actual connected types. If they match we pass
+                //the callables result argument
+
+                let call_result_port = InportLocation {
+                    node: calldef,
+                    input: rvsdg::edge::InputType::Result(0),
+                };
+                let result_type = {
+                    let lmdregion = RegionLocation {
+                        node: calldef,
+                        region_index: 0,
+                    };
+                    //Checkout the connected edges type.
+                    if let Some(edg) = self.graph.region(&lmdregion).unwrap().results[0].edge {
+                        if let Some(ty) = self.graph.edge(edg).ty.get_type() {
+                            ty.clone()
+                        } else {
+                            let err = OptError::Any {
+                                text: format!("apply node's result has no type set"),
+                            };
+                            report(err.clone(), region_src_span.get_file());
+                            return Err(err);
+                        }
+                    } else {
+                        let err = OptError::Any {
+                            text: format!("apply node's result has no connected edge."),
+                        };
+                        report(err.clone(), region_src_span.get_file());
+                        return Err(err);
+                    }
+                };
+
+                let callable_reg = RegionLocation {
+                    node: calldef,
+                    region_index: 0,
+                };
+                let mut expected_call_sig: SmallVec<[Ty; 3]> = SmallVec::default();
+                for argidx in 0..self.graph.region(&callable_reg).unwrap().arguments.len() {
+                    let arg_location = OutportLocation {
+                        node: calldef,
+                        output: OutputType::Argument(argidx),
+                    };
+                    let arg_type = if let Some(ty) = self.typemap.attrib(&arg_location.into()) {
+                        assert!(ty.len() == 1);
+                        ty[0].clone()
+                    } else {
+                        //Not yet set apparently
+                        //TODO won't be set ever I guess? We don't do cross-λ-derive yet.
+                        return Ok(None);
+                    };
+                    expected_call_sig.push(arg_type);
+                }
+
+                //Now match the call sig to the apply_node sig
+                let apply_node_sig = {
+                    let mut apply_sig: SmallVec<[Ty; 3]> = SmallVec::default();
+                    let argcount = apply.get_call_arg_count();
+                    for i in 0..argcount {
+                        if let Some(edg) = apply.argument_input(i).unwrap().edge {
+                            let ty = self.graph.edge(edg).ty.get_type().unwrap();
+                            apply_sig.push(ty.clone());
+                        } else {
+                            let err = OptError::Any {
+                                text: format!("apply node's {i}-th input has no connected edge."),
+                            };
+                            report(err.clone(), region_src_span.get_file());
+                            return Err(err);
+                        }
+                    }
+
+                    apply_sig
+                };
+
+                assert!(apply_node_sig.len() == expected_call_sig.len());
+                for i in 0..apply_node_sig.len() {
+                    if apply_node_sig[i] != expected_call_sig[i] {
+                        let err = OptError::Any {
+                            text: format!(
+                                "apply node's {i}-th input expected type {:?} but got {:?}",
+                                expected_call_sig[i], apply_node_sig[i]
+                            ),
+                        };
+                        report(err.clone(), region_src_span.get_file());
+                        return Err(err);
+                    }
+                }
+                //If we finished till here, then its all-right
+                Ok(Some(result_type))
+            } else {
+                let err = OptError::Any {
+                    text: format!("apply node's call-edge hat no callable producer."),
+                };
+                report(err.clone(), region_src_span.get_file());
+                Err(err)
+            }
+        } else {
+            let err = OptError::Any {
+                text: format!("apply node's calledge was not connected"),
+            };
+            report(err.clone(), region_src_span.get_file());
+            Err(err)
+        }
+    }
+
     fn derive_region(
         &mut self,
         reg: RegionLocation,
@@ -365,18 +480,25 @@ impl Optimizer {
                     _ => {}
                 }
 
-                let type_resolve_try = self
-                    .graph
-                    .node(node)
-                    .node_type
-                    .unwrap_simple_ref()
-                    .node
-                    .try_derive_type(
+                let type_resolve_try = match &self.graph.node(node).node_type {
+                    NodeType::Simple(s) => s.node.try_derive_type(
                         &self.typemap,
                         &self.graph,
                         &self.concepts,
                         &self.csg_node_defs,
-                    );
+                    ),
+                    NodeType::Apply(a) => self.try_apply_derive(a, &region_src_span),
+                    t => {
+                        let err = OptError::Any {
+                            text: format!(
+                                "Unexpected node type {t:?} in graph while doing type resolution."
+                            ),
+                        };
+                        report(err.clone(), region_src_span.get_file());
+                        return Err(err);
+                    }
+                };
+
                 match type_resolve_try {
                     Ok(Some(ty)) => {
                         //flag change.
@@ -386,7 +508,7 @@ impl Optimizer {
                         // is actually just one output.
                         assert!(
                             self.graph.node_mut(node).outputs().len() == 1,
-                            "encounterd node with != 1 outport"
+                            "encountered node with != 1 outport"
                         );
                         self.typemap.push_attrib(
                             &OutportLocation {
@@ -445,13 +567,25 @@ impl Optimizer {
         //If the build stack is not empty at this point, type derivation has failed. Report all failed nodes
         if !build_stack.is_empty() {
             for failed_node in &build_stack {
-                let optnode = self.graph.node(*failed_node);
+                let node = self.graph.node(*failed_node);
+                let span = match &node.node_type {
+                    NodeType::Simple(s) => s.span.clone(),
+                    NodeType::Apply(_) => {
+                        if let Some([span, ..]) = self.span_tags.attrib(&failed_node.clone().into())
+                        {
+                            span.clone()
+                        } else {
+                            Span::empty()
+                        }
+                    }
+                    _ => Span::empty(),
+                };
                 let err = OptError::AnySpanned {
-                    span: optnode.node_type.unwrap_simple_ref().span.clone().into(),
+                    span: span.clone().into(),
                     text: format!("Failed to derive a type"),
                     span_text: "for this".to_owned(),
                 };
-                report(err, optnode.node_type.unwrap_simple_ref().span.get_file());
+                report(err, span.get_file());
             }
 
             return Err(OptError::TypeDeriveFailed {

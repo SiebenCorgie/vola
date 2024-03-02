@@ -23,7 +23,7 @@ use vola_common::report;
 use crate::{
     alge::{CallOp, EvalNode, FieldAccess, Imm, ListConst, WkOp},
     common::{LmdContext, Ty},
-    csg::{CsgCall, CsgOp},
+    csg::CsgOp,
     error::OptError,
     OptNode, Optimizer,
 };
@@ -324,14 +324,7 @@ impl<'a> AstLambdaBuilder<'a> {
         // 3. a csg reference with no subtree. (set within the scope)
         // 4. a call to a field definition
 
-        //tmp enum that lets us return the correct type of node
-        // in a concrete type
-        enum CSGConnectionType {
-            CSGOp(CsgOp),
-            CSGCall(CsgCall),
-        }
-
-        let (node, span) = match tree.sub_trees.len() {
+        let (opnode, span) = match tree.sub_trees.len() {
             0 => {
                 //Uses a local csg reference. Therefore check if we have that, and if so, inline
                 // it here
@@ -395,17 +388,16 @@ impl<'a> AstLambdaBuilder<'a> {
 
                         //looks good, construct the CSGOp
                         (
-                            CSGConnectionType::CSGOp(CsgOp::new(
-                                csgdef.name.clone(),
-                                0,
-                                tree.args.len(),
-                            )),
+                            CsgOp::new(csgdef.name.clone(), 0, tree.args.len()),
                             tree.span.clone(),
                         )
                     } else {
                         //Is not defined as csg_op, so try to find a field def with that name
 
-                        if let Some(fdef) = self.opt.field_def.get(&tree.op.0) {
+                        if let Some(fdef) = self.opt.field_def.get(&tree.op.0).cloned() {
+                            //In the case that we have an field definition, import the field definition as
+                            //context variable, and call it
+
                             if fdef.input_signature.len() != tree.args.len() {
                                 return Err(OptError::report_argument_missmatch(
                                     &fdef.span,
@@ -415,24 +407,31 @@ impl<'a> AstLambdaBuilder<'a> {
                                 ));
                             }
 
-                            //Build the fdef based signature
-                            let mut signature = SmallVec::new();
-                            for arg in fdef.input_signature.iter() {
-                                signature.push(
-                                    arg.1.clone().try_into().expect(
-                                        "Could not connect tree call argument into opttype",
-                                    ),
-                                );
+                            //build the apply node and early return
+                            let mut args: SmallVec<[OutportLocation; 3]> = SmallVec::new();
+                            for arg in tree.args {
+                                args.push(self.setup_alge_expr(arg, parent)?);
                             }
+                            let (call_node, _) = self
+                                .opt
+                                .graph
+                                .on_region(&self.lambda_region, |reg| {
+                                    let imported = reg
+                                        .import_context(OutportLocation {
+                                            node: fdef.lambda,
+                                            output: rvsdg::edge::OutputType::LambdaDeclaration,
+                                        })
+                                        .unwrap();
 
-                            //looks good, construct a call instead
-                            (
-                                CSGConnectionType::CSGCall(CsgCall::new(
-                                    fdef.name.clone(),
-                                    signature,
-                                )),
-                                tree.span.clone(),
-                            )
+                                    reg.call(imported, &args).unwrap()
+                                })
+                                .unwrap();
+                            //NOTE: We tag the apply node with a span, since the apply-node itself has no span
+                            //associated, but in this case we have an actual source-level location.
+                            self.opt
+                                .span_tags
+                                .push_attrib(&call_node.into(), tree.span.clone());
+                            return Ok(call_node.output(0));
                         } else {
                             let err = OptError::AnySpanned { span: tree.head_span().into(), text: format!("{} does not name an entity, local csg variable or field def", tree.op.0), span_text: "try defining a local variable, an entity or a field with that name".to_owned() };
                             report(err.clone(), tree.span.get_file());
@@ -456,11 +455,7 @@ impl<'a> AstLambdaBuilder<'a> {
 
                         //Aight, looks good, using that.
                         (
-                            CSGConnectionType::CSGOp(CsgOp::new(
-                                opdef.name.clone(),
-                                subcount,
-                                tree.args.len() + subcount,
-                            )),
+                            CsgOp::new(opdef.name.clone(), subcount, tree.args.len() + subcount),
                             tree.span.clone(),
                         )
                     } else {
@@ -495,19 +490,11 @@ impl<'a> AstLambdaBuilder<'a> {
         let opnode = self
             .opt
             .graph
-            .on_region(&self.lambda_region, |regbuilder| match node {
-                CSGConnectionType::CSGCall(call) => {
-                    let (opnode, _) = regbuilder
-                        .connect_node(OptNode::new(call, span), &args)
-                        .unwrap();
-                    opnode.output(0)
-                }
-                CSGConnectionType::CSGOp(op) => {
-                    let (opnode, _) = regbuilder
-                        .connect_node(OptNode::new(op, span), &args)
-                        .unwrap();
-                    opnode.output(0)
-                }
+            .on_region(&self.lambda_region, |regbuilder| {
+                let (opnode, _) = regbuilder
+                    .connect_node(OptNode::new(opnode, span), &args)
+                    .unwrap();
+                opnode.output(0)
             })
             .unwrap();
         Ok(opnode)

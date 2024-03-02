@@ -220,6 +220,12 @@ impl Optimizer {
         Ok(())
     }
 
+    ///Inlines the `callnode` by querying the optimizer for that field def, and if found, deep-copying
+    //the field content to our region. Afte that we
+    fn inline_csg_call(&mut self, callnode: NodeRef) -> Result<NodeRef, OptError> {
+        todo!()
+    }
+
     fn specialize_node(
         &mut self,
         ctx: &SpecializationContext,
@@ -269,10 +275,12 @@ impl Optimizer {
                             report(err.clone(), ctx.specialization_src.get_file());
                             return Err(err);
                         }
+                        csg_args.push(src);
                     }
                     "alge" => {
                         //change to alge args if not done so already
                         saw_alge_arg = true;
+                        alge_args.push(src);
                     }
                     e => {
                         let argnodespan = self
@@ -313,11 +321,24 @@ impl Optimizer {
             }
         }
 
-        let pr = self.graph.node(node).parent.unwrap();
-        let node = self.graph.on_region(&pr, |reg| {
-            reg.insert_node(OptNode::new(DummyNode::new(), Span::empty()))
-        });
-        Ok(node.unwrap())
+        //alright, sorted out the csg and alge-args. now continue by dispatching to the right kind of specialization. We've got
+        // - CSGEntity Specialization: For CSGOps with no sub tree
+        // - CSGCall Specialization: For CSGCalls (also no sub-trees),
+        // - CSGOpertaion: For CSGOps with 1..n sub trees.
+        //
+        // in each case we first checkout that the argument count matches, then we
+        todo!("implement the CSGOP only dispatch");
+        Ok(node)
+    }
+
+    fn dispatch_csg_operation(
+        &mut self,
+        ctx: &SpecializationContext,
+        srcnode: NodeRef,
+        subtrees: SmallVec<[OutportLocation; 3]>,
+        arguments: SmallVec<[OutportLocation; 3]>,
+    ) -> Result<NodeRef, OptError> {
+        todo!()
     }
 
     ///Dispatches the export_field with the given `ident`ifier.

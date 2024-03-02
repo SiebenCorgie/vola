@@ -20,6 +20,7 @@ use crate::{
     Optimizer,
 };
 
+#[derive(Clone, Debug)]
 pub struct FieldDef {
     pub span: Span,
     pub name: Ident,

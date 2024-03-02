@@ -77,6 +77,10 @@ define subfield(trans: vec3){
     }
 }
 
+define some_cube(){
+     Box([1.0, 1.0, 1.0])
+}
+
 //Export interface of the SDF
 export myField(p: vec3, translation: vec3, some_lerp: s){
     let some_formula = translation.x * 2.0;
@@ -85,8 +89,12 @@ export myField(p: vec3, translation: vec3, some_lerp: s){
         subfield(translation)
     }{
         Translate([30.0, 30.0, some_formula]){
-            Round(1.0){
-                Box([1.0, 0.5, 3.0])
+            Union(){
+                Round(1.0){
+                    Box([1.0, 0.5, 3.0])
+                }
+            }{
+                some_cube()
             }
         }
     };

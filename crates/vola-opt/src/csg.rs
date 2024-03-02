@@ -181,6 +181,7 @@ impl DialectNode for CsgOp {
     }
 }
 
+/*
 ///CsgTree call into a defined sub tree. Akin to a function call, but gets inlined at dispatch-time.
 ///
 /// NOTE: We *don't* use a λ-Node+Apply node pair here, since we don't known _yet_ which concept on this CSGNode (Entity or Operation) is called.
@@ -267,7 +268,7 @@ impl DialectNode for CsgCall {
         Ok(Some(Ty::CSGTree))
     }
 }
-
+*/
 ///Access description for a tree.
 #[derive(LangNode, Debug)]
 pub struct TreeAccess {
