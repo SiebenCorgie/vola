@@ -11,6 +11,7 @@ use crate::{
 };
 
 pub mod copy;
+pub mod inline;
 pub mod region_utils;
 
 impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
