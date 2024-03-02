@@ -261,8 +261,41 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
                 self.node(dst.node).parent.clone(),
             ) {
                 (Some(reg_src), Some(reg_dst)) => {
-                    assert!(reg_src == reg_dst);
-                    reg_src
+                    //Check that, either one is the parent of the other node,
+                    match (src.output.is_argument(), dst.input.is_result()) {
+                        (true, true) => {
+                            //In this case, this is an edge straight from an argument
+                            //to an result. We disconnect that on the `internal` region
+                            //of the src/dst node.
+                            //NOTE: This is somewhat hard, since we don't really know _which_
+                            //      of the regions the edge is in. So we just search for it.
+                            assert!(src.node == dst.node, "If both src and dst are argument/result, both need to be part of the same node!");
+                            let mut parent_reg_candidate = None;
+                            for (regidx, reg) in self.node(src.node).regions().iter().enumerate() {
+                                if reg.edges.contains(&edge) {
+                                    parent_reg_candidate = Some(RegionLocation {
+                                        node: src.node,
+                                        region_index: regidx,
+                                    });
+                                    break;
+                                }
+                            }
+                            if let Some(reg) = parent_reg_candidate {
+                                reg
+                            } else {
+                                return Err(GraphError::InvalidEdge(edge));
+                            }
+                        }
+                        (false, true) => {
+                            //use the region of src
+                            reg_src
+                        }
+                        (true, false) => reg_dst,
+                        (false, false) => {
+                            assert!(reg_src == reg_dst);
+                            reg_src
+                        }
+                    }
                 }
                 //Happens if one participant is the omega node
                 (Some(reg), None) | (None, Some(reg)) => reg,

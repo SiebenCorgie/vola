@@ -34,18 +34,22 @@
 //
 //      Yet another idea is, to first specialise into a meta-tree that already resolved the sub-calls in each implblock, then resolve those to the actual lambda
 
-use std::fmt::format;
+use std::{
+    fmt::{format, Debug},
+    process::Output,
+};
 
 use ahash::AHashMap;
 use rvsdg::{
     edge::{InportLocation, InputType, OutportLocation, OutputType},
     region::{Inport, RegionLocation},
-    smallvec::SmallVec,
+    smallvec::{smallvec, SmallVec},
     NodeRef,
 };
+use rvsdg_viewer::View;
 use vola_common::report;
 
-use crate::{error::OptError, OptGraph, Optimizer};
+use crate::{error::OptError, OptEdge, OptGraph, Optimizer, TypeState};
 
 impl Optimizer {
     ///dispatches all field_exports that are currently registered in the optimizer.
@@ -83,10 +87,14 @@ impl Optimizer {
         let dst_region_lambda = self
             .graph
             .shallow_copy_node(src_node_region.node, parent_region);
+
         let dst_region = RegionLocation {
             node: dst_region_lambda,
             region_index: 0,
         };
+
+        //NOTE: we set the λ-Node to have only one output atm.
+        self.graph.region_mut(&dst_region).unwrap().results = smallvec![Inport::default(); 1];
 
         let mut node_mapping = AHashMap::new();
         //push λ-remap
@@ -120,6 +128,13 @@ impl Optimizer {
             if node_mapping.contains_key(&src.node) && node_mapping.contains_key(&dst.node) {
                 src.node = *node_mapping.get(&src.node).unwrap();
                 dst.node = *node_mapping.get(&dst.node).unwrap();
+
+                //Overwrite result ports, since we have only one, and the TreeAccess is expected
+                //to only return one result.
+                if dst.input.is_result() {
+                    dst.input = InputType::Result(0);
+                }
+
                 //Now connect
                 self.graph.connect(src, dst, ty).unwrap();
             }
@@ -134,27 +149,32 @@ impl Optimizer {
         //Find all TreeAccess nodes, replace the node with the
 
         //Right now just copy
-        let copy_node_list = if let Some(exp) = self.export_fn.get(ident) {
-            let mut copy_nodes: SmallVec<[NodeRef; 3]> = SmallVec::default();
-            let result_count = self.graph.region(&exp.lambda_region).unwrap().results.len();
-            for i in 0..result_count {
-                if let Some(port) = self
-                    .graph
-                    .region(&exp.lambda_region)
-                    .unwrap()
-                    .result_src(&self.graph, i)
-                {
-                    copy_nodes.push(port.node);
+        let (copy_node_list, export_fn_region, argcount) =
+            if let Some(exp) = self.export_fn.get(ident) {
+                let mut copy_nodes: SmallVec<[NodeRef; 3]> = SmallVec::default();
+                let result_count = self.graph.region(&exp.lambda_region).unwrap().results.len();
+                for i in 0..result_count {
+                    if let Some(port) = self
+                        .graph
+                        .region(&exp.lambda_region)
+                        .unwrap()
+                        .result_src(&self.graph, i)
+                    {
+                        copy_nodes.push(port.node);
+                    }
                 }
-            }
 
-            copy_nodes
-        } else {
-            //No such export fn
-            return Err(OptError::Any {
-                text: format!("No export function named {} found!", ident),
-            });
-        };
+                (
+                    copy_nodes,
+                    exp.lambda_region.clone(),
+                    exp.input_signature.len(),
+                )
+            } else {
+                //No such export fn
+                return Err(OptError::Any {
+                    text: format!("No export function named {} found!", ident),
+                });
+            };
 
         //TODO: instead reimport λ and replace `node` with a call to that lambda
         //
@@ -166,19 +186,84 @@ impl Optimizer {
         for node in copy_node_list {
             let new_lambda = self.trace_copy_node(node);
             let omega_node = self.graph.toplevel_region().node;
-            //then hook up export
-            let export_port = self.graph.on_omega_node(|omg| {
-                let new_export = omg.node_mut().add_export();
-                InportLocation {
-                    node: omega_node,
-                    input: InputType::Result(new_export),
-                }
-            });
-            self.graph
-                .connect(new_lambda.output(0), export_port, crate::OptEdge::State)
-                .unwrap();
-        }
 
+            //At this point we build the correct λ-Node, now import into the
+            //original import location, delete `node`, import `new_lambda`
+            //and call it with all arguments to the export_fn.
+
+            let import_cv = self
+                .graph
+                .node_mut(export_fn_region.node)
+                .node_type
+                .unwrap_lambda_mut()
+                .add_context_variable();
+            let import_cv_port_in = InportLocation {
+                node: export_fn_region.node,
+                input: InputType::ContextVariableInput(import_cv),
+            };
+            let import_cv_port_out = OutportLocation {
+                node: export_fn_region.node,
+                output: OutputType::ContextVariableArgument(import_cv),
+            };
+            self.graph
+                .connect(
+                    OutportLocation {
+                        node: new_lambda,
+                        output: OutputType::LambdaDeclaration,
+                    },
+                    import_cv_port_in,
+                    OptEdge::Value {
+                        ty: TypeState::Unset,
+                    },
+                )
+                .unwrap();
+            //hook up the node internally
+
+            let target_port = {
+                assert!(
+                    self.graph.node(node).outputs().len() == 1,
+                    "expected FieldAccess to have only one input!"
+                );
+                let targets = self
+                    .graph
+                    .node(node)
+                    .output_dsts(&self.graph, 0)
+                    .unwrap()
+                    .clone();
+                assert!(targets.len() == 1);
+                targets[0]
+            };
+
+            assert!(
+                target_port.input.is_result(),
+                "Expected accessField to be connected to a result port!"
+            );
+            //Since we saved the outport dst we can finally remove the node, and setup the new apply node.
+            self.graph.remove_node(node).unwrap();
+
+            let input_args = (0..argcount)
+                .map(|idx| OutportLocation {
+                    node: export_fn_region.node,
+                    output: OutputType::Argument(idx),
+                })
+                .collect::<SmallVec<[OutportLocation; 3]>>();
+            self.graph.on_region(&export_fn_region, |reg| {
+                let (call_node, _) = reg
+                    .call(import_cv_port_out, &input_args)
+                    .expect("Failed to hook up replacement Apply node");
+
+                reg.ctx_mut()
+                    .connect(
+                        call_node.output(0),
+                        target_port,
+                        OptEdge::Value {
+                            ty: TypeState::Unset,
+                        },
+                    )
+                    .unwrap();
+            });
+            //Now start the actual dispatcher on `new_lambda`.
+        }
         Ok(())
     }
 }
