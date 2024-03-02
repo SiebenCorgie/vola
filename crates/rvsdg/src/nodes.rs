@@ -382,26 +382,6 @@ impl<N: LangNode + 'static> Node<N> {
             None
         }
     }
-
-    ///Resets all inputs. NOTE prefer to use connect/disconnect. As this has the potential to
-    /// introduce _lost_ edges.
-    pub(crate) fn clear_inputs(&mut self) {
-        let mut i = 0;
-        while let Some(input) = self.inputs_mut().get_mut(i) {
-            i += 1;
-            input.edge = None;
-        }
-    }
-
-    ///Resets all outputs. NOTE prefer to use connect/disconnect. As this has the potential to
-    /// introduce _lost_ edges.
-    pub(crate) fn clear_outputs(&mut self) {
-        let mut i = 0;
-        while let Some(input) = self.inputs_mut().get_mut(i) {
-            i += 1;
-            input.edge = None;
-        }
-    }
 }
 
 impl<N: LangNode + 'static> Display for NodeType<N> {

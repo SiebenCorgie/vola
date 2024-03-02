@@ -1,4 +1,4 @@
-use crate::{edge::LangEdge, err::GraphError, nodes::LangNode, region::RegionLocation, Rvsdg};
+use crate::{edge::LangEdge, nodes::LangNode, Rvsdg};
 
 impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
     //NOTE: At first I wanted to implement things like `remove_result` and `remove_argument` here,

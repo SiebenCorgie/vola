@@ -102,17 +102,6 @@ impl Region {
             edges: AHashSet::default(),
         }
     }
-
-    pub(crate) fn clear(&mut self) {
-        for arg in &mut self.arguments {
-            arg.edges.clear();
-        }
-        for res in &mut self.results {
-            res.edge = None;
-        }
-        self.nodes.clear();
-        self.edges.clear();
-    }
 }
 
 impl Default for Region {

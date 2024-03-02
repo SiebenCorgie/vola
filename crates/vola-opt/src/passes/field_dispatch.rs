@@ -34,11 +34,6 @@
 //
 //      Yet another idea is, to first specialise into a meta-tree that already resolved the sub-calls in each implblock, then resolve those to the actual lambda
 
-use std::{
-    fmt::{format, Debug},
-    process::Output,
-};
-
 use ahash::AHashMap;
 use rvsdg::{
     edge::{InportLocation, InputType, OutportLocation, OutputType},
@@ -46,10 +41,9 @@ use rvsdg::{
     smallvec::{smallvec, SmallVec},
     NodeRef,
 };
-use rvsdg_viewer::View;
 use vola_common::report;
 
-use crate::{error::OptError, OptEdge, OptGraph, Optimizer, TypeState};
+use crate::{error::OptError, OptEdge, Optimizer, TypeState};
 
 impl Optimizer {
     ///dispatches all field_exports that are currently registered in the optimizer.
@@ -185,7 +179,6 @@ impl Optimizer {
         // 2. implementations exist, as requested by the imbl-block that is inlined.
         for node in copy_node_list {
             let new_lambda = self.trace_copy_node(node);
-            let omega_node = self.graph.toplevel_region().node;
 
             //At this point we build the correct λ-Node, now import into the
             //original import location, delete `node`, import `new_lambda`

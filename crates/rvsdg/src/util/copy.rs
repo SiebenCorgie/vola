@@ -3,7 +3,7 @@ use ahash::AHashMap;
 use smallvec::smallvec;
 
 use crate::{
-    edge::{Edge, LangEdge},
+    edge::LangEdge,
     nodes::{
         ApplyNode, DeltaNode, GammaNode, LambdaNode, LangNode, Node, NodeType, OmegaNode, PhiNode,
         ThetaNode,
@@ -121,7 +121,7 @@ impl<N: LangNode + StructuralClone + 'static, E: LangEdge + StructuralClone + 's
     ///Copies `src_node` into a new node. If the `src_node` had any sub regions, copies the region's
     /// configuration, but not the content.
     pub fn shallow_copy_node(&mut self, src_node: NodeRef, dst_region: RegionLocation) -> NodeRef {
-        let mut new_node = self.node(src_node).structural_copy();
+        let new_node = self.node(src_node).structural_copy();
         //now unwrap the inner type, and add that to a new registered node in dst_region
         let node = self
             .on_region(&dst_region, |reg| reg.add_node_type(new_node.node_type))

@@ -241,7 +241,7 @@ impl RegionLayout {
                     .fold(0.0f32, |a, p| a.max(p.x + config.port_spacing as f32)),
             ),
             offset_y.max(config.grid_empty_spacing as f32),
-        )
+        );
     }
 
     pub fn set_height(&mut self, height: f32, config: &LayoutConfig) {

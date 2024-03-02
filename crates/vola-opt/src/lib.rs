@@ -22,7 +22,7 @@
 //!
 //! Used to represent algebraic expressions.
 
-use std::{any::Any, fmt::Debug, ops::Deref};
+use std::{any::Any, fmt::Debug};
 
 use ahash::AHashMap;
 use alge::implblock::{ConceptImpl, ConceptImplKey};
@@ -364,7 +364,7 @@ impl Optimizer {
         let conf = LayoutConfig {
             grid_padding: 30,
             grid_empty_spacing: 15,
-            ignore_dead_node: true,
+            ignore_dead_node: false,
             ..Default::default()
         };
         rvsdg_viewer::into_svg_with_config(&self.graph, name, &conf)
