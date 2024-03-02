@@ -8,9 +8,11 @@
 //! # CSG Dialect
 
 use rvsdg::{
+    nodes::LangNode,
     region::{Input, Output},
     rvsdg_derive_lang::LangNode,
     smallvec::{smallvec, SmallVec},
+    EdgeRef,
 };
 use vola_ast::{common::Ident, csg::CSGNodeDef};
 
@@ -290,6 +292,17 @@ impl TreeAccess {
             input_signature: signature,
             output: Output::default(),
         }
+    }
+
+    pub fn get_op_edge(&self) -> Option<EdgeRef> {
+        self.inputs[0].edge.clone()
+    }
+
+    pub fn get_args(&self) -> SmallVec<[Option<EdgeRef>; 3]> {
+        self.inputs[1..]
+            .iter()
+            .map(|arg| arg.edge.clone())
+            .collect()
     }
 }
 

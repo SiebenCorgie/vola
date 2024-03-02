@@ -37,13 +37,22 @@
 use ahash::AHashMap;
 use rvsdg::{
     edge::{InportLocation, InputType, OutportLocation, OutputType},
+    nodes::{self, LangNode, Node},
     region::{Inport, RegionLocation},
     smallvec::{smallvec, SmallVec},
-    NodeRef,
+    EdgeRef, NodeRef,
 };
-use vola_common::report;
+use vola_common::{report, Span};
 
-use crate::{error::OptError, OptEdge, Optimizer, TypeState};
+use crate::{
+    alge::DummyNode, csg::TreeAccess, error::OptError, OptEdge, OptNode, Optimizer, TypeState,
+};
+
+struct SpecializationContext {
+    concept_name: String,
+    //The span of the TreeAccess node based uppon we specialize.
+    specialization_src: Span,
+}
 
 impl Optimizer {
     ///dispatches all field_exports that are currently registered in the optimizer.
@@ -138,6 +147,179 @@ impl Optimizer {
         dst_region_lambda
     }
 
+    ///Runs the actual specialization of an region.
+    fn specialize_region(&mut self, region: RegionLocation) -> Result<(), OptError> {
+        //we specialize the region by recursively calling _csg_-dialect nodes
+        //with _specialize-node_ function. However, first we need to read out the field access
+        //node, so we know our entry condition / entry-concept. The AccessField node itself will be removed in the
+        //process, since we'll hook up the first specialized_node() to the output afterwards.
+
+        let access_field_node_port = self
+            .graph
+            .region(&region)
+            .unwrap()
+            .result_src(&self.graph, 0)
+            .unwrap();
+
+        let (entry_concept, entry_csg_op, entry_arguments) = {
+            assert!(
+                self.graph
+                    .node(access_field_node_port.node)
+                    .node_type
+                    .unwrap_simple_ref()
+                    .node
+                    .dialect()
+                    == "csg",
+                "Expected csg node at pruned-result"
+            );
+            let tree_access_node = self
+                .graph
+                .node(access_field_node_port.node)
+                .node_type
+                .unwrap_simple_ref()
+                .try_downcast_ref::<TreeAccess>()
+                .unwrap();
+            //Sort out what the entry op is, and what the args are.
+            //by definition
+            (
+                tree_access_node.called_concept.clone(),
+                tree_access_node.get_op_edge(),
+                tree_access_node.get_args(),
+            )
+        };
+        let access_span = self
+            .graph
+            .node(access_field_node_port.node)
+            .node_type
+            .unwrap_simple_ref()
+            .span
+            .clone();
+        let spec_ctx = SpecializationContext {
+            concept_name: entry_concept.clone(),
+            specialization_src: access_span,
+        };
+
+        let entry_node_port = self
+            .graph
+            .edge(entry_csg_op.expect("expected csgop to be connected!"))
+            .src();
+        let specialized_entry_node = self.specialize_node(&spec_ctx, entry_node_port.node)?;
+        //reconncet output to the resulting node. This will effectively render all CSG-Nodes _dead_.
+        let result_edge = self.graph.region(&region).unwrap().results[0]
+            .edge
+            .clone()
+            .unwrap();
+        self.graph.disconnect(result_edge).unwrap();
+        //now connect the specialized_entry_node to that output
+        self.graph
+            .on_region(&region, |reg| {
+                reg.connect_to_result(specialized_entry_node.output(0), InputType::Result(0))
+                    .unwrap()
+            })
+            .unwrap();
+        Ok(())
+    }
+
+    fn specialize_node(
+        &mut self,
+        ctx: &SpecializationContext,
+        node: NodeRef,
+    ) -> Result<NodeRef, OptError> {
+        //At first we need to find out what kind of op this is. If it has no csg-dialect predecessors,
+        // it is either a CSGOp or CSGCall.
+        // If it has any csg-dialect predecessors, it will always be a CsgOp.
+        // So our first action is to scrape the inputs of that node for
+        // csg and non-csg arguments. Right now the CSG-Args have to be the first ones,
+        //so we try that first. If we find any CSG-Arg _after_ the first alge_arg, we bail.
+
+        let mut csg_args: SmallVec<[OutportLocation; 3]> = SmallVec::default();
+        let mut alge_args: SmallVec<[OutportLocation; 3]> = SmallVec::default();
+        let mut saw_alge_arg = false;
+        let argcount = self.graph.node(node).inputs().len();
+        for inidx in 0..argcount {
+            if let Some(arg_edge) = self.graph.node(node).inputs()[inidx].edge {
+                let src = self.graph.edge(arg_edge).src().clone();
+                //check out the argument type
+                match self
+                    .graph
+                    .node(src.node)
+                    .node_type
+                    .unwrap_simple_ref()
+                    .node
+                    .dialect()
+                {
+                    "csg" => {
+                        //If we already saw an alge arg, the call convention is violated. Shouldn't happen,
+                        //but since we are in the "[...] around and find out" stage of the project, test it anyways.
+                        if saw_alge_arg {
+                            let argnodespan = self
+                                .graph
+                                .node(src.node)
+                                .node_type
+                                .unwrap_simple_ref()
+                                .span
+                                .clone();
+                            let err = OptError::AnySpannedWithSource {
+                            source_span: ctx.specialization_src.clone().into(),
+                            source_text: format!("While specializing for this"),
+                            text: format!("Argument {inidx} was of csg-dialect, after already seeing algebraic arguments. This is a call-convention violation..."),
+                            span: argnodespan.into(),
+                            span_text: format!("This is the argument node "),
+                            };
+                            report(err.clone(), ctx.specialization_src.get_file());
+                            return Err(err);
+                        }
+                    }
+                    "alge" => {
+                        //change to alge args if not done so already
+                        saw_alge_arg = true;
+                    }
+                    e => {
+                        let argnodespan = self
+                            .graph
+                            .node(src.node)
+                            .node_type
+                            .unwrap_simple_ref()
+                            .span
+                            .clone();
+                        let err = OptError::AnySpannedWithSource {
+                            source_span: ctx.specialization_src.clone().into(),
+                            source_text: format!("While specializing for this"),
+                            text: format!("Argument {inidx} was of unexpected dialect \"{e}\""),
+                            span: argnodespan.into(),
+                            span_text: format!("This is the argument node "),
+                        };
+                        report(err.clone(), ctx.specialization_src.get_file());
+                        return Err(err);
+                    }
+                }
+            } else {
+                let argnodespan = self
+                    .graph
+                    .node(node)
+                    .node_type
+                    .unwrap_simple_ref()
+                    .span
+                    .clone();
+                let err = OptError::AnySpannedWithSource {
+                    source_span: ctx.specialization_src.clone().into(),
+                    source_text: format!("While specializing for this"),
+                    text: format!("Argument {inidx} was not specified"),
+                    span: argnodespan.into(),
+                    span_text: format!("While specializing this"),
+                };
+                report(err.clone(), ctx.specialization_src.get_file());
+                return Err(err);
+            }
+        }
+
+        let pr = self.graph.node(node).parent.unwrap();
+        let node = self.graph.on_region(&pr, |reg| {
+            reg.insert_node(OptNode::new(DummyNode::new(), Span::empty()))
+        });
+        Ok(node.unwrap())
+    }
+
     ///Dispatches the export_field with the given `ident`ifier.
     pub fn dispatch_export(&mut self, ident: &str) -> Result<(), OptError> {
         //Find all TreeAccess nodes, replace the node with the
@@ -170,16 +352,15 @@ impl Optimizer {
                 });
             };
 
-        //TODO: instead reimport λ and replace `node` with a call to that lambda
-        //
-        //TODO: after trace copy, do the actual iterative replacement of the nodes with the impl-block content, based on the tree structure.
-        //
-        // special attention is required here, so that
-        // 1. subtree count is as expected
-        // 2. implementations exist, as requested by the imbl-block that is inlined.
+        //we know the list of field accesses, so first things first, to a trace-copy
+        //of all of them.
+        let mut access_new_lambda_pairs: SmallVec<[(NodeRef, NodeRef); 3]> = SmallVec::default();
         for node in copy_node_list {
             let new_lambda = self.trace_copy_node(node);
+            access_new_lambda_pairs.push((node, new_lambda));
+        }
 
+        for (src_field_access, new_lambda) in &access_new_lambda_pairs {
             //At this point we build the correct λ-Node, now import into the
             //original import location, delete `node`, import `new_lambda`
             //and call it with all arguments to the export_fn.
@@ -201,7 +382,7 @@ impl Optimizer {
             self.graph
                 .connect(
                     OutportLocation {
-                        node: new_lambda,
+                        node: *new_lambda,
                         output: OutputType::LambdaDeclaration,
                     },
                     import_cv_port_in,
@@ -214,12 +395,12 @@ impl Optimizer {
 
             let target_port = {
                 assert!(
-                    self.graph.node(node).outputs().len() == 1,
+                    self.graph.node(*src_field_access).outputs().len() == 1,
                     "expected FieldAccess to have only one input!"
                 );
                 let targets = self
                     .graph
-                    .node(node)
+                    .node(*src_field_access)
                     .output_dsts(&self.graph, 0)
                     .unwrap()
                     .clone();
@@ -232,7 +413,7 @@ impl Optimizer {
                 "Expected accessField to be connected to a result port!"
             );
             //Since we saved the outport dst we can finally remove the node, and setup the new apply node.
-            self.graph.remove_node(node).unwrap();
+            self.graph.remove_node(*src_field_access).unwrap();
 
             let input_args = (0..argcount)
                 .map(|idx| OutportLocation {
@@ -255,7 +436,22 @@ impl Optimizer {
                     )
                     .unwrap();
             });
-            //Now start the actual dispatcher on `new_lambda`.
+        }
+
+        //TODO: after trace copy, do the actual iterative replacement
+        // of the nodes with the impl-block content, based on the tree structure.
+        //
+        // special attention is required here, so that
+        // 1. subtree count is as expected
+        // 2. implementations exist, as requested by the imbl-block that is inlined.
+
+        //NOTE: the first NodeRef of the pair's is invalid at this point
+        for (_, new_lambda) in access_new_lambda_pairs {
+            let lambda_region = RegionLocation {
+                node: new_lambda,
+                region_index: 0,
+            };
+            self.specialize_region(lambda_region)?;
         }
         Ok(())
     }

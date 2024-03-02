@@ -22,6 +22,9 @@
 //!
 //! Used to represent algebraic expressions.
 
+//NOTE: We need that trait for the OptNode, so we can Upacast `DialectNode: Any` to `Any`.
+#![feature(trait_upcasting)]
+
 use std::{any::Any, fmt::Debug};
 
 use ahash::AHashMap;
@@ -92,6 +95,19 @@ impl OptNode {
             span,
             node: Box::new(node),
         }
+    }
+
+    ///Tries to downcast the inner `node` to `T`.
+    pub fn try_downcast_ref<'a, T: DialectNode + Send + Sync + 'static>(&'a self) -> Option<&'a T> {
+        let upcast: &'a dyn Any = self.node.as_ref();
+        upcast.downcast_ref()
+    }
+    ///Tries to downcast the inner `node` to `T`.
+    pub fn try_downcast_mut<'a, T: DialectNode + Send + Sync + 'static>(
+        &'a mut self,
+    ) -> Option<&'a mut T> {
+        let upcast: &'a mut dyn Any = self.node.as_mut();
+        upcast.downcast_mut()
     }
 }
 
@@ -364,7 +380,7 @@ impl Optimizer {
         let conf = LayoutConfig {
             grid_padding: 30,
             grid_empty_spacing: 15,
-            ignore_dead_node: false,
+            ignore_dead_node: true,
             ..Default::default()
         };
         rvsdg_viewer::into_svg_with_config(&self.graph, name, &conf)

@@ -16,3 +16,8 @@ There are multiple levels within opt, that get progressively lowered from an AST
 ## Hints
 
 - export `VOLA_BACKTRACE=1` to enable backtraces whenever the optimizer panics.
+
+
+## Todo 📔
+
+- [ ] Right now we'll have a lot of dead nodes in the λ-Regions after some transformations. That is not _really_ a problem, but implementing the generic dead-node-elimination would probably be a good idea anyways
