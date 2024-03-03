@@ -19,6 +19,7 @@
 
 use std::collections::VecDeque;
 
+use ahash::{AHashMap, AHashSet};
 use rvsdg::{
     edge::{InportLocation, OutportLocation, OutputType},
     nodes::{ApplyNode, NodeType},
@@ -58,7 +59,11 @@ impl Optimizer {
         //
         // Similar to the add_ast routine we _try_ all resolves, and collect errors before returning.
 
+        //NOTE: Implblocks never have context dependecies, so we can always resolve them immediatly.
+        //      This also gives us a nice initial _resolved_set_
+
         let mut error_count = 0;
+        let mut resolve_set = AHashSet::new();
         let implblocks = self
             .concept_impl
             .values()
@@ -67,6 +72,9 @@ impl Optimizer {
         for (implblock, span) in implblocks {
             if let Err(_err) = self.derive_region(implblock, span.clone()) {
                 error_count += 1;
+            } else {
+                //Add to resolve set
+                resolve_set.insert(implblock.node).clone();
             }
         }
 
@@ -74,15 +82,102 @@ impl Optimizer {
             self.verify_imblblock(implblock)?;
         }
 
+        //To guarantee that a region can resolve _context-dependent-nodes_ (mostly apply nodes atm),
+        //We build a _context_dependecy_map_ first. This will allow us to check all λ-Node context dependencies
+        //So we only try to resolve nodes where the context is already resolved.
+
         let fregs = self
             .field_def
             .values()
             .map(|fdef| (fdef.lambda_region.clone(), fdef.span.clone()))
             .collect::<Vec<_>>();
-        //Now do the field def
-        for (def, srcspan) in fregs {
-            if let Err(_err) = self.derive_region(def, srcspan.clone()) {
-                error_count += 1;
+
+        let exports = self
+            .export_fn
+            .values()
+            .map(|exp| (exp.lambda_region.clone(), exp.span.clone()))
+            .collect::<Vec<_>>();
+
+        let mut context_dependeny_map = AHashMap::default();
+        for def in fregs
+            .iter()
+            .map(|f| f.0.node)
+            .chain(exports.iter().map(|e| e.0.node))
+        {
+            //For def, read out the context variables, and push all srcs
+            let mut i = 0;
+            let mut dependecy_set = AHashSet::default();
+            while let Some(cvin) = self
+                .graph
+                .node(def)
+                .node_type
+                .unwrap_lambda_ref()
+                .cv_input(i)
+            {
+                i += 1;
+                if let Some(connection) = cvin.edge {
+                    let src_node = self.graph.edge(connection).src().node;
+                    dependecy_set.insert(src_node);
+                }
+            }
+            if dependecy_set.len() > 0 {
+                context_dependeny_map.insert(def, dependecy_set);
+            }
+        }
+
+        //Now do the field defs by iterating work list till either nothing changes or empty.
+        //we always check if all dependencies are met
+        let mut worklist = fregs;
+        'fielddef_resolution: loop {
+            let mut changed_any = false;
+            let mut local_work_list = Vec::new();
+            std::mem::swap(&mut worklist, &mut local_work_list);
+            for (def, srcspan) in local_work_list {
+                //check if def's dependecies are met
+                let dependecies_met = {
+                    if let Some(dependecies) = context_dependeny_map.get(&def.node) {
+                        let mut is_met = true;
+                        for dep in dependecies {
+                            if !resolve_set.contains(dep) {
+                                is_met = false;
+                                break;
+                            }
+                        }
+                        is_met
+                    } else {
+                        //Has no dependecies, therfore we can always resolve
+                        true
+                    }
+                };
+
+                if dependecies_met {
+                    //Try to resolve, since all dependecies are met
+                    if let Err(err) = self.derive_region(def, srcspan.clone()) {
+                        error_count += 1;
+                    } else {
+                        //successfully resolved, so add to resolve map
+                        changed_any = true;
+                        let is_newly_inserted = resolve_set.insert(def.node);
+                        assert!(
+                            is_newly_inserted,
+                            "the field-def {} shouldn't have been resolved yet...",
+                            def.node
+                        );
+                    }
+                } else {
+                    //dependencies not yet met, push back again
+                    worklist.push((def, srcspan));
+                }
+            }
+
+            if !changed_any && !worklist.is_empty() {
+                return Err(OptError::Any {
+                    text: format!("Could not type resolve all field definitions!"),
+                });
+            }
+
+            if worklist.is_empty() {
+                break 'fielddef_resolution;
             }
         }
 
@@ -90,12 +185,15 @@ impl Optimizer {
             self.verify_field_def(fdef)?;
         }
 
-        let exports = self
-            .export_fn
-            .values()
-            .map(|exp| (exp.lambda_region.clone(), exp.span.clone()))
-            .collect::<Vec<_>>();
+        //NOTE: Right now we don't use the dependency driven resolution we use for field defs,
+        //      cause by definition all dependecies must be resolved that could be imported.
+        //      However, since this is pre-alpha ware, we still check
         for (exp, span) in exports {
+            if let Some(deps) = context_dependeny_map.get(&exp.node) {
+                for dep in deps {
+                    assert!(resolve_set.contains(dep));
+                }
+            }
             if let Err(_err) = self.derive_region(exp, span) {
                 error_count += 1;
             }
@@ -335,21 +433,19 @@ impl Optimizer {
                     node: calldef.node,
                     region_index: 0,
                 };
+                let mut call_sig = self.get_lambda_arg_signature(callable_reg.node);
                 let mut expected_call_sig: SmallVec<[Ty; 3]> = SmallVec::default();
-                for argidx in 0..self.graph.region(&callable_reg).unwrap().arguments.len() {
-                    let arg_location = OutportLocation {
-                        node: calldef.node,
-                        output: OutputType::Argument(argidx),
-                    };
-                    let arg_type = if let Some(ty) = self.typemap.attrib(&arg_location.into()) {
-                        assert!(ty.len() == 1);
-                        ty[0].clone()
+                for maybe_ty in call_sig {
+                    if let Some(t) = maybe_ty {
+                        expected_call_sig.push(t);
                     } else {
-                        //Not yet set apparently
-                        //TODO won't be set ever I guess? We don't do cross-λ-derive yet.
-                        return Ok(None);
-                    };
-                    expected_call_sig.push(arg_type);
+                        //Shouldn't happen, so return an error in that case
+                        let err = OptError::Any {
+                            text: "Argument type was not set for lambda".to_owned(),
+                        };
+                        report(err.clone(), region_src_span.get_file());
+                        return Err(err);
+                    }
                 }
 
                 //Now match the call sig to the apply_node sig

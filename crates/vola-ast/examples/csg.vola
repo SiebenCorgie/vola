@@ -64,6 +64,10 @@ impl ColorOw<sub> for Color(at){
 }
 
 
+define some_cube(){
+     Box([1.0, 1.0, 1.0])
+}
+
 //Some reusable field definition
 define subfield(trans: vec3){
     csg sphere = Sphere(42);
@@ -73,13 +77,10 @@ define subfield(trans: vec3){
             sphere
         }
     }{
-        Box([1.0, 0.0, 3.0])
+        some_cube()
     }
 }
 
-define some_cube(){
-     Box([1.0, 1.0, 1.0])
-}
 
 //Export interface of the SDF
 export myField(p: vec3, translation: vec3, some_lerp: s){

@@ -1,5 +1,7 @@
 use std::slice;
 
+use graphviz_rust::print;
+
 use crate::{
     edge::{InputType, OutputType},
     region::{Argument, Input, Output, RegResult, Region},
@@ -31,8 +33,9 @@ impl ApplyNode {
     ///Creates a call that has the signature needed for the given lambda node
     pub fn new_for_lambda(node: &LambdaNode) -> Self {
         let node_body = &node.body;
-        //need to add one more inputs then args
-        let inputs = (0..(node_body.arguments.len() + 1))
+        //NOTE: We need a call-arg and the amount of arguments for the apply-node's
+        //      Inputs.
+        let inputs = (0..(node.argument_count() + 1))
             .map(|_| Input::default())
             .collect();
         ApplyNode {
@@ -267,5 +270,10 @@ impl LambdaNode {
     ///Returns the port to this function's `n`-th argument
     pub fn result_mut(&mut self, n: usize) -> Option<&mut RegResult> {
         self.body.results.get_mut(n)
+    }
+
+    ///The amount of arguments, that are no context-variables to this λ-Node's region.
+    pub fn argument_count(&self) -> usize {
+        self.body.arguments.len() - self.cv_count
     }
 }

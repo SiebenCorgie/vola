@@ -1,3 +1,5 @@
+use std::time::Instant;
+
 use vola_opt::Optimizer;
 
 pub fn main() {
@@ -18,15 +20,27 @@ pub fn main() {
 
     opt.dump_svg("before_type_resolution.svg");
 
+    let tyder_start = Instant::now();
     if let Err(e) = opt.type_derive() {
         println!("Type derive failed: {e}");
     }
+    println!(
+        "Type derive pass took {}ms / {}ns",
+        tyder_start.elapsed().as_millis(),
+        tyder_start.elapsed().as_nanos()
+    );
 
     opt.dump_svg("after_type_resolution.svg");
 
+    let mut disp_start = Instant::now();
     if let Err(e) = opt.dispatch_all_exports() {
         println!("Dispatching exports failed!");
     }
+    println!(
+        "Dispatch pass took {}ms / {}ns",
+        disp_start.elapsed().as_millis(),
+        disp_start.elapsed().as_nanos()
+    );
 
     opt.dump_svg("after_dispatch.svg");
 }

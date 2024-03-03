@@ -194,6 +194,9 @@ impl Optimizer {
         //soo, for the thingy to work, we first inline all _calls_ into the region. Which are calls to field_defs atm.
         //we do that by just iterating _all_ nodes, and if its an apply-node,
         // and if it is, call the rvsdg native inliner.
+
+        return Ok(());
+
         {
             let all_nodes = self.graph.region(&region).unwrap().nodes.clone();
             for node in all_nodes {
@@ -412,11 +415,13 @@ impl Optimizer {
                     }
                 }
 
-                (
-                    copy_nodes,
-                    exp.lambda_region.clone(),
-                    exp.input_signature.len(),
-                )
+                let argcount = self
+                    .graph
+                    .node(exp.lambda)
+                    .node_type
+                    .unwrap_lambda_ref()
+                    .argument_count();
+                (copy_nodes, exp.lambda_region.clone(), argcount)
             } else {
                 //No such export fn
                 return Err(OptError::Any {

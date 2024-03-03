@@ -50,6 +50,7 @@ mod common;
 mod csg;
 mod error;
 mod passes;
+mod util;
 
 pub type OptGraph = Rvsdg<OptNode, OptEdge>;
 

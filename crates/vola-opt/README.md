@@ -21,3 +21,4 @@ There are multiple levels within opt, that get progressively lowered from an AST
 ## Todo 📔
 
 - [ ] Right now we'll have a lot of dead nodes in the λ-Regions after some transformations. That is not _really_ a problem, but implementing the generic dead-node-elimination would probably be a good idea anyways
+- [ ] We currently don't catch recursive field-calls. Instead the compiler panics when trying to inline those atm.
