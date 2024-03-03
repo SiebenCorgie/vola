@@ -436,7 +436,12 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
             .push(edge);
 
         self.node_mut(dst.node).inport_mut(&dst.input).unwrap().edge = Some(edge);
-
+        assert!(self
+            .node_mut(dst.node)
+            .inport_mut(&dst.input)
+            .unwrap()
+            .edge
+            .is_some());
         //now notify the region of this new edge
         self.node_mut(src_parent_region.node)
             .regions_mut()

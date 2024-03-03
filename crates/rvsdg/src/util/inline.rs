@@ -3,7 +3,7 @@
 use crate::{
     edge::{InportLocation, InputType, LangEdge, OutportLocation, OutputType},
     err::GraphError,
-    nodes::{LangNode, NodeType},
+    nodes::{LangNode, NodeType, StructuralNode},
     region::RegionLocation,
     NodeRef, Rvsdg,
 };
@@ -11,6 +11,18 @@ use ahash::AHashMap;
 use smallvec::SmallVec;
 
 use super::copy::StructuralClone;
+
+use thiserror::Error;
+
+#[derive(Error, Debug, Clone)]
+pub enum InlineError {
+    #[error("Node {0} was not an apply node")]
+    NodeWasNotApplyNode(NodeRef),
+    #[error("The call-port of the apply-node was not connected")]
+    CallPortNotConnected,
+    #[error("Could not find the Lambda or Phi definition port")]
+    NoDefPortFound,
+}
 
 impl<
         N: LangNode + StructuralClone + 'static,
@@ -22,7 +34,7 @@ impl<
     ///
     ///
     /// NOTE: the inliner currently does not handle context and recursion variables.
-    pub fn inline_apply_node(&mut self, node: NodeRef) -> Result<(), GraphError> {
+    pub fn inline_apply_node(&mut self, node: NodeRef) -> Result<(), InlineError> {
         let dst_region = self
             .node(node)
             .parent
@@ -37,14 +49,21 @@ impl<
                 if let Some(calledge) = callport.edge {
                     self.edge(calledge).src().clone()
                 } else {
-                    return Err(GraphError::NotCallable(node));
+                    return Err(InlineError::CallPortNotConnected);
                 }
             };
+
+            let inport = InportLocation {
+                node: node,
+                input: InputType::Input(0),
+            };
+            let indef = self.find_producer_inp(inport);
+
             //now trace it
             let call_lmd_def = if let Some(calldef) = self.find_callabel_def(call_src) {
-                calldef
+                calldef.node
             } else {
-                return Err(GraphError::NotCallable(node));
+                return Err(InlineError::NoDefPortFound);
             };
 
             //Also collect where the apply node connects to/was connected from.
@@ -78,7 +97,7 @@ impl<
                 res_dsts,
             )
         } else {
-            return Err(GraphError::InvalidNode(node));
+            return Err(InlineError::NodeWasNotApplyNode(node));
         };
 
         //we now have all information, so delete the apply node

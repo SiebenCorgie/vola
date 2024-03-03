@@ -236,7 +236,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> RegionBuilder<'a, N, E> {
     ) -> Result<(NodeRef, SmallColl<EdgeRef>), GraphError> {
         let (apply_node, is_defined) =
             if let Some(funct_def) = self.ctx.find_callabel_def(callable_src.clone()) {
-                if let NodeType::Lambda(l) = &self.ctx.node(funct_def).node_type {
+                if let NodeType::Lambda(l) = &self.ctx.node(funct_def.node).node_type {
                     (ApplyNode::new_for_lambda(l), true)
                 } else {
                     println!("Callable for phi not implemented!");

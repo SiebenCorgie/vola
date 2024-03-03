@@ -422,7 +422,6 @@ impl<'a> AstLambdaBuilder<'a> {
                                             output: rvsdg::edge::OutputType::LambdaDeclaration,
                                         })
                                         .unwrap();
-
                                     reg.call(imported, &args).unwrap()
                                 })
                                 .unwrap();

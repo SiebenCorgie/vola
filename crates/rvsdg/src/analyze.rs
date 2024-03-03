@@ -197,7 +197,7 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
     ///
     /// Returns None if the `input` is not connected to any producing node. For instance if a context_variable is undefined, or any other connection is
     /// not set.
-    pub fn find_producer_out(&self, output: OutportLocation) -> Option<NodeRef> {
+    pub fn find_producer_out(&self, output: OutportLocation) -> Option<OutportLocation> {
         //We trace until we find a non-cv / non-entry variable. We consider all others `producers`.
         //
         // start out by finding the first src port. Per iteration we then either _hop_ over the node boundary (defined by cv / lv),
@@ -230,7 +230,7 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
                         }
                     } else {
                         panic!(
-                            "Invalid hop: node {:?} hat CVArgument({cv}), but not a CVInput({cv})",
+                            "Invalid hop: node {:?} has CVArgument({cv}), but not a CVInput({cv})",
                             next_port.node
                         );
                     }
@@ -260,11 +260,11 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
                     }
                 }
                 //Any other case, return the the node
-                _ => return Some(next_port.node),
+                _ => return Some(next_port),
             }
         }
     }
-    pub fn find_producer_inp(&self, input: InportLocation) -> Option<NodeRef> {
+    pub fn find_producer_inp(&self, input: InportLocation) -> Option<OutportLocation> {
         let start_out = if let Some(start_edge) = self.node(input.node).inport(&input.input)?.edge {
             self.edge(start_edge).src.clone()
         } else {
@@ -279,13 +279,14 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
     /// returning the reference to the node, if that node is an lambda or phi node.
     ///
     /// If you get `Some(node)`, you'd be safe to unwrap into a lambda or phi node.
-    pub fn find_callabel_def(&self, src: OutportLocation) -> Option<NodeRef> {
+    pub fn find_callabel_def(&self, src: OutportLocation) -> Option<OutportLocation> {
         //We trace by matching context variables to cross inter/intra-procedural node bounds, until we reach a node-output
         //If the found node is λ/ϕ, we return.
 
         let producer = self.find_producer_out(src)?;
-        match self.node(producer).node_type {
-            NodeType::Lambda(_) | NodeType::Phi(_) => Some(producer),
+        match producer.output {
+            //TODO: I think the phi nodes might be broken with this
+            OutputType::LambdaDeclaration => Some(producer),
             _ => None,
         }
     }

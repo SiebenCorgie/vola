@@ -141,14 +141,14 @@ impl Debug for OptNode {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum TypeState {
     Set(Ty),
     Derived(Ty),
     Unset,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum OptEdge {
     State,
     Value { ty: TypeState },

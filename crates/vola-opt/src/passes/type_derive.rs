@@ -303,12 +303,12 @@ impl Optimizer {
                 //the callables result argument
 
                 let call_result_port = InportLocation {
-                    node: calldef,
+                    node: calldef.node,
                     input: rvsdg::edge::InputType::Result(0),
                 };
                 let result_type = {
                     let lmdregion = RegionLocation {
-                        node: calldef,
+                        node: calldef.node,
                         region_index: 0,
                     };
                     //Checkout the connected edges type.
@@ -332,13 +332,13 @@ impl Optimizer {
                 };
 
                 let callable_reg = RegionLocation {
-                    node: calldef,
+                    node: calldef.node,
                     region_index: 0,
                 };
                 let mut expected_call_sig: SmallVec<[Ty; 3]> = SmallVec::default();
                 for argidx in 0..self.graph.region(&callable_reg).unwrap().arguments.len() {
                     let arg_location = OutportLocation {
-                        node: calldef,
+                        node: calldef.node,
                         output: OutputType::Argument(argidx),
                     };
                     let arg_type = if let Some(ty) = self.typemap.attrib(&arg_location.into()) {

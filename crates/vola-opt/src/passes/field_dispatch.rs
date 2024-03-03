@@ -37,9 +37,10 @@
 use ahash::AHashMap;
 use rvsdg::{
     edge::{InportLocation, InputType, OutportLocation, OutputType},
-    nodes::{self, LangNode, Node},
+    nodes::{self, LangNode, Node, StructuralNode},
     region::{Inport, RegionLocation},
     smallvec::{smallvec, SmallVec},
+    util::copy::StructuralClone,
     EdgeRef, NodeRef,
 };
 use vola_common::{report, Span};
@@ -143,6 +144,42 @@ impl Optimizer {
             }
         }
 
+        //Before we can finish, we have to handle the
+        // _outside_ connection of our srcnode, or more specifically, the context variables. So iter
+        // those as well, and reconcet them with outrs
+
+        let cvcount = self
+            .graph
+            .node(src_node_region.node)
+            .node_type
+            .unwrap_lambda_ref()
+            .context_variable_count();
+        for cv in 0..cvcount {
+            let (cvsrc, cv_edge_ty) = {
+                if let Some(edg) = self
+                    .graph
+                    .node(src_node_region.node)
+                    .node_type
+                    .unwrap_lambda_ref()
+                    .cv_input(cv)
+                    .unwrap()
+                    .edge
+                {
+                    let edg = self.graph.edge(edg);
+                    (edg.src().clone(), edg.ty.structural_copy())
+                } else {
+                    //Was not connected, so ignore
+                    continue;
+                }
+            };
+
+            let dst = InportLocation {
+                node: dst_region.node,
+                input: InputType::ContextVariableInput(cv),
+            };
+            self.graph.connect(cvsrc, dst, cv_edge_ty).unwrap();
+        }
+
         //return new lambda
         dst_region_lambda
     }
@@ -154,6 +191,20 @@ impl Optimizer {
         //node, so we know our entry condition / entry-concept. The AccessField node itself will be removed in the
         //process, since we'll hook up the first specialized_node() to the output afterwards.
 
+        //soo, for the thingy to work, we first inline all _calls_ into the region. Which are calls to field_defs atm.
+        //we do that by just iterating _all_ nodes, and if its an apply-node,
+        // and if it is, call the rvsdg native inliner.
+        {
+            let all_nodes = self.graph.region(&region).unwrap().nodes.clone();
+            for node in all_nodes {
+                if self.graph.node(node).node_type.is_apply() {
+                    self.graph.inline_apply_node(node).unwrap();
+                }
+            }
+        }
+
+        //TODO: remove and do all the other stuff
+        return Ok(());
         let access_field_node_port = self
             .graph
             .region(&region)

@@ -575,13 +575,6 @@ impl FromTreeSitter for ImplBlock {
         ParserError::assert_ast_level_empty(ctx, children.next())?;
         ParserError::assert_node_no_error(ctx, node)?;
 
-        /*
-                println!(
-                    "Parsed:\ndst {:?}\noperands: {:?}\nconcept: {:?}\nargs: {:?}\nstmts: {:#?}",
-                    dst, operands, concept, concept_arg_naming, stmts
-                );
-        */
-
         Ok(ImplBlock {
             span: Span::from(node).with_file_maybe(ctx.get_file()),
             dst,
