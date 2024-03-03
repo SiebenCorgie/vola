@@ -34,6 +34,8 @@
 //
 //      Yet another idea is, to first specialise into a meta-tree that already resolved the sub-calls in each implblock, then resolve those to the actual lambda
 
+use std::env;
+
 use ahash::AHashMap;
 use rvsdg::{
     edge::{InportLocation, InputType, OutportLocation, OutputType},
@@ -194,8 +196,6 @@ impl Optimizer {
         //soo, for the thingy to work, we first inline all _calls_ into the region. Which are calls to field_defs atm.
         //we do that by just iterating _all_ nodes, and if its an apply-node,
         // and if it is, call the rvsdg native inliner.
-
-        return Ok(());
 
         {
             let all_nodes = self.graph.region(&region).unwrap().nodes.clone();
@@ -522,6 +522,9 @@ impl Optimizer {
         // 1. subtree count is as expected
         // 2. implementations exist, as requested by the imbl-block that is inlined.
 
+        if env::var("VOLA_DUMP_ALL").is_ok() || env::var("DUMP_BEFOR_SPECIALIZE").is_ok() {
+            self.dump_svg("before_specialize.svg");
+        }
         //NOTE: the first NodeRef of the pair's is invalid at this point
         for (_, new_lambda) in access_new_lambda_pairs {
             let lambda_region = RegionLocation {

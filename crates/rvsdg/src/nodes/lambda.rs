@@ -276,4 +276,8 @@ impl LambdaNode {
     pub fn argument_count(&self) -> usize {
         self.body.arguments.len() - self.cv_count
     }
+
+    pub fn result_count(&self) -> usize {
+        self.body.results.len()
+    }
 }

@@ -1,5 +1,7 @@
 //! Generic inliner.
 
+use core::panic;
+
 use crate::{
     edge::{InportLocation, InputType, LangEdge, OutportLocation, OutputType},
     err::GraphError,
@@ -120,8 +122,13 @@ impl<
         // as key, and the corresponding arg_src / res_dst as value. This allows us to catch all args and
         // dst later when reconnecting all node, an connect them to the correct dst immediately.
 
-        assert!(self.region(&lmd_region).unwrap().arguments.len() == arg_srcs.len());
-        assert!(self.region(&lmd_region).unwrap().results.len() == res_dsts.len());
+        let (src_lambda_arg_count, src_lambda_result_count) = match &self.node(call_lmd).node_type{
+            NodeType::Phi(phi) => (phi.argument_count(), phi.result_count()),
+            NodeType::Lambda(lmd) => (lmd.argument_count(), lmd.result_count()),
+            _ => panic!("Unexpected node type for callable!")
+        };
+        assert!(src_lambda_arg_count == arg_srcs.len());
+        assert!(src_lambda_result_count == res_dsts.len());
 
         //Check that there are no cv or rvs
         match &self.node(call_lmd).node_type {
