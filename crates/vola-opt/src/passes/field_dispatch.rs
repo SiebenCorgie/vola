@@ -39,7 +39,7 @@ use std::env;
 use ahash::AHashMap;
 use rvsdg::{
     edge::{InportLocation, InputType, OutportLocation, OutputType},
-    nodes::{self, LangNode, Node, StructuralNode},
+    nodes::{self, LangNode, Node, NodeType, StructuralNode},
     region::{Inport, RegionLocation},
     smallvec::{smallvec, SmallVec},
     util::copy::StructuralClone,
@@ -186,6 +186,35 @@ impl Optimizer {
         dst_region_lambda
     }
 
+    //Small recursive helper that explores all Apply nodes, and inlines their call-defs, before
+    //inlining itself.
+    fn fully_inline_region(&mut self, region: RegionLocation) -> Result<(), OptError> {
+        let all_nodes = self.graph.region(&region).unwrap().nodes.clone();
+
+        for node in all_nodes {
+            if self.graph.node(node).node_type.is_apply() {
+                let apply_node_call_port = InportLocation {
+                    node,
+                    input: InputType::Input(0),
+                };
+                if let Some(prod) = self.graph.find_producer_inp(apply_node_call_port) {
+                    assert!(self.graph.node(prod.node).node_type.is_lambda());
+                    //recursively inline this
+                    self.fully_inline_region(RegionLocation {
+                        node: prod.node,
+                        region_index: 0,
+                    })?;
+                    //now inline ourselfs
+                    self.graph.inline_apply_node(node).unwrap();
+                } else {
+                    //#[cfg(feature = "log")]
+                    //log::error!("ApplyNode {node} had no def in {region:?}");
+                    //NOTE: this can happen, if the all_nodes of the region changed. So we ignore that atm.
+                }
+            }
+        }
+        Ok(())
+    }
     ///Runs the actual specialization of an region.
     fn specialize_region(&mut self, region: RegionLocation) -> Result<(), OptError> {
         //we specialize the region by recursively calling _csg_-dialect nodes
@@ -197,14 +226,7 @@ impl Optimizer {
         //we do that by just iterating _all_ nodes, and if its an apply-node,
         // and if it is, call the rvsdg native inliner.
 
-        {
-            let all_nodes = self.graph.region(&region).unwrap().nodes.clone();
-            for node in all_nodes {
-                if self.graph.node(node).node_type.is_apply() {
-                    self.graph.inline_apply_node(node).unwrap();
-                }
-            }
-        }
+        self.fully_inline_region(region)?;
 
         //TODO: remove and do all the other stuff
         return Ok(());
