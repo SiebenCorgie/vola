@@ -24,6 +24,10 @@ pub enum InlineError {
     CallPortNotConnected,
     #[error("Could not find the Lambda or Phi definition port")]
     NoDefPortFound,
+    #[error("Phi node inlining not supported (yet)")]
+    WasPhiNode,
+    #[error("Failed to import context for inlined apply-node: {0}")]
+    FailedToImportContext(GraphError),
 }
 
 impl<
@@ -35,7 +39,7 @@ impl<
     /// if the apply-node's calldef couldn't be found.
     ///
     ///
-    /// NOTE: the inliner currently does not handle context and recursion variables.
+    /// NOTE: the inliner currently does not handle Phi nodes.
     pub fn inline_apply_node(&mut self, node: NodeRef) -> Result<(), InlineError> {
         let dst_region = self
             .node(node)
@@ -102,6 +106,10 @@ impl<
             return Err(InlineError::NodeWasNotApplyNode(node));
         };
 
+        if let NodeType::Phi(_) = &self.node(call_lmd).node_type {
+            return Err(InlineError::WasPhiNode);
+        }
+
         //we now have all information, so delete the apply node
         let _ = self.remove_node(node).unwrap();
 
@@ -115,6 +123,7 @@ impl<
         };
         let mut argument_remapping: AHashMap<OutportLocation, Option<(OutportLocation, E)>> =
             AHashMap::default();
+        let mut cv_remapping: AHashMap<OutportLocation, OutportLocation> = AHashMap::default();
         let mut result_remapping: AHashMap<InportLocation, SmallVec<[(InportLocation, E); 3]>> =
             AHashMap::default();
 
@@ -122,39 +131,28 @@ impl<
         // as key, and the corresponding arg_src / res_dst as value. This allows us to catch all args and
         // dst later when reconnecting all node, an connect them to the correct dst immediately.
 
-        let (src_lambda_arg_count, src_lambda_result_count) = match &self.node(call_lmd).node_type{
+        let (src_lambda_arg_count, src_lambda_result_count) = match &self.node(call_lmd).node_type {
             NodeType::Phi(phi) => (phi.argument_count(), phi.result_count()),
             NodeType::Lambda(lmd) => (lmd.argument_count(), lmd.result_count()),
-            _ => panic!("Unexpected node type for callable!")
+            _ => panic!("Unexpected node type for callable!"),
         };
         assert!(src_lambda_arg_count == arg_srcs.len());
         assert!(src_lambda_result_count == res_dsts.len());
 
-        //Check that there are no cv or rvs
-        match &self.node(call_lmd).node_type {
+        //Check that there are no rvs
+        let cvcount = match &self.node(call_lmd).node_type {
             NodeType::Phi(phi) => {
-                assert!(
-                    phi.cv_argument(0).is_none(),
-                    "Inliner does not support context variables!"
-                );
                 assert!(
                     phi.rv_argument(0).is_none(),
                     "Inliner does not support recursion variables!"
                 );
+                phi.context_variable_count()
             }
-            NodeType::Lambda(lmd) => {
-                assert!(
-                    self.node(call_lmd)
-                        .node_type
-                        .unwrap_lambda_ref()
-                        .cv_argument(0)
-                        .is_none(),
-                    "Inliner does not support context variables!"
-                );
-            }
+            NodeType::Lambda(l) => l.context_variable_count(),
             _ => panic!("Unexpected node type for callable in inliner"),
-        }
+        };
 
+        //Add the argument remapping
         for (argidx, src) in arg_srcs.into_iter().enumerate() {
             let lmd_port = OutportLocation {
                 node: call_lmd,
@@ -162,6 +160,32 @@ impl<
                 output: OutputType::Argument(argidx),
             };
             argument_remapping.insert(lmd_port, src);
+        }
+
+        //Add context variable remapping
+        //This is a little more involved. We add a new CV to the dst_lmd for each
+        //context variable that is connected in the src_region.
+
+        for cvidx in 0..cvcount {
+            //Try to find a producer for the orginal cvidx. If there is none, we can ignore that
+            let src_cv_port = OutportLocation {
+                node: call_lmd,
+                output: OutputType::ContextVariableArgument(cvidx),
+            };
+            if let Some(connected_callable) = self.find_producer_out(src_cv_port) {
+                //was connected, import the callable into the dst region and add the remapping
+                match self.import_context(connected_callable, dst_region) {
+                    Ok(dst_cv) => {
+                        //add to remapping
+                        let is_new = cv_remapping.insert(src_cv_port, dst_cv);
+                        assert!(is_new.is_none());
+                    }
+                    Err(e) => {
+                        return Err(InlineError::FailedToImportContext(e));
+                    }
+                }
+            }
+            //now import the source of the orginal cv-input to the just created one
         }
 
         for (res_idx, dsts) in res_dsts.into_iter().enumerate() {
@@ -195,8 +219,15 @@ impl<
                 )
             };
 
-            //remap src
-            if src.output.is_argument() {
+            //remap src.
+            //We first check if its a context variable, if so we use that
+            //map to do the remapping. Otherwise we check if its some _other_
+            //kind of region argument. For that we use the _argumenti_ remapping. And finally
+            //if it ain't that, its some kind of _normal_ region-internal sourec port, so we use that.
+            if let OutputType::ContextVariableArgument(_) = src.output {
+                let new_src_port = cv_remapping.get(&src).unwrap();
+                src = new_src_port.clone();
+            } else if src.output.is_argument() {
                 //use the argument remapping
                 if let Some((remap_port, remap_ty)) = argument_remapping.get(&src).unwrap() {
                     assert!(remap_ty == &ty);
