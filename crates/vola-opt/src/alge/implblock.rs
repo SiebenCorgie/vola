@@ -392,7 +392,8 @@ impl Optimizer {
 
         //Create the lambda node. NOTE that we currently alway export. For debug purposes.
         let (lmd, lmd_region) = self.graph.on_omega_node(|omg| {
-            omg.new_function(true, |lmd_builder| {
+            let export_impl_block = std::env::var("VOLA_EXPORT_ALL").is_ok();
+            omg.new_function(export_impl_block, |lmd_builder| {
                 lmd_builder.on_region(|reg| reg.parent_location())
             })
         });

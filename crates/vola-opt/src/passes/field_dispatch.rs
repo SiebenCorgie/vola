@@ -48,10 +48,16 @@ use rvsdg::{
 use vola_common::{report, Span};
 
 use crate::{
-    alge::DummyNode, csg::TreeAccess, error::OptError, OptEdge, OptNode, Optimizer, TypeState,
+    alge::{implblock::ConceptImplKey, DummyNode},
+    common::Ty,
+    csg::TreeAccess,
+    error::OptError,
+    OptEdge, OptNode, Optimizer, TypeState,
 };
 
+#[derive(Clone, Debug)]
 struct SpecializationContext {
+    //The concept that is _expected_.
     concept_name: String,
     //The span of the TreeAccess node based uppon we specialize.
     specialization_src: Span,
@@ -213,6 +219,9 @@ impl Optimizer {
                 }
             }
         }
+
+        //for good measures, remove all unused CVs after importing _everything_
+        self.graph.remove_unused_context_variables(region.node);
         Ok(())
     }
     ///Runs the actual specialization of an region.
@@ -228,8 +237,8 @@ impl Optimizer {
 
         self.fully_inline_region(region)?;
 
-        //TODO: remove and do all the other stuff
         return Ok(());
+
         let access_field_node_port = self
             .graph
             .region(&region)
@@ -270,6 +279,7 @@ impl Optimizer {
             .unwrap_simple_ref()
             .span
             .clone();
+
         let spec_ctx = SpecializationContext {
             concept_name: entry_concept.clone(),
             specialization_src: access_span,
@@ -294,12 +304,6 @@ impl Optimizer {
             })
             .unwrap();
         Ok(())
-    }
-
-    ///Inlines the `callnode` by querying the optimizer for that field def, and if found, deep-copying
-    //the field content to our region. Afte that we
-    fn inline_csg_call(&mut self, callnode: NodeRef) -> Result<NodeRef, OptError> {
-        todo!()
     }
 
     fn specialize_node(
@@ -342,11 +346,11 @@ impl Optimizer {
                                 .span
                                 .clone();
                             let err = OptError::AnySpannedWithSource {
-                            source_span: ctx.specialization_src.clone().into(),
-                            source_text: format!("While specializing for this"),
-                            text: format!("Argument {inidx} was of csg-dialect, after already seeing algebraic arguments. This is a call-convention violation..."),
-                            span: argnodespan.into(),
-                            span_text: format!("This is the argument node "),
+                                source_span: ctx.specialization_src.clone().into(),
+                                source_text: format!("While specializing for this"),
+                                text: format!("Argument {inidx} was of csg-dialect, after already seeing algebraic arguments. This is a call-convention violation..."),
+                                span: argnodespan.into(),
+                                span_text: format!("This is the argument node "),
                             };
                             report(err.clone(), ctx.specialization_src.get_file());
                             return Err(err);
@@ -399,12 +403,14 @@ impl Optimizer {
 
         //alright, sorted out the csg and alge-args. now continue by dispatching to the right kind of specialization. We've got
         // - CSGEntity Specialization: For CSGOps with no sub tree
-        // - CSGCall Specialization: For CSGCalls (also no sub-trees),
         // - CSGOpertaion: For CSGOps with 1..n sub trees.
-        //
-        // in each case we first checkout that the argument count matches, then we
-        todo!("implement the CSGOP only dispatch");
-        Ok(node)
+        let new_node = if csg_args.len() > 0 {
+            self.dispatch_csg_operation(ctx, node, csg_args, alge_args)?
+        } else {
+            self.dispatch_csg_entity(ctx, node, alge_args)?
+        };
+
+        Ok(new_node)
     }
 
     fn dispatch_csg_operation(
@@ -414,6 +420,16 @@ impl Optimizer {
         subtrees: SmallVec<[OutportLocation; 3]>,
         arguments: SmallVec<[OutportLocation; 3]>,
     ) -> Result<NodeRef, OptError> {
+        todo!()
+    }
+
+    fn dispatch_csg_entity(
+        &mut self,
+        ctx: &SpecializationContext,
+        srcnode: NodeRef,
+        arguments: SmallVec<[OutportLocation; 3]>,
+    ) -> Result<NodeRef, OptError> {
+        //Specializing an entity is pretty easy. Since those have no eval-nodes we can just copy all nodes into the ctx-region, hook up the edges and args and be done.
         todo!()
     }
 
@@ -537,6 +553,11 @@ impl Optimizer {
             });
         }
 
+        //For some house keeping, remove unused imports on the export after trace
+        //copying
+        self.graph
+            .remove_unused_context_variables(export_fn_region.node);
+
         //TODO: after trace copy, do the actual iterative replacement
         // of the nodes with the impl-block content, based on the tree structure.
         //
@@ -547,6 +568,7 @@ impl Optimizer {
         if env::var("VOLA_DUMP_ALL").is_ok() || env::var("DUMP_BEFOR_SPECIALIZE").is_ok() {
             self.dump_svg("before_specialize.svg");
         }
+
         //NOTE: the first NodeRef of the pair's is invalid at this point
         for (_, new_lambda) in access_new_lambda_pairs {
             let lambda_region = RegionLocation {

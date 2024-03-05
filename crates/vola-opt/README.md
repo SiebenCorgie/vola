@@ -16,7 +16,9 @@ There are multiple levels within opt, that get progressively lowered from an AST
 ## Hints
 
 - export `VOLA_BACKTRACE=1` to enable backtraces whenever the optimizer panics.
-
+- export `VOLA_DUMP_ALL=1` to dump intermediate states of the optimizers to svg
+  -> Have a look at the code base / grep for `VOLA_DUMP_*` to dump specific pass stages
+- export `VOLA_EXPORT_ALL=1` to export all λ-Regions, which in turn makes them visible to the debugger in all stages.
 
 ## Todo 📔
 

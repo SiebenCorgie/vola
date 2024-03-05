@@ -240,7 +240,8 @@ impl Optimizer {
 
         //Setup the λ-Region. Always export
         let (lambda, lambda_region) = self.graph.on_omega_node(|omg| {
-            omg.new_function(true, |lmd_builder| {
+            let export_field_def = std::env::var("VOLA_EXPORT_ALL").is_ok();
+            omg.new_function(export_field_def, |lmd_builder| {
                 lmd_builder.on_region(|reg| reg.parent_location())
             })
         });

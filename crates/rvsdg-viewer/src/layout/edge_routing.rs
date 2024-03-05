@@ -489,7 +489,7 @@ impl RegionLayout {
                     return Some(self.arg_ports[idx]);
                 }
             }
-            panic!("Edge was not contained in arguments!");
+            panic!("Edge {edge:?} of type {port:?} was not contained in arguments!");
         } else {
             //TODO no OutputType -> index mapping atm. So we just search for the output edge
             // in all output ports.
