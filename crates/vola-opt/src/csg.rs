@@ -59,6 +59,7 @@ macro_rules! implViewCsgOp {
 /// Used to build resolved.
 #[derive(LangNode, Debug)]
 pub struct CsgOp {
+    ///The operation or entity that is being called.
     pub op: String,
 
     pub subtree_count: usize,

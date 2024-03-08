@@ -40,6 +40,19 @@ pub enum OptError {
         span_text: String,
     },
 
+    #[error("Failed to dispatch field for {opname} and concept {concept}: {errstring}!")]
+    DispatchAnyError {
+        #[label("Trying to dispatch this operation")]
+        opspan: SourceSpan,
+        #[label("Trying to dispatch based on this tree-acces")]
+        treeaccessspan: SourceSpan,
+        #[label("Need to dispatch concept {concept} because of this eval")]
+        evalspan: SourceSpan,
+        concept: String,
+        opname: String,
+        errstring: String,
+    },
+
     #[error("{err}")]
     PostSpanned {
         err: Box<OptError>,

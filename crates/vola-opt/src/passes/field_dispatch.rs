@@ -40,7 +40,7 @@ use ahash::AHashMap;
 use rvsdg::{
     edge::{InportLocation, InputType, OutportLocation, OutputType},
     nodes::{self, LangNode, Node, NodeType, StructuralNode},
-    region::{Inport, RegionLocation},
+    region::{Argument, Inport, RegionLocation},
     smallvec::{smallvec, SmallVec},
     util::copy::StructuralClone,
     EdgeRef, NodeRef,
@@ -48,17 +48,14 @@ use rvsdg::{
 use vola_common::{report, Span};
 
 use crate::{
-    alge::{implblock::ConceptImplKey, DummyNode},
-    common::Ty,
-    csg::TreeAccess,
+    alge::{implblock::ConceptImplKey, EvalNode},
+    csg::{CsgOp, TreeAccess},
     error::OptError,
-    OptEdge, OptNode, Optimizer, TypeState,
+    OptEdge, Optimizer, TypeState,
 };
 
 #[derive(Clone, Debug)]
 struct SpecializationContext {
-    //The concept that is _expected_.
-    concept_name: String,
     //The span of the TreeAccess node based uppon we specialize.
     specialization_src: Span,
 }
@@ -237,7 +234,11 @@ impl Optimizer {
 
         self.fully_inline_region(region)?;
 
-        return Ok(());
+        //NOTE: This dump is prett _specific_, but good if you need to know if some CSG-Tree inline failes
+        //      unexpectedly.
+        if env::var("VOLA_DUMP_ALL").is_ok() || env::var("DUMP_AFTER_INLINE_CALL_TREE").is_ok() {
+            self.dump_svg(&format!("after_inline_call_tree_{}.svg", region.node));
+        }
 
         let access_field_node_port = self
             .graph
@@ -281,7 +282,6 @@ impl Optimizer {
             .clone();
 
         let spec_ctx = SpecializationContext {
-            concept_name: entry_concept.clone(),
             specialization_src: access_span,
         };
 
@@ -289,12 +289,16 @@ impl Optimizer {
             .graph
             .edge(entry_csg_op.expect("expected csgop to be connected!"))
             .src();
-        let specialized_entry_node = self.specialize_node(&spec_ctx, entry_node_port.node)?;
-        //reconncet output to the resulting node. This will effectively render all CSG-Nodes _dead_.
+        //NOTE we seed the specialization with the entry_csg node, and the TreeAccess node we start at.
+        let specialized_entry_node =
+            self.specialize_node(&spec_ctx, entry_node_port.node, access_field_node_port.node)?;
+
+        //reconnect output to the resulting node. This will effectively render all CSG-Nodes _dead_.
         let result_edge = self.graph.region(&region).unwrap().results[0]
             .edge
             .clone()
             .unwrap();
+
         self.graph.disconnect(result_edge).unwrap();
         //now connect the specialized_entry_node to that output
         self.graph
@@ -309,7 +313,10 @@ impl Optimizer {
     fn specialize_node(
         &mut self,
         ctx: &SpecializationContext,
-        node: NodeRef,
+        //the csg node that the specialization is based on
+        csg_node: NodeRef,
+        //the eval-like node we are specializing on.
+        dispatch_node: NodeRef,
     ) -> Result<NodeRef, OptError> {
         //At first we need to find out what kind of op this is. If it has no csg-dialect predecessors,
         // it is either a CSGOp or CSGCall.
@@ -321,9 +328,9 @@ impl Optimizer {
         let mut csg_args: SmallVec<[OutportLocation; 3]> = SmallVec::default();
         let mut alge_args: SmallVec<[OutportLocation; 3]> = SmallVec::default();
         let mut saw_alge_arg = false;
-        let argcount = self.graph.node(node).inputs().len();
+        let argcount = self.graph.node(csg_node).inputs().len();
         for inidx in 0..argcount {
-            if let Some(arg_edge) = self.graph.node(node).inputs()[inidx].edge {
+            if let Some(arg_edge) = self.graph.node(csg_node).inputs()[inidx].edge {
                 let src = self.graph.edge(arg_edge).src().clone();
                 //check out the argument type
                 match self
@@ -384,7 +391,7 @@ impl Optimizer {
             } else {
                 let argnodespan = self
                     .graph
-                    .node(node)
+                    .node(csg_node)
                     .node_type
                     .unwrap_simple_ref()
                     .span
@@ -401,36 +408,180 @@ impl Optimizer {
             }
         }
 
-        //alright, sorted out the csg and alge-args. now continue by dispatching to the right kind of specialization. We've got
-        // - CSGEntity Specialization: For CSGOps with no sub tree
-        // - CSGOpertaion: For CSGOps with 1..n sub trees.
-        let new_node = if csg_args.len() > 0 {
-            self.dispatch_csg_operation(ctx, node, csg_args, alge_args)?
-        } else {
-            self.dispatch_csg_entity(ctx, node, alge_args)?
+        //now query the concept of the dispatch node, as well as the
+        //entity/operation that is dispatched, since we have this info only now.
+        let concept = self.query_concept(dispatch_node)?;
+        let entity_or_op_name = self.query_eoo_name(csg_node)?;
+        //now we can build the Implblock key which we need to import.
+        let implblock_key = ConceptImplKey {
+            node_name: entity_or_op_name,
+            concept_name: concept,
         };
+
+        //now we have enough information to pull all the nodes in here
+        let new_node = self.inline_impl_block(
+            ctx,
+            csg_node,
+            dispatch_node,
+            implblock_key,
+            csg_args,
+            alge_args,
+        )?;
 
         Ok(new_node)
     }
 
-    fn dispatch_csg_operation(
+    fn query_concept(&self, node: NodeRef) -> Result<String, OptError> {
+        match &self.graph.node(node).node_type {
+            NodeType::Simple(s) => {
+                //first try downcasting to Eval, if that doesn't work, try downcasting to TreeAccess,
+                //if that doesn't work either, something is buggy
+                if let Some(eval) = s.try_downcast_ref::<EvalNode>() {
+                    return Ok(eval.concept().clone());
+                }
+
+                if let Some(taccess) = s.try_downcast_ref::<TreeAccess>() {
+                    return Ok(taccess.called_concept.clone());
+                }
+
+                //if we reached this, something is bugg.
+                let err = OptError::AnySpanned {
+                    span: s.span.clone().into(),
+                    text: "Expected either a TreeAccess expression, or a EvalNode expression!"
+                        .to_owned(),
+                    span_text: "Failed to get this nodes called concept".to_owned(),
+                };
+                report(err.clone(), s.span.get_file());
+                Err(err)
+            }
+            _ => Err(OptError::Any {
+                text: format!("Cound not query concept, was no simple node!"),
+            }),
+        }
+    }
+
+    ///Returns the EntityOrOp (eoo) name the `node` calls. Assumes that `node` is a CsgOp. Otherwise
+    /// returns an error.
+    fn query_eoo_name(&self, node: NodeRef) -> Result<String, OptError> {
+        match &self.graph.node(node).node_type {
+            NodeType::Simple(s) => {
+                if let Some(csgop) = s.try_downcast_ref::<CsgOp>() {
+                    Ok(csgop.op.clone())
+                } else {
+                    let err = OptError::AnySpanned {
+                        span: s.span.clone().into(),
+                        text: "Expected operation or entity!".to_owned(),
+                        span_text: "Failed to get this nodes entity or operation name".to_owned(),
+                    };
+                    report(err.clone(), s.span.get_file());
+                    Err(err)
+                }
+            }
+            _ => Err(OptError::Any {
+                text: format!("Colud not query eoo-name, expected simple node!"),
+            }),
+        }
+    }
+
+    //Inlines all nodes of a _block_key_ into `region`. Connects all `subrees` to the first
+    //arguments of the apropriate eval-nodes, as well as all arguments to the apropriate nodes.
+    //Then recurses while passing down the _right_ part of the subtree to [specialize_node].
+    //
+    // So the whole thing can be thought of as _inline-with-csg-tree-context_.
+    fn inline_impl_block(
         &mut self,
         ctx: &SpecializationContext,
-        srcnode: NodeRef,
+        csg_node: NodeRef,
+        dispatch_node: NodeRef,
+        block_key: ConceptImplKey,
         subtrees: SmallVec<[OutportLocation; 3]>,
         arguments: SmallVec<[OutportLocation; 3]>,
     ) -> Result<NodeRef, OptError> {
-        todo!()
-    }
+        //First inline _block_key_, hookup the evla-nodes appropriatly.
+        // Then recurse based on the hooked up sub-tree.
+        // Finally, return the _output_ node of the inlined impl_block
 
-    fn dispatch_csg_entity(
-        &mut self,
-        ctx: &SpecializationContext,
-        srcnode: NodeRef,
-        arguments: SmallVec<[OutportLocation; 3]>,
-    ) -> Result<NodeRef, OptError> {
-        //Specializing an entity is pretty easy. Since those have no eval-nodes we can just copy all nodes into the ctx-region, hook up the edges and args and be done.
-        todo!()
+        //NOTE at first we check the subtree-count matches. Type-Checking is handled based on the
+        //     concept definition. But we don't yet know that an appropriate concept implementation
+        //     exists, since we only know the tree yet.
+
+        let opspan = self
+            .graph
+            .node(csg_node)
+            .node_type
+            .unwrap_simple_ref()
+            .span
+            .clone();
+        let evalspan = self
+            .graph
+            .node(dispatch_node)
+            .node_type
+            .unwrap_simple_ref()
+            .span
+            .clone();
+
+        let (all_nodes, all_edges, concept_region) = {
+            let concept_impl = if let Some(blk) = self.concept_impl.get(&block_key) {
+                blk
+            } else {
+                let err = OptError::DispatchAnyError {
+                    opspan: opspan.into(),
+                    treeaccessspan: ctx.specialization_src.clone().into(),
+                    evalspan: evalspan.into(),
+                    concept: block_key.concept_name.clone(),
+                    opname: block_key.node_name.clone(),
+                    errstring: "concept is not implemented for this operation or entity".to_owned(),
+                };
+                report(err.clone(), ctx.specialization_src.get_file());
+                return Err(err);
+            };
+
+            //check that th impl block matches the subtree lenght for expected subtrees.
+
+            if concept_impl.cv_desc.len() != subtrees.len() {
+                let err = OptError::DispatchAnyError {
+                    opspan: opspan.into(),
+                    treeaccessspan: ctx.specialization_src.clone().into(),
+                    evalspan: evalspan.into(),
+                    concept: block_key.concept_name.clone(),
+                    opname: block_key.node_name.clone(),
+                    errstring: format!(
+                        "concept is implemented, but for {} subtrees, not {}",
+                        concept_impl.cv_desc.len(),
+                        subtrees.len()
+                    ),
+                };
+                report(err.clone(), ctx.specialization_src.get_file());
+                return Err(err);
+            }
+
+            //TODO: Decide if we wanna re-test that the arguments also match at this point?
+            //      That is already handled already before by another pass (while transforming AST->RVSDG),
+            //      but we kinda rely on it happening
+
+            let reg = self.graph.region(&concept_impl.lambda_region).unwrap();
+            (
+                reg.nodes.clone(),
+                reg.edges.clone(),
+                concept_impl.lambda_region,
+            )
+        };
+
+        //Allright, passed semantic checks, so lets copy over all the nodes and edges we found.
+        //also, while at it, read out if they where connected to an argument or cv (on the input side), or an
+        //result to the output side. In that case, record the remapping.
+        let mut node_remapping: AHashMap<NodeRef, NodeRef> = AHashMap::default();
+        let mut inport_remapping: AHashMap<InportLocation, InportLocation> = AHashMap::default();
+        let mut outport_remapping: AHashMap<OutportLocation, OutportLocation> = AHashMap::default();
+
+        for node in &all_nodes {}
+
+        //alright, after copying, re-map all edges as well.
+
+        //finally, find all _eval_ nodes and recurse via _inline_impl_block_ and the apropriate
+        //subtree.
+
+        todo!("Failed")
     }
 
     ///Dispatches the export_field with the given `ident`ifier.

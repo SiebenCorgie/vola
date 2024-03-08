@@ -212,7 +212,13 @@ impl<'a> AstLambdaBuilder<'a> {
                     .graph
                     .on_region(&self.lambda_region, |regbuilder| {
                         let (opnode, _) = regbuilder
-                            .connect_node(OptNode::new(EvalNode::new(argount), expr_span), &inputs)
+                            .connect_node(
+                                OptNode::new(
+                                    EvalNode::new(argount, evalexpr.concept.0.clone()),
+                                    expr_span,
+                                ),
+                                &inputs,
+                            )
                             .unwrap();
                         opnode.output(0)
                     })

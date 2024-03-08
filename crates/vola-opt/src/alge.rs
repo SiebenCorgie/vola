@@ -486,6 +486,8 @@ impl DialectNode for DummyNode {
 /// to that call.
 #[derive(LangNode, Debug)]
 pub struct EvalNode {
+    ///The concept that is being called.
+    called_concept: String,
     #[inputs]
     inputs: SmallVec<[Input; 3]>,
     ///The eval node itsel has only one output, the state that is produced by the called concept.
@@ -494,8 +496,13 @@ pub struct EvalNode {
 }
 
 impl EvalNode {
-    pub fn new(argount: usize) -> Self {
+    ///Returns the concept name that is called by this node.
+    pub fn concept(&self) -> &String {
+        &self.called_concept
+    }
+    pub fn new(argount: usize, concept: String) -> Self {
         EvalNode {
+            called_concept: concept,
             inputs: smallvec![Input::default(); argount + 1],
             out: Output::default(),
         }
@@ -511,6 +518,7 @@ impl DialectNode for EvalNode {
         OptNode {
             span,
             node: Box::new(EvalNode {
+                called_concept: self.called_concept.clone(),
                 inputs: smallvec![Input::default(); self.inputs.len()],
                 out: Output::default(),
             }),
