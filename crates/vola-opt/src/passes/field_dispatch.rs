@@ -45,19 +45,22 @@ use rvsdg::{
     util::copy::StructuralClone,
     EdgeRef, NodeRef,
 };
+use rvsdg_viewer::View;
 use vola_common::{report, Span};
 
 use crate::{
     alge::{implblock::ConceptImplKey, EvalNode},
     csg::{CsgOp, TreeAccess},
     error::OptError,
-    OptEdge, Optimizer, TypeState,
+    OptEdge, OptNode, Optimizer, TypeState,
 };
 
 #[derive(Clone, Debug)]
 struct SpecializationContext {
     //The span of the TreeAccess node based uppon we specialize.
     specialization_src: Span,
+    //the region we are specializing in
+    spec_region: RegionLocation,
 }
 
 impl Optimizer {
@@ -247,7 +250,7 @@ impl Optimizer {
             .result_src(&self.graph, 0)
             .unwrap();
 
-        let (entry_concept, entry_csg_op, entry_arguments) = {
+        let entry_csg_op = {
             assert!(
                 self.graph
                     .node(access_field_node_port.node)
@@ -267,11 +270,7 @@ impl Optimizer {
                 .unwrap();
             //Sort out what the entry op is, and what the args are.
             //by definition
-            (
-                tree_access_node.called_concept.clone(),
-                tree_access_node.get_op_edge(),
-                tree_access_node.get_args(),
-            )
+            tree_access_node.get_op_edge()
         };
         let access_span = self
             .graph
@@ -282,151 +281,199 @@ impl Optimizer {
             .clone();
 
         let spec_ctx = SpecializationContext {
-            specialization_src: access_span,
+            specialization_src: access_span.clone(),
+            spec_region: region,
         };
 
-        let entry_node_port = self
+        //TODO exchange the tree-access node with an eval-node, where the single
+        //     _entry-node-tree_ is hooked up, as well as the arguments, than use [specialzie_node]
+        //     to start the _standard_ specialization.
+        //NOTE: the -1 is, becasue EvalNode::new() adds an input for the csg-argument, which is in the
+        //      inputs().len() already.
+        let access_argcount = self.graph.node(access_field_node_port.node).inputs().len() - 1;
+        println!("Entry eval gets {access_argcount}");
+        let accessed_concept = self.query_concept(access_field_node_port.node)?;
+        //create the dummy node we use and connect that in place of the tree_access_node
+        let eval_node = OptNode::new(
+            EvalNode::new(access_argcount, accessed_concept),
+            access_span,
+        );
+
+        let seeding_eval_node = self
             .graph
-            .edge(entry_csg_op.expect("expected csgop to be connected!"))
-            .src();
+            .replace_node(access_field_node_port.node, eval_node)
+            .unwrap();
+
+        //We exected the seeding eval node to be connected directly to its src tree on input-0.
+        let entry_csg_node = self
+            .graph
+            .node(seeding_eval_node)
+            .input_src(&self.graph, 0)
+            .unwrap()
+            .node;
+
+        if env::var("VOLA_DUMP_ALL").is_ok() || env::var("DUMP_AFTER_ACCESSNODE_REWRITE").is_ok() {
+            self.dump_svg(&format!("after_access_node_rewrite_{}.svg", region.node));
+        }
+
         //NOTE we seed the specialization with the entry_csg node, and the TreeAccess node we start at.
-        let specialized_entry_node =
-            self.specialize_node(&spec_ctx, entry_node_port.node, access_field_node_port.node)?;
+        let specialized_entry_node = self.specialize_eval_node(&spec_ctx, seeding_eval_node)?;
 
-        //reconnect output to the resulting node. This will effectively render all CSG-Nodes _dead_.
-        let result_edge = self.graph.region(&region).unwrap().results[0]
-            .edge
-            .clone()
-            .unwrap();
-
-        self.graph.disconnect(result_edge).unwrap();
-        //now connect the specialized_entry_node to that output
-        self.graph
-            .on_region(&region, |reg| {
-                reg.connect_to_result(specialized_entry_node.output(0), InputType::Result(0))
-                    .unwrap()
-            })
-            .unwrap();
         Ok(())
     }
 
-    fn specialize_node(
+    fn specialize_eval_node(
         &mut self,
         ctx: &SpecializationContext,
-        //the csg node that the specialization is based on
-        csg_node: NodeRef,
         //the eval-like node we are specializing on.
         dispatch_node: NodeRef,
     ) -> Result<NodeRef, OptError> {
-        //At first we need to find out what kind of op this is. If it has no csg-dialect predecessors,
-        // it is either a CSGOp or CSGCall.
-        // If it has any csg-dialect predecessors, it will always be a CsgOp.
-        // So our first action is to scrape the inputs of that node for
-        // csg and non-csg arguments. Right now the CSG-Args have to be the first ones,
-        //so we try that first. If we find any CSG-Arg _after_ the first alge_arg, we bail.
+        if env::var("VOLA_DUMP_ALL").is_ok() || env::var("DUMP_DISPATCH").is_ok() {
+            self.dump_svg(&format!(
+                "dispatch_reg_{:?}_{dispatch_node:?}.svg",
+                ctx.spec_region.node
+            ));
+        }
 
-        let mut csg_args: SmallVec<[OutportLocation; 3]> = SmallVec::default();
-        let mut alge_args: SmallVec<[OutportLocation; 3]> = SmallVec::default();
-        let mut saw_alge_arg = false;
-        let argcount = self.graph.node(csg_node).inputs().len();
-        for inidx in 0..argcount {
-            if let Some(arg_edge) = self.graph.node(csg_node).inputs()[inidx].edge {
-                let src = self.graph.edge(arg_edge).src().clone();
-                //check out the argument type
-                match self
-                    .graph
-                    .node(src.node)
-                    .node_type
-                    .unwrap_simple_ref()
-                    .node
-                    .dialect()
-                {
-                    "csg" => {
-                        //If we already saw an alge arg, the call convention is violated. Shouldn't happen,
-                        //but since we are in the "[...] around and find out" stage of the project, test it anyways.
-                        if saw_alge_arg {
-                            let argnodespan = self
-                                .graph
-                                .node(src.node)
-                                .node_type
-                                .unwrap_simple_ref()
-                                .span
-                                .clone();
-                            let err = OptError::AnySpannedWithSource {
-                                source_span: ctx.specialization_src.clone().into(),
-                                source_text: format!("While specializing for this"),
-                                text: format!("Argument {inidx} was of csg-dialect, after already seeing algebraic arguments. This is a call-convention violation..."),
-                                span: argnodespan.into(),
-                                span_text: format!("This is the argument node "),
-                            };
-                            report(err.clone(), ctx.specialization_src.get_file());
-                            return Err(err);
-                        }
-                        csg_args.push(src);
-                    }
-                    "alge" => {
-                        //change to alge args if not done so already
-                        saw_alge_arg = true;
-                        alge_args.push(src);
-                    }
-                    e => {
-                        let argnodespan = self
-                            .graph
-                            .node(src.node)
-                            .node_type
-                            .unwrap_simple_ref()
-                            .span
-                            .clone();
-                        let err = OptError::AnySpannedWithSource {
-                            source_span: ctx.specialization_src.clone().into(),
-                            source_text: format!("While specializing for this"),
-                            text: format!("Argument {inidx} was of unexpected dialect \"{e}\""),
-                            span: argnodespan.into(),
-                            span_text: format!("This is the argument node "),
-                        };
-                        report(err.clone(), ctx.specialization_src.get_file());
-                        return Err(err);
-                    }
+        //check that the first argument is in fact a subtree. If not, this is an invalid tree-op pair
+        //since we _expect_ to have a subtree, but there are no more csg-nodes
+        let subtree = {
+            let srcport = self
+                .graph
+                .node(dispatch_node)
+                .input_src(&self.graph, 0)
+                .unwrap();
+            if let NodeType::Simple(s) = &self.graph.node(srcport.node).node_type {
+                //now make sure this is in fact a csg node
+                if s.node.dialect() != "csg" {
+                    panic!("Expected CSG sub node!");
+                } else {
+                    println!("Specializing {}", s.name());
+                    srcport
                 }
             } else {
-                let argnodespan = self
-                    .graph
-                    .node(csg_node)
-                    .node_type
-                    .unwrap_simple_ref()
-                    .span
-                    .clone();
-                let err = OptError::AnySpannedWithSource {
-                    source_span: ctx.specialization_src.clone().into(),
-                    source_text: format!("While specializing for this"),
-                    text: format!("Argument {inidx} was not specified"),
-                    span: argnodespan.into(),
-                    span_text: format!("While specializing this"),
-                };
-                report(err.clone(), ctx.specialization_src.get_file());
-                return Err(err);
+                panic!("Was not a simple node");
+            }
+        };
+
+        //NOTE index 0 was already checked
+        //NOTE (as well). By definition the first n-arguments are the _fields_ of the
+        //     entity or argument that is implemented. So the alge-args to the csg-node.
+        //     After that the alge-args to the concept that is implemented follow, which are the alge args to the
+        //     eval-node we are handling
+
+        let mut alge_args: SmallVec<[OutportLocation; 3]> = SmallVec::default();
+        let csg_argcount = self.graph.node(subtree.node).inputs().len();
+        for csgarg in 0..csg_argcount {
+            let srcport = self
+                .graph
+                .node(subtree.node)
+                .input_src(&self.graph, csgarg)
+                .unwrap();
+            match &self.graph.node(srcport.node).node_type {
+                NodeType::Simple(s) => {
+                    if s.node.dialect() != "alge" {
+                        panic!("Was not of alge dialect!");
+                    } else {
+                        alge_args.push(srcport);
+                    }
+                }
+                NodeType::Lambda(_l) => {
+                    if srcport.node == ctx.spec_region.node {
+                        println!("Detected argport");
+                        alge_args.push(srcport);
+                    } else {
+                        panic!("Unexpected λ-Node");
+                    }
+                }
+                _ => panic!("Unexpected node type!"),
+            }
+        }
+
+        //now append the alge-args of the eval-node
+        let argcount = self.graph.node(dispatch_node).inputs().len();
+        for inidx in 1..argcount {
+            let srcport = self
+                .graph
+                .node(dispatch_node)
+                .input_src(&self.graph, inidx)
+                .unwrap();
+            match &self.graph.node(srcport.node).node_type {
+                NodeType::Simple(s) => {
+                    if s.node.dialect() != "alge" {
+                        panic!("Was not of alge dialect!");
+                    } else {
+                        alge_args.push(srcport);
+                    }
+                }
+                NodeType::Lambda(_l) => {
+                    if srcport.node == ctx.spec_region.node {
+                        println!("Detected argport");
+                        alge_args.push(srcport);
+                    } else {
+                        panic!("Unexpected λ-Node");
+                    }
+                }
+                _ => panic!("Unexpected node type!"),
             }
         }
 
         //now query the concept of the dispatch node, as well as the
         //entity/operation that is dispatched, since we have this info only now.
         let concept = self.query_concept(dispatch_node)?;
-        let entity_or_op_name = self.query_eoo_name(csg_node)?;
+        let entity_or_op_name = self.query_eoo_name(subtree.node)?;
         //now we can build the Implblock key which we need to import.
         let implblock_key = ConceptImplKey {
             node_name: entity_or_op_name,
             concept_name: concept,
         };
 
+        //peek the subtrees of the csg_node that is hooked up to the nodei
+        let mut csg_subtrees = SmallVec::new();
+        for inidx in 0..self.graph.node(subtree.node).inputs().len() {
+            if let Some(src) = self.graph.node(subtree.node).input_src(&self.graph, inidx) {
+                if let NodeType::Simple(s) = &self.graph.node(src.node).node_type {
+                    if s.node.dialect() == "csg" {
+                        csg_subtrees.push(src);
+                    }
+                }
+            }
+        }
+
+        println!("Found args {alge_args:?}\nsubtrees {csg_subtrees:?}");
+
         //now we have enough information to pull all the nodes in here
         let new_node = self.inline_impl_block(
             ctx,
-            csg_node,
+            subtree.node,
             dispatch_node,
             implblock_key,
-            csg_args,
+            csg_subtrees,
             alge_args,
         )?;
+
+        println!("Replacing {} with {}", dispatch_node, new_node);
+
+        //reconnect output to the resulting node. This will effectively render all CSG-Nodes _dead_.
+        let result_edges = self.graph.node(dispatch_node).output_edges()[0].clone();
+        for edg in result_edges {
+            let dst = self.graph.edge(edg).dst().clone();
+            let result_ty = self.graph.disconnect(edg).unwrap();
+            println!("Hook up to {:?}", dst);
+            //now connect the specialized_entry_node to that output
+            self.graph
+                .connect(
+                    OutportLocation {
+                        node: new_node,
+                        output: OutputType::Output(0),
+                    },
+                    dst,
+                    result_ty,
+                )
+                .unwrap();
+        }
+        self.graph.remove_node(dispatch_node).unwrap();
+        self.graph.is_legal_structural().unwrap();
 
         Ok(new_node)
     }
@@ -538,7 +585,7 @@ impl Optimizer {
 
             //check that th impl block matches the subtree lenght for expected subtrees.
 
-            if concept_impl.cv_desc.len() != subtrees.len() {
+            if concept_impl.operands.len() != subtrees.len() {
                 let err = OptError::DispatchAnyError {
                     opspan: opspan.into(),
                     treeaccessspan: ctx.specialization_src.clone().into(),
@@ -547,7 +594,7 @@ impl Optimizer {
                     opname: block_key.node_name.clone(),
                     errstring: format!(
                         "concept is implemented, but for {} subtrees, not {}",
-                        concept_impl.cv_desc.len(),
+                        concept_impl.operands.len(),
                         subtrees.len()
                     ),
                 };
@@ -567,21 +614,165 @@ impl Optimizer {
             )
         };
 
-        //Allright, passed semantic checks, so lets copy over all the nodes and edges we found.
-        //also, while at it, read out if they where connected to an argument or cv (on the input side), or an
-        //result to the output side. In that case, record the remapping.
+        //aight, passed semantic checks, so lets copy over all the nodes and edges we found.
         let mut node_remapping: AHashMap<NodeRef, NodeRef> = AHashMap::default();
-        let mut inport_remapping: AHashMap<InportLocation, InportLocation> = AHashMap::default();
         let mut outport_remapping: AHashMap<OutportLocation, OutportLocation> = AHashMap::default();
+        let mut inport_remapping: AHashMap<InportLocation, InportLocation> = AHashMap::default();
 
-        for node in &all_nodes {}
+        for subtree in &subtrees {
+            println!("Subtree from {subtree:?}");
+        }
 
-        //alright, after copying, re-map all edges as well.
+        //register cv mapping
+        for cv in 0..self
+            .graph
+            .node(concept_region.node)
+            .node_type
+            .unwrap_lambda_ref()
+            .context_variable_count()
+        {
+            println!("Add remapping {cv}");
+            outport_remapping.insert(
+                OutportLocation {
+                    node: concept_region.node,
+                    output: OutputType::ContextVariableArgument(cv),
+                },
+                subtrees[cv].clone(),
+            );
+        }
+
+        //register argument mapping
+        for argidx in 0..arguments.len() {
+            println!("Remapping arg[{argidx}] to {:?}", arguments[argidx]);
+            outport_remapping.insert(
+                OutportLocation {
+                    node: concept_region.node,
+                    output: OutputType::Argument(argidx),
+                },
+                arguments[argidx].clone(),
+            );
+        }
+
+        //note add the region nodes, as well
+        let _ = node_remapping.insert(concept_region.node, ctx.spec_region.node);
+        //Argument ports are mapped to the provided _args_
+        for node in &all_nodes {
+            let cpy = self.graph.deep_copy_node(*node, ctx.spec_region);
+            let old = node_remapping.insert(*node, cpy);
+            assert!(old.is_none());
+        }
+
+        let mut result_src_nodes: SmallVec<[NodeRef; 1]> = SmallVec::default();
+        //re-map all edges as well. There is a lil
+        //thing, that is, we don't respect result-connected edges. Instead
+        //we just don't connect them at all, since that will be handeled by the
+        //caller (of this function), when hooking up the result.
+        for edge in &all_edges {
+            let (src, dst, ty) = {
+                let edg = self.graph.edge(*edge);
+                (edg.src(), edg.dst(), edg.ty.structural_copy())
+            };
+
+            //try remapping the port
+            let src = if let Some(alternate_src) = outport_remapping.get(&src) {
+                println!("Use remapping from {src:?} to {alternate_src:?}");
+                *alternate_src
+            } else {
+                //if not in remapping, remap the src's node instead and keep the output type
+
+                OutportLocation {
+                    node: *node_remapping.get(&src.node).unwrap(),
+                    output: src.output,
+                }
+            };
+
+            //if the dst is a result, register the node in result_src_nodes instead.
+            let dst = if dst.input.is_result() {
+                //use node remapping tho
+                result_src_nodes.push(src.node);
+                continue;
+            } else {
+                //is not a result, therfore remapp the node part
+                InportLocation {
+                    node: *node_remapping.get(&dst.node).unwrap(),
+                    input: dst.input,
+                }
+            };
+
+            //aight, lets hook them up again
+            self.graph.connect(src, dst, ty).unwrap();
+        }
 
         //finally, find all _eval_ nodes and recurse via _inline_impl_block_ and the apropriate
         //subtree.
+        for node in &all_nodes {
+            //use the remapping
+            let mapped_node = node_remapping.get(node).unwrap();
+            let is_eval_node = {
+                match &self.graph.node(*mapped_node).node_type {
+                    NodeType::Simple(s) => s.try_downcast_ref::<EvalNode>().is_some(),
+                    _ => false,
+                }
+            };
 
-        todo!("Failed")
+            if !is_eval_node {
+                continue;
+            }
+
+            //aigh, is a eval node, so recurse with the csg node that is connected to the eval node
+            let csg_node = self
+                .graph
+                .node(*mapped_node)
+                .input_src(&self.graph, 0)
+                .unwrap();
+            {
+                println!("using csgnode {}", csg_node.node);
+                let name = &self
+                    .graph
+                    .node(csg_node.node)
+                    .node_type
+                    .unwrap_simple_ref()
+                    .try_downcast_ref::<CsgOp>()
+                    .unwrap()
+                    .op;
+                println!("recursing with subtree {name}");
+            }
+
+            let output_node = self.specialize_eval_node(ctx, *mapped_node)?;
+            //now disconnect the eval node, and hookup the output node instead
+            let dst_nodes = self
+                .graph
+                .node(*mapped_node)
+                .output_dsts(&self.graph, 0)
+                .unwrap();
+            //also carry over the type of the edges
+            let ty = self
+                .graph
+                .edge(self.graph.node(*node).outputs()[0].edges[0])
+                .ty
+                .structural_copy();
+            assert!(self.graph.node(*mapped_node).outputs().len() == 1);
+
+            self.graph.remove_node(*mapped_node).unwrap();
+            for dst in dst_nodes {
+                self.graph
+                    .connect(
+                        OutportLocation {
+                            node: output_node,
+                            output: OutputType::Output(0),
+                        },
+                        dst,
+                        ty.structural_copy(),
+                    )
+                    .unwrap();
+            }
+        }
+
+        assert!(
+            result_src_nodes.len() == 1,
+            "expected only one result node (atm)"
+        );
+        Ok(result_src_nodes[0])
     }
 
     ///Dispatches the export_field with the given `ident`ifier.

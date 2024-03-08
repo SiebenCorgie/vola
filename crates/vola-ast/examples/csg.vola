@@ -29,11 +29,18 @@ impl Sphere for SDF3D(at){
      length(at) - radius
 }
 
+impl Sphere for Color(pos){
+    [1.0, 1.0, 1.0]
+}
+
 impl Box for SDF3D(at){
      let q = abs(at) - extent;
      length(max(q, [0.0, 0.0, 0.0])) + min(max(q.x, max(q.y, q.z)), 0.0)
 }
 
+impl Box for Color(at){
+    [0.0, at.x, extent.x]
+}
 
 //declares that `translate` takes a sub-expression and the
 //field
@@ -47,6 +54,12 @@ impl Union<l, r> for SDF3D(at) {
     let right = eval r.SDF3D(at);
     let new_result = min(left, right);
     new_result
+}
+
+impl Union<l,r> for Color(at){
+    let lcol = eval l.Color(at);
+    let rcol = eval r.Color(at);
+    min(lcol, rcol)
 }
 
 impl SmoothUnion<left, right> for SDF3D(at){
@@ -84,21 +97,6 @@ define subfield(trans: vec3){
 
 //Export interface of the SDF
 export myField(p: vec3, translation: vec3, some_lerp: s){
-    let some_formula = translation.x * 2.0;
-
-    csg all_field = SmoothUnion(1.0){
-        subfield(translation)
-    }{
-        Translate([30.0, 30.0, some_formula]){
-            Union(){
-                Round(1.0){
-                    Box([1.0, 0.5, 3.0])
-                }
-            }{
-                some_cube()
-            }
-        }
-    };
-
+    csg all_field = Box([42.0, 69.0, some_lerp]);
     (all_field.SDF3D(p), all_field.Color(p))
 }

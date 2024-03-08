@@ -1,7 +1,8 @@
 use core::panic;
 
 use crate::{
-    edge::{InportLocation, InputType, LangEdge, OutputType},
+    edge::{InportLocation, InputType, LangEdge, OutportLocation, OutputType},
+    err::GraphError,
     nodes::{LangNode, NodeType, StructuralNode},
     NodeRef, Rvsdg,
 };
@@ -128,5 +129,56 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
                 }
             }
         }
+    }
+
+    ///Shortcut to replace one node with another, which includes hooking up the replacee the same way `to_be_repled` was.
+    ///
+    /// Replaces `to_be_replaced` with `replacee` and returns `replacee`'s NodeRef.
+    ///
+    /// - Assumes that `replacee` has at least the input and output
+    /// amount as `to_be_replaced` has.
+    /// - Assumes `to_be_replaced` to be a `SimpleNode`.
+    /// - Assumes `to_be_replaced` to have a parent region.
+    ///
+    /// Note that `to_be_replaced` is not deleted from the graph, but compleatly unconnected in its region.
+    pub fn replace_node(
+        &mut self,
+        to_be_replaced: NodeRef,
+        replacee: N,
+    ) -> Result<NodeRef, GraphError> {
+        if !self.node(to_be_replaced).node_type.is_simple() {
+            return Err(GraphError::InvalidNode(to_be_replaced));
+        }
+
+        let parent_region = self.node(to_be_replaced).parent.unwrap();
+        let replacee_ref = self
+            .on_region(&parent_region, |r| r.insert_node(replacee))
+            .unwrap();
+
+        //collect all connected edges, then iterate them, disconnect the node,
+        //recover its value, and reconnect in on `replacee`
+        for input in self.node(to_be_replaced).input_edges() {
+            if let Some(input_edge) = input {
+                //disconnect, and reconnect
+                let src = self.edge(input_edge).src().clone();
+                let mut dst = self.edge(input_edge).dst().clone();
+                dst.node = replacee_ref;
+                let ty = self.disconnect(input_edge)?;
+                self.connect(src, dst, ty)?;
+            }
+        }
+        //similarly reconnect all outputs
+        for output in self.node(to_be_replaced).output_edges() {
+            for outedge in output {
+                let mut src = self.edge(outedge).src().clone();
+                let dst = self.edge(outedge).dst().clone();
+                src.node = replacee_ref;
+                let ty = self.disconnect(outedge)?;
+                self.connect(src, dst, ty)?;
+            }
+        }
+
+        //reconnected everything, so we can return
+        Ok(replacee_ref)
     }
 }

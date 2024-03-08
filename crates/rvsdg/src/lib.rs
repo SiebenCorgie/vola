@@ -88,7 +88,7 @@ impl EdgeRef {
     pub fn disconnect<N: LangNode + 'static, E: LangEdge + 'static>(
         self,
         ctx: &mut Rvsdg<N, E>,
-    ) -> Result<(), GraphError> {
+    ) -> Result<E, GraphError> {
         ctx.disconnect(self)
     }
 
@@ -237,7 +237,9 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
     /// Returns Ok if the disconnect was successful. Otherwise an error describing what went wrong. In general the disconnect will be
     /// executed as good as possible. Meaning, if one of the two nodes is invalid, the other one will be notified of the disconnect regardless.
     /// However, you should consider your graph unstable regardless after an failed disconnect.
-    pub fn disconnect(&mut self, edge: EdgeRef) -> Result<(), GraphError> {
+    ///
+    /// Returns the `ty` value of the disconnected edge, if successful
+    pub fn disconnect(&mut self, edge: EdgeRef) -> Result<E, GraphError> {
         if let Some(edge_val) = self.edges.remove(edge) {
             let Edge { src, dst, ty: _ } = edge_val;
 
@@ -317,7 +319,7 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
             if let Some(e) = err {
                 Err(e)
             } else {
-                Ok(())
+                Ok(edge_val.ty)
             }
         } else {
             Err(GraphError::InvalidEdge(edge))

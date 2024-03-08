@@ -32,42 +32,14 @@ pub struct ConceptImplKey {
     pub node_name: String,
 }
 
-///Key to a operand that allows access to a operand's concept.
-///
-/// for instance in the expression `eval a.color();` we access `operand` "a" and access the concept `color`.
-#[derive(Debug, Clone, PartialEq, Hash, Eq)]
-pub struct OperandAccessKey {
-    pub operand: String,
-    pub concept: String,
-}
-
-///Tracks Operand access in a concept impl. For later use and debug purposes.
-pub struct OperandAccess {
-    ///the port that is register for that operand access
-    pub outport: OutportLocation,
-    pub cv_index: usize,
-    pub access: SmallVec<[Span; 1]>,
-}
-
 ///Contains the meta data of a concept implementation
 pub struct ConceptImpl {
     pub span: Span,
     pub concept: Ident,
     pub node_type: CSGNodeTy,
 
-    /// Operand variable description. This is the actual _generic_ interface of this λ-Node.
-    ///
-    /// In practice we might know that `OP<a,b>` has _two_ sub-trees. However, we don't know which concepts
-    /// of a,b this λ is interested in. Therefore when building the block, everytime we eval a.X or b.Y, we check if concept
-    /// a.X or b.Y are already described by the argument-interface. If not, we push it into the lookup table.
-    ///
-    /// When building a CSG tree we can then configure a.X and b.Y via the argument, which always need to be Lambda nodes.
-    /// and call them as described by concept that is implemented.
-    ///
-    /// This map is keyed by operand-name first and operand's concept name second.
-    //TODO The hash map might be overkill, but its working right now.
-    // This is a 1..2 long hashmap usually. So this is really not worth it lol.
-    pub cv_desc: AHashMap<OperandAccessKey, OperandAccess>,
+    ///All named operands an their index.
+    pub operands: AHashMap<String, usize>,
 
     ///The λ-Node of this concept
     pub lambda: NodeRef,
@@ -108,47 +80,18 @@ impl LambdaBuilderCtx for ConceptImpl {
             .try_into()
             .expect("Could not convert ast-type to opt-type");
 
-        let key = OperandAccessKey {
-            operand: eval_expr.evaluator.0.clone(),
-            concept: eval_expr.concept.0.clone(),
-        };
-        if let Some(registered) = self.cv_desc.get_mut(&key) {
-            //Note that we use that
-            registered.access.push(eval_expr.span.clone());
-            return Ok((registered.outport.clone(), concept_ret_type));
+        //Assumes that the operand exists
+        if !self.operands.contains_key(&eval_expr.evaluator.0) {
+            return Err(OptError::Any {
+                text: format!("Operand {} does not exist", eval_expr.evaluator.0),
+            });
         }
+        let cv = *self.operands.get(&eval_expr.evaluator.0).unwrap();
 
-        //Not found, therefore add
-        let cv = builder
-            .opt
-            .graph
-            .node_mut(builder.lambda)
-            .node_type
-            .unwrap_lambda_mut()
-            .add_context_variable();
         let port = OutportLocation {
             node: builder.lambda,
             output: OutputType::ContextVariableArgument(cv),
         };
-
-        //now tag the port with the context type
-        builder.opt.typemap.push_attrib(
-            &port.clone().into(),
-            Ty::Callable {
-                concept: concept.name.0.clone(),
-            },
-        );
-
-        let old = self.cv_desc.insert(
-            key,
-            OperandAccess {
-                outport: port.clone(),
-                cv_index: cv,
-                access: smallvec![eval_expr.span.clone()],
-            },
-        );
-        //there shouldn't be one in here
-        assert!(old.is_none());
 
         Ok((port, concept_ret_type))
     }
@@ -386,6 +329,14 @@ impl Optimizer {
             node_name: src_csg_def.name.0.clone(),
         };
 
+        //Build the operand->index map
+        let operands = implblock
+            .operands
+            .iter()
+            .enumerate()
+            .map(|(idx, name)| (name.0.clone(), idx))
+            .collect();
+
         //At this point we should have verified the overall signature. We therefore start building the actual λ-Node.
         // We do this by building the function-context helper that contains all concept-args as defined variables, as well as the
         // operation variables.
@@ -397,6 +348,17 @@ impl Optimizer {
                 lmd_builder.on_region(|reg| reg.parent_location())
             })
         });
+
+        //register the context ports in the same order as the operands map was build
+        for (idx, _name) in implblock.operands.iter().enumerate() {
+            let lmdcvidx = self
+                .graph
+                .node_mut(lmd)
+                .node_type
+                .unwrap_lambda_mut()
+                .add_context_variable();
+            assert!(idx == lmdcvidx);
+        }
 
         let lmd_context = LmdContext::new_for_impl_block(
             &mut self.graph,
@@ -421,7 +383,7 @@ impl Optimizer {
             span: implblock.span.clone(),
             concept: implblock.concept.clone(),
             node_type: src_csg_def.ty.clone(),
-            cv_desc: AHashMap::default(),
+            operands,
 
             lambda: lmd,
             lambda_region: lmd_region,
