@@ -59,7 +59,7 @@ impl Union<l, r> for SDF3D(at) {
 impl Union<l,r> for Color(at){
     let lcol = eval l.Color(at);
     let rcol = eval r.Color(at);
-    min(lcol, rcol)
+    min(lcol, rcol) - [0.2, 0.1, 0.4]
 }
 
 impl SmoothUnion<left, right> for SDF3D(at){
@@ -97,6 +97,10 @@ define subfield(trans: vec3){
 
 //Export interface of the SDF
 export myField(p: vec3, translation: vec3, some_lerp: s){
-    csg all_field = Box([42.0, 69.0, some_lerp]);
+    csg all_field = Union(){
+        Box([42.0, 69.0, some_lerp])
+    }{
+        Sphere(1.0)  
+    };
     (all_field.SDF3D(p), all_field.Color(p))
 }

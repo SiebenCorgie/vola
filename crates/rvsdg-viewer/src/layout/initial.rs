@@ -11,7 +11,7 @@ pub struct NodeGrid {
 }
 
 impl RegionLayout {
-    pub fn sub_layout<'a, N: LangNode + 'static, E: LangEdge + 'static>(
+    pub fn sub_layout<'a, N: LangNode + View + 'static, E: LangEdge + 'static>(
         &mut self,
         rvsdg: &Rvsdg<N, E>,
         ignore_dead_nodes: bool,
@@ -24,7 +24,7 @@ impl RegionLayout {
     }
 
     ///Creates an initial layout for the region and its children
-    pub fn initial_layouting<N: LangNode + 'static, E: LangEdge + 'static>(
+    pub fn initial_layouting<N: LangNode + View + 'static, E: LangEdge + 'static>(
         &mut self,
         rvsdg: &Rvsdg<N, E>,
         ignore_dead_nodes: bool,
@@ -53,6 +53,13 @@ impl RegionLayout {
 
             let mut had_any_succ_connection = false;
             for succ in rvsdg.node(*noderef).succ(rvsdg) {
+                //NOTE: do not add succ nod, if succ is not contained in the
+                //      region layout. Otherwise we might block enqueing later on,
+                //      cause a dead-node is never reached
+                if !self.nodes.contains_key(&succ.node) && succ.node != self.src.node {
+                    continue;
+                }
+
                 had_any_succ_connection = true;
                 //branch prevents us from adding the sourrounding node.
                 if region.nodes.contains(&succ.node) {
@@ -62,6 +69,8 @@ impl RegionLayout {
 
             //If the node has no successor, it is a dead node by definition.
             if ignore_dead_nodes && !had_any_succ_connection {
+                //but mark as layouted anyways
+                layouted.insert(*noderef);
                 continue;
             }
 
@@ -118,6 +127,9 @@ impl RegionLayout {
                     "error: Could not layout all nodes, there are still {} nodes!",
                     waiting.len()
                 );
+                for w in &waiting {
+                    log::error!("node named: {}", rvsdg.node(w.node).name());
+                }
                 break;
             }
         }

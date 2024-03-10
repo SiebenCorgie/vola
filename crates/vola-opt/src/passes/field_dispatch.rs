@@ -50,6 +50,7 @@ use vola_common::{report, Span};
 
 use crate::{
     alge::{implblock::ConceptImplKey, EvalNode},
+    common::Ty,
     csg::{CsgOp, TreeAccess},
     error::OptError,
     OptEdge, OptNode, Optimizer, TypeState,
@@ -335,6 +336,13 @@ impl Optimizer {
             ));
         }
 
+        let region = self
+            .graph
+            .node(dispatch_node)
+            .parent
+            .as_ref()
+            .cloned()
+            .unwrap();
         //check that the first argument is in fact a subtree. If not, this is an invalid tree-op pair
         //since we _expect_ to have a subtree, but there are no more csg-nodes
         let subtree = {
@@ -343,6 +351,9 @@ impl Optimizer {
                 .node(dispatch_node)
                 .input_src(&self.graph, 0)
                 .unwrap();
+            //to be sure, trace the src port compleatly to its producer
+            let srcport = self.graph.find_producer_out(srcport).unwrap();
+
             if let NodeType::Simple(s) = &self.graph.node(srcport.node).node_type {
                 //now make sure this is in fact a csg node
                 if s.node.dialect() != "csg" {
@@ -372,14 +383,14 @@ impl Optimizer {
                 .unwrap();
             match &self.graph.node(srcport.node).node_type {
                 NodeType::Simple(s) => {
-                    if s.node.dialect() != "alge" {
-                        panic!("Was not of alge dialect!");
-                    } else {
+                    if s.node.dialect() == "alge" {
+                        //If this is an argument to the subtree that is being called, add it to
+                        //the list
                         alge_args.push(srcport);
                     }
                 }
                 NodeType::Lambda(_l) => {
-                    if srcport.node == ctx.spec_region.node {
+                    if srcport.node == region.node {
                         println!("Detected argport");
                         alge_args.push(srcport);
                     } else {
@@ -389,7 +400,6 @@ impl Optimizer {
                 _ => panic!("Unexpected node type!"),
             }
         }
-
         //now append the alge-args of the eval-node
         let argcount = self.graph.node(dispatch_node).inputs().len();
         for inidx in 1..argcount {
@@ -407,7 +417,7 @@ impl Optimizer {
                     }
                 }
                 NodeType::Lambda(_l) => {
-                    if srcport.node == ctx.spec_region.node {
+                    if srcport.node == region.node {
                         println!("Detected argport");
                         alge_args.push(srcport);
                     } else {
@@ -417,7 +427,7 @@ impl Optimizer {
                 _ => panic!("Unexpected node type!"),
             }
         }
-
+        println!("... and {} args", alge_args.len());
         //now query the concept of the dispatch node, as well as the
         //entity/operation that is dispatched, since we have this info only now.
         let concept = self.query_concept(dispatch_node)?;
@@ -429,7 +439,7 @@ impl Optimizer {
         };
 
         //peek the subtrees of the csg_node that is hooked up to the nodei
-        let mut csg_subtrees = SmallVec::new();
+        let mut csg_subtrees: SmallVec<[OutportLocation; 3]> = SmallVec::new();
         for inidx in 0..self.graph.node(subtree.node).inputs().len() {
             if let Some(src) = self.graph.node(subtree.node).input_src(&self.graph, inidx) {
                 if let NodeType::Simple(s) = &self.graph.node(src.node).node_type {
@@ -440,19 +450,64 @@ impl Optimizer {
             }
         }
 
-        println!("Found args {alge_args:?}\nsubtrees {csg_subtrees:?}");
+        //Now, we _inline_ by deep-copying the λ-region of the concept into our region, then hooking up the sub-trees and
+        //arguments as described, and finally replacing the eval_node with a apply node that calls the specialized local λ-node
+        //with the apropriate arguments.
+        let local_lmd_node = {
+            //TODO error handling
+            let concept = self
+                .concept_impl
+                .get(&implblock_key)
+                .expect(&format!("{implblock_key:?} was not implemented"));
+            self.graph.deep_copy_node(concept.lambda, region)
+        };
 
-        //now we have enough information to pull all the nodes in here
-        let new_node = self.inline_impl_block(
-            ctx,
-            subtree.node,
-            dispatch_node,
-            implblock_key,
-            csg_subtrees,
-            alge_args,
-        )?;
+        //hook up the subtrees
+        for (subidx, subtree_output) in csg_subtrees.iter().enumerate() {
+            //If needed, import the subtree_output to our region.
+            let subtree_output = if self.graph.node(subtree_output.node).parent.unwrap() != region {
+                self.graph.import_context(*subtree_output, region).unwrap()
+            } else {
+                *subtree_output
+            };
 
-        println!("Replacing {} with {}", dispatch_node, new_node);
+            self.graph
+                .connect(
+                    subtree_output,
+                    InportLocation {
+                        node: local_lmd_node,
+                        input: InputType::ContextVariableInput(subidx),
+                    },
+                    OptEdge::Value {
+                        ty: TypeState::Set(Ty::CSGTree),
+                    },
+                )
+                .unwrap();
+        }
+
+        //now hookup the arguments, as needed to the apply node, that calls this
+        //before we can actually do that, we have to make sure, that the argument is actually in our context thought.
+        for argport in &mut alge_args {
+            *argport = if self.graph.node(argport.node).parent.unwrap() != region {
+                self.graph.import_context(*argport, region).unwrap()
+            } else {
+                *argport
+            };
+        }
+        let lmd_call = self
+            .graph
+            .on_region(&region, |reg| {
+                //This is one of those rare cases, where we construct the apply node, since we currently do not known the actuall correct
+                //pattern
+                let (callnode, _) = reg
+                    .call(
+                        local_lmd_node.as_outport_location(OutputType::LambdaDeclaration),
+                        &alge_args,
+                    )
+                    .unwrap();
+                callnode
+            })
+            .unwrap();
 
         //reconnect output to the resulting node. This will effectively render all CSG-Nodes _dead_.
         let result_edges = self.graph.node(dispatch_node).output_edges()[0].clone();
@@ -464,7 +519,7 @@ impl Optimizer {
             self.graph
                 .connect(
                     OutportLocation {
-                        node: new_node,
+                        node: lmd_call,
                         output: OutputType::Output(0),
                     },
                     dst,
@@ -473,9 +528,34 @@ impl Optimizer {
                 .unwrap();
         }
         self.graph.remove_node(dispatch_node).unwrap();
+        //for sanity, check that
+        #[cfg(debug_assertions)]
         self.graph.is_legal_structural().unwrap();
+        assert!(!self.graph.region_has_cycles(region));
 
-        Ok(new_node)
+        //finally, recurse into the just created region.
+        let allnodes = self
+            .graph
+            .region(&RegionLocation {
+                node: local_lmd_node,
+                region_index: 0,
+            })
+            .unwrap()
+            .nodes
+            .clone();
+        for node in allnodes {
+            let is_eval_node = match &self.graph.node(node).node_type {
+                NodeType::Simple(s) => s.try_downcast_ref::<EvalNode>().is_some(),
+                _ => false,
+            };
+            if is_eval_node {
+                self.specialize_eval_node(ctx, node)?;
+            }
+        }
+
+        self.graph.remove_unused_context_variables(local_lmd_node);
+
+        Ok(lmd_call)
     }
 
     fn query_concept(&self, node: NodeRef) -> Result<String, OptError> {
