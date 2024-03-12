@@ -44,7 +44,7 @@ pub enum OptError {
     DispatchAnyError {
         #[label("Trying to dispatch this operation")]
         opspan: SourceSpan,
-        #[label("Trying to dispatch based on this tree-acces")]
+        #[label("Trying to dispatch based on this tree-access")]
         treeaccessspan: SourceSpan,
         #[label("Need to dispatch concept {concept} because of this eval")]
         evalspan: SourceSpan,

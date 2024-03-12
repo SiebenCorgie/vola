@@ -65,7 +65,7 @@ impl<
             };
             let indef = self.find_producer_inp(inport);
 
-            //now trace it
+            //now trace it, NOTE that only the first input _must_ be a callable.
             let call_lmd_def = if let Some(calldef) = self.find_callabel_def(call_src) {
                 calldef.node
             } else {

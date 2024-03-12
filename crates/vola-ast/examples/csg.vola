@@ -49,6 +49,10 @@ impl Translate<sub> for SDF3D(at){
     eval sub.SDF3D(at)
 }
 
+impl Translate<sub> for Color(p){
+    eval sub.Color(p)
+}
+
 impl Union<l, r> for SDF3D(at) {
     let left = eval l.SDF3D(at);
     let right = eval r.SDF3D(at);
@@ -98,7 +102,7 @@ define subfield(trans: vec3){
 //Export interface of the SDF
 export myField(p: vec3, translation: vec3, some_lerp: s){
     csg all_field = Union(){
-        Box([42.0, 69.0, some_lerp])
+        subfield(translation)
     }{
         Sphere(1.0)  
     };

@@ -1,9 +1,13 @@
 use core::panic;
 
+use ahash::{AHashMap, AHashSet};
+use smallvec::SmallVec;
+
 use crate::{
     edge::{InportLocation, InputType, LangEdge, OutportLocation, OutputType},
     err::GraphError,
     nodes::{LangNode, NodeType, StructuralNode},
+    region::{Input, Output, RegionLocation},
     NodeRef, Rvsdg,
 };
 
@@ -24,8 +28,16 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
             _ => return,
         };
 
+        //now we build a new cv connection table, and reconnect everything based on that.
+        //NOTE: This is not the _fastest_ way, but the most correct. I tried using a
+        //      _iterate, collect and rewire dst/src-ports_, but that was always buggy,
+        //      so we go the _ez_ road now.
+
+        //Remaps an _old_ cv-index to a new cv-index
+        let mut remapping_table: AHashMap<usize, usize> = AHashMap::default();
+        let mut next_unused_cv_idx = 0;
         //for each cv, check if it is connected internally, if not,
-        //call the remover 🧹
+        //call the remover 🧹, otherwise, add to the mappin
         for cvidx in 0..cvcount {
             let is_connected = if let Some(cv) = self
                 .node(node)
@@ -39,7 +51,10 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
             };
 
             //if not connected internally, remove any outside connection if there is any.
-            if !is_connected {
+            if is_connected {
+                remapping_table.insert(cvidx, next_unused_cv_idx);
+                next_unused_cv_idx += 1;
+            } else {
                 if let Some(inport) = self
                     .node(node)
                     .inport(&InputType::ContextVariableInput(cvidx))
@@ -55,79 +70,89 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
             }
         }
 
-        //now, in reverse order, remove CV-Ports that have nothing connected anymore,
-        // and decrement the port_idx of any cv_edge that is connected to any of the
-        // cvs _following_ that... yeah its convoluted
-        //NOTE: Since all arguments are _after_ the CVs, we can just decrement the CVcounter
-        //      And remove the ports from the node and its inner region.
-        for cvidx in (0..cvcount).rev() {
-            let is_connected = if let Some(cv) = self
+        if remapping_table.len() == cvcount {
+            //in this case we can early return, since we ain't remapping anything.
+            return;
+        }
+
+        //now use the remapping, to disconnect all ports, and
+        //save where they need to be connected to _in the next loop_.
+        //we can't do that at once, since there might still be connection for any given
+        //cv port.
+        let mut remap_targets: SmallVec<[(InportLocation, OutportLocation, E); 3]> =
+            SmallVec::new();
+        for src_cv_idx in remapping_table.keys() {
+            if let Some(edgref) = self
                 .node(node)
-                .outport(&OutputType::ContextVariableArgument(cvidx))
+                .inport(&InputType::ContextVariableInput(*src_cv_idx))
+                .unwrap()
+                .edge
             {
-                cv.edges.len() > 0
-            } else {
-                #[cfg(feature = "log")]
-                log::warn!("Found invalid cv_idx {cvidx}, ignoring");
-                continue;
-            };
+                let original_src = self.edge(edgref).src().clone();
+                let ty = self.disconnect(edgref).unwrap();
 
-            if is_connected {
-                continue;
+                let remapped_cv = remapping_table.get(src_cv_idx).unwrap();
+                remap_targets.push((
+                    InportLocation {
+                        node,
+                        input: InputType::ContextVariableInput(*remapped_cv),
+                    },
+                    original_src,
+                    ty,
+                ));
             }
 
-            match &mut self.node_mut(node).node_type {
-                NodeType::Lambda(lmd) => {
-                    lmd.cv_count -= 1;
-                    lmd.inputs.remove(cvidx);
-                    lmd.body.arguments.remove(cvidx);
-                }
-                NodeType::Phi(p) => {
-                    p.cv_count -= 1;
-                    p.inputs.remove(cvidx);
-                    p.body.arguments.remove(cvidx);
-                }
-                _ => panic!(),
-            }
+            //now do the same for all dst. NOTE that we clone the edge-array, since we are changing it in thae
+            // self.disconnect() call.
+            for edgref in self
+                .node(node)
+                .outport(&OutputType::ContextVariableArgument(*src_cv_idx))
+                .unwrap()
+                .edges
+                .clone()
+            {
+                let original_dst = self.edge(edgref).dst().clone();
+                let ty = self.disconnect(edgref).unwrap();
 
-            //Update cvount, since we just removed one
-            cvcount -= 1;
-            //now decrement all following
-            for dec_cv_idx in (1 + cvidx)..cvcount {
-                if let Some(connected_inport) = self
-                    .node(node)
-                    .inport(&InputType::ContextVariableInput(dec_cv_idx))
-                {
-                    if let Some(edg) = connected_inport.edge {
-                        match &mut self.edge_mut(edg).dst.input {
-                            InputType::ContextVariableInput(deccv) => {
-                                assert!(*deccv == dec_cv_idx + 1);
-                                *deccv -= 1;
-                            }
-                            _ => panic!("Expected Context Variable"),
-                        }
-                    }
-                } else {
-                    panic!("expected dec_cv_idx to be existent");
-                }
-
-                if let Some(outp) = self
-                    .node(node)
-                    .outport(&OutputType::ContextVariableArgument(dec_cv_idx))
-                {
-                    for edg in outp.edges.clone() {
-                        match &mut self.edge_mut(edg).src.output {
-                            OutputType::ContextVariableArgument(deccv) => {
-                                assert!(*deccv == dec_cv_idx + 1);
-                                *deccv -= 1;
-                            }
-                            _ => panic!("expected CV"),
-                        }
-                    }
-                } else {
-                    panic!("Expected dec_cv_idx arg to be existent");
-                }
+                let remapped_cv = remapping_table.get(src_cv_idx).unwrap();
+                remap_targets.push((
+                    original_dst,
+                    OutportLocation {
+                        node,
+                        output: OutputType::ContextVariableArgument(*remapped_cv),
+                    },
+                    ty,
+                ));
             }
+        }
+        //finally reconnect all edges and remove all unused cvs
+        for remap_target in remap_targets {
+            self.connect(remap_target.1, remap_target.0, remap_target.2)
+                .unwrap();
+        }
+
+        assert!(remapping_table.len() <= cvcount);
+
+        match &mut self.node_mut(node).node_type {
+            NodeType::Lambda(l) => {
+                //remove all the cvs that are unused
+                for _ in remapping_table.len()..cvcount {
+                    l.inputs.remove(remapping_table.len());
+                    l.body.arguments.remove(remapping_table.len());
+                }
+                //now decrement the cv-count
+                l.cv_count = remapping_table.len();
+            }
+            NodeType::Phi(p) => {
+                //remove the input-argument pair
+                for _ in remapping_table.len()..cvcount {
+                    p.inputs.remove(remapping_table.len());
+                    p.body.arguments.remove(remapping_table.len());
+                }
+                //now decrement the cv-count
+                p.cv_count = remapping_table.len();
+            }
+            _ => panic!("unexpected non λ- or ϕ-Node"),
         }
     }
 
@@ -180,5 +205,22 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
 
         //reconnected everything, so we can return
         Ok(replacee_ref)
+    }
+
+    ///Utility that connects all node, that are `live`, so connected to any result
+    ///in some way.
+    pub fn live_variables(&self, region: RegionLocation) -> Vec<NodeRef> {
+        let mut live_variables = AHashSet::default();
+
+        let region = self.region(&region).unwrap();
+        for resultidx in 0..region.results.len() {
+            if let Some(src) = region.result_src(self, resultidx) {
+                for pred in self.walk_predecessors(src.node) {
+                    live_variables.insert(pred.node);
+                }
+            }
+        }
+
+        live_variables.into_iter().collect()
     }
 }
