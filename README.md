@@ -18,40 +18,39 @@ The whole thing is highly experimental at the moment. Don't use it for anything 
 
 ## Goal
 
-We try to create a language and intermediate distance function (DF) representation that makes it easy to write, and programmatically generate such distance fields. The final compiler should make 
+We try to create a language and intermediate representation for distance function (DF) that makes it easy to write, and programmatically generate such distance fields. The final compiler should make 
 it possible to patch code that targets GPU execution at runtime in an efficient manor.
 
 An example field that describes a sphere translated by one unit on `X` might look like this:
 
 ```
-prim sphere(radius){
-  def s;
-  s.@ = length(@ - radius);
-  s
+entity Sphere(radius: s);
+operation Translate(trans: vec3);
+concept SDF3D: vec3 -> s;
+
+//Implements the SDF3D Concept for the Sphere
+impl Sphere for SDF3D(at){
+     length(at) - radius
+}
+//Implements the translation operation on one operand for SDF3D.
+impl Translate<sub> for SDF3D(at){
+    at = at - trans;
+    eval sub.SDF3D(at)
 }
 
-op translate<p>(translation){
-  @ -= translation;
-  p
-}
-
-//Smallest version
-field my_sdf(){
-  translate<sphere(5.0)>([1.0, 0.0, 0.0])
-}
-
-//Or, more readable
-field my_sdf(){
-  //Define a sphere with radius 0;
-  def my_sphere = sphere(5.0);
-  //Use OP "translate" on sdf "my_sphere" with the argument vec3 = [1,0,0].
-  def translated_sphere = translate<my_sphere>([1.0, 0.0, 0.0]);
-  //Return the sphere.
-  translated_sphere
+export myField(pos: vec3){
+    csg field = Translate([1, 0, 0]){
+        Sphere(1.0)  
+    };
+    
+    //Returns the result of `field` evaluated for the 
+    //signed distance field concept SDF3D at the location
+    // `pos`.
+    field.SDF3D(pos)
 }
 ```
 
-For more examples either have a look at the syntax [test corpus](crates/tree-sitter-vola/corpus) or the [idea.md](https://gitlab.com/tendsinmende/vola/-/blob/main/docs/ideas.md?ref_type=heads#syntax-examples) file.
+For more examples either have a look at the syntax [test corpus](https://gitlab.com/tendsinmende/tree-sitter-vola/-/tree/main/corpus) or the [idea.md](https://gitlab.com/tendsinmende/vola/-/blob/main/docs/ideas.md?ref_type=heads#syntax-examples) file.
 
 
 ## Techstack / Packages
@@ -105,7 +104,7 @@ Some packages have a `dot` feature. This lets you create [DOT](https://en.wikipe
 
 ## Support
 
-The language's grammar is located in `crates/vola-parser/grammar.js`
+The language's grammar is located in [its own repository](https://gitlab.com/tendsinmende/tree-sitter-vola/-/blob/main/grammar.js).
 
 Some thoughts / documentation regarding the language can be found in `docs/`.
 
@@ -117,7 +116,7 @@ If you are interested in the runtime SPIR-V patching, have a look at [spv-patche
 **Milestone 0**: MVP
 
 - [x] Simple grammar to get started
-- [ ] Simple middle end pass (static-dispatch, type resolving etc.)
+- [x] Simple middle end pass (static-dispatch, type resolving etc.)
 - [ ] middle-end => SPIR-T pass for gpu code emission. 
 - [ ] SPIR-V test app (`dry-run`) that tests the whole text-file -> SPIR-V chain
 - [ ] Vulkan test app (`runtime-patch`) that tests runtime patching of actually executed shaders.

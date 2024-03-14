@@ -7,7 +7,7 @@ use crate::{
     edge::{InportLocation, InputType, LangEdge, OutportLocation, OutputType},
     err::GraphError,
     nodes::{LangNode, NodeType, StructuralNode},
-    region::{Input, Output, RegionLocation},
+    region::RegionLocation,
     NodeRef, Rvsdg,
 };
 
@@ -21,7 +21,7 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
     /// This will remove all cv-nodes that are not used within the region of `node`, regardless if
     /// they are connected from the outside.
     pub fn remove_unused_context_variables(&mut self, node: NodeRef) {
-        let mut cvcount = match &self.node(node).node_type {
+        let cvcount = match &self.node(node).node_type {
             NodeType::Lambda(l) => l.context_variable_count(),
             NodeType::Phi(p) => p.context_variable_count(),
             //We do not do anything on those
@@ -207,16 +207,23 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
         Ok(replacee_ref)
     }
 
-    ///Utility that connects all node, that are `live`, so connected to any result
+    ///Utility that collects all node, that are `live`, so connected to any result
     ///in some way.
-    pub fn live_variables(&self, region: RegionLocation) -> Vec<NodeRef> {
+    pub fn live_nodes(&self, region: RegionLocation) -> Vec<NodeRef> {
         let mut live_variables = AHashSet::default();
 
-        let region = self.region(&region).unwrap();
-        for resultidx in 0..region.results.len() {
-            if let Some(src) = region.result_src(self, resultidx) {
-                for pred in self.walk_predecessors(src.node) {
-                    live_variables.insert(pred.node);
+        let region_content = self.region(&region).unwrap();
+        for resultidx in 0..region_content.results.len() {
+            if let Some(src) = region_content.result_src(self, resultidx) {
+                //insert the seeding node. If this wasn't already in the map, wal the predecessors as well
+                if live_variables.insert(src.node) {
+                    for pred in self.walk_predecessors(src.node) {
+                        //ignore the src region
+                        if pred.node == region.node {
+                            continue;
+                        }
+                        live_variables.insert(pred.node);
+                    }
                 }
             }
         }

@@ -24,7 +24,7 @@ use rvsdg::{
     edge::{InportLocation, OutportLocation, OutputType},
     nodes::{ApplyNode, NodeType},
     region::RegionLocation,
-    smallvec::{SmallVec, ToSmallVec},
+    smallvec::SmallVec,
     NodeRef,
 };
 use vola_common::{report, Span};

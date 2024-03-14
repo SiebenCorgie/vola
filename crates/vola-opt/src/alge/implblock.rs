@@ -15,7 +15,6 @@ use ahash::AHashMap;
 use rvsdg::{
     edge::{InputType, OutportLocation, OutputType},
     region::RegionLocation,
-    smallvec::{smallvec, SmallVec},
     NodeRef,
 };
 use vola_ast::{

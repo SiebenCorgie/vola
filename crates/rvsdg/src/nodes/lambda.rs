@@ -1,12 +1,9 @@
-use std::slice;
-
-use graphviz_rust::print;
-
 use crate::{
     edge::{InputType, OutputType},
     region::{Argument, Input, Output, RegResult, Region},
     SmallColl,
 };
+use std::slice;
 
 use super::StructuralNode;
 

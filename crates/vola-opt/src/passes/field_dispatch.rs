@@ -39,11 +39,11 @@ use std::env;
 use ahash::AHashMap;
 use rvsdg::{
     edge::{InportLocation, InputType, OutportLocation, OutputType},
-    nodes::{self, LangNode, Node, NodeType, StructuralNode},
-    region::{Argument, Inport, RegionLocation},
+    nodes::{NodeType, StructuralNode},
+    region::{Inport, RegionLocation},
     smallvec::{smallvec, SmallVec},
     util::copy::StructuralClone,
-    EdgeRef, NodeRef,
+    NodeRef,
 };
 use rvsdg_viewer::View;
 use vola_common::{report, Span};
@@ -341,9 +341,16 @@ impl Optimizer {
         //NOTE: We only inline connected apply nodes, since we'd outherwise might touch _undefined_
         //      parts of the region.
 
-        let all_nodes = self.graph.live_variables(region);
+        let applynodes = self
+            .graph
+            .live_nodes(region)
+            .iter()
+            .filter(|n| self.graph.node(**n).node_type.is_apply())
+            .cloned()
+            .collect::<Vec<_>>();
+
         //        let mut ninline = 0;
-        for node in all_nodes {
+        for node in applynodes {
             if self.graph.node(node).node_type.is_apply() {
                 let apply_node_call_port = InportLocation {
                     node,
@@ -360,8 +367,8 @@ impl Optimizer {
                     //now inline ourselfs
                     self.graph.inline_apply_node(node).unwrap();
                 } else {
-                    //#[cfg(feature = "log")]
-                    //log::error!("ApplyNode {node} had no def in {region:?}");
+                    #[cfg(feature = "log")]
+                    log::error!("ApplyNode {node} had no def in {region:?}");
                     //NOTE: this can happen, if the all_nodes of the region changed. So we ignore that atm.
                 }
             }
@@ -431,12 +438,9 @@ impl Optimizer {
 
         //NOTE we seed the specialization with the entry_csg node, and the TreeAccess node we start at.
         let _specialized_entry_node = self.specialize_eval_node(&spec_ctx, seeding_eval_node)?;
-
-        self.dump_svg("before inlining.svg");
+        println!("Start post-inliner");
         //After specializing, use recursive inliner again, to bring all ops into the same region
         self.fully_inline_region(region).unwrap();
-
-        self.dump_svg("After inlining.svg");
 
         Ok(())
     }

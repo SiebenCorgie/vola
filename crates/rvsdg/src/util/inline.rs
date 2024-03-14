@@ -47,8 +47,7 @@ impl<
             .expect("expected node to have a parent when inlining");
 
         //first step is to find the call def.
-        let (call_lmd, argcount, result_count, arg_srcs, res_dsts) = if let NodeType::Apply(a) =
-            &self.node(node).node_type
+        let (call_lmd, arg_srcs, res_dsts) = if let NodeType::Apply(a) = &self.node(node).node_type
         {
             let callport = a.get_callabel_decl();
             let call_src = {
@@ -58,12 +57,6 @@ impl<
                     return Err(InlineError::CallPortNotConnected);
                 }
             };
-
-            let inport = InportLocation {
-                node: node,
-                input: InputType::Input(0),
-            };
-            let indef = self.find_producer_inp(inport);
 
             //now trace it, NOTE that only the first input _must_ be a callable.
             let call_lmd_def = if let Some(calldef) = self.find_callabel_def(call_src) {
@@ -95,13 +88,7 @@ impl<
                 res_dsts.push(dsts);
             }
 
-            (
-                call_lmd_def,
-                a.get_call_arg_count(),
-                a.outputs.len(),
-                arg_srcs,
-                res_dsts,
-            )
+            (call_lmd_def, arg_srcs, res_dsts)
         } else {
             return Err(InlineError::NodeWasNotApplyNode(node));
         };
@@ -230,7 +217,22 @@ impl<
             } else if src.output.is_argument() {
                 //use the argument remapping
                 if let Some((remap_port, remap_ty)) = argument_remapping.get(&src).unwrap() {
-                    assert!(remap_ty == &ty);
+                    //NOTE: This was an assert before. However, those frequently do not match,
+                    //      If there is a more involved edge system. So we now warn if they are unequal,
+                    //      and only panic, if there is a state/value-edge missmatch
+                    if remap_ty.is_value_edge() != ty.is_value_edge() {
+                        panic!(
+                            "Inliner: Value/State edge missmatch for apply-node output {:?}",
+                            remap_port.output
+                        )
+                    }
+                    #[cfg(feature = "log")]
+                    if remap_ty != &ty {
+                        log::warn!(
+                            "Edge type missmatch on port {:?} while inlining!",
+                            remap_port
+                        );
+                    }
                     src = remap_port.clone();
                 } else {
                     //no remapping needed, since the arg was not connected initially
@@ -249,7 +251,20 @@ impl<
                 //checkout the rempping
                 for (remapped_edg, remapped_ty) in result_remapping.get(&dst).unwrap() {
                     //use the remapped dst, and the initial src, to connect a copy of ty
-                    assert!(remapped_ty == &ty);
+
+                    if remapped_ty.is_value_edge() != ty.is_value_edge() {
+                        panic!(
+                            "Inliner: Value/State edge missmatch for apply-node input {:?}",
+                            remapped_edg.input
+                        )
+                    }
+                    #[cfg(feature = "log")]
+                    if remapped_ty != &ty {
+                        log::warn!(
+                            "Edge type missmatch on port {:?} while inlining!",
+                            remapped_edg
+                        );
+                    }
                     self.connect(src.clone(), remapped_edg.clone(), ty.structural_copy())
                         .unwrap();
                 }
