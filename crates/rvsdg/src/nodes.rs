@@ -29,12 +29,13 @@ mod phi;
 pub use phi::{PhiNode, RecursionNode};
 pub mod relations;
 mod theta;
+use smallvec::SmallVec;
 pub use theta::{LoopNode, ThetaNode};
 
 use crate::{
     edge::{InportLocation, InputType, LangEdge, OutportLocation, OutputType},
     region::{Inport, Input, Outport, Output, Region, RegionLocation},
-    Rvsdg, SmallColl,
+    EdgeRef, Rvsdg, SmallColl,
 };
 
 ///simple node of a language. The trait lets us embed such a node in our overall RVSDG graph.
@@ -381,6 +382,16 @@ impl<N: LangNode + 'static> Node<N> {
         } else {
             None
         }
+    }
+
+    ///Returns the input port's connected edges. This is guranteed to have the length
+    /// (and order) of [inputs()].
+    pub fn input_edges(&self) -> SmallVec<[Option<EdgeRef>; 3]> {
+        self.inputs().iter().map(|inp| inp.edge.clone()).collect()
+    }
+
+    pub fn output_edges(&self) -> SmallVec<[SmallVec<[EdgeRef; 3]>; 3]> {
+        self.outputs().iter().map(|op| op.edges.clone()).collect()
     }
 }
 

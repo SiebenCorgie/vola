@@ -2,14 +2,24 @@
 name = "vola-common"
 version = "0.1.0"
 edition = "2021"
+license = "MPL-2.0"
+authors = ["Tendsin Mende"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[features]
+default = ["dot"]
+dot = ["graphviz-rust"]
 
 [dependencies]
 thiserror.workspace = true
 backtrace.workspace = true
-annotate-snippets.workspace = true
 tree-sitter.workspace = true
-tinyvec.workspace = true
-tinyvec_string = {workspace = true, features = ["alloc"]}
 ahash.workspace = true
+smallvec.workspace = true
+smallstr = {workspace = true, features = ["serde"]}
+serde = {workspace = true, features = ["derive"]}
+serde-lexpr.workspace = true
+graphviz-rust = {workspace = true, optional = true}
+miette = {workspace = true, features = ["fancy"]}
+lazy_static.workspace = true

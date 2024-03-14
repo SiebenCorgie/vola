@@ -1,522 +1,576 @@
-use graphviz_rust::{
-    attributes::NodeAttributes,
-    dot_structures::{Edge, EdgeTy, Id, Node, NodeId, Stmt, Vertex},
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ *
+ * 2024 Tendsin Mende
+ */
+use vola_common::dot::{
+    graphviz_rust::{
+        cmd::Format,
+        exec_dot,
+        printer::{DotPrinter, PrinterContext},
+    },
+    DotNode, GraphvizBuilder,
 };
 
 use crate::{
-    alge::AlgeExpr,
-    comb::OpNode,
-    common::{Alge, Field, Identifier, Op, Prim, PrimBlock, TypedIdent},
+    alge::{
+        AlgeExpr, AlgeExprTy, AlgeStmt, AssignStmt, EvalExpr, FieldAccessor, ImplBlock, LetStmt,
+    },
+    common::{CTArg, Call, TypedIdent},
+    csg::{
+        AccessDesc, CSGBinding, CSGConcept, CSGNodeDef, CSGNodeTy, CSGOp, CSGStmt, ExportFn,
+        FieldDef,
+    },
+    AstEntry, TopLevelNode, VolaAst,
 };
 
-impl Field {
-    pub fn dot_node(&self, rnd: &mut usize, stmt: &mut Vec<Stmt>) -> Vertex {
-        let block_id = self.block.dot_node(rnd, &self.ident, stmt);
-        for arg in &self.args {
-            let arg_id = arg.dot_node(rnd, stmt);
-            stmt.push(Stmt::Edge(Edge {
-                ty: EdgeTy::Pair(block_id.clone(), arg_id),
-                attributes: vec![],
-            }));
+///Creates a Dot svg for `ast`.
+pub fn ast_to_svg(ast: &VolaAst, file_name: &str) {
+    let mut builder = GraphvizBuilder::new();
+
+    for entry in &ast.entries {
+        let name = format!("{:?}", entry.id());
+        builder.start_graph(&name);
+
+        builder.add_node(entry);
+        builder = entry.build_children(builder);
+
+        builder.end_graph();
+    }
+
+    //now take the graph and make the svg
+
+    let dot = builder.graph.print(&mut PrinterContext::default());
+
+    let format = Format::Svg;
+    let graph_svg = exec_dot(dot, vec![format.into()]).unwrap();
+
+    std::fs::write(file_name, graph_svg).unwrap();
+}
+
+impl DotNode for TopLevelNode {
+    fn id(&self) -> String {
+        format!("TopLevelNode {:?}..{:?}", self.span.from, self.span.to)
+    }
+    fn content(&self) -> String {
+        format!("Top Level Node")
+    }
+    fn build_children(&self, mut builder: GraphvizBuilder) -> GraphvizBuilder {
+        for ct in &self.ct_args {
+            builder.add_node(ct);
+            builder.connect(self, ct);
+            builder = ct.build_children(builder)
         }
 
-        block_id
+        builder.add_node(&self.entry);
+        builder.connect(self, &self.entry);
+        self.entry.build_children(builder)
     }
 }
 
-impl Op {
-    pub fn dot_node(&self, rnd: &mut usize, stmt: &mut Vec<Stmt>) -> Vertex {
-        let block_id = self.block.dot_node(rnd, &self.ident, stmt);
-        for arg in &self.args {
-            let arg_id = arg.dot_node(rnd, stmt);
-            stmt.push(Stmt::Edge(Edge {
-                ty: EdgeTy::Pair(block_id.clone(), arg_id),
-                attributes: vec![],
-            }));
-        }
-        for p in &self.prims {
-            let arg_id = p.dot_node(rnd, stmt);
-            stmt.push(Stmt::Edge(Edge {
-                ty: EdgeTy::Pair(block_id.clone(), arg_id),
-                attributes: vec![],
-            }));
-        }
-
-        block_id
-    }
-}
-
-impl Prim {
-    pub fn dot_node(&self, rnd: &mut usize, stmt: &mut Vec<Stmt>) -> Vertex {
-        let block_id = self.block.dot_node(rnd, &self.ident, stmt);
-        for arg in &self.args {
-            let arg_id = arg.dot_node(rnd, stmt);
-            stmt.push(Stmt::Edge(Edge {
-                ty: EdgeTy::Pair(block_id.clone(), arg_id),
-                attributes: vec![],
-            }));
-        }
-
-        block_id
-    }
-}
-
-impl Alge {
-    pub fn dot_node(&self, rnd: &mut usize, stmt: &mut Vec<Stmt>) -> Vertex {
-        let block_id = self.ret.dot_node(rnd, stmt);
-        for arg in &self.args {
-            let arg_id = arg.dot_node(rnd, stmt);
-            stmt.push(Stmt::Edge(Edge {
-                ty: EdgeTy::Pair(block_id.clone(), arg_id),
-                attributes: vec![],
-            }));
-        }
-
-        block_id
-    }
-}
-
-impl Identifier {
-    pub fn dot_node(&self, rnd: &mut usize, stmt: &mut Vec<Stmt>) -> Vertex {
-        let id = NodeId(Id::Plain(format!("Ident_{}_{rnd}", self.imm)), None);
-        *rnd += 1;
-        stmt.push(Stmt::Node(Node {
-            id: id.clone(),
-            attributes: vec![NodeAttributes::label(format!("\"{}\"", self.imm))],
-        }));
-        Vertex::N(id)
-    }
-}
-
-impl TypedIdent {
-    pub fn dot_node(&self, rnd: &mut usize, stmt: &mut Vec<Stmt>) -> Vertex {
-        let id = NodeId(Id::Plain(format!("Ident_{}_{rnd}", self.ident.imm)), None);
-        *rnd += 1;
-        stmt.push(Stmt::Node(Node {
-            id: id.clone(),
-            attributes: vec![if let Some(ty) = &self.ty {
-                NodeAttributes::label(format!("\"{}: {:?}\"", self.ident.imm, ty))
-            } else {
-                NodeAttributes::label(format!("\"{}: NoTy\"", self.ident.imm))
-            }],
-        }));
-        Vertex::N(id)
-    }
-}
-
-impl PrimBlock {
-    pub fn dot_node(&self, rnd: &mut usize, ident: &Identifier, stmt: &mut Vec<Stmt>) -> Vertex {
-        let id = NodeId(Id::Plain(format!("Block_{rnd}")), None);
-        *rnd += 1;
-
-        stmt.push(Stmt::Node(Node {
-            id: id.clone(),
-            attributes: vec![NodeAttributes::label(format!("\"{}\"", ident.imm))],
-        }));
-        for local_stmt in &self.stmt_list {
-            let stmt_id = local_stmt.dot_node(rnd, stmt);
-
-            //Attach statment to block
-            stmt.push(Stmt::Edge(Edge {
-                ty: EdgeTy::Pair(Vertex::N(id.clone()), stmt_id),
-                attributes: vec![],
-            }));
-        }
-
-        let optree_node = self.op_tree.dot_node(rnd, stmt);
-        stmt.push(Stmt::Edge(Edge {
-            ty: EdgeTy::Pair(Vertex::N(id.clone()), optree_node),
-            attributes: vec![],
-        }));
-
-        Vertex::N(id)
-    }
-}
-
-impl crate::common::Stmt {
-    pub fn dot_node(&self, rnd: &mut usize, stmt: &mut Vec<Stmt>) -> Vertex {
+impl DotNode for AstEntry {
+    fn id(&self) -> String {
         match self {
-            crate::common::Stmt::AtAssign {
-                assign_op,
-                expr,
-                src: _,
-            } => {
-                let id = if let Some(op) = assign_op {
-                    NodeId(Id::Plain(format!("AtAssign_{:?}_{rnd}", op)), None)
-                } else {
-                    NodeId(Id::Plain(format!("AtAssign_NONE_{rnd}")), None)
-                };
-                *rnd += 1;
-                let expr_vertex = expr.dot_node(rnd, stmt);
-                stmt.push(Stmt::Node(Node {
-                    id: id.clone(),
-                    attributes: vec![NodeAttributes::label(format!("\"@ {:?}= \"", assign_op))],
-                }));
-                stmt.push(Stmt::Edge(Edge {
-                    ty: EdgeTy::Pair(Vertex::N(id.clone()), expr_vertex),
-                    attributes: vec![],
-                }));
+            AstEntry::Comment(s) => format!("Comment {:?}..{:?}", s.from, s.to),
+            AstEntry::CSGNodeDef(def) => def.id(),
+            AstEntry::Concept(def) => def.id(),
+            AstEntry::ImplBlock(b) => b.id(),
+            AstEntry::FieldDefine(fd) => fd.id(),
+            AstEntry::ExportFn(ef) => ef.id(),
+        }
+    }
 
-                Vertex::N(id)
-            }
-            crate::common::Stmt::FieldAssign {
-                src: _,
-                prim,
-                field,
-                assign_op,
-                expr,
-            } => {
-                let id = if let Some(op) = assign_op {
-                    NodeId(
-                        Id::Plain(format!(
-                            "FieldAssign_{}_{:?}_{}_rnd",
-                            prim.imm, op, field.imm
-                        )),
-                        None,
-                    )
-                } else {
-                    NodeId(
-                        Id::Plain(format!("FieldAssign_{}_NONE_{}_{rnd}", prim.imm, field.imm)),
-                        None,
-                    )
-                };
-                *rnd += 1;
-                let expr_vertex = expr.dot_node(rnd, stmt);
-                stmt.push(Stmt::Node(Node {
-                    id: id.clone(),
-                    attributes: vec![NodeAttributes::label(format!(
-                        "\"{}.{} {:?}= \"",
-                        prim.imm, field.imm, assign_op
-                    ))],
-                }));
-                stmt.push(Stmt::Edge(Edge {
-                    ty: EdgeTy::Pair(Vertex::N(id.clone()), expr_vertex),
-                    attributes: vec![],
-                }));
+    fn content(&self) -> String {
+        match self {
+            AstEntry::Comment(_s) => format!("Comment"),
+            AstEntry::CSGNodeDef(def) => def.content(),
+            AstEntry::Concept(s) => s.content(),
+            AstEntry::ImplBlock(b) => b.content(),
+            AstEntry::FieldDefine(fd) => fd.content(),
+            AstEntry::ExportFn(ef) => ef.content(),
+        }
+    }
 
-                Vertex::N(id)
-            }
-            crate::common::Stmt::LetStmt {
-                src: _,
-                ident,
-                expr,
-            } => {
-                let id = NodeId(
-                    Id::Plain(format!("LetStmt_{}_{rnd}", ident.ident.imm)),
-                    None,
-                );
-                *rnd += 1;
-                let sub_expr = expr.dot_node(rnd, stmt);
-
-                stmt.push(Stmt::Node(Node {
-                    id: id.clone(),
-                    attributes: vec![NodeAttributes::label(format!(
-                        "\"let {}= \"",
-                        ident.ident.imm
-                    ))],
-                }));
-                stmt.push(Stmt::Edge(Edge {
-                    ty: EdgeTy::Pair(Vertex::N(id.clone()), sub_expr),
-                    attributes: vec![],
-                }));
-                Vertex::N(id)
-            }
-            crate::common::Stmt::PrimAtAssign {
-                src: _,
-                prim,
-                assign_op,
-                expr,
-            } => {
-                let id = if let Some(op) = assign_op {
-                    NodeId(
-                        Id::Plain(format!("FieldAssign_{}_{:?}_AT_{rnd}", prim.imm, op)),
-                        None,
-                    )
-                } else {
-                    NodeId(
-                        Id::Plain(format!("FieldAssign_{}_NONE_AT_{rnd}", prim.imm)),
-                        None,
-                    )
-                };
-                *rnd += 1;
-                let expr_vertex = expr.dot_node(rnd, stmt);
-                stmt.push(Stmt::Node(Node {
-                    id: id.clone(),
-                    attributes: vec![NodeAttributes::label(format!(
-                        "\"{}.@ {:?}= \"",
-                        prim.imm, assign_op
-                    ))],
-                }));
-                stmt.push(Stmt::Edge(Edge {
-                    ty: EdgeTy::Pair(Vertex::N(id.clone()), expr_vertex),
-                    attributes: vec![],
-                }));
-
-                Vertex::N(id)
-            }
-            crate::common::Stmt::PrimDef {
-                src: _,
-                ident,
-                init,
-            } => {
-                let id = NodeId(Id::Plain(format!("PrimDef_{}_{rnd}", ident.imm)), None);
-                *rnd += 1;
-
-                stmt.push(Stmt::Node(Node {
-                    id: id.clone(),
-                    attributes: vec![NodeAttributes::label(format!("\"def {} = \"", ident.imm))],
-                }));
-                if let Some(subexp) = init {
-                    let sub_expr = subexp.dot_node(rnd, stmt);
-
-                    stmt.push(Stmt::Edge(Edge {
-                        ty: EdgeTy::Pair(Vertex::N(id.clone()), sub_expr),
-                        attributes: vec![],
-                    }));
-                }
-
-                Vertex::N(id)
-            }
-            crate::common::Stmt::EvalStmt {
-                src: _,
-                template_ident,
-                binding,
-            } => {
-                let id = NodeId(Id::Plain(format!("EvalStmt_{}_{rnd}", binding.imm)), None);
-                *rnd += 1;
-
-                stmt.push(Stmt::Node(Node {
-                    id: id.clone(),
-                    attributes: vec![NodeAttributes::label(format!(
-                        "\"eval {} -> {} \"",
-                        template_ident.imm, binding.imm
-                    ))],
-                }));
-
-                Vertex::N(id)
-            }
+    fn build_children(&self, builder: GraphvizBuilder) -> GraphvizBuilder {
+        match self {
+            AstEntry::Comment(_s) => builder,
+            AstEntry::CSGNodeDef(def) => def.build_children(builder),
+            AstEntry::Concept(s) => s.build_children(builder),
+            AstEntry::ImplBlock(b) => b.build_children(builder),
+            AstEntry::FieldDefine(fd) => fd.build_children(builder),
+            AstEntry::ExportFn(ef) => ef.build_children(builder),
         }
     }
 }
 
-impl AlgeExpr {
-    pub fn dot_node(&self, rnd: &mut usize, stmt: &mut Vec<Stmt>) -> Vertex {
+impl DotNode for FieldDef {
+    fn id(&self) -> String {
+        format!("FieldDef {:?}..{:?}", self.span.from, self.span.to)
+    }
+
+    fn content(&self) -> String {
+        self.name.0.clone()
+    }
+
+    fn build_children(&self, mut builder: GraphvizBuilder) -> GraphvizBuilder {
+        for inp in &self.inputs {
+            builder.add_node(inp);
+            builder.connect(self, inp);
+
+            //now recurse
+            builder = inp.build_children(builder)
+        }
+
+        //Add all sub nodes and connect them to our selfs
+        for stmt in &self.stmts {
+            builder.add_node(stmt);
+            builder.connect(self, stmt);
+
+            //now recurse
+            builder = stmt.build_children(builder)
+        }
+
+        builder.add_node(&self.ret);
+        builder.connect(self, &self.ret);
+
+        //now recurse
+        self.ret.build_children(builder)
+    }
+}
+
+impl DotNode for ExportFn {
+    fn id(&self) -> String {
+        format!("ExportFn {:?}..{:?}", self.span.from, self.span.to)
+    }
+
+    fn content(&self) -> String {
+        self.name.0.clone()
+    }
+
+    fn build_children(&self, mut builder: GraphvizBuilder) -> GraphvizBuilder {
+        for inp in &self.inputs {
+            builder.add_node(inp);
+            builder.connect(self, inp);
+
+            //now recurse
+            builder = inp.build_children(builder)
+        }
+        //Add all sub nodes and connect them to our selfs
+        for stmt in &self.stmts {
+            builder.add_node(stmt);
+            builder.connect(self, stmt);
+
+            //now recurse
+            builder = stmt.build_children(builder)
+        }
+
+        //Finally add accessors
+        for acc in &self.access_descriptors {
+            builder.add_node(acc);
+            builder.connect(self, acc);
+
+            //now recurse
+            builder = acc.build_children(builder)
+        }
+
+        builder
+    }
+}
+
+impl DotNode for AccessDesc {
+    fn id(&self) -> String {
+        format!("AccessDecs {:?}..{:?}", self.span.from, self.span.to)
+    }
+    fn content(&self) -> String {
+        format!("{}.{}", self.tree_ref.0, self.call.ident.0)
+    }
+    fn color(&self) -> vola_common::dot::graphviz_rust::attributes::color_name {
+        vola_common::dot::graphviz_rust::attributes::color_name::red
+    }
+    fn shape(&self) -> vola_common::dot::graphviz_rust::attributes::shape {
+        vola_common::dot::graphviz_rust::attributes::shape::rarrow
+    }
+    fn build_children(&self, mut builder: GraphvizBuilder) -> GraphvizBuilder {
+        for sib in &self.call.args {
+            builder.add_node(sib);
+            builder.connect(self, sib);
+
+            //now recurse
+            builder = sib.build_children(builder)
+        }
+        builder
+    }
+}
+
+impl DotNode for ImplBlock {
+    fn id(&self) -> String {
+        format!("ImplBlock {:?}..{:?}", self.span.from, self.span.to)
+    }
+
+    fn content(&self) -> String {
+        format!(
+            "impl {}<{}> for {}({})",
+            self.dst.0,
+            self.operands.len(),
+            self.concept.0,
+            self.concept_arg_naming.len()
+        )
+    }
+
+    fn build_children(&self, mut builder: GraphvizBuilder) -> GraphvizBuilder {
+        //Add all sub nodes and connect them to our selfs
+        for stmt in &self.stmts {
+            builder.add_node(stmt);
+            builder.connect(self, stmt);
+            builder = stmt.build_children(builder)
+        }
+
+        //Finally add accessors
+        builder.add_node(&self.return_expr);
+        builder.connect(self, &self.return_expr);
+        builder = self.return_expr.build_children(builder);
+
+        builder
+    }
+}
+
+impl DotNode for AlgeStmt {
+    fn id(&self) -> String {
+        match &self {
+            AlgeStmt::Assign(a) => a.id(),
+            AlgeStmt::Let(l) => l.id(),
+        }
+    }
+    fn content(&self) -> String {
         match self {
-            AlgeExpr::BinOp {
+            AlgeStmt::Assign(a) => a.content(),
+            AlgeStmt::Let(a) => a.content(),
+        }
+    }
+    fn build_children(&self, builder: GraphvizBuilder) -> GraphvizBuilder {
+        match self {
+            AlgeStmt::Assign(a) => a.build_children(builder),
+            AlgeStmt::Let(l) => l.build_children(builder),
+        }
+    }
+}
+
+impl DotNode for AssignStmt {
+    fn id(&self) -> String {
+        format!("assign {:?}..{:?}", self.span.from, self.span.to)
+    }
+    fn content(&self) -> String {
+        format!("{} = ", self.dst.0)
+    }
+    fn build_children(&self, mut builder: GraphvizBuilder) -> GraphvizBuilder {
+        builder.add_node(&self.expr);
+        builder.connect(self, &self.expr);
+        self.expr.build_children(builder)
+    }
+}
+
+impl DotNode for EvalExpr {
+    fn id(&self) -> String {
+        format!("EvalExpr {:?}..{:?}", self.span.from, self.span.to)
+    }
+    fn content(&self) -> String {
+        format!("eval {} ", self.evaluator.0)
+    }
+    fn build_children(&self, mut builder: GraphvizBuilder) -> GraphvizBuilder {
+        for arg in &self.params {
+            builder.add_node(arg);
+            builder.connect(self, arg);
+            builder = arg.build_children(builder);
+        }
+
+        builder
+    }
+}
+
+impl DotNode for CSGStmt {
+    fn id(&self) -> String {
+        match self {
+            CSGStmt::CSGBinding(b) => b.id(),
+            CSGStmt::LetStmt(l) => l.id(),
+        }
+    }
+
+    fn content(&self) -> String {
+        match self {
+            CSGStmt::CSGBinding(b) => b.content(),
+            CSGStmt::LetStmt(l) => l.content(),
+        }
+    }
+
+    fn color(&self) -> vola_common::dot::graphviz_rust::attributes::color_name {
+        match self {
+            CSGStmt::CSGBinding(_) => vola_common::dot::graphviz_rust::attributes::color_name::blue,
+            CSGStmt::LetStmt(_) => vola_common::dot::graphviz_rust::attributes::color_name::black,
+        }
+    }
+
+    fn build_children(&self, builder: GraphvizBuilder) -> GraphvizBuilder {
+        match self {
+            CSGStmt::CSGBinding(b) => b.build_children(builder),
+            CSGStmt::LetStmt(l) => l.build_children(builder),
+        }
+    }
+}
+
+impl DotNode for CSGBinding {
+    fn id(&self) -> String {
+        format!("CSGBinding {:?}..{:?}", self.span.from, self.span.to)
+    }
+
+    fn content(&self) -> String {
+        format!("csg {}", self.decl_name.0.clone())
+    }
+
+    fn color(&self) -> vola_common::dot::graphviz_rust::attributes::color_name {
+        vola_common::dot::graphviz_rust::attributes::color_name::blue
+    }
+
+    fn build_children(&self, mut builder: GraphvizBuilder) -> GraphvizBuilder {
+        //build sub tree and connect to self
+        builder.add_node(&self.tree);
+        builder.connect(self, &self.tree);
+        self.tree.build_children(builder)
+    }
+}
+
+impl DotNode for LetStmt {
+    fn id(&self) -> String {
+        format!("LetStmt {:?}..{:?}", self.span.from, self.span.to)
+    }
+
+    fn content(&self) -> String {
+        format!("let {}", self.decl_name.0)
+    }
+
+    fn build_children(&self, mut builder: GraphvizBuilder) -> GraphvizBuilder {
+        builder.add_node(&self.expr);
+        builder.connect(self, &self.expr);
+        self.expr.build_children(builder)
+    }
+}
+
+impl DotNode for CSGOp {
+    fn id(&self) -> String {
+        format!("CSGOp {:?}..{:?}", self.span.from, self.span.to)
+    }
+    fn content(&self) -> String {
+        format!("{}", self.op.0)
+    }
+
+    fn color(&self) -> vola_common::dot::graphviz_rust::attributes::color_name {
+        vola_common::dot::graphviz_rust::attributes::color_name::blue
+    }
+
+    fn build_children(&self, mut builder: GraphvizBuilder) -> GraphvizBuilder {
+        for stmt in &self.sub_trees {
+            builder.add_node(stmt);
+            builder.connect(self, stmt);
+
+            //now recurse
+            builder = stmt.build_children(builder)
+        }
+
+        for arg in &self.args {
+            builder.add_node(arg);
+            builder.connect(self, arg);
+
+            builder = arg.build_children(builder);
+        }
+
+        builder
+    }
+}
+
+impl DotNode for AlgeExpr {
+    fn id(&self) -> String {
+        match &self.expr_ty {
+            AlgeExprTy::EvalExpr(e) => e.id(),
+            AlgeExprTy::Call(c) => c.id(),
+            _ => format!("AlgeExpr {:?}..{:?}", self.span.from, self.span.to),
+        }
+    }
+
+    fn shape(&self) -> vola_common::dot::graphviz_rust::attributes::shape {
+        vola_common::dot::graphviz_rust::attributes::shape::oval
+    }
+
+    fn content(&self) -> String {
+        match &self.expr_ty {
+            AlgeExprTy::Binary {
+                left: _,
+                right: _,
                 op,
-                left,
-                right,
-                span: _,
-            } => {
-                let id = NodeId(Id::Plain(format!("BinOp_{:?}_{rnd}", op)), None);
-                *rnd += 1;
-
-                stmt.push(Stmt::Node(Node {
-                    id: id.clone(),
-                    attributes: vec![NodeAttributes::label(format!("\"x {:?} y\"", op))],
-                }));
-
-                let left = left.dot_node(rnd, stmt);
-                let right = right.dot_node(rnd, stmt);
-
-                stmt.push(Stmt::Edge(Edge {
-                    ty: EdgeTy::Pair(Vertex::N(id.clone()), left),
-                    attributes: vec![],
-                }));
-                stmt.push(Stmt::Edge(Edge {
-                    ty: EdgeTy::Pair(Vertex::N(id.clone()), right),
-                    attributes: vec![],
-                }));
-
-                Vertex::N(id)
+            } => format!("{:?}", op),
+            AlgeExprTy::Unary { op, operand: _ } => format!("{:?}", op),
+            AlgeExprTy::Call(call) => call.content(),
+            AlgeExprTy::EvalExpr(eex) => eex.content(),
+            AlgeExprTy::FieldAccess { src, accessors: _ } => {
+                format!("Access: {}.", src.0)
             }
-            AlgeExpr::UnaryOp { op, expr, span: _ } => {
-                let id = NodeId(Id::Plain(format!("UnOp_{:?}_{rnd}", op)), None);
-                *rnd += 1;
+            AlgeExprTy::Ident(i) => format!("{}", i.0),
+            AlgeExprTy::List(_l) => format!("List"),
+            AlgeExprTy::Literal(lit) => format!("Lit: {:?}", lit),
+        }
+    }
 
-                stmt.push(Stmt::Node(Node {
-                    id: id.clone(),
-                    attributes: vec![NodeAttributes::label(format!("\"{:?} x\"", op))],
-                }));
-                let exp = expr.dot_node(rnd, stmt);
-                stmt.push(Stmt::Edge(Edge {
-                    ty: EdgeTy::Pair(Vertex::N(id.clone()), exp),
-                    attributes: vec![],
-                }));
+    fn build_children(&self, mut builder: GraphvizBuilder) -> GraphvizBuilder {
+        match &self.expr_ty {
+            AlgeExprTy::Binary { left, right, op: _ } => {
+                builder.add_node(left.as_ref());
+                builder.add_node(right.as_ref());
+                builder.connect(self, left.as_ref());
+                builder.connect(self, right.as_ref());
 
-                Vertex::N(id)
+                builder = left.build_children(builder);
+                builder = right.build_children(builder);
+                builder
             }
-            AlgeExpr::Call {
-                ident,
-                args,
-                span: _,
-            } => {
-                let id = NodeId(Id::Plain(format!("Call_{}_{rnd}", ident.imm)), None);
-                *rnd += 1;
-                stmt.push(Stmt::Node(Node {
-                    id: id.clone(),
-                    attributes: vec![NodeAttributes::label(format!("\"{}() \"", ident.imm))],
-                }));
-
-                for arg in args {
-                    let exp = arg.dot_node(rnd, stmt);
-                    stmt.push(Stmt::Edge(Edge {
-                        ty: EdgeTy::Pair(Vertex::N(id.clone()), exp),
-                        attributes: vec![],
-                    }));
+            AlgeExprTy::Unary { op: _, operand } => {
+                builder.add_node(operand.as_ref());
+                builder.connect(self, operand.as_ref());
+                operand.build_children(builder)
+            }
+            AlgeExprTy::Call(op) => op.build_children(builder),
+            AlgeExprTy::EvalExpr(e) => e.build_children(builder),
+            AlgeExprTy::FieldAccess { src: _, accessors } => {
+                for param in accessors {
+                    builder.add_node(param);
+                    builder.connect(self, param);
+                    builder = param.build_children(builder);
                 }
-
-                Vertex::N(id)
+                builder
             }
-            AlgeExpr::PrimAccess {
-                ident,
-                field,
-                span: _,
-            } => {
-                let id = NodeId(
-                    Id::Plain(format!("PrimAccess_{}_{}_{rnd}", ident.imm, field.imm)),
-                    None,
-                );
-
-                *rnd += 1;
-                stmt.push(Stmt::Node(Node {
-                    id: id.clone(),
-                    attributes: vec![NodeAttributes::label(format!(
-                        "\"{}.{}\"",
-                        ident.imm, field.imm
-                    ))],
-                }));
-                Vertex::N(id)
-            }
-            AlgeExpr::List { list, span: _ } => {
-                let id = NodeId(Id::Plain(format!("List_{rnd}")), None);
-                *rnd += 1;
-                stmt.push(Stmt::Node(Node {
-                    id: id.clone(),
-                    attributes: vec![NodeAttributes::label(format!("\"List\""))],
-                }));
-
-                for arg in list {
-                    let exp = arg.dot_node(rnd, stmt);
-                    stmt.push(Stmt::Edge(Edge {
-                        ty: EdgeTy::Pair(Vertex::N(id.clone()), exp),
-                        attributes: vec![],
-                    }));
+            AlgeExprTy::List(l) => {
+                for li in l {
+                    builder.add_node(li);
+                    builder.connect(self, li);
+                    builder = li.build_children(builder);
                 }
-
-                Vertex::N(id)
+                builder
             }
-            AlgeExpr::Float {
-                float: imm,
-                span: _,
-            } => {
-                let id = NodeId(
-                    Id::Plain(format!(
-                        "Float_{}_{}_{rnd}",
-                        imm.digits.0.digit, imm.digits.1.digit
-                    )),
-                    None,
-                );
-                *rnd += 1;
-                stmt.push(Stmt::Node(Node {
-                    id: id.clone(),
-                    attributes: vec![NodeAttributes::label(format!(
-                        "\"{}.{}\"",
-                        imm.digits.0.digit, imm.digits.1.digit
-                    ))],
-                }));
-                Vertex::N(id)
-            }
-            AlgeExpr::Identifier { ident, span: _ } => {
-                let id = NodeId(Id::Plain(format!("Ident_{}_{rnd}", ident.imm)), None);
-                *rnd += 1;
-                stmt.push(Stmt::Node(Node {
-                    id: id.clone(),
-                    attributes: vec![NodeAttributes::label(format!("\"{}\"", ident.imm))],
-                }));
-                Vertex::N(id)
-            }
-            AlgeExpr::Kw { kw, span: _ } => {
-                let id = NodeId(Id::Plain(format!("KW_{:?}_{rnd}", kw)), None);
-                *rnd += 1;
-                stmt.push(Stmt::Node(Node {
-                    id: id.clone(),
-                    attributes: vec![NodeAttributes::label(format!("\"KW:{:?}\"", kw))],
-                }));
-                Vertex::N(id)
-            }
+            AlgeExprTy::Ident(_) | AlgeExprTy::Literal(_) => builder,
         }
     }
 }
 
-impl OpNode {
-    pub fn dot_node(&self, rnd: &mut usize, stmt: &mut Vec<Stmt>) -> Vertex {
+impl DotNode for Call {
+    fn id(&self) -> String {
+        format!("Call {:?}..{:?}", self.span.from, self.span.to)
+    }
+    fn content(&self) -> String {
+        format!("call {}", self.ident.0)
+    }
+    fn build_children(&self, mut builder: GraphvizBuilder) -> GraphvizBuilder {
+        for arg in &self.args {
+            builder.add_node(arg);
+            builder.connect(self, arg);
+            builder = arg.build_children(builder);
+        }
+        builder
+    }
+}
+
+impl DotNode for FieldAccessor {
+    fn id(&self) -> String {
         match self {
-            OpNode::OpCall { ident, args, prims } => {
-                let id = NodeId(Id::Plain(format!("OpCall_{}_{rnd}", ident.imm)), None);
-                *rnd += 1;
-                stmt.push(Stmt::Node(Node {
-                    id: id.clone(),
-                    attributes: vec![NodeAttributes::label(format!("\"call {} \"", ident.imm))],
-                }));
-
-                for arg in args {
-                    let arg_expr = arg.dot_node(rnd, stmt);
-
-                    stmt.push(Stmt::Edge(Edge {
-                        ty: EdgeTy::Pair(Vertex::N(id.clone()), arg_expr),
-                        attributes: vec![],
-                    }));
-                }
-
-                for prim in prims {
-                    let arg_expr = prim.dot_node(rnd, stmt);
-                    stmt.push(Stmt::Edge(Edge {
-                        ty: EdgeTy::Pair(Vertex::N(id.clone()), arg_expr),
-                        attributes: vec![],
-                    }));
-                }
-
-                Vertex::N(id)
+            FieldAccessor::Digit { span, .. } => {
+                format!("FieldAccessor {:?}..{:?}", span.from, span.to)
             }
-            OpNode::Prim {
-                prim_call_ident,
-                args,
-            } => {
-                let id = NodeId(
-                    Id::Plain(format!("PrimCall_{}_{rnd}", prim_call_ident.imm)),
-                    None,
-                );
-                *rnd += 1;
-                stmt.push(Stmt::Node(Node {
-                    id: id.clone(),
-                    attributes: vec![NodeAttributes::label(format!(
-                        "\"prim {} \"",
-                        prim_call_ident.imm
-                    ))],
-                }));
-
-                for arg in args {
-                    let arg_expr = arg.dot_node(rnd, stmt);
-                    stmt.push(Stmt::Edge(Edge {
-                        ty: EdgeTy::Pair(Vertex::N(id.clone()), arg_expr),
-                        attributes: vec![],
-                    }));
-                }
-                Vertex::N(id)
-            }
-            OpNode::PrimIdent(ident) => {
-                let id = NodeId(Id::Plain(format!("Prim_{}_{rnd}", ident.imm)), None);
-                *rnd += 1;
-                stmt.push(Stmt::Node(Node {
-                    id: id.clone(),
-                    attributes: vec![NodeAttributes::label(format!(
-                        "\"prim ref {} \"",
-                        ident.imm
-                    ))],
-                }));
-                Vertex::N(id)
+            FieldAccessor::Ident { span, .. } => {
+                format!("FieldAccessor {:?}..{:?}", span.from, span.to)
             }
         }
+    }
+
+    fn content(&self) -> String {
+        match self {
+            FieldAccessor::Digit { span: _, digit } => format!("{digit}"),
+            FieldAccessor::Ident { span: _, ident } => format!("{}", ident.0),
+        }
+    }
+
+    fn build_children(&self, builder: GraphvizBuilder) -> GraphvizBuilder {
+        builder
+    }
+}
+
+impl DotNode for TypedIdent {
+    fn id(&self) -> String {
+        format!("TypedIdent {:?}..{:?}", self.span.from, self.span.to)
+    }
+    fn color(&self) -> vola_common::dot::graphviz_rust::attributes::color_name {
+        vola_common::dot::graphviz_rust::attributes::color_name::green
+    }
+    fn shape(&self) -> vola_common::dot::graphviz_rust::attributes::shape {
+        vola_common::dot::graphviz_rust::attributes::shape::rarrow
+    }
+    fn content(&self) -> String {
+        format!("{} : {:?}", self.ident.0, self.ty)
+    }
+    fn build_children(&self, builder: GraphvizBuilder) -> GraphvizBuilder {
+        builder
+    }
+}
+
+impl DotNode for CTArg {
+    fn id(&self) -> String {
+        format!("CompileTimeArg {:?}..{:?}", self.span.from, self.span.to)
+    }
+    fn content(&self) -> String {
+        format!("CTArg: {}", self.ident.0)
+    }
+    fn build_children(&self, mut builder: GraphvizBuilder) -> GraphvizBuilder {
+        for arg in &self.args {
+            builder.add_node(arg);
+            builder.connect(self, arg);
+            builder = arg.build_children(builder);
+        }
+        builder
+    }
+}
+
+impl DotNode for CSGNodeDef {
+    fn id(&self) -> String {
+        format!("CSGDef {:?}..{:?}", self.span.from, self.span.to)
+    }
+    fn content(&self) -> String {
+        match self.ty {
+            CSGNodeTy::Entity => format!("entity {}", self.name.0),
+            CSGNodeTy::Operation => format!("operation {}", self.name.0),
+        }
+    }
+
+    fn build_children(&self, mut builder: GraphvizBuilder) -> GraphvizBuilder {
+        for arg in &self.args {
+            builder.add_node(arg);
+            builder.connect(self, arg);
+            builder = arg.build_children(builder);
+        }
+        builder
+    }
+}
+impl DotNode for CSGConcept {
+    fn id(&self) -> String {
+        format!("CSGConcept {:?}..{:?}", self.span.from, self.span.to)
+    }
+    fn content(&self) -> String {
+        if self.src_ty.len() > 0 {
+            format!(
+                "concept {}: {:?} -> {:?}",
+                self.name.0, self.src_ty, self.dst_ty
+            )
+        } else {
+            format!("concept {}: -> {:?}", self.name.0, self.dst_ty)
+        }
+    }
+    fn build_children(&self, builder: GraphvizBuilder) -> GraphvizBuilder {
+        builder
     }
 }

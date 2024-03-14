@@ -10,3 +10,4 @@ rvsdg = {path = "../rvsdg"}
 macroquad = "0.4.4"
 ahash.workspace = true
 priority-queue = "1.3.2"
+log.workspace = true

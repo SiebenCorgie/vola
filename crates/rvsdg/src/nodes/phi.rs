@@ -236,4 +236,13 @@ impl PhiNode {
 
         self.outputs.get_mut(n)
     }
+
+    ///The amount of arguments, that are no context-variables to this λ-Node's region.
+    pub fn argument_count(&self) -> usize {
+        self.body.arguments.len() - self.cv_count - self.rv_count
+    }
+
+    pub fn result_count(&self) -> usize {
+        self.body.results.len() - self.rv_count
+    }
 }

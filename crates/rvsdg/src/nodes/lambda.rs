@@ -1,10 +1,9 @@
-use std::slice;
-
 use crate::{
     edge::{InputType, OutputType},
     region::{Argument, Input, Output, RegResult, Region},
     SmallColl,
 };
+use std::slice;
 
 use super::StructuralNode;
 
@@ -31,8 +30,9 @@ impl ApplyNode {
     ///Creates a call that has the signature needed for the given lambda node
     pub fn new_for_lambda(node: &LambdaNode) -> Self {
         let node_body = &node.body;
-        //need to add one more inputs then args
-        let inputs = (0..(node_body.arguments.len() + 1))
+        //NOTE: We need a call-arg and the amount of arguments for the apply-node's
+        //      Inputs.
+        let inputs = (0..(node.argument_count() + 1))
             .map(|_| Input::default())
             .collect();
         ApplyNode {
@@ -83,6 +83,12 @@ impl ApplyNode {
     ///Returns the port for the `n`-th return value the function emits.
     pub fn return_value_mut(&mut self, n: usize) -> Option<&mut Output> {
         self.outputs.get_mut(n)
+    }
+
+    ///Returns how many callargs the apply node expects. This is by definition `input_count - 1`. As
+    /// the first input is reserved for the callable that is called.
+    pub fn get_call_arg_count(&self) -> usize {
+        self.inputs.len() - 1
     }
 }
 
@@ -261,5 +267,14 @@ impl LambdaNode {
     ///Returns the port to this function's `n`-th argument
     pub fn result_mut(&mut self, n: usize) -> Option<&mut RegResult> {
         self.body.results.get_mut(n)
+    }
+
+    ///The amount of arguments, that are no context-variables to this λ-Node's region.
+    pub fn argument_count(&self) -> usize {
+        self.body.arguments.len() - self.cv_count
+    }
+
+    pub fn result_count(&self) -> usize {
+        self.body.results.len()
     }
 }

@@ -1,43 +1,29 @@
-//! Algebra level AST components.
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ *
+ * 2024 Tendsin Mende
+ */
+//! The Algebraic AST
 
-use ahash::AHashMap;
+use crate::common::{Call, Ident, Literal};
+use smallvec::SmallVec;
 use vola_common::Span;
 
-use crate::{
-    common::{Identifier, Imm, Keyword, TypedIdent},
-    parser::FromSitter,
-    AstError, AstErrorTy,
-};
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum UnOp {
-    //The ! op
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum UnaryOp {
     Not,
-    // The - op
     Neg,
 }
 
-impl FromSitter for UnOp {
-    fn parse_node(_source: &[u8], node: &tree_sitter::Node) -> Result<Self, AstError>
-    where
-        Self: Sized,
-    {
-        match node.kind() {
-            "!" => Ok(UnOp::Not),
-            "-" => Ok(UnOp::Neg),
-            _ => Err(AstError::at_node(
-                &node,
-                AstErrorTy::UnexpectedToken {
-                    token: node.kind().to_owned(),
-                    unit: "UnaryOperation".to_owned(),
-                },
-            )),
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum BinOp {
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum BinaryOp {
     Add,
     Sub,
     Mul,
@@ -45,252 +31,148 @@ pub enum BinOp {
     Mod,
 }
 
-impl BinOp {
-    ///Tries to parse assignment op. So `+=`, `*=` etc. Returns None if its just an assignment.
-    pub fn parse_assign_op(
-        _source: &[u8],
-        node: &tree_sitter::Node,
-    ) -> Result<Option<Self>, AstError> {
-        match node.kind() {
-            "+=" => Ok(Some(BinOp::Add)),
-            "-=" => Ok(Some(BinOp::Sub)),
-            "*=" => Ok(Some(BinOp::Mul)),
-            "/=" => Ok(Some(BinOp::Div)),
-            "%=" => Ok(Some(BinOp::Mod)),
-            "=" => Ok(None),
-            _ => Err(AstError::at_node(
-                &node,
-                AstErrorTy::UnexpectedToken {
-                    token: node.kind().to_owned(),
-                    unit: "Assignment BinOp".to_owned(),
-                },
-            )),
-        }
-    }
-}
-
-impl FromSitter for BinOp {
-    fn parse_node(_source: &[u8], node: &tree_sitter::Node) -> Result<Self, AstError>
-    where
-        Self: Sized,
-    {
-        match node.kind() {
-            "+" => Ok(BinOp::Add),
-            "-" => Ok(BinOp::Sub),
-            "*" => Ok(BinOp::Mul),
-            "/" => Ok(BinOp::Div),
-            "%" => Ok(BinOp::Mod),
-            _ => Err(AstError::at_node(
-                &node,
-                AstErrorTy::UnexpectedToken {
-                    token: node.kind().to_owned(),
-                    unit: "BinOp".to_owned(),
-                },
-            )),
-        }
-    }
-}
-
-///Algebraic expression.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum AlgeExpr {
-    Identifier {
-        ident: Identifier,
-        span: Span,
-    },
-    List {
-        list: Vec<AlgeExpr>,
-        span: Span,
-    },
-    BinOp {
-        span: Span,
-        op: BinOp,
-        left: Box<AlgeExpr>,
-        right: Box<AlgeExpr>,
-    },
-    UnaryOp {
-        span: Span,
-        op: UnOp,
-        expr: Box<AlgeExpr>,
-    },
-    ///Call to some algebraic function
-    Call {
-        span: Span,
-        ident: Identifier,
-        args: Vec<AlgeExpr>,
-    },
-    ///Acccess on an primitives field
-    PrimAccess {
-        span: Span,
-        ident: Identifier,
-        field: Identifier,
-    },
-    //Some keyword
-    Kw {
-        kw: Keyword,
-        span: Span,
-    },
-    Float {
-        float: Imm,
-        span: Span,
-    },
-}
-
-impl FromSitter for AlgeExpr {
-    fn parse_node(source: &[u8], node: &tree_sitter::Node) -> Result<Self, AstError>
-    where
-        Self: Sized,
-    {
-        //let mut walker = node.walk();
-        //let mut children = node.children(&mut walker);
-
-        match node.kind() {
-            "unary_expr" => {
-                assert!(node.child_count() == 2, "Unary op must have 2 children!");
-                let op = UnOp::parse_node(source, &node.child(0).unwrap())?;
-                let expr = AlgeExpr::parse_node(source, &node.child(1).unwrap())?;
-                Ok(AlgeExpr::UnaryOp {
-                    span: Span::from(node),
-                    op,
-                    expr: Box::new(expr),
-                })
-            }
-            "binary_expr" => {
-                assert!(
-                    node.child_count() == 3,
-                    "Binary expression must have 3 nodes"
-                );
-                let left = Self::parse_node(source, &node.child(0).unwrap())?;
-                let op = BinOp::parse_node(source, &node.child(1).unwrap())?;
-                let right = Self::parse_node(source, &node.child(2).unwrap())?;
-                Ok(AlgeExpr::BinOp {
-                    span: Span::from(node),
-                    op,
-                    left: Box::new(left),
-                    right: Box::new(right),
-                })
-            }
-            "scoped_expr" => {
-                let mut walker = node.walk();
-                let mut children = node.children(&mut walker);
-                assert!(children.next().unwrap().kind() == "{");
-
-                let mut life_idents = AHashMap::default();
-                for child in children {
-                    match child.kind() {
-                        "let_stmt" => {
-                            let (ident, expr) = Self::parse_let_stmt(source, &child)?;
-                            //TODO similar to the let statements in the
-                            // OpTree, we loose the type info here.
-                            life_idents.insert(ident.ident, expr);
-                        }
-                        "," => {}     //ignore
-                        "}" => break, //finish
-                        _ => {
-                            let expr = Self::parse_node(source, &child)?;
-                            return Ok(expr);
-                        }
-                    }
-                }
-                Err(AstErrorTy::ScopedEndNoAlge.into())
-            }
-            "call_expr" => {
-                let (ident, args) = Self::parse_call(source, node)?;
-                Ok(AlgeExpr::Call {
-                    ident,
-                    args,
-                    span: Span::from(node),
-                })
-            }
-            "identifier" => Ok(AlgeExpr::Identifier {
-                ident: Identifier::parse_node(source, node)?,
-                span: Span::from(node),
-            }),
-            "arg_access" => {
-                assert!(node.child_count() == 3);
-                let ident = Identifier::parse_node(source, &node.child(0).unwrap())?;
-                let field = Identifier::parse_node(source, &node.child(2).unwrap())?;
-
-                Ok(AlgeExpr::PrimAccess {
-                    ident,
-                    field,
-                    span: Span::from(node),
-                })
-            }
-            "float" => Ok(AlgeExpr::Float {
-                float: Imm::parse_node(source, node)?,
-                span: Span::from(node),
-            }),
-            "kw_at" => Ok(AlgeExpr::Kw {
-                kw: Keyword::parse_node(source, node)?,
-                span: Span::from(node),
-            }),
-            "list" => {
-                let mut walker = node.walk();
-                let mut children = node.children(&mut walker);
-                assert!(children.next().unwrap().kind() == "[");
-                let mut list = Vec::with_capacity(node.child_count() - 2);
-                for child in children {
-                    match child.kind() {
-                        "]" => break,
-                        "," => {}
-                        _ => {
-                            let node = AlgeExpr::parse_node(source, &child)?;
-                            list.push(node);
-                        }
-                    }
-                }
-                Ok(AlgeExpr::List {
-                    list,
-                    span: Span::from(node),
-                })
-            }
-            _ => Err(AstError::at_node(
-                &node,
-                AstErrorTy::UnexpectedToken {
-                    token: node.kind().to_owned(),
-                    unit: "AlgeExpr".to_owned(),
-                },
-            )),
-        }
-    }
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[derive(Clone, Debug)]
+pub struct AlgeExpr {
+    pub span: Span,
+    pub expr_ty: AlgeExprTy,
 }
 
 impl AlgeExpr {
-    ///Tries to parse a `call_expr`. If successfull, returns the call's identifier as well as all arguments.
-    pub fn parse_call(
-        source: &[u8],
-        call_expr: &tree_sitter::Node,
-    ) -> Result<(Identifier, Vec<AlgeExpr>), AstError> {
-        AstError::kind_expected(call_expr, "call_expr")?;
-
-        let mut walker = call_expr.walk();
-        let mut children = call_expr.children(&mut walker);
-        let ident_node = children.next().unwrap();
-        let ident = Identifier::parse_node(source, &ident_node)?;
-        assert!(children.next().unwrap().kind() == "(");
-
-        let mut args = Vec::with_capacity(call_expr.child_count() - 2);
-        for child in children {
-            match child.kind() {
-                ")" => break,
-                "," => {}
-                _ => args.push(AlgeExpr::parse_node(source, &child)?),
+    ///By default the `span` contains the whole space of the sub expressions.
+    /// That is technically correct, but hard to read when reporting errors.
+    ///
+    /// Consider `(some_long_expr) + (some_other_long_expr)`. The span of `+` contains the whole
+    /// line, however, when reporting an error on `+` you might only want the single char to be highlighted.
+    /// Thats what this function is for.
+    pub fn op_span(&self) -> Span {
+        match &self.expr_ty {
+            AlgeExprTy::Unary { op: _, operand } => {
+                let mut subspan = self.span.clone();
+                subspan.byte_end = operand.span.byte_start;
+                subspan.to = operand.span.from;
+                subspan
             }
+            AlgeExprTy::Binary { left, right, op: _ } => {
+                let mut span = self.span.clone();
+                span.byte_start = left.span.byte_end;
+                span.from = left.span.to;
+                span.byte_end = right.span.byte_start;
+                span.to = right.span.from;
+                span
+            }
+            AlgeExprTy::Call(c) => {
+                if c.args.len() > 0 {
+                    let mut span = c.span.clone();
+                    span.byte_end = c.args[0].span.byte_start;
+                    span.to = c.args[0].span.from;
+                    span
+                } else {
+                    c.span.clone()
+                }
+            }
+            AlgeExprTy::EvalExpr(eexpr) => eexpr.span.clone(),
+            AlgeExprTy::FieldAccess { .. } => self.span.clone(),
+            AlgeExprTy::Ident(_i) => self.span.clone(),
+            AlgeExprTy::List(_) => self.span.clone(),
+            AlgeExprTy::Literal(_) => self.span.clone(),
         }
-
-        Ok((ident, args))
     }
+}
 
-    pub fn parse_let_stmt(
-        source: &[u8],
-        let_stmt: &tree_sitter::Node,
-    ) -> Result<(TypedIdent, Self), AstError> {
-        assert!(let_stmt.kind() == "let_stmt");
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum FieldAccessor {
+    Digit { span: Span, digit: usize },
+    Ident { span: Span, ident: Ident },
+}
 
-        let ident = TypedIdent::parse_node(source, &let_stmt.child(1).unwrap())?;
-        let expr = Self::parse_node(source, &let_stmt.child(3).unwrap())?;
-
-        Ok((ident, expr))
+impl FieldAccessor {
+    pub fn try_to_index(&self) -> Option<usize> {
+        match self {
+            Self::Digit { digit, .. } => Some(*digit),
+            Self::Ident { ident, .. } => match ident.0.as_str() {
+                "x" => Some(0),
+                "y" => Some(1),
+                "z" => Some(2),
+                "w" => Some(3),
+                _ => None,
+            },
+        }
     }
+}
+
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[derive(Clone, Debug)]
+pub enum AlgeExprTy {
+    Unary {
+        op: UnaryOp,
+        operand: Box<AlgeExpr>,
+    },
+    Binary {
+        left: Box<AlgeExpr>,
+        right: Box<AlgeExpr>,
+        op: BinaryOp,
+    },
+    EvalExpr(EvalExpr),
+    Ident(Ident),
+    FieldAccess {
+        src: Ident,
+        accessors: SmallVec<[FieldAccessor; 1]>,
+    },
+    Call(Box<Call>),
+    List(Vec<AlgeExpr>),
+    Literal(Literal),
+}
+
+///Binds an algebraic expression to an identifier
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[derive(Clone, Debug)]
+pub struct LetStmt {
+    pub span: Span,
+    pub decl_name: Ident,
+    pub expr: AlgeExpr,
+}
+
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[derive(Clone, Debug)]
+pub struct EvalExpr {
+    pub span: Span,
+    ///The operand that is being evaluated.
+    pub evaluator: Ident,
+    ///The concept that is being evaluated.
+    pub concept: Ident,
+    pub params: Vec<AlgeExpr>,
+}
+
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[derive(Clone, Debug)]
+pub struct AssignStmt {
+    pub span: Span,
+    pub dst: Ident,
+    pub expr: AlgeExpr,
+}
+
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[derive(Clone, Debug)]
+pub enum AlgeStmt {
+    Let(LetStmt),
+    Assign(AssignStmt),
+}
+
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[derive(Clone, Debug)]
+pub struct ImplBlock {
+    pub span: Span,
+    //What is being implemented
+    pub dst: Ident,
+    //On how many operands we implement
+    pub operands: SmallVec<[Ident; 2]>,
+    ///The concept on which we implement
+    pub concept: Ident,
+    ///(Re)naming of the concepts input argument.
+    pub concept_arg_naming: SmallVec<[Ident; 1]>,
+
+    pub stmts: Vec<AlgeStmt>,
+    pub return_expr: AlgeExpr,
 }

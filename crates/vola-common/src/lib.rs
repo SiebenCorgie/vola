@@ -1,176 +1,98 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ *
+ * 2024 Tendsin Mende
+ */
 //! Common diagnosis helper. This is mostly Span of nodes, as well their reporting.
 
-use std::{fmt::Display, str::FromStr};
+use miette::{SourceOffset, SourceSpan};
+pub use reporter::ErrorReporter;
+use serde::{Deserialize, Serialize};
+use smallstr::SmallString;
 
-use backtrace::Backtrace;
+pub use serde;
+pub use serde_lexpr;
 
-use annotate_snippets::{
-    display_list::{DisplayList, FormatOptions},
-    snippet::{Annotation, AnnotationType, Slice, Snippet, SourceAnnotation},
-};
-use tinyvec_string::TinyString;
+pub use miette;
+pub use thiserror;
+
+#[cfg(feature = "dot")]
+pub mod dot;
 
 mod reporter;
-pub use reporter::ErrorReporter;
 
-pub type TinyErrorString = TinyString<[u8; 32]>;
+pub use reporter::{report, Reportable};
+
+pub type FileString = SmallString<[u8; 32]>;
 
 ///Source-Code span information.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Span {
-    pub file: TinyErrorString,
+    pub file: FileString,
+    ///Start line and collumn
     pub from: (usize, usize),
+    ///End line and collumn
     pub to: (usize, usize),
+    ///Start byte into the src file
+    pub byte_start: usize,
+    ///End byte into the src file
+    pub byte_end: usize,
 }
 
 impl Span {
     pub fn empty() -> Self {
         Span {
-            file: TinyString::default(),
+            file: FileString::default(),
             from: (0, 0),
             to: (0, 0),
+            byte_start: 0,
+            byte_end: 0,
         }
     }
 
     pub fn with_file(mut self, file_name: &str) -> Self {
-        self.file = TinyString::from_str(file_name).unwrap();
+        self.file = FileString::from_str(file_name);
         self
+    }
+
+    ///Basically [with_file], but for an option. Makes it easy to combine `Span::from(Node).with_file_myabe(parser_context.get_file())`.
+    pub fn with_file_maybe(self, file_name: Option<&str>) -> Self {
+        if let Some(file) = file_name {
+            self.with_file(file)
+        } else {
+            self
+        }
+    }
+
+    ///Returns a non-empty file string, if one was set
+    pub fn get_file(&self) -> Option<&str> {
+        if self.file.is_empty() {
+            None
+        } else {
+            Some(&self.file)
+        }
+    }
+}
+
+impl Into<SourceSpan> for Span {
+    fn into(self) -> SourceSpan {
+        SourceSpan::new(
+            SourceOffset::from(self.byte_start),
+            self.byte_end - self.byte_start,
+        )
     }
 }
 
 impl<'a> From<&tree_sitter::Node<'a>> for Span {
     fn from(value: &tree_sitter::Node) -> Self {
         Span {
-            file: TinyString::default(),
+            file: FileString::default(),
             from: (value.start_position().row, value.start_position().column),
             to: (value.end_position().row, value.end_position().column),
-        }
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct CommonError<E: std::error::Error> {
-    pub span: Span,
-    pub source: E,
-    pub backtrace: Option<Backtrace>,
-}
-
-impl<E: std::error::Error> CommonError<E> {
-    pub fn new(span: Span, source: E) -> Self {
-        CommonError {
-            span,
-            source,
-            backtrace: if std::env::var("VOLA_BACKTRACE").is_ok() {
-                Some(Backtrace::new())
-            } else {
-                None
-            },
-        }
-    }
-}
-
-pub(crate) struct ErrorPrintBundle<'a, E: std::error::Error> {
-    pub error: &'a CommonError<E>,
-    pub src_lines: &'a [String],
-}
-
-impl<'a, E: std::error::Error + Default> Display for ErrorPrintBundle<'a, E> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let ErrorPrintBundle { error, src_lines } = self;
-        let error_str = error.source.to_string();
-        //NOTE: usually an error is only on one line / at one point. However,
-        // sometimes it goes over multiple lines. In this case, this makes sure we only
-        // attach annotation to the last line, by clamping to the first line + start offset, and last line - start offset
-        let snippet = if error.span.from.0 != error.span.to.0 {
-            let mut slices = Vec::with_capacity(error.span.to.0 - error.span.from.0);
-            for line_number in error.span.from.0..error.span.to.0 {
-                let slice_line = &src_lines[line_number];
-                let annotations = if line_number == error.span.from.0 {
-                    vec![SourceAnnotation {
-                        label: &error_str,
-                        annotation_type: AnnotationType::Error,
-                        range: (0, slice_line.chars().count() - 1),
-                    }]
-                } else if line_number == error.span.to.0 {
-                    vec![SourceAnnotation {
-                        label: "end of error region",
-                        annotation_type: AnnotationType::Error,
-                        range: (0, slice_line.chars().count()),
-                    }]
-                } else {
-                    vec![]
-                };
-
-                slices.push(Slice {
-                    source: slice_line,
-                    line_start: line_number + 1, //+1 since we are using indices, but want to display the line number
-                    origin: None,                //TODO carry filename at some point
-                    fold: false,
-                    annotations,
-                })
-            }
-
-            Snippet {
-                title: Some(Annotation {
-                    label: Some("CommonError"),
-                    id: None, //TODO might want to turn those into error IDs at some point
-                    annotation_type: AnnotationType::Error,
-                }),
-                footer: vec![],
-                slices,
-                opt: FormatOptions {
-                    color: true,
-                    ..Default::default()
-                },
-            }
-        } else {
-            //Simple single line reporting
-            Snippet {
-                title: Some(Annotation {
-                    label: None,
-                    id: None, //TODO might want to turn those into error IDs at some point
-                    annotation_type: AnnotationType::Error,
-                }),
-                footer: vec![],
-                slices: vec![Slice {
-                    source: src_lines[error.span.from.0].as_str(),
-                    line_start: error.span.from.0 + 1, //+1 since we are using indices, but want to display the line number
-                    origin: None,                      //TODO carry filename at some point
-                    fold: true,
-                    annotations: vec![SourceAnnotation {
-                        label: &error_str,
-                        annotation_type: AnnotationType::Error,
-                        range: (error.span.from.1, error.span.to.1),
-                    }],
-                }],
-                opt: FormatOptions {
-                    color: true,
-                    ..Default::default()
-                },
-            }
-        };
-
-        let dl = DisplayList::from(snippet);
-        let res = dl.fmt(f);
-        if let Some(bt) = &error.backtrace {
-            write!(f, "\nBacktrace:")?;
-            write!(f, "\n{:?}", bt)?;
-        } else {
-            write!(
-                f,
-                "\n`VOLA_BACKTRACE=1` to print the backtrace of the error occurrence"
-            )?;
-        }
-        res
-    }
-}
-
-impl<E: std::error::Error + Default> Default for CommonError<E> {
-    fn default() -> Self {
-        CommonError {
-            span: Span::empty(),
-            source: E::default(),
-            backtrace: None,
+            byte_start: value.start_byte(),
+            byte_end: value.end_byte(),
         }
     }
 }

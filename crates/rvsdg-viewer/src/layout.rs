@@ -12,7 +12,7 @@
 //! 6. For any edge that couldn't be routed, insert a straight path.
 //!
 
-use ahash::AHashMap;
+use ahash::{AHashMap, AHashSet};
 use macroquad::math::Vec2;
 use rvsdg::{edge::LangEdge, nodes::LangNode, region::RegionLocation, EdgeRef, NodeRef, Rvsdg};
 
@@ -100,12 +100,36 @@ impl RegionLayout {
         config: &LayoutConfig,
     ) -> RegionLayout {
         //For each node in the region, build a LayoutNode, and if applicable, build sub-regions
+        //NOTE, that we ignore unconnected nodes, if specified in the `config`.
+
+        //If we should ignore, build a pass list, othewise add all nodes to the list.
+        let node_pass_list = if config.ignore_dead_node {
+            let mut result_connected_nodes = AHashSet::default();
+            let result_count = rvsdg.region(&region).unwrap().results.len();
+            for residx in 0..result_count {
+                for connected_result in &rvsdg.region(&region).unwrap().result_src(&rvsdg, residx) {
+                    result_connected_nodes.insert(connected_result.node);
+                }
+            }
+
+            let mut pass_list = result_connected_nodes.clone();
+            //Walk all predecessors to all results, and push them into the list
+            for res in result_connected_nodes {
+                for pre in rvsdg.walk_predecessors(res) {
+                    pass_list.insert(pre.node);
+                }
+            }
+            pass_list
+        } else {
+            rvsdg.region(&region).unwrap().nodes.clone()
+        };
 
         let nodes = rvsdg
             .region(&region)
             .unwrap()
             .nodes
             .iter()
+            .filter(|node| node_pass_list.contains(&node))
             .filter_map(|nref| {
                 let node = rvsdg.node(*nref);
                 let sub_regions = if node.regions().len() > 0 {

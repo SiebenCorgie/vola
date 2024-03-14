@@ -1,6 +1,6 @@
 use rvsdg::{
-    nodes::LangNode,
     region::{Input, Output},
+    rvsdg_derive_lang::LangNode,
 };
 pub use rvsdg_viewer::macroquad;
 use rvsdg_viewer::View;
@@ -31,10 +31,14 @@ pub enum MyNodes {
     Sub,
 }
 
-#[derive(Clone, Debug)]
+//NOTE: Uses the LangNode derive macro. You could also implement the
+// trait yourself if you want
+#[derive(Clone, Debug, LangNode)]
 pub struct LNode {
     node: MyNodes,
+    #[inputs]
     inputs: Vec<Input>,
+    #[outputs]
     outputs: Vec<Output>,
 }
 
@@ -64,39 +68,24 @@ impl LNode {
     }
 }
 
-impl LangNode for LNode {
-    fn inputs(&self) -> &[Input] {
-        &self.inputs
-    }
-    fn outputs(&self) -> &[Output] {
-        &self.outputs
-    }
-    fn inputs_mut(&mut self) -> &mut [Input] {
-        &mut self.inputs
-    }
-    fn outputs_mut(&mut self) -> &mut [Output] {
-        &mut self.outputs
-    }
-}
-
 impl View for LNode {
     fn color(&self) -> macroquad::color::Color {
         macroquad::prelude::Color::from_rgba(255, 255, 128, 255)
     }
 
-    fn name(&self) -> &str {
+    fn name(&self) -> String {
         match self.node {
-            MyNodes::Add => "add",
-            MyNodes::AryConst(_) => "ArrayConst",
-            MyNodes::Gt => "gt",
-            MyNodes::ImmChar(_) => "ImmChar",
-            MyNodes::ImmI32(_) => "ImmI32",
-            MyNodes::Load => "Load",
-            MyNodes::Lt => "lt",
-            MyNodes::UnEq => "UnEq",
-            MyNodes::Mul => "mul",
-            MyNodes::Store => "store",
-            MyNodes::Sub => "Sub",
+            MyNodes::Add => "add".to_owned(),
+            MyNodes::AryConst(size) => format!("ArrayConst({size})"),
+            MyNodes::Gt => "gt".to_owned(),
+            MyNodes::ImmChar(c) => format!("ImmChar {:?} ", c.to_string()),
+            MyNodes::ImmI32(imm) => format!("ImmI32({imm})"),
+            MyNodes::Load => "Load".to_owned(),
+            MyNodes::Lt => "lt".to_owned(),
+            MyNodes::UnEq => "UnEq".to_owned(),
+            MyNodes::Mul => "mul".to_owned(),
+            MyNodes::Store => "store".to_owned(),
+            MyNodes::Sub => "Sub".to_owned(),
         }
     }
 }

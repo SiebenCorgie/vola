@@ -22,6 +22,9 @@ use slotmap::{new_key_type, SlotMap};
 pub use smallvec;
 use smallvec::SmallVec;
 
+#[cfg(feature = "derive")]
+pub use rvsdg_derive_lang;
+
 pub mod analyze;
 pub mod attrib;
 pub mod builder;
@@ -85,7 +88,7 @@ impl EdgeRef {
     pub fn disconnect<N: LangNode + 'static, E: LangEdge + 'static>(
         self,
         ctx: &mut Rvsdg<N, E>,
-    ) -> Result<(), GraphError> {
+    ) -> Result<E, GraphError> {
         ctx.disconnect(self)
     }
 
@@ -234,14 +237,18 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
     /// Returns Ok if the disconnect was successful. Otherwise an error describing what went wrong. In general the disconnect will be
     /// executed as good as possible. Meaning, if one of the two nodes is invalid, the other one will be notified of the disconnect regardless.
     /// However, you should consider your graph unstable regardless after an failed disconnect.
-    pub fn disconnect(&mut self, edge: EdgeRef) -> Result<(), GraphError> {
+    ///
+    /// Returns the `ty` value of the disconnected edge, if successful
+    pub fn disconnect(&mut self, edge: EdgeRef) -> Result<E, GraphError> {
         if let Some(edge_val) = self.edges.remove(edge) {
             let Edge { src, dst, ty: _ } = edge_val;
 
             let mut err = None;
             //Notify src
             if let Some(port) = self.node_mut(src.node).outport_mut(&src.output) {
+                let before_count = port.edges.len();
                 port.edges.retain(|e| *e != edge);
+                assert!(port.edges.len() == before_count - 1);
             } else {
                 err = Some(GraphError::InvalidNode(src.node));
             }
@@ -258,8 +265,41 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
                 self.node(dst.node).parent.clone(),
             ) {
                 (Some(reg_src), Some(reg_dst)) => {
-                    assert!(reg_src == reg_dst);
-                    reg_src
+                    //Check that, either one is the parent of the other node,
+                    match (src.output.is_argument(), dst.input.is_result()) {
+                        (true, true) => {
+                            //In this case, this is an edge straight from an argument
+                            //to an result. We disconnect that on the `internal` region
+                            //of the src/dst node.
+                            //NOTE: This is somewhat hard, since we don't really know _which_
+                            //      of the regions the edge is in. So we just search for it.
+                            assert!(src.node == dst.node, "If both src and dst are argument/result, both need to be part of the same node!");
+                            let mut parent_reg_candidate = None;
+                            for (regidx, reg) in self.node(src.node).regions().iter().enumerate() {
+                                if reg.edges.contains(&edge) {
+                                    parent_reg_candidate = Some(RegionLocation {
+                                        node: src.node,
+                                        region_index: regidx,
+                                    });
+                                    break;
+                                }
+                            }
+                            if let Some(reg) = parent_reg_candidate {
+                                reg
+                            } else {
+                                return Err(GraphError::InvalidEdge(edge));
+                            }
+                        }
+                        (false, true) => {
+                            //use the region of src
+                            reg_src
+                        }
+                        (true, false) => reg_dst,
+                        (false, false) => {
+                            assert!(reg_src == reg_dst);
+                            reg_src
+                        }
+                    }
                 }
                 //Happens if one participant is the omega node
                 (Some(reg), None) | (None, Some(reg)) => reg,
@@ -279,7 +319,7 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
             if let Some(e) = err {
                 Err(e)
             } else {
-                Ok(())
+                Ok(edge_val.ty)
             }
         } else {
             Err(GraphError::InvalidEdge(edge))
@@ -400,7 +440,12 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
             .push(edge);
 
         self.node_mut(dst.node).inport_mut(&dst.input).unwrap().edge = Some(edge);
-
+        assert!(self
+            .node_mut(dst.node)
+            .inport_mut(&dst.input)
+            .unwrap()
+            .edge
+            .is_some());
         //now notify the region of this new edge
         self.node_mut(src_parent_region.node)
             .regions_mut()
