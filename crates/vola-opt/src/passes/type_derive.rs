@@ -21,7 +21,7 @@ use std::collections::VecDeque;
 
 use ahash::{AHashMap, AHashSet};
 use rvsdg::{
-    edge::{InportLocation, OutportLocation, OutputType},
+    edge::{OutportLocation, OutputType},
     nodes::{ApplyNode, NodeType},
     region::RegionLocation,
     smallvec::SmallVec,
@@ -74,7 +74,8 @@ impl Optimizer {
                 error_count += 1;
             } else {
                 //Add to resolve set
-                resolve_set.insert(implblock.node).clone();
+                let was_new = resolve_set.insert(implblock.node).clone();
+                assert!(was_new);
             }
         }
 
@@ -152,7 +153,7 @@ impl Optimizer {
 
                 if dependecies_met {
                     //Try to resolve, since all dependecies are met
-                    if let Err(err) = self.derive_region(def, srcspan.clone()) {
+                    if let Err(_err) = self.derive_region(def, srcspan.clone()) {
                         error_count += 1;
                     } else {
                         //successfully resolved, so add to resolve map
@@ -400,10 +401,6 @@ impl Optimizer {
                 //types. After that we match them to the apply_nodes actual connected types. If they match we pass
                 //the callables result argument
 
-                let call_result_port = InportLocation {
-                    node: calldef.node,
-                    input: rvsdg::edge::InputType::Result(0),
-                };
                 let result_type = {
                     let lmdregion = RegionLocation {
                         node: calldef.node,
@@ -433,7 +430,7 @@ impl Optimizer {
                     node: calldef.node,
                     region_index: 0,
                 };
-                let mut call_sig = self.get_lambda_arg_signature(callable_reg.node);
+                let call_sig = self.get_lambda_arg_signature(callable_reg.node);
                 let mut expected_call_sig: SmallVec<[Ty; 3]> = SmallVec::default();
                 for maybe_ty in call_sig {
                     if let Some(t) = maybe_ty {
