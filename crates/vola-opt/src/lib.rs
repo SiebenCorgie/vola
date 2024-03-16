@@ -56,7 +56,7 @@ pub type OptGraph = Rvsdg<OptNode, OptEdge>;
 ///The _whole_ optimizer. Mostly ties together the RVSDG and some auxiliary structures that
 /// make wiring the the correct nodes together possible.
 pub struct Optimizer {
-    pub(crate) graph: OptGraph,
+    pub graph: OptGraph,
 
     ///All known concept definitions keyed by their name
     //NOTE: using the name, since thats how we reference them all the time.
@@ -78,6 +78,11 @@ pub struct Optimizer {
 
     ///Can be used to tag source Spans for nodes that are no OptNodes
     pub(crate) span_tags: AttribStore<Span>,
+
+    ///Can be used to name nodes, which might be interesting for passes that
+    ///do not have knowledge of the original AST/Source, but still need to emit human
+    /// readable names.
+    pub names: AttribStore<String>,
 }
 
 impl Optimizer {
@@ -91,6 +96,7 @@ impl Optimizer {
             field_def: AHashMap::default(),
             typemap: AttribStore::new(),
             span_tags: AttribStore::new(),
+            names: AttribStore::new(),
         }
     }
 

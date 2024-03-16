@@ -1,23 +1,16 @@
-use rvsdg::{edge::LangEdge, nodes::LangNode};
+use rvsdg::{
+    edge::LangEdge,
+    region::{Input, Output},
+    rvsdg_derive_lang::LangNode,
+    smallvec::SmallVec,
+};
 
-pub struct SpvOp;
-
-impl LangNode for SpvOp {
-    fn inputs(&self) -> &[rvsdg::region::Input] {
-        &[]
-    }
-
-    fn inputs_mut(&mut self) -> &mut [rvsdg::region::Input] {
-        &mut []
-    }
-
-    fn outputs(&self) -> &[rvsdg::region::Output] {
-        &[]
-    }
-
-    fn outputs_mut(&mut self) -> &mut [rvsdg::region::Output] {
-        &mut []
-    }
+#[derive(LangNode)]
+pub struct SpvOp {
+    #[inputs]
+    inputs: SmallVec<[Input; 3]>,
+    #[outputs]
+    outputs: SmallVec<[Output; 3]>,
 }
 
 pub enum SpvEdg {

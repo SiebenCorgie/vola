@@ -68,9 +68,11 @@ impl SpirvBackend {
     }
 
     ///Interns the `opt` module into this backend builder. All as _export_ declared
-    /// λ-Nodes will be exported in the [SpirvModule] as well.    
+    /// λ-Nodes will be exported in the [SpirvModule] as well.
+    ///
+    /// assumes that all nodes that are live/reachabl (from any ω-result) are in the "alge" dialect.
     pub fn intern_module(&mut self, opt: &Optimizer) -> Result<(), BackendSpirvError> {
-        todo!()
+        self.intern(opt)
     }
 
     ///Builds the module based on the current configuration.
