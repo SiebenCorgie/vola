@@ -4,3 +4,9 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+vola-ast = {path = "../vola-ast"}
+vola-opt = {path = "../vola-opt"}
+vola-backend-spirv = {path = "../vola-backend-spirv"}
+vola-common = {path = "../vola-common"}
+rvsdg = {path = "../rvsdg"}
+bytemuck.workspace = true

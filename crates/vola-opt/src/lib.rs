@@ -29,7 +29,6 @@ use ahash::AHashMap;
 use alge::implblock::{ConceptImpl, ConceptImplKey};
 use common::Ty;
 use csg::{exportfn::ExportFn, fielddef::FieldDef};
-use error::OptError;
 use rvsdg::{attrib::AttribStore, Rvsdg};
 
 use rvsdg_viewer::layout::LayoutConfig;
@@ -44,6 +43,7 @@ mod ast;
 mod common;
 mod csg;
 mod error;
+pub use error::OptError;
 mod graph;
 mod passes;
 mod util;

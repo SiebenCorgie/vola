@@ -17,12 +17,14 @@
 //!
 
 use ahash::AHashSet;
-use error::BackendSpirvError;
 use graph::{SpvEdg, SpvOp};
 use rvsdg::Rvsdg;
 use vola_opt::Optimizer;
 
+pub use rspirv;
+
 mod error;
+pub use error::BackendSpirvError;
 mod graph;
 mod passes;
 
