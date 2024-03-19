@@ -38,10 +38,10 @@ use vola_ast::{
 };
 use vola_common::Span;
 
-mod alge;
+pub mod alge;
 mod ast;
-mod common;
-mod csg;
+pub mod common;
+pub mod csg;
 mod error;
 pub use error::OptError;
 mod graph;

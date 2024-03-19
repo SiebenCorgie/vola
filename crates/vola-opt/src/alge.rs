@@ -20,6 +20,8 @@ use vola_ast::{
     csg::{CSGConcept, CSGNodeDef},
 };
 
+pub use vola_ast::common::Literal;
+
 use crate::{common::Ty, error::OptError, DialectNode, OptEdge, OptGraph, OptNode, TypeState};
 
 pub(crate) mod implblock;

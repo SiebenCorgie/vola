@@ -43,6 +43,7 @@ struct Args {
 }
 
 fn main() {
+    pretty_env_logger::init();
     let args = Args::parse();
 
     let target_format = match args.format {

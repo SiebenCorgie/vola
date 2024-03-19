@@ -3,10 +3,14 @@ name = "vola-backend-spirv"
 version = "0.1.0"
 edition = "2021"
 
+[features]
+default = ["log"]
+log = ["dep:log"]
+
 [dependencies]
 vola-opt = {path = "../vola-opt"}
 vola-common = {path = "../vola-common"}
 rvsdg = {path = "../rvsdg"}
 rspirv.workspace = true
 ahash.workspace = true
-
+log = {workspace = true, optional = true}

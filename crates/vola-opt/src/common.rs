@@ -18,6 +18,9 @@ use crate::{error::OptError, OptGraph};
 /// CV-Inputs of nodes. They basically make sure that we connect λ-Nodes with the right output type _when called_.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Ty {
+    //Shouldn't be used by the frontend and optimizer. However sometimes we can't (yet?) get around
+    //it in the Spirv backend
+    Void,
     Scalar,
     Vector {
         width: usize,

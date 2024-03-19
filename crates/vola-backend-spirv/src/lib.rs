@@ -15,9 +15,14 @@
 //! Apart from that the transformation is pretty easy, since SPIR-V itself is an SCF-Graph, so
 //! translation from RVSDG is pretty straight forward.
 //!
+//!
+//! Right now we exploid the fact, that vola-opt only outputs a ddg within a λ-Node. So constructing the
+//! SCF is pretty easy.
+//!
+//! Later on we should implement the RVSDG-Destruction algorithm described in the RVSDG-paper.
 
 use ahash::AHashSet;
-use graph::{SpvEdg, SpvOp};
+use rspirv::dr::Builder;
 use rvsdg::Rvsdg;
 use vola_opt::Optimizer;
 
@@ -25,7 +30,6 @@ pub use rspirv;
 
 mod error;
 pub use error::BackendSpirvError;
-mod graph;
 mod passes;
 
 pub type SpirvModule = rspirv::dr::Module;
@@ -55,17 +59,33 @@ impl Default for SpirvConfig {
     }
 }
 
-///The backend borrows the source graph for its lifetime.
 pub struct SpirvBackend {
-    graph: Rvsdg<SpvOp, SpvEdg>,
+    //NOTE: option allows us to temporarly take
+    //      the builder
+    module: Option<SpirvModule>,
     config: SpirvConfig,
 }
 
 impl SpirvBackend {
-    pub fn new() -> Self {
+    pub fn new(config: SpirvConfig) -> Self {
+        //Build the initial _empty_ module with the header specified by config
+        let mut b = Builder::new();
+        b.set_version(config.version_major, config.version_minor);
+        b.memory_model(
+            rspirv::spirv::AddressingModel::Logical,
+            rspirv::spirv::MemoryModel::Vulkan,
+        );
+        for ext in &config.extensions {
+            b.extension(ext.clone());
+        }
+
+        for ext_inst in &config.ext_inst {
+            b.ext_inst_import(ext_inst.clone());
+        }
+
         SpirvBackend {
-            graph: Rvsdg::new(),
-            config: SpirvConfig::default(),
+            module: Some(b.module()),
+            config,
         }
     }
 
@@ -78,8 +98,7 @@ impl SpirvBackend {
     }
 
     ///Builds the module based on the current configuration.
-    pub fn build(&self) -> Result<SpirvModule, BackendSpirvError> {
-        let config = self.config.clone();
-        self.into_spv_module(&config)
+    pub fn build(&self) -> SpirvModule {
+        self.into_spv_module()
     }
 }

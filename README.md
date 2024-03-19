@@ -57,20 +57,23 @@ For more examples either have a look at the syntax [test corpus](https://gitlab.
 
 - [Treesitter](https://github.com/tree-sitter/tree-sitter) based grammar + parser
 - [Cranelift](https://cranelift.dev/) based CPU targeting
-- [SPIR-T](https://github.com/EmbarkStudios/spirt) based SPIR-V / GPU targeting
+- [SPIR-T](https://github.com/EmbarkStudios/spirt) based SPIR-V / GPU targeting (in the future)
+- [Rspriv](https://github.com/gfx-rs/rspirv) SPIR-V generation for the first MVP
 - [SPV-Patcher](https://gitlab.com/tendsinmende/spv-patcher) for runtime shader code patching
 
 Note: The techstack is not set in stone. We might switch to a hand written parser, or take in any dependencies that reduce the workload somehow.
 
 ## Packages
 
-- `tree-sitter-vola`: Treesitter based parser. Also contains the language grammar
+- [tree-sitter-vola](https://gitlab.com/tendsinmende/tree-sitter-vola): Treesitter based parser. Also contains the language grammar.
 - `vola-ast`: The Abstract-Syntax-Tree representation of any Vola program. Can either be build from a file (using `tree-sitter-vola`) or 
 by using this as a library. Servers as interface between the Vola frontend, and any middle- / backend.
-- `vola-hir`: HighLevel-Intermediate-Representation. Conceptually similar to Rust's [THIR](https://rustc-dev-guide.rust-lang.org/thir.html). Used for type resolving, and matching and building a crude data-dependency graph.
+- `vola-opt`: The RVSDG based optimizer
+- `vola-backend-spirv`: SPIR-V backend
+- `volac`: The compiler library. Mostly takes care of executing passes of the various parts _in order_.
+- `vola-cli`: Thin CLI interface around `volac`
 - `rvsdg`: A generic [RVSDG](https://dl.acm.org/doi/abs/10.1145/3391902) implementation. 
 - `vola-common`: Factors out common components for Vola's compiler stages. These are mostly debugging / error-reporting related.
-- `volac`: Vola-Compiler. An executable that ties together all vola stages into a single executable.
 
 ## Status
 

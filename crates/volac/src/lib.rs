@@ -42,11 +42,6 @@ impl Backend {
     }
 }
 
-pub enum Src {
-    CustomAst(VolaAst),
-    SrcFile(PathBuf),
-}
-
 ///An executable compilation pipeline.
 /// There are always four main steps, with possible sub steps:
 /// 1. _somehow_ get an AST,
@@ -91,15 +86,18 @@ impl Pipeline {
         //do mandatory dispatch of all exports
         opt.dispatch_all_exports()?;
 
+        //do some _post_everyting_ cleanup
+        opt.cleanup_export_lmd();
+
         //finally use the expected backend
         match self.target_format {
             Backend::Spirv => {
-                let mut backend = vola_backend_spirv::SpirvBackend::new();
+                let spvconfig = SpirvConfig::default();
+                let mut backend = vola_backend_spirv::SpirvBackend::new(spvconfig);
                 let target_name = self.target_file_name();
                 println!("Emitting SPIR-V as {target_name:?}");
                 backend.intern_module(&opt)?;
-                let spvconfig = SpirvConfig::default();
-                let spvmodule = backend.into_spv_module(&spvconfig)?;
+                let spvmodule = backend.into_spv_module();
                 //now write to file
 
                 if target_name.exists() {
