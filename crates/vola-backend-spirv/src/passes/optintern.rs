@@ -5,7 +5,7 @@ use rspirv::{
 };
 use rvsdg::{
     edge::{InportLocation, InputType, OutportLocation, OutputType},
-    nodes::StructuralNode,
+    nodes::{NodeType, StructuralNode},
     region::RegionLocation,
     smallvec::SmallVec,
     NodeRef,
@@ -14,7 +14,9 @@ use vola_opt::{common::Ty, Optimizer};
 
 use crate::{error::BackendSpirvError, SpirvBackend};
 
-struct InterningCtx {
+mod alge_to_spirv;
+
+pub(crate) struct InterningCtx {
     ///Maps a λ-Node to a function Id, which we can use to call the function once its defined
     node_fn_mapping: AHashMap<NodeRef, Word>,
     builder: Builder,
@@ -62,6 +64,8 @@ impl SpirvBackend {
     ///dependent nodes.
     ///
     pub(crate) fn intern(&mut self, opt: &Optimizer) -> Result<(), BackendSpirvError> {
+        opt.dump_svg("ayay.svg");
+
         //take the internal module
         let builder = Builder::new_from_module(self.module.take().unwrap());
 
@@ -273,6 +277,8 @@ impl SpirvBackend {
             argidx += 1;
         }
 
+        println!("{:?} = {:?}", return_type, arg_types);
+
         //convert the args and results to SPIR-V types, so we can build the function type
         let resty_spirv = ctx.optty_to_spirvty(return_type);
         let argtys: SmallVec<[Word; 3]> = arg_types
@@ -340,6 +346,52 @@ impl SpirvBackend {
         }
 
         //dang, don't known ourselfs yet, so explore all dependecies, then add ourself
+        //first step is to match the node type. Depending on it, we shall _do the right_
+        // stuff. Right now we just expect calls and simple nodes.
+        //
+        // however in the future we might support loops and branches. So that would be handled here as well.
+        // TODO: To myself: In that case it might make sense to operate on regions instead of λ-nodes.
+
+        //dependecy exploration
+        let dep_ids: SmallVec<[Option<Word>; 3]> = opt
+            .graph
+            .node(node)
+            .input_edges()
+            .into_iter()
+            .map(|edg| {
+                if let Some(edg) = edg {
+                    let src = opt.graph.edge(edg).src();
+                    assert!(src.output == OutputType::Output(0));
+                    Some(Self::intern_node(ctx, lmdctx, opt, src.node).unwrap())
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        let id = match &opt.graph.node(node).node_type {
+            NodeType::Simple(s) => {
+                assert!(
+                    s.node.dialect() == "alge",
+                    "expected alge node, found {} node",
+                    s.node.dialect()
+                );
+
+                ctx.intern_alge_node(opt, s)?
+            }
+            NodeType::Apply(a) => todo!(),
+            other => panic!("unexpected node type {other:?}"),
+        };
+
+        //add to the mapping and return
+        let old = lmdctx.known_nodes.insert(
+            OutportLocation {
+                node,
+                output: OutputType::Output(0),
+            },
+            id,
+        );
+        assert!(old.is_none());
 
         todo!()
     }

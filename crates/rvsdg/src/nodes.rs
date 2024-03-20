@@ -323,6 +323,104 @@ impl<N: LangNode + 'static> Node<N> {
         }
     }
 
+    ///Helper that builds all output types for this node in order. Spares you from analysing the
+    ///nodes ports to get a type-correct OutportLocation (when paired with a mapping to the actual location).
+    pub fn output_types(&self) -> SmallVec<[OutputType; 3]> {
+        match &self.node_type {
+            NodeType::Simple(node) => {
+                let mut outs = SmallVec::new();
+                for i in 0..node.outputs().len() {
+                    outs.push(OutputType::Output(i));
+                }
+                outs
+            }
+            NodeType::Gamma(g) => g.output_types(),
+            NodeType::Theta(g) => g.output_types(),
+            NodeType::Lambda(g) => g.output_types(),
+            NodeType::Apply(g) => {
+                let mut outs = SmallVec::new();
+                for i in 0..g.outputs.len() {
+                    outs.push(OutputType::Output(i));
+                }
+                outs
+            }
+            NodeType::Delta(g) => g.output_types(),
+            NodeType::Phi(g) => g.output_types(),
+            NodeType::Omega(g) => g.output_types(),
+        }
+    }
+
+    pub fn inport_types(&self) -> SmallVec<[InputType; 3]> {
+        match &self.node_type {
+            NodeType::Simple(node) => {
+                let mut ins = SmallVec::new();
+                for i in 0..node.inputs().len() {
+                    ins.push(InputType::Input(i));
+                }
+                ins
+            }
+            NodeType::Gamma(g) => g.input_types(),
+            NodeType::Theta(g) => g.input_types(),
+            NodeType::Lambda(g) => g.input_types(),
+            NodeType::Apply(g) => {
+                let mut ins = SmallVec::new();
+                for i in 0..g.outputs.len() {
+                    ins.push(InputType::Input(i));
+                }
+                ins
+            }
+            NodeType::Delta(g) => g.input_types(),
+            NodeType::Phi(g) => g.input_types(),
+            NodeType::Omega(g) => g.input_types(),
+        }
+    }
+
+    pub fn argument_types(&self, region_index: usize) -> SmallVec<[OutputType; 3]> {
+        match &self.node_type {
+            NodeType::Gamma(g) => g.argument_types(region_index),
+            NodeType::Theta(g) => g.argument_types(region_index),
+            NodeType::Lambda(g) => g.argument_types(region_index),
+            NodeType::Delta(g) => g.argument_types(region_index),
+            NodeType::Phi(g) => g.argument_types(region_index),
+            NodeType::Omega(g) => g.argument_types(region_index),
+            NodeType::Simple(_s) => {
+                #[cfg(feature = "log")]
+                log::warn!("Tried to get argument-types of simple node, returning none");
+
+                SmallVec::new()
+            }
+            NodeType::Apply(_a) => {
+                #[cfg(feature = "log")]
+                log::warn!("Tried to get argument-types of apply node, returning none");
+
+                SmallVec::new()
+            }
+        }
+    }
+
+    pub fn result_types(&self, region_index: usize) -> SmallVec<[InputType; 3]> {
+        match &self.node_type {
+            NodeType::Gamma(g) => g.result_types(region_index),
+            NodeType::Theta(g) => g.result_types(region_index),
+            NodeType::Lambda(g) => g.result_types(region_index),
+            NodeType::Delta(g) => g.result_types(region_index),
+            NodeType::Phi(g) => g.result_types(region_index),
+            NodeType::Omega(g) => g.result_types(region_index),
+            NodeType::Simple(_s) => {
+                #[cfg(feature = "log")]
+                log::warn!("Tried to get result-types of simple node, returning none");
+
+                SmallVec::new()
+            }
+            NodeType::Apply(_a) => {
+                #[cfg(feature = "log")]
+                log::warn!("Tried to get result-types of apply node, returning none");
+
+                SmallVec::new()
+            }
+        }
+    }
+
     ///Returns true if this is either a lambda, or phi node
     pub fn is_callable(&self) -> bool {
         if let NodeType::Lambda(_) | NodeType::Phi(_) = self.node_type {
@@ -461,4 +559,10 @@ pub trait StructuralNode {
     fn std_output_count(&self) -> usize {
         self.outputs().len() - self.recursion_variable_count()
     }
+
+    ///Builds the output signature for this node. Can be mapped to the actual OutportLocations.
+    fn output_types(&self) -> SmallVec<[OutputType; 3]>;
+    fn input_types(&self) -> SmallVec<[InputType; 3]>;
+    fn argument_types(&self, region_index: usize) -> SmallVec<[OutputType; 3]>;
+    fn result_types(&self, region_index: usize) -> SmallVec<[InputType; 3]>;
 }

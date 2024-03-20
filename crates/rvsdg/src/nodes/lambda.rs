@@ -1,3 +1,5 @@
+use smallvec::SmallVec;
+
 use crate::{
     edge::{InputType, OutputType},
     region::{Argument, Input, Output, RegResult, Region},
@@ -175,6 +177,53 @@ impl StructuralNode for LambdaNode {
     }
     fn context_variable_count(&self) -> usize {
         self.cv_count
+    }
+
+    fn output_types(&self) -> SmallVec<[OutputType; 3]> {
+        let mut outs = SmallVec::new();
+        outs.push(OutputType::LambdaDeclaration);
+        outs
+    }
+    fn input_types(&self) -> SmallVec<[InputType; 3]> {
+        let mut inputs = SmallVec::default();
+        //now append all the args
+        for i in 0..self.inputs.len() {
+            if i < self.cv_count {
+                inputs.push(InputType::ContextVariableInput(i));
+            } else {
+                panic!("λ-Node can't have other inputs than CV-Inputs.")
+            }
+        }
+
+        inputs
+    }
+    fn argument_types(&self, region_index: usize) -> SmallVec<[OutputType; 3]> {
+        if region_index > 0 {
+            return SmallVec::new();
+        }
+
+        let mut args = SmallVec::new();
+        for i in 0..self.body.arguments.len() {
+            if i < self.cv_count {
+                args.push(OutputType::ContextVariableArgument(i));
+            } else {
+                args.push(OutputType::Argument(i - self.cv_count));
+            }
+        }
+        args
+    }
+    fn result_types(&self, region_index: usize) -> SmallVec<[InputType; 3]> {
+        //Does not exist!
+        if region_index > 0 {
+            return SmallVec::new();
+        }
+
+        let mut res = SmallVec::new();
+        for i in 0..self.body.results.len() {
+            res.push(InputType::Result(i));
+        }
+
+        res
     }
 }
 

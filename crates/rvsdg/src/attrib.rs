@@ -2,6 +2,8 @@
 //!
 //! Helper that lets you associate any item within the graph with a custom attribute.
 
+use std::ops::Deref;
+
 use ahash::AHashMap;
 
 use crate::{
@@ -48,6 +50,8 @@ impl From<EdgeRef> for AttribLocation {
     }
 }
 
+///Stores multiple attributes for any component of the RVSDG. If you only want to store
+/// one attribute. Have a look at [FlagStore].
 #[derive(Debug, Clone)]
 pub struct AttribStore<ATTRIB: 'static> {
     pub attribs: AHashMap<AttribLocation, Vec<ATTRIB>>,
@@ -72,5 +76,31 @@ impl<ATTRIB: 'static> AttribStore<ATTRIB> {
         } else {
             self.attribs.insert(location.clone(), vec![attrib]);
         }
+    }
+}
+
+///Stores zero or one single flag of type `F` for any component of the RVSDG.
+pub struct FlagStore<F: 'static> {
+    pub flags: AHashMap<AttribLocation, F>,
+}
+
+impl<F: 'static> FlagStore<F> {
+    pub fn new() -> Self {
+        FlagStore {
+            flags: AHashMap::default(),
+        }
+    }
+
+    pub fn get(&self, location: &AttribLocation) -> Option<&F> {
+        self.flags.get(location)
+    }
+
+    pub fn get_mut(&mut self, location: &AttribLocation) -> Option<&mut F> {
+        self.flags.get_mut(location)
+    }
+
+    ///Sets or overwrites the flag. If there was already one set, returns the old one.
+    pub fn set(&mut self, location: AttribLocation, flag: F) -> Option<F> {
+        self.flags.insert(location, flag)
     }
 }

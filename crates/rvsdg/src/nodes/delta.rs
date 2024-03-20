@@ -1,5 +1,7 @@
 use std::slice;
 
+use smallvec::{smallvec, SmallVec};
+
 use crate::{
     edge::{InputType, OutputType},
     region::{Argument, Input, Output, RegResult, Region},
@@ -84,6 +86,52 @@ impl StructuralNode for DeltaNode {
     }
     fn outputs_mut(&mut self) -> &mut [Output] {
         slice::from_mut(&mut self.output)
+    }
+
+    fn output_types(&self) -> SmallVec<[OutputType; 3]> {
+        smallvec![OutputType::DeltaDeclaration]
+    }
+    fn input_types(&self) -> SmallVec<[InputType; 3]> {
+        let mut inputs = SmallVec::default();
+
+        for i in 0..self.inputs.len() {
+            if i < self.cv_count {
+                inputs.push(InputType::ContextVariableInput(i));
+            } else {
+                panic!("There shouldn't be anything besides cvargs");
+            }
+        }
+
+        inputs
+    }
+    fn argument_types(&self, region_index: usize) -> SmallVec<[OutputType; 3]> {
+        //Does not exist!
+        if region_index != 0 {
+            return SmallVec::new();
+        }
+
+        let mut args = SmallVec::new();
+        for i in 0..self.body.arguments.len() {
+            if i < self.cv_count {
+                args.push(OutputType::ContextVariableArgument(i))
+            } else {
+                args.push(OutputType::Argument(i - self.cv_count))
+            }
+        }
+        args
+    }
+    fn result_types(&self, region_index: usize) -> SmallVec<[InputType; 3]> {
+        //Does not exist!
+        if region_index != 0 {
+            return SmallVec::new();
+        }
+
+        let mut res = SmallVec::new();
+        for i in 0..self.body.results.len() {
+            res.push(InputType::Result(i));
+        }
+
+        res
     }
 }
 

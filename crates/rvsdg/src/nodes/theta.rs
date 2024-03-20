@@ -1,5 +1,7 @@
 use std::slice;
 
+use smallvec::SmallVec;
+
 use crate::{
     edge::{InputType, OutputType},
     region::{Argument, Input, Output, RegResult, Region},
@@ -78,6 +80,49 @@ impl StructuralNode for ThetaNode {
     }
     fn outputs_mut(&mut self) -> &mut [Output] {
         &mut self.outputs
+    }
+
+    fn output_types(&self) -> SmallVec<[OutputType; 3]> {
+        let mut outs = SmallVec::new();
+        for outidx in 0..self.lv_count {
+            outs.push(OutputType::Output(outidx));
+        }
+        outs
+    }
+    fn input_types(&self) -> SmallVec<[InputType; 3]> {
+        let mut inputs = SmallVec::default();
+        //now append all the args
+        for i in 0..self.lv_count {
+            inputs.push(InputType::Input(i))
+        }
+
+        inputs
+    }
+    fn argument_types(&self, region_index: usize) -> SmallVec<[OutputType; 3]> {
+        if region_index > 0 {
+            return SmallVec::new();
+        }
+
+        let mut args = SmallVec::new();
+        for i in 0..self.lv_count {
+            args.push(OutputType::Argument(i));
+        }
+        args
+    }
+    fn result_types(&self, region_index: usize) -> SmallVec<[InputType; 3]> {
+        //Does not exist!
+        if region_index > 0 {
+            return SmallVec::new();
+        }
+
+        let mut res = SmallVec::new();
+        //prepend the predicate
+        res.push(InputType::ThetaPredicate);
+        for i in 0..self.lv_count {
+            res.push(InputType::LoopVariableResult(i));
+        }
+
+        res
     }
 }
 

@@ -1,3 +1,5 @@
+use smallvec::SmallVec;
+
 use crate::{
     edge::{InputType, OutputType},
     region::{Argument, Input, Output, RegResult, Region},
@@ -96,6 +98,55 @@ impl StructuralNode for GammaNode {
     }
     fn outputs_mut(&mut self) -> &mut [Output] {
         &mut self.outputs
+    }
+
+    fn output_types(&self) -> SmallVec<[OutputType; 3]> {
+        let mut outs = SmallVec::new();
+        for outidx in 0..self.exit_var_count {
+            outs.push(OutputType::ExitVariableOutput(outidx));
+        }
+        outs
+    }
+    fn input_types(&self) -> SmallVec<[InputType; 3]> {
+        let mut inputs = SmallVec::default();
+        //prepend the gamma-predicate
+        inputs.push(InputType::GammaPredicate);
+        //now append all the args
+        for i in 0..self.entry_var_count {
+            inputs.push(InputType::EntryVariableInput(i))
+        }
+
+        inputs
+    }
+    fn argument_types(&self, region_index: usize) -> SmallVec<[OutputType; 3]> {
+        if region_index >= self.regions.len() {
+            return SmallVec::new();
+        }
+
+        let mut args = SmallVec::new();
+        for i in 0..self.entry_var_count {
+            args.push(OutputType::EntryVariableArgument {
+                branch: region_index,
+                entry_variable: i,
+            })
+        }
+        args
+    }
+    fn result_types(&self, region_index: usize) -> SmallVec<[InputType; 3]> {
+        //Does not exist!
+        if region_index >= self.regions.len() {
+            return SmallVec::new();
+        }
+
+        let mut res = SmallVec::new();
+        for i in 0..self.exit_var_count {
+            res.push(InputType::ExitVariableResult {
+                branch: region_index,
+                exit_variable: i,
+            })
+        }
+
+        res
     }
 }
 
@@ -224,3 +275,66 @@ impl GammaNode {
 }
 
 pub type DecisionNode = GammaNode;
+
+#[cfg(test)]
+mod gammatests {
+    use smallvec::{smallvec, SmallVec};
+
+    use crate::{
+        edge::{InputType, OutputType},
+        nodes::StructuralNode,
+    };
+
+    use super::GammaNode;
+
+    //TODO write those tests for the others as well!
+    #[test]
+    fn sig_inputs_test() {
+        let mut gamma = GammaNode::new();
+        let a = gamma.add_entry_var();
+        let b = gamma.add_entry_var();
+        let c = gamma.add_exit_var();
+        assert!(gamma.add_region() == 0);
+        assert!(a == 0);
+        assert!(b == 1);
+        assert!(c == 0);
+
+        let insig = gamma.input_types();
+        let expected_in_sig: SmallVec<[InputType; 3]> = smallvec![
+            InputType::GammaPredicate,
+            InputType::EntryVariableInput(a),
+            InputType::EntryVariableInput(b)
+        ];
+        assert!(
+            insig == expected_in_sig,
+            "{:?} != {:?}",
+            insig,
+            expected_in_sig
+        );
+
+        let argsig = gamma.argument_types(0);
+        let expected_arg_sig: SmallVec<[OutputType; 3]> = smallvec![
+            OutputType::EntryVariableArgument {
+                branch: 0,
+                entry_variable: 0
+            },
+            OutputType::EntryVariableArgument {
+                branch: 0,
+                entry_variable: 1
+            }
+        ];
+        assert!(argsig == expected_arg_sig);
+
+        let ressig = gamma.result_types(0);
+        let expected_ressig: SmallVec<[InputType; 3]> = smallvec![InputType::ExitVariableResult {
+            branch: 0,
+            exit_variable: 0
+        }];
+        assert!(ressig == expected_ressig);
+
+        let outsig = gamma.output_types();
+        let expected_outsig: SmallVec<[OutputType; 3]> =
+            smallvec![OutputType::ExitVariableOutput(0)];
+        assert!(outsig == expected_outsig);
+    }
+}

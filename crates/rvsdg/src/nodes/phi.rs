@@ -1,5 +1,7 @@
 use std::slice;
 
+use smallvec::SmallVec;
+
 use crate::{
     edge::{InputType, OutputType},
     region::{Argument, Input, Output, RegResult, Region},
@@ -108,6 +110,63 @@ impl StructuralNode for PhiNode {
     }
     fn recursion_variable_count(&self) -> usize {
         self.rv_count
+    }
+
+    fn output_types(&self) -> SmallVec<[OutputType; 3]> {
+        let mut outs = SmallVec::new();
+        for i in 0..self.rv_count {
+            outs.push(OutputType::RecursionVariableOutput(i));
+        }
+        outs
+    }
+    fn input_types(&self) -> SmallVec<[InputType; 3]> {
+        let mut inputs = SmallVec::default();
+        //now append all the args
+        for i in 0..self.inputs.len() {
+            if i < self.cv_count {
+                inputs.push(InputType::ContextVariableInput(i));
+            } else {
+                panic!("ϕ-Node can't have other inputs than CV-inputs.")
+            }
+        }
+
+        inputs
+    }
+    fn argument_types(&self, region_index: usize) -> SmallVec<[OutputType; 3]> {
+        if region_index > 0 {
+            return SmallVec::new();
+        }
+
+        let mut args = SmallVec::new();
+        for i in 0..self.body.arguments.len() {
+            if i < self.cv_count {
+                args.push(OutputType::ContextVariableArgument(i));
+            } else {
+                if i < (self.cv_count + self.rv_count) {
+                    args.push(OutputType::RecursionVariableArgument(i - self.cv_count));
+                } else {
+                    args.push(OutputType::Argument(i - self.cv_count - self.rv_count));
+                }
+            }
+        }
+        args
+    }
+    fn result_types(&self, region_index: usize) -> SmallVec<[InputType; 3]> {
+        //Does not exist!
+        if region_index > 0 {
+            return SmallVec::new();
+        }
+
+        let mut res = SmallVec::new();
+        for i in 0..self.body.results.len() {
+            if i < self.rv_count {
+                res.push(InputType::RecursionVariableResult(i));
+            } else {
+                res.push(InputType::Result(i - self.rv_count));
+            }
+        }
+
+        res
     }
 }
 
