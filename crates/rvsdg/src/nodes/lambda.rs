@@ -327,3 +327,56 @@ impl LambdaNode {
         self.body.results.len()
     }
 }
+
+#[cfg(test)]
+mod phitests {
+    use smallvec::{smallvec, SmallVec};
+
+    use crate::{
+        edge::{InputType, OutputType},
+        nodes::{LambdaNode, StructuralNode},
+    };
+
+    //TODO write those tests for the others as well!
+    #[test]
+    fn sig_inputs_test() {
+        let mut lmd = LambdaNode::new();
+
+        assert!(lmd.add_context_variable() == 0);
+        assert!(lmd.add_argument() == 0);
+        assert!(lmd.add_context_variable() == 1);
+        assert!(lmd.add_argument() == 1);
+        assert!(lmd.add_result() == 0);
+        assert!(lmd.add_result() == 1);
+
+        let insig = lmd.input_types();
+        let expected_in_sig: SmallVec<[InputType; 3]> = smallvec![
+            InputType::ContextVariableInput(0),
+            InputType::ContextVariableInput(1),
+        ];
+        assert!(
+            insig == expected_in_sig,
+            "{:?} != {:?}",
+            insig,
+            expected_in_sig
+        );
+
+        let argsig = lmd.argument_types(0);
+        let expected_arg_sig: SmallVec<[OutputType; 3]> = smallvec![
+            OutputType::ContextVariableArgument(0),
+            OutputType::ContextVariableArgument(1),
+            OutputType::Argument(0),
+            OutputType::Argument(1),
+        ];
+        assert!(argsig == expected_arg_sig);
+
+        let ressig = lmd.result_types(0);
+        let expected_ressig: SmallVec<[InputType; 3]> =
+            smallvec![InputType::Result(0), InputType::Result(1),];
+        assert!(ressig == expected_ressig);
+
+        let outsig = lmd.output_types();
+        let expected_outsig: SmallVec<[OutputType; 3]> = smallvec![OutputType::LambdaDeclaration,];
+        assert!(outsig == expected_outsig);
+    }
+}

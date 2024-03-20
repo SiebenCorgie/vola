@@ -195,3 +195,47 @@ impl DeltaNode {
 }
 
 pub type GlobalVariable = DeltaNode;
+
+#[cfg(test)]
+mod phitests {
+    use smallvec::{smallvec, SmallVec};
+
+    use crate::{
+        edge::{InputType, OutputType},
+        nodes::{DeltaNode, StructuralNode},
+    };
+
+    //TODO write those tests for the others as well!
+    #[test]
+    fn sig_inputs_test() {
+        let mut dlt = DeltaNode::new();
+        assert!(dlt.add_context_variable() == 0);
+        assert!(dlt.add_context_variable() == 1);
+        let insig = dlt.input_types();
+        let expected_in_sig: SmallVec<[InputType; 3]> = smallvec![
+            InputType::ContextVariableInput(0),
+            InputType::ContextVariableInput(1),
+        ];
+        assert!(
+            insig == expected_in_sig,
+            "{:?} != {:?}",
+            insig,
+            expected_in_sig
+        );
+
+        let argsig = dlt.argument_types(0);
+        let expected_arg_sig: SmallVec<[OutputType; 3]> = smallvec![
+            OutputType::ContextVariableArgument(0),
+            OutputType::ContextVariableArgument(1),
+        ];
+        assert!(argsig == expected_arg_sig);
+
+        let ressig = dlt.result_types(0);
+        let expected_ressig: SmallVec<[InputType; 3]> = smallvec![InputType::Result(0)];
+        assert!(ressig == expected_ressig);
+
+        let outsig = dlt.output_types();
+        let expected_outsig: SmallVec<[OutputType; 3]> = smallvec![OutputType::DeltaDeclaration];
+        assert!(outsig == expected_outsig);
+    }
+}

@@ -136,3 +136,47 @@ impl OmegaNode {
         self.body.results.get_mut(n)
     }
 }
+
+#[cfg(test)]
+mod phitests {
+    use smallvec::{smallvec, SmallVec};
+
+    use crate::{
+        edge::{InputType, OutputType},
+        nodes::{OmegaNode, StructuralNode},
+    };
+
+    //TODO write those tests for the others as well!
+    #[test]
+    fn sig_inputs_test() {
+        let mut omg = OmegaNode::new();
+
+        assert!(omg.add_import() == 0);
+        assert!(omg.add_export() == 0);
+        assert!(omg.add_import() == 1);
+        assert!(omg.add_export() == 1);
+
+        let insig = omg.input_types();
+        let expected_in_sig: SmallVec<[InputType; 3]> = smallvec![];
+        assert!(
+            insig == expected_in_sig,
+            "{:?} != {:?}",
+            insig,
+            expected_in_sig
+        );
+
+        let argsig = omg.argument_types(0);
+        let expected_arg_sig: SmallVec<[OutputType; 3]> =
+            smallvec![OutputType::Argument(0), OutputType::Argument(1),];
+        assert!(argsig == expected_arg_sig);
+
+        let ressig = omg.result_types(0);
+        let expected_ressig: SmallVec<[InputType; 3]> =
+            smallvec![InputType::Result(0), InputType::Result(1)];
+        assert!(ressig == expected_ressig);
+
+        let outsig = omg.output_types();
+        let expected_outsig: SmallVec<[OutputType; 3]> = smallvec![];
+        assert!(outsig == expected_outsig);
+    }
+}
