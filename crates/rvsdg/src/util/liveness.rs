@@ -2,7 +2,7 @@
 
 use crate::{
     attrib::FlagStore,
-    edge::LangEdge,
+    edge::{InportLocation, LangEdge},
     nodes::{LangNode, NodeType},
     region::RegionLocation,
     Rvsdg,
@@ -22,15 +22,17 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
     pub fn liveness_region(&self, region: RegionLocation) -> FlagStore<bool> {
         //setup the initial flags for all results.
         //The _type of result_ depends on the region's node type. So we use that to explore the definitions
-        match &self.node(region.node).node_type {
-            NodeType::Simple(_) | NodeType::Apply(_) => panic!("node has no region"),
-            NodeType::Gamma(_) => {
-                //for gamma nodes
-            }
-            _ => todo!(),
+        let results = self.node(region.node).result_types(region.region_index);
+        let mut flags = FlagStore::new();
+        for res in results.into_iter().map(|r| InportLocation {
+            node: region.node,
+            input: r,
+        }) {
+            flags.set(res.into(), true);
         }
 
-        todo!();
+        //now hit up the algorithm
+        self.calc_liveness(region, flags)
     }
 
     ///The recursive algorithm, This is more or less the _mark_ phase of the dead-node elimination algorithm described

@@ -38,8 +38,8 @@ impl StructuralNode for ThetaNode {
     fn inport(&self, ty: &InputType) -> Option<&Input> {
         match ty {
             InputType::Input(u) => self.inputs.get(*u),
-            InputType::Result(n) => self.loop_body.results.get(*n),
-            InputType::LoopVariableResult(n) => self.loop_body.results.get(n + 1),
+            //NOTE: Offest by one, since the first is our predicate.
+            InputType::Result(n) => self.loop_body.results.get(*n + 1),
             InputType::ThetaPredicate => Some(self.loop_predicate()),
             _ => None,
         }
@@ -47,8 +47,8 @@ impl StructuralNode for ThetaNode {
     fn inport_mut(&mut self, ty: &InputType) -> Option<&mut Input> {
         match ty {
             InputType::Input(u) => self.inputs.get_mut(*u),
-            InputType::Result(n) => self.loop_body.results.get_mut(*n),
-            InputType::LoopVariableResult(n) => self.loop_body.results.get_mut(n + 1),
+            //NOTE: offset by one, since the first is our predicate.
+            InputType::Result(n) => self.loop_body.results.get_mut(*n + 1),
             InputType::ThetaPredicate => Some(self.loop_predicate_mut()),
             _ => None,
         }
@@ -119,7 +119,7 @@ impl StructuralNode for ThetaNode {
         //prepend the predicate
         res.push(InputType::ThetaPredicate);
         for i in 0..self.lv_count {
-            res.push(InputType::LoopVariableResult(i));
+            res.push(InputType::Result(i));
         }
 
         res
@@ -197,5 +197,53 @@ impl ThetaNode {
     ///Returns the `n`-th loop variable output to this node.
     pub fn lv_output_mut(&mut self, n: usize) -> Option<&mut Output> {
         self.outputs.get_mut(n)
+    }
+}
+
+#[cfg(test)]
+mod gammatests {
+    use smallvec::{smallvec, SmallVec};
+
+    use crate::{
+        edge::{InputType, OutputType},
+        nodes::StructuralNode,
+    };
+
+    use super::ThetaNode;
+
+    //TODO write those tests for the others as well!
+    #[test]
+    fn sig_inputs_test() {
+        let mut tet = ThetaNode::new();
+        assert!(tet.add_loop_variable() == 0);
+        assert!(tet.add_loop_variable() == 1);
+
+        let insig = tet.input_types();
+        let expected_in_sig: SmallVec<[InputType; 3]> =
+            smallvec![InputType::Input(0), InputType::Input(1)];
+        assert!(
+            insig == expected_in_sig,
+            "{:?} != {:?}",
+            insig,
+            expected_in_sig
+        );
+
+        let argsig = tet.argument_types(0);
+        let expected_arg_sig: SmallVec<[OutputType; 3]> =
+            smallvec![OutputType::Argument(0), OutputType::Argument(1),];
+        assert!(argsig == expected_arg_sig);
+
+        let ressig = tet.result_types(0);
+        let expected_ressig: SmallVec<[InputType; 3]> = smallvec![
+            InputType::ThetaPredicate,
+            InputType::Result(0),
+            InputType::Result(1),
+        ];
+        assert!(ressig == expected_ressig);
+
+        let outsig = tet.output_types();
+        let expected_outsig: SmallVec<[OutputType; 3]> =
+            smallvec![OutputType::Output(0), OutputType::Output(1)];
+        assert!(outsig == expected_outsig);
     }
 }

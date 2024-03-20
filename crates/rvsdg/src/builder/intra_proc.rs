@@ -187,7 +187,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> ThetaBuilder<'a, N, E> {
         };
         let result = InportLocation {
             node: self.node_ref,
-            input: InputType::LoopVariableResult(created_at_idx),
+            input: InputType::Result(created_at_idx),
         };
         let arg = OutportLocation {
             node: self.node_ref,
