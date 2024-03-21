@@ -334,7 +334,7 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
     /// If one or more errors occur while disconnecting the node's edges, the process will try to continue to
     /// disconnect the remaining edges.
     /// If any error occurs, Err is returned, carrying the last occurred error;
-    pub fn remove_node(&mut self, node: NodeRef) -> Result<(), GraphError> {
+    pub fn remove_node(&mut self, node: NodeRef) -> Result<Node<N>, GraphError> {
         let input_edges: SmallColl<EdgeRef> = self
             .node(node)
             .inputs()
@@ -360,7 +360,17 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
         if let Some(err) = any_error {
             Err(err)
         } else {
-            Ok(())
+            //remove the node from the slotmap and return it
+            let n = self.nodes.remove(node).unwrap();
+
+            //remove the node from its region map
+            if let Some(parentreg) = &n.parent {
+                assert!(
+                    self.region_mut(parentreg).unwrap().nodes.remove(&node),
+                    "expected node to be present in its parent region!"
+                );
+            }
+            Ok(n)
         }
     }
 

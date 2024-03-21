@@ -7,131 +7,87 @@ use ahash::AHashSet;
 use thiserror::Error;
 
 use crate::{
-    attrib::{AttribLocation, AttribStore},
+    attrib::{AttribLocation, AttribStore, FlagStore},
     edge::{InportLocation, InputType, LangEdge, OutportLocation, OutputType},
-    nodes::LangNode,
+    err::GraphError,
+    nodes::{LangNode, Node},
     region::RegionLocation,
-    Rvsdg,
+    NodeRef, Rvsdg,
 };
 impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
-    ///Applies dead-node-elimination to the whole graph.
-    pub fn dead_node_elimination(&mut self) -> Result<(), DneError> {
-        Ok(())
-    }
-
-    fn is_inport_alive(marks: &AttribStore<bool>, port: InportLocation) -> bool {
-        if let Some(mark) = marks.attrib(&port.into()) {
-            assert!(mark.len() <= 1);
-            match mark {
-                [false, ..] => false,
-                [true, ..] => true,
-                [] => false,
-            }
-        } else {
-            //dead by definition
-            false
-        }
-    }
-
-    fn is_outport_alive(marks: &AttribStore<bool>, port: OutportLocation) -> bool {
-        if let Some(mark) = marks.attrib(&port.into()) {
-            assert!(mark.len() <= 1);
-            match mark {
-                [false, ..] => false,
-                [true, ..] => true,
-                [] => false,
-            }
-        } else {
-            //unmarked ports are dead by definition
-            false
-        }
-    }
-
-    fn mark_outport(marks: &mut AttribStore<bool>, port: OutportLocation, is_alive: bool) {
-        if let Some(marks) = marks.attrib_mut(&port.into()) {
-            //overwrite
-            marks.clear();
-            marks.push(is_alive);
-        } else {
-            marks.push_attrib(&port.into(), is_alive)
-        }
-    }
-
-    fn mark_inport(marks: &mut AttribStore<bool>, port: InportLocation, is_alive: bool) {
-        if let Some(marks) = marks.attrib_mut(&port.into()) {
-            //overwrite
-            marks.clear();
-            marks.push(is_alive);
-        } else {
-            marks.push_attrib(&port.into(), is_alive)
-        }
+    ///Applies dead-node-elimination to the whole graph. Returns all nodes that
+    /// where deleted.
+    pub fn dead_node_elimination(&mut self) -> Result<Vec<Node<N>>, GraphError> {
+        self.dne_region(self.toplevel_region())
     }
 
     ///Applies the dead-node-elimination on `region` and all its children (in topological order).
-    pub fn dne_region(
-        &mut self,
-        region: RegionLocation,
-        marks: &mut AttribStore<bool>,
-    ) -> Result<(), DneError> {
+    pub fn dne_region(&mut self, region: RegionLocation) -> Result<Vec<Node<N>>, GraphError> {
         //We basically coppy the algorithm VI: DeadNodeElimination of the [source paper](http://arxiv.org/abs/1912.05036v2)
         //We express the `marks` via the attribute store and do traversal via recursion.
         //
-        // So the _mark-phase_ is before the recursion down to the sub-regions.
-        // once the recursion comes back, all child-regions are marked acordingly, so we can use that information to do
-        // our own elimination/sweep pass.
+        //The _mark_ phase is done by our per-port liveness analysis. The sweep only iterates all nodes of all regions
+        // and deletes any node, where all output ports are marked dead.
 
-        //IMPORTANT NOTE: We don't use the relative addressing of attributes, since we don't care for the difference of
-        //                the different argument-like ports. We just use In/output and result/argument.
+        let liveness = self.liveness_region(region);
+        let mut deleted_buffer = Vec::with_capacity(10);
+        //we now do a top-down traversal, where we first delete all dead nodes of a region,
+        //and then recurse all sub regions of nodes that are still theren. This effectively prevents us from traversing
+        //dead structural nodes, since those are deleted at that point already.
+        self.dne_dfs_sweep(&liveness, region, &mut deleted_buffer)?;
 
-        //PREPARE: by copying over all result-annotations of the region's parent node
-        let rescount = self.region(&region).unwrap().results.len();
-        for residx in 0..rescount {
-            if Self::is_outport_alive(
-                &marks,
-                OutportLocation {
-                    node: region.node,
-                    output: OutputType::Output(residx),
-                },
-            ) {
-                //mark ours as alive
-                Self::mark_inport(
-                    marks,
-                    InportLocation {
-                        node: region.node,
-                        input: InputType::Result(residx),
-                    },
-                    true,
-                );
-            } else {
-                //mark dead as well
-                Self::mark_inport(
-                    marks,
-                    InportLocation {
-                        node: region.node,
-                        input: InputType::Result(residx),
-                    },
-                    false,
-                );
+        Ok(deleted_buffer)
+    }
+
+    fn node_is_live(&self, liveness: &FlagStore<bool>, node: NodeRef) -> bool {
+        //the node is live, if any output is live
+        for outty in self.node(node).outport_types() {
+            let port = OutportLocation {
+                node,
+                output: outty,
+            };
+            //found an alive port
+            if let Some(true) = liveness.get(&port.into()) {
+                return true;
             }
         }
 
-        //MARK:
-        let mut residx = 0;
-        //Seed a traversal by result-connected nodes. Then use the predecessor iterator to go over all.
-        // We might walk some connections multiple times, but thats okay
-        for res in 0..rescount {
-            let seed_node = if let Some(seed) = self.region(&region).unwrap().result_src(&self, res)
-            {
-                seed
-            } else {
-                continue;
-            };
+        false
+    }
+
+    fn dne_dfs_sweep(
+        &mut self,
+        liveness: &FlagStore<bool>,
+        region: RegionLocation,
+        deleted_buffer: &mut Vec<Node<N>>,
+    ) -> Result<(), GraphError> {
+        let all_nodes = self.region(&region).unwrap().nodes.clone();
+        let initial_deleted = deleted_buffer.len();
+        for node in &all_nodes {
+            if !self.node_is_live(liveness, *node) {
+                deleted_buffer.push(self.remove_node(*node)?);
+            }
         }
 
-        //TODO: recurse all sub regions
-
-        //TODO for all nodes with subregion, copy over liveness information from args
-
+        //now recurse into all sub regions
+        //NOTE: save one clone if possible
+        let left_nodes = if initial_deleted == deleted_buffer.len() {
+            all_nodes
+        } else {
+            self.region(&region).unwrap().nodes.clone()
+        };
+        for node in left_nodes {
+            let regcount = self.node(node).regions().len();
+            if regcount > 0 {
+                for region_index in 0..regcount {
+                    self.dne_dfs_sweep(
+                        liveness,
+                        RegionLocation { node, region_index },
+                        deleted_buffer,
+                    )?;
+                }
+            }
+        }
         Ok(())
     }
 }

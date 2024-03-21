@@ -19,3 +19,7 @@ graphviz-rust = {workspace = true, optional = true}
 smallvec.workspace = true
 rvsdg-derive-lang = {path = "../rvsdg-derive-lang", optional = true}
 log= {workspace = true, optional = true}
+
+
+[dev-dependencies]
+rvsdg-viewer = {path = "../rvsdg-viewer"}
