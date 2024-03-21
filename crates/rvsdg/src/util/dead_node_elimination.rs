@@ -28,9 +28,7 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
                 [] => false,
             }
         } else {
-            #[cfg(feature = "log")]
-            log::warn!("Found invalid liveness check!");
-
+            //dead by definition
             false
         }
     }
@@ -44,9 +42,7 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
                 [] => false,
             }
         } else {
-            #[cfg(feature = "log")]
-            log::warn!("Found invalid liveness check!");
-
+            //unmarked ports are dead by definition
             false
         }
     }
@@ -122,7 +118,7 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
         //MARK:
         let mut residx = 0;
         //Seed a traversal by result-connected nodes. Then use the predecessor iterator to go over all.
-        //
+        // We might walk some connections multiple times, but thats okay
         for res in 0..rescount {
             let seed_node = if let Some(seed) = self.region(&region).unwrap().result_src(&self, res)
             {
@@ -131,6 +127,10 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
                 continue;
             };
         }
+
+        //TODO: recurse all sub regions
+
+        //TODO for all nodes with subregion, copy over liveness information from args
 
         Ok(())
     }

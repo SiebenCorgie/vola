@@ -179,7 +179,7 @@ impl StructuralNode for LambdaNode {
         self.cv_count
     }
 
-    fn output_types(&self) -> SmallVec<[OutputType; 3]> {
+    fn outport_types(&self) -> SmallVec<[OutputType; 3]> {
         let mut outs = SmallVec::new();
         outs.push(OutputType::LambdaDeclaration);
         outs
@@ -375,7 +375,7 @@ mod phitests {
             smallvec![InputType::Result(0), InputType::Result(1),];
         assert!(ressig == expected_ressig);
 
-        let outsig = lmd.output_types();
+        let outsig = lmd.outport_types();
         let expected_outsig: SmallVec<[OutputType; 3]> = smallvec![OutputType::LambdaDeclaration,];
         assert!(outsig == expected_outsig);
     }

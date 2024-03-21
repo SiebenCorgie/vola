@@ -88,7 +88,7 @@ impl StructuralNode for DeltaNode {
         slice::from_mut(&mut self.output)
     }
 
-    fn output_types(&self) -> SmallVec<[OutputType; 3]> {
+    fn outport_types(&self) -> SmallVec<[OutputType; 3]> {
         smallvec![OutputType::DeltaDeclaration]
     }
     fn input_types(&self) -> SmallVec<[InputType; 3]> {
@@ -234,7 +234,7 @@ mod phitests {
         let expected_ressig: SmallVec<[InputType; 3]> = smallvec![InputType::Result(0)];
         assert!(ressig == expected_ressig);
 
-        let outsig = dlt.output_types();
+        let outsig = dlt.outport_types();
         let expected_outsig: SmallVec<[OutputType; 3]> = smallvec![OutputType::DeltaDeclaration];
         assert!(outsig == expected_outsig);
     }

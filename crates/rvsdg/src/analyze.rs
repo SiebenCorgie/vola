@@ -5,7 +5,7 @@
 
 use std::collections::VecDeque;
 
-use ahash::AHashSet;
+use ahash::{AHashMap, AHashSet};
 
 mod region_walker;
 pub use region_walker::RegionWalker;
@@ -13,7 +13,7 @@ pub use region_walker::RegionWalker;
 use crate::{
     edge::{InportLocation, InputType, LangEdge, OutportLocation, OutputType},
     nodes::LangNode,
-    region::RegionLocation,
+    region::{Input, RegionLocation},
     NodeRef, Rvsdg,
 };
 
@@ -423,4 +423,31 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
 
         false
     }
+
+    ///Builds the dependecy graph for this region's nodes. Only includes region-local nodes.
+    /// the `region.node` is a dependecy, if a nodes depends on any _outside-region_ value.
+    pub fn region_node_dependecy_graph(&self, region: RegionLocation) -> DependencyGraph {
+        let mut graph = AHashMap::default();
+
+        for node in self.region(&region).unwrap().nodes {
+            let mut dependencies = AHashSet::new();
+            let inputcount = self.node(node).inputs().len();
+            for input in 0..inputcount {
+                if let Some(src) = self.node(node).input_src(&self, input) {
+                    assert!(dependencies.insert(src.node));
+                }
+            }
+
+            let old = graph.insert(node, dependencies);
+            assert!(old.is_none());
+        }
+
+        DependencyGraph { graph }
+    }
+}
+
+///
+pub struct DependencyGraph {
+    ///Maps a node to all nodes it depends on
+    pub graph: AHashMap<NodeRef, AHashSet<NodeRef>>,
 }

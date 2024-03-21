@@ -100,7 +100,7 @@ impl StructuralNode for GammaNode {
         &mut self.outputs
     }
 
-    fn output_types(&self) -> SmallVec<[OutputType; 3]> {
+    fn outport_types(&self) -> SmallVec<[OutputType; 3]> {
         let mut outs = SmallVec::new();
         for outidx in 0..self.exit_var_count {
             outs.push(OutputType::ExitVariableOutput(outidx));
@@ -332,7 +332,7 @@ mod gammatests {
         }];
         assert!(ressig == expected_ressig);
 
-        let outsig = gamma.output_types();
+        let outsig = gamma.outport_types();
         let expected_outsig: SmallVec<[OutputType; 3]> =
             smallvec![OutputType::ExitVariableOutput(0)];
         assert!(outsig == expected_outsig);

@@ -112,7 +112,7 @@ impl StructuralNode for PhiNode {
         self.rv_count
     }
 
-    fn output_types(&self) -> SmallVec<[OutputType; 3]> {
+    fn outport_types(&self) -> SmallVec<[OutputType; 3]> {
         let mut outs = SmallVec::new();
         for i in 0..self.rv_count {
             outs.push(OutputType::RecursionVariableOutput(i));
@@ -361,7 +361,7 @@ mod phitests {
         ];
         assert!(ressig == expected_ressig);
 
-        let outsig = phi.output_types();
+        let outsig = phi.outport_types();
         let expected_outsig: SmallVec<[OutputType; 3]> = smallvec![
             OutputType::RecursionVariableOutput(0),
             OutputType::RecursionVariableOutput(1),

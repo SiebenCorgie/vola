@@ -82,7 +82,7 @@ impl StructuralNode for ThetaNode {
         &mut self.outputs
     }
 
-    fn output_types(&self) -> SmallVec<[OutputType; 3]> {
+    fn outport_types(&self) -> SmallVec<[OutputType; 3]> {
         let mut outs = SmallVec::new();
         for outidx in 0..self.lv_count {
             outs.push(OutputType::Output(outidx));
@@ -241,7 +241,7 @@ mod gammatests {
         ];
         assert!(ressig == expected_ressig);
 
-        let outsig = tet.output_types();
+        let outsig = tet.outport_types();
         let expected_outsig: SmallVec<[OutputType; 3]> =
             smallvec![OutputType::Output(0), OutputType::Output(1)];
         assert!(outsig == expected_outsig);

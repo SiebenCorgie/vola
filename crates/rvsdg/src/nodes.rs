@@ -325,7 +325,7 @@ impl<N: LangNode + 'static> Node<N> {
 
     ///Helper that builds all output types for this node in order. Spares you from analysing the
     ///nodes ports to get a type-correct OutportLocation (when paired with a mapping to the actual location).
-    pub fn output_types(&self) -> SmallVec<[OutputType; 3]> {
+    pub fn outport_types(&self) -> SmallVec<[OutputType; 3]> {
         match &self.node_type {
             NodeType::Simple(node) => {
                 let mut outs = SmallVec::new();
@@ -334,9 +334,9 @@ impl<N: LangNode + 'static> Node<N> {
                 }
                 outs
             }
-            NodeType::Gamma(g) => g.output_types(),
-            NodeType::Theta(g) => g.output_types(),
-            NodeType::Lambda(g) => g.output_types(),
+            NodeType::Gamma(g) => g.outport_types(),
+            NodeType::Theta(g) => g.outport_types(),
+            NodeType::Lambda(g) => g.outport_types(),
             NodeType::Apply(g) => {
                 let mut outs = SmallVec::new();
                 for i in 0..g.outputs.len() {
@@ -344,9 +344,9 @@ impl<N: LangNode + 'static> Node<N> {
                 }
                 outs
             }
-            NodeType::Delta(g) => g.output_types(),
-            NodeType::Phi(g) => g.output_types(),
-            NodeType::Omega(g) => g.output_types(),
+            NodeType::Delta(g) => g.outport_types(),
+            NodeType::Phi(g) => g.outport_types(),
+            NodeType::Omega(g) => g.outport_types(),
         }
     }
 
@@ -561,7 +561,7 @@ pub trait StructuralNode {
     }
 
     ///Builds the output signature for this node. Can be mapped to the actual OutportLocations.
-    fn output_types(&self) -> SmallVec<[OutputType; 3]>;
+    fn outport_types(&self) -> SmallVec<[OutputType; 3]>;
     fn input_types(&self) -> SmallVec<[InputType; 3]>;
     fn argument_types(&self, region_index: usize) -> SmallVec<[OutputType; 3]>;
     fn result_types(&self, region_index: usize) -> SmallVec<[InputType; 3]>;

@@ -63,7 +63,7 @@ impl StructuralNode for OmegaNode {
         &mut []
     }
 
-    fn output_types(&self) -> SmallVec<[OutputType; 3]> {
+    fn outport_types(&self) -> SmallVec<[OutputType; 3]> {
         //ω never has outputs
         let mut outs = SmallVec::new();
         outs
@@ -175,7 +175,7 @@ mod phitests {
             smallvec![InputType::Result(0), InputType::Result(1)];
         assert!(ressig == expected_ressig);
 
-        let outsig = omg.output_types();
+        let outsig = omg.outport_types();
         let expected_outsig: SmallVec<[OutputType; 3]> = smallvec![];
         assert!(outsig == expected_outsig);
     }
