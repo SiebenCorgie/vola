@@ -429,16 +429,16 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
     pub fn region_node_dependecy_graph(&self, region: RegionLocation) -> DependencyGraph {
         let mut graph = AHashMap::default();
 
-        for node in self.region(&region).unwrap().nodes {
+        for node in &self.region(&region).unwrap().nodes {
             let mut dependencies = AHashSet::new();
-            let inputcount = self.node(node).inputs().len();
+            let inputcount = self.node(*node).inputs().len();
             for input in 0..inputcount {
-                if let Some(src) = self.node(node).input_src(&self, input) {
+                if let Some(src) = self.node(*node).input_src(&self, input) {
                     assert!(dependencies.insert(src.node));
                 }
             }
 
-            let old = graph.insert(node, dependencies);
+            let old = graph.insert(*node, dependencies);
             assert!(old.is_none());
         }
 
