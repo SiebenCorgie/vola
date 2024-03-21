@@ -194,6 +194,16 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
                             //activate _all_ results for the λ/ϕ/δ nodes.
                             //TODO: Not entirely correct, we should analyse if those results are in fact used
                             //      by the caller (in case of the delta and lambda nodes).
+
+                            for resport in self.node(src_port.node).result_types(0) {
+                                //flag as live and push back
+                                let new_inport = InportLocation {
+                                    node: src_port.node,
+                                    input: resport,
+                                };
+                                flags.set(new_inport.clone().into(), true);
+                                waiting_ports.push_back(new_inport);
+                            }
                         }
                         NodeType::Theta(t) => {
                             let theta_pred = InportLocation {

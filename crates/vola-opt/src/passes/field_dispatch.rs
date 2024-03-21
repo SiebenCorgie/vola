@@ -215,7 +215,7 @@ impl Optimizer {
             .remove_unused_context_variables(export_fn_region.node);
 
         if env::var("VOLA_DUMP_ALL").is_ok() || env::var("DUMP_BEFOR_SPECIALIZE").is_ok() {
-            self.dump_svg("before_specialize.svg");
+            self.dump_svg("before_specialize.svg", true);
         }
 
         //NOTE: the first NodeRef of the pair's is invalid at this point
@@ -391,7 +391,7 @@ impl Optimizer {
         //NOTE: This dump is _specific_, but good if you need to know if some CSG-Tree inline failes
         //      unexpectedly.
         if env::var("VOLA_DUMP_ALL").is_ok() || env::var("DUMP_AFTER_INLINE_CALL_TREE").is_ok() {
-            self.dump_svg(&format!("after_inline_call_tree_{}.svg", region.node));
+            self.dump_svg(&format!("after_inline_call_tree_{}.svg", region.node), true);
         }
 
         let access_field_node_port = self
@@ -433,7 +433,10 @@ impl Optimizer {
             .unwrap();
 
         if env::var("VOLA_DUMP_ALL").is_ok() || env::var("DUMP_AFTER_ACCESSNODE_REWRITE").is_ok() {
-            self.dump_svg(&format!("after_access_node_rewrite_{}.svg", region.node));
+            self.dump_svg(
+                &format!("after_access_node_rewrite_{}.svg", region.node),
+                true,
+            );
         }
 
         //NOTE we seed the specialization with the entry_csg node, and the TreeAccess node we start at.
@@ -452,10 +455,13 @@ impl Optimizer {
         dispatch_node: NodeRef,
     ) -> Result<NodeRef, OptError> {
         if env::var("VOLA_DUMP_ALL").is_ok() || env::var("DUMP_DISPATCH").is_ok() {
-            self.dump_svg(&format!(
-                "dispatch_reg_{:?}_{dispatch_node:?}.svg",
-                ctx.spec_region.node
-            ));
+            self.dump_svg(
+                &format!(
+                    "dispatch_reg_{:?}_{dispatch_node:?}.svg",
+                    ctx.spec_region.node
+                ),
+                true,
+            );
         }
 
         let region = self

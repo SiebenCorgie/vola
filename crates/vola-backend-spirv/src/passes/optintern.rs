@@ -64,7 +64,7 @@ impl SpirvBackend {
     ///dependent nodes.
     ///
     pub(crate) fn intern(&mut self, opt: &Optimizer) -> Result<(), BackendSpirvError> {
-        opt.dump_svg("ayay.svg");
+        opt.dump_svg("ayay.svg", false);
 
         //take the internal module
         let builder = Builder::new_from_module(self.module.take().unwrap());
@@ -152,7 +152,7 @@ impl SpirvBackend {
                         #[cfg(feature = "log")]
                         log::error!("dumping as \"LmdCycle.svg\"");
 
-                        opt.dump_svg("LmdCycle.svg");
+                        opt.dump_svg("LmdCycle.svg", true);
                     }
 
                     return Err(BackendSpirvError::Any {
@@ -361,7 +361,11 @@ impl SpirvBackend {
             .map(|edg| {
                 if let Some(edg) = edg {
                     let src = opt.graph.edge(edg).src();
-                    assert!(src.output == OutputType::Output(0));
+                    assert!(
+                        src.output == OutputType::Output(0),
+                        "{:?} != Output(0)",
+                        src.output
+                    );
                     Some(Self::intern_node(ctx, lmdctx, opt, src.node).unwrap())
                 } else {
                     None

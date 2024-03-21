@@ -191,13 +191,13 @@ impl Optimizer {
         }
     }
 
-    pub fn dump_svg(&self, name: &str) {
+    pub fn dump_svg(&self, name: &str, ignore_dead_node: bool) {
         println!("Found {} type-tags", self.typemap.attribs.len());
 
         let conf = LayoutConfig {
             grid_padding: 30,
             grid_empty_spacing: 15,
-            ignore_dead_node: true,
+            ignore_dead_node,
             ..Default::default()
         };
         rvsdg_viewer::into_svg_with_config(&self.graph, name, &conf)
