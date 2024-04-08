@@ -37,7 +37,7 @@ impl Backend {
         match self {
             Backend::Spirv => "spv",
             Backend::Cranelift(CraneliftTarget::X86) => "bin",
-            Backend::Cranelift(CraneliftTarget::Wasm) => ".wasm",
+            Backend::Cranelift(CraneliftTarget::Wasm) => "wasm",
         }
     }
 }
@@ -97,6 +97,9 @@ impl Pipeline {
                 let target_name = self.target_file_name();
                 println!("Emitting SPIR-V as {target_name:?}");
                 backend.intern_module(&opt)?;
+
+                backend.dump_svg("eyo.svg", false);
+
                 let spvmodule = backend.build();
                 //now write to file
 

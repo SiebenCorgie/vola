@@ -23,16 +23,16 @@ use crate::spv::SpvNode;
 
 pub enum BackendOp {
     SpirvOp(Box<dyn SpvNode + 'static>),
+    Dummy,
 }
 
 ///The backend graph is characterised by SSA-like multi-input, single-output nodes.
-//
 #[derive(LangNode)]
-pub(crate) struct BackendNode {
+pub struct BackendNode {
     #[inputs]
-    inputs: SmallVec<[Input; 3]>,
+    pub inputs: SmallVec<[Input; 3]>,
     #[output]
-    output: Output,
+    pub output: Output,
 
     pub(crate) op: BackendOp,
 }
@@ -41,12 +41,13 @@ impl Debug for BackendNode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self.op {
             BackendOp::SpirvOp(o) => write!(f, "SpirvOp({})", o.name()),
+            BackendOp::Dummy => write!(f, "Dummy"),
         }
     }
 }
 
 #[derive(Debug, Clone, Copy)]
-pub(crate) enum BackendEdge {
+pub enum BackendEdge {
     Value,
     State,
 }
@@ -55,6 +56,7 @@ impl View for BackendNode {
     fn name(&self) -> String {
         match &self.op {
             BackendOp::SpirvOp(o) => o.name(),
+            BackendOp::Dummy => "Dummy".to_owned(),
         }
     }
     fn color(&self) -> rvsdg_viewer::Color {

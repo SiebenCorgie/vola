@@ -84,7 +84,8 @@ impl SpirvBackend {
     ///
     /// Assumes that all nodes that are live/reachable (from any ω-result) are in the "alge" dialect.
     pub fn intern_module(&mut self, opt: &Optimizer) -> Result<(), BackendSpirvError> {
-        todo!()
+        self.intern_opt_graph(opt)
+            .map_err(|e| BackendSpirvError::InterningError(e))
     }
 
     ///Builds the module based on the current configuration and graph.

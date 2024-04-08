@@ -43,7 +43,7 @@ pub trait GraphTypeTransformer {
     //      be nice.
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Clone)]
 pub enum GraphTypeTransformerError {
     ///Happens, if the toplevel regions of the src has more arguments than the dst graph.
     #[error("The Toplevel region of the src graph has {src} arguments, but the dst graph has only {dst}")]

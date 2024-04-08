@@ -6,6 +6,7 @@
  * 2024 Tendsin Mende
  */
 
+use rvsdg::util::graph_type_transform::GraphTypeTransformerError;
 use vola_common::{
     miette::{self, Diagnostic},
     thiserror::{self, Error},
@@ -18,4 +19,6 @@ impl Reportable for BackendSpirvError {}
 pub enum BackendSpirvError {
     #[error("{text}")]
     Any { text: String },
+    #[error("Failed to intern optimizer graph: {0}")]
+    InterningError(GraphTypeTransformerError),
 }
