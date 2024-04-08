@@ -1,5 +1,6 @@
 use crate::{edge::LangEdge, Rvsdg};
 
+#[derive(Clone, Copy, Debug)]
 pub enum VSEdge {
     ///Value Edge, representing data dependency of one node to another
     Value,

@@ -30,20 +30,20 @@ fn build_liveness_graph() -> Rvsdg<LNode, VSEdge> {
 
             let (gammanode, _) = reg.new_decission(|gamma| {
                 //add inputs
-                let (port, index) = gamma.add_entry_variable();
+                let (_port, index) = gamma.add_entry_variable();
                 assert!(index == 0);
-                let (port, index) = gamma.add_entry_variable();
+                let (_port, index) = gamma.add_entry_variable();
                 assert!(index == 1);
-                let (index, port) = gamma.add_exit_variable();
+                let (index, _port) = gamma.add_exit_variable();
                 assert!(index == 0);
-                let (index, port) = gamma.add_exit_variable();
+                let (index, _port) = gamma.add_exit_variable();
                 assert!(index == 1);
 
                 //add the branch with the internal theta node
                 let (teta_b_idx, _) = gamma.new_branch(|gbranch, bidx| {
                     let (tnode, _) = gbranch.new_loop(|tet| {
-                        let (a, b, c, d) = tet.add_loop_variable();
-                        let (a, b, c, d) = tet.add_loop_variable();
+                        let (_a, _b, _c, _d) = tet.add_loop_variable();
+                        let (_a, _b, _c, _d) = tet.add_loop_variable();
 
                         tet.on_loop(|b_theta| {
                             let nodeid = b_theta.parent_location().node;
@@ -250,7 +250,7 @@ fn build_liveness_graph() -> Rvsdg<LNode, VSEdge> {
                         neg.input(0),
                     )
                     .unwrap();
-                    b.connect_to_result(
+                    let _ = b.connect_to_result(
                         neg.output(0),
                         InputType::ExitVariableResult {
                             branch: bidx,
@@ -279,7 +279,7 @@ fn build_liveness_graph() -> Rvsdg<LNode, VSEdge> {
                     b.ctx_mut()
                         .connect(add.output(0), div.input(1), VSEdge::Value)
                         .unwrap();
-                    b.connect_to_result(
+                    let _ = b.connect_to_result(
                         div.output(0),
                         InputType::ExitVariableResult {
                             branch: bidx,

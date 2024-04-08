@@ -26,7 +26,7 @@ pub fn main() {
         println!("Opt did not parse AST successfully :(");
     }
 
-    opt.dump_svg("before_type_resolution.svg");
+    opt.dump_svg("before_type_resolution.svg", true);
 
     let tyder_start = Instant::now();
     if let Err(e) = opt.type_derive() {
@@ -38,7 +38,7 @@ pub fn main() {
         tyder_start.elapsed().as_nanos()
     );
 
-    opt.dump_svg("after_type_resolution.svg");
+    opt.dump_svg("after_type_resolution.svg", true);
 
     let mut disp_start = Instant::now();
     if let Err(e) = opt.dispatch_all_exports() {
@@ -50,5 +50,5 @@ pub fn main() {
         disp_start.elapsed().as_nanos()
     );
 
-    opt.dump_svg("after_dispatch.svg");
+    opt.dump_svg("after_dispatch.svg", true);
 }
