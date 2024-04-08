@@ -56,6 +56,7 @@ pub enum WkOp {
 
     Abs,
     Frac,
+    //TODO: basically implement the rest of the glsl-ext-inst, cause people might be used to those.
 }
 
 impl WkOp {
@@ -387,7 +388,7 @@ pub struct CallOp {
     #[output]
     output: Output,
 
-    op: WkOp,
+    pub op: WkOp,
 }
 
 impl CallOp {

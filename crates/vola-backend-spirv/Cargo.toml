@@ -11,6 +11,7 @@ log = ["dep:log"]
 vola-opt = {path = "../vola-opt"}
 vola-common = {path = "../vola-common"}
 rvsdg = {path = "../rvsdg"}
+rvsdg-viewer = {path = "../rvsdg-viewer"}
 rspirv.workspace = true
 ahash.workspace = true
 log = {workspace = true, optional = true}

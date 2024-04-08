@@ -9,7 +9,7 @@ impl Optimizer {
         let dnecount = self.graph.dead_node_elimination().unwrap().len();
 
         #[cfg(feature = "log")]
-        log::error!("Delted {dnecount} nodes in DNE ");
+        log::info!("Deleted {dnecount} nodes in DNE ");
 
         //then remove all unused cvs from the export λs
         let tl = self.graph.toplevel_region();

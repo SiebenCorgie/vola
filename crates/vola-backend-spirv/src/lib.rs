@@ -7,7 +7,7 @@
  */
 //! # Vola's SPIR-V backend
 //!
-//! Implements the transformation from the RVSDG in vola-opti into a valid SPIR-V module.
+//! Implements the transformation from the RVSDG in vola-opt into a valid SPIR-V module.
 //!
 //! With this transformation we also need to respect all quirks of the target format. This manyl
 //! is the __recursion-less-ness__ of SPIR-V atm. So no ϕ-Nodes at all at the moment.
@@ -22,6 +22,7 @@
 //! Later on we should implement the RVSDG-Destruction algorithm described in the RVSDG-paper.
 
 use ahash::AHashSet;
+use graph::{BackendEdge, BackendNode};
 use rspirv::dr::Builder;
 use rvsdg::Rvsdg;
 use vola_opt::Optimizer;
@@ -31,6 +32,10 @@ pub use rspirv;
 mod error;
 pub use error::BackendSpirvError;
 mod passes;
+
+//Defines the SPIR-V dialect used in the backend's RVSDG.
+mod graph;
+mod spv;
 
 pub type SpirvModule = rspirv::dr::Module;
 
@@ -62,29 +67,14 @@ impl Default for SpirvConfig {
 pub struct SpirvBackend {
     //NOTE: option allows us to temporarly take
     //      the builder
-    module: Option<SpirvModule>,
+    graph: Rvsdg<BackendNode, BackendEdge>,
     config: SpirvConfig,
 }
 
 impl SpirvBackend {
     pub fn new(config: SpirvConfig) -> Self {
-        //Build the initial _empty_ module with the header specified by config
-        let mut b = Builder::new();
-        b.set_version(config.version_major, config.version_minor);
-        b.memory_model(
-            rspirv::spirv::AddressingModel::Logical,
-            rspirv::spirv::MemoryModel::Vulkan,
-        );
-        for ext in &config.extensions {
-            b.extension(ext.clone());
-        }
-
-        for ext_inst in &config.ext_inst {
-            b.ext_inst_import(ext_inst.clone());
-        }
-
         SpirvBackend {
-            module: Some(b.module()),
+            graph: Rvsdg::new(),
             config,
         }
     }
@@ -92,13 +82,23 @@ impl SpirvBackend {
     ///Interns the `opt` module into this backend builder. All as _export_ declared
     /// λ-Nodes will be exported in the [SpirvModule] as well.
     ///
-    /// assumes that all nodes that are live/reachabl (from any ω-result) are in the "alge" dialect.
+    /// Assumes that all nodes that are live/reachable (from any ω-result) are in the "alge" dialect.
     pub fn intern_module(&mut self, opt: &Optimizer) -> Result<(), BackendSpirvError> {
-        self.intern(opt)
+        todo!()
     }
 
-    ///Builds the module based on the current configuration.
+    ///Builds the module based on the current configuration and graph.
     pub fn build(&self) -> SpirvModule {
-        self.into_spv_module()
+        self.into_spv_module(&self.config)
+    }
+
+    pub fn dump_svg(&self, name: &str, ignore_dead_node: bool) {
+        let conf = rvsdg_viewer::layout::LayoutConfig {
+            grid_padding: 30,
+            grid_empty_spacing: 15,
+            ignore_dead_node,
+            ..Default::default()
+        };
+        rvsdg_viewer::into_svg_with_config(&self.graph, name, &conf)
     }
 }

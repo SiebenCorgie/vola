@@ -97,7 +97,7 @@ impl Pipeline {
                 let target_name = self.target_file_name();
                 println!("Emitting SPIR-V as {target_name:?}");
                 backend.intern_module(&opt)?;
-                let spvmodule = backend.into_spv_module();
+                let spvmodule = backend.build();
                 //now write to file
 
                 if target_name.exists() {
