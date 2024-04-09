@@ -1,9 +1,6 @@
 use rvsdg::err::GraphError;
 use vola_ast::ParserError;
-use vola_common::{
-    miette::{self, Diagnostic},
-    thiserror::{self, Error},
-};
+use vola_common::thiserror::{self, Error};
 use vola_opt::OptError;
 
 ///Error type collection that can happen at compile-time.

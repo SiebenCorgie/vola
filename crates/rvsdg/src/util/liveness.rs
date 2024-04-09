@@ -3,11 +3,10 @@
 use std::collections::VecDeque;
 
 use ahash::AHashSet;
-use smallvec::SmallVec;
 
 use crate::{
     attrib::{AttribLocation, FlagStore},
-    edge::{InportLocation, InputType, LangEdge, OutportLocation, OutputType},
+    edge::{InportLocation, InputType, LangEdge, OutputType},
     nodes::{LangNode, NodeType},
     region::RegionLocation,
     NodeRef, Rvsdg,
@@ -37,28 +36,12 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
         }
 
         //now hit up the algorithm
-        self.calc_liveness(region, flags)
-    }
-
-    fn is_live_outport(flags: &FlagStore<bool>, port: OutportLocation) -> bool {
-        if let Some(value) = flags.get(&port.into()) {
-            *value
-        } else {
-            false
-        }
-    }
-
-    fn is_live_inport(flags: &FlagStore<bool>, port: InportLocation) -> bool {
-        if let Some(value) = flags.get(&port.into()) {
-            *value
-        } else {
-            false
-        }
+        self.calc_liveness(flags)
     }
 
     ///The recursive algorithm, This is more or less the _mark_ phase of the dead-node elimination algorithm described
     /// in [the source paper](http://arxiv.org/abs/1912.05036v2) in _Algorithm VI_.
-    fn calc_liveness(&self, region: RegionLocation, mut flags: FlagStore<bool>) -> FlagStore<bool> {
+    fn calc_liveness(&self, mut flags: FlagStore<bool>) -> FlagStore<bool> {
         //we basically do a breadth-first traversal on _edge_ / _port_ granularity.
         //to make things a little easier on the big-O, we checkout _simple-nodes_ and apply-nodes only once,
         //which is also the vast majority of nodes usually.
@@ -126,7 +109,7 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
                 // and we take care of the theta predicate whenever bridign _into_ a region.
                 if src_port.output.is_argument() {
                     //so first step, the carry-over process
-                    for subregidx in 0..subreg_count {
+                    for _subregidx in 0..subreg_count {
                         //check if we can carry over, to dat
                         if let Some(carried_over_port) = src_port.output.map_out_of_region() {
                             let new_inport = InportLocation {
@@ -205,7 +188,7 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
                                 waiting_ports.push_back(new_inport);
                             }
                         }
-                        NodeType::Theta(t) => {
+                        NodeType::Theta(_t) => {
                             let theta_pred = InportLocation {
                                 node: src_port.node,
                                 input: InputType::ThetaPredicate,

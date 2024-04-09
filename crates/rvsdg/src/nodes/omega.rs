@@ -65,12 +65,12 @@ impl StructuralNode for OmegaNode {
 
     fn outport_types(&self) -> SmallVec<[OutputType; 3]> {
         //ω never has outputs
-        let mut outs = SmallVec::new();
+        let outs = SmallVec::new();
         outs
     }
     fn input_types(&self) -> SmallVec<[InputType; 3]> {
         //also no inputs
-        let mut inputs = SmallVec::default();
+        let inputs = SmallVec::default();
         inputs
     }
     fn argument_types(&self, region_index: usize) -> SmallVec<[OutputType; 3]> {

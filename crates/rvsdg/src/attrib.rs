@@ -2,8 +2,6 @@
 //!
 //! Helper that lets you associate any item within the graph with a custom attribute.
 
-use std::ops::Deref;
-
 use ahash::AHashMap;
 
 use crate::{

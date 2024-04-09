@@ -1,6 +1,6 @@
 use rspirv::dr::Builder;
 
-use crate::{error::BackendSpirvError, SpirvBackend, SpirvConfig, SpirvModule};
+use crate::{SpirvBackend, SpirvConfig, SpirvModule};
 
 impl SpirvBackend {
     pub fn into_spv_module(&self, config: &SpirvConfig) -> SpirvModule {

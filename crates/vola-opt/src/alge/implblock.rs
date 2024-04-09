@@ -35,6 +35,7 @@ pub struct ConceptImplKey {
 pub struct ConceptImpl {
     pub span: Span,
     pub concept: Ident,
+    #[allow(unused)]
     pub node_type: CSGNodeTy,
 
     ///All named operands an their index.

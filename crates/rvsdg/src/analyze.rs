@@ -13,7 +13,7 @@ pub use region_walker::RegionWalker;
 use crate::{
     edge::{InportLocation, InputType, LangEdge, OutportLocation, OutputType},
     nodes::LangNode,
-    region::{Input, RegionLocation},
+    region::RegionLocation,
     NodeRef, Rvsdg,
 };
 

@@ -15,10 +15,6 @@ use vola_opt::{
     OptNode,
 };
 
-use crate::BackendSpirvError;
-
-pub struct SpvType;
-
 type CoreOp = rspirv::spirv::Op;
 type GlOp = rspirv::spirv::GLOp;
 
@@ -137,7 +133,7 @@ impl SpvNode {
         }
     }
 
-    fn from_list_constructor(lc: &ListConst) -> Self {
+    fn from_list_constructor(_lc: &ListConst) -> Self {
         Self {
             op: SpvOp::ConstantConstruct,
         }

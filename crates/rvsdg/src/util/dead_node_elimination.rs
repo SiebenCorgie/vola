@@ -3,12 +3,11 @@
 #[derive(Clone, Debug, Error)]
 pub enum DneError {}
 
-use ahash::AHashSet;
 use thiserror::Error;
 
 use crate::{
-    attrib::{AttribLocation, AttribStore, FlagStore},
-    edge::{InportLocation, InputType, LangEdge, OutportLocation, OutputType},
+    attrib::FlagStore,
+    edge::{LangEdge, OutportLocation},
     err::GraphError,
     nodes::{LangNode, Node},
     region::RegionLocation,

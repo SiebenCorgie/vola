@@ -15,7 +15,6 @@ use rvsdg::{
     region::{Input, Output},
     rvsdg_derive_lang::LangNode,
     smallvec::SmallVec,
-    Rvsdg,
 };
 use rvsdg_viewer::View;
 

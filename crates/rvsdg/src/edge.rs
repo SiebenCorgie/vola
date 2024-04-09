@@ -68,7 +68,7 @@ impl InputType {
 
     //If possible, maps the result-like input to an out-of-region equivalent output.
     //works for recursion-variable-result, loop-variable-result, exit-variable-result and result.
-    pub fn map_out_of_region(&self, region_index: usize) -> Option<OutputType> {
+    pub fn map_out_of_region(&self) -> Option<OutputType> {
         match self {
             Self::RecursionVariableResult(i) => Some(OutputType::RecursionVariableOutput(*i)),
             Self::ExitVariableResult {

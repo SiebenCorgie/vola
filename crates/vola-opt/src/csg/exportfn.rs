@@ -31,6 +31,7 @@ use super::TreeAccess;
 pub struct ExportFn {
     pub span: Span,
     ///The input signature that is exported to the linkage-attributes
+    #[allow(unused)]
     pub input_signature: SmallVec<[(Ident, Ty); 3]>,
     ///The outputs that are exported from the module.
     pub output_signature: SmallVec<[Ty; 3]>,

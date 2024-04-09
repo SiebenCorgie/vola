@@ -23,7 +23,6 @@
 
 use ahash::AHashSet;
 use graph::{BackendEdge, BackendNode};
-use rspirv::dr::Builder;
 use rvsdg::Rvsdg;
 use vola_opt::Optimizer;
 

@@ -1,7 +1,6 @@
 use rvsdg::{
     common::VSEdge,
     edge::{InportLocation, InputType, OutportLocation, OutputType},
-    err::LegalizationError,
     nodes::NodeType,
     Rvsdg,
 };
