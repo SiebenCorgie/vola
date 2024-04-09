@@ -384,9 +384,9 @@ macro_rules! implViewAlgeOp {
 #[derive(LangNode)]
 pub struct CallOp {
     #[inputs]
-    inputs: SmallVec<[Input; 2]>,
+    pub inputs: SmallVec<[Input; 2]>,
     #[output]
-    output: Output,
+    pub output: Output,
 
     pub op: WkOp,
 }
@@ -490,12 +490,12 @@ impl DialectNode for DummyNode {
 #[derive(LangNode, Debug)]
 pub struct EvalNode {
     ///The concept that is being called.
-    called_concept: String,
+    pub called_concept: String,
     #[inputs]
-    inputs: SmallVec<[Input; 3]>,
+    pub inputs: SmallVec<[Input; 3]>,
     ///The eval node itsel has only one output, the state that is produced by the called concept.
     #[output]
-    out: Output,
+    pub out: Output,
 }
 
 impl EvalNode {
@@ -625,7 +625,7 @@ pub struct Imm {
     pub lit: vola_ast::common::Literal,
     ///the output port the `lit` value is passed down to.
     #[output]
-    out: Output,
+    pub out: Output,
 }
 
 impl Imm {
@@ -669,10 +669,10 @@ impl DialectNode for Imm {
 #[derive(LangNode, Debug)]
 pub struct FieldAccess {
     #[input]
-    access_src: Input,
-    access_list: SmallVec<[FieldAccessor; 1]>,
+    pub access_src: Input,
+    pub access_list: SmallVec<[FieldAccessor; 1]>,
     #[output]
-    output: Output,
+    pub output: Output,
 }
 
 impl FieldAccess {

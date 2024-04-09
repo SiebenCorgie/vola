@@ -22,7 +22,7 @@ use rvsdg_viewer::View;
 use crate::spv::SpvNode;
 
 pub enum BackendOp {
-    SpirvOp(Box<dyn SpvNode + 'static>),
+    SpirvOp(SpvNode),
     Dummy,
 }
 

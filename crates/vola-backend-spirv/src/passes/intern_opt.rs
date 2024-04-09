@@ -16,7 +16,8 @@ use rvsdg::{
 use vola_opt::{OptEdge, OptNode, Optimizer};
 
 use crate::{
-    graph::{BackendEdge, BackendNode},
+    graph::{BackendEdge, BackendNode, BackendOp},
+    spv::SpvNode,
     SpirvBackend,
 };
 
@@ -35,10 +36,16 @@ impl GraphTypeTransformer for InterningTransformer {
         }
     }
     fn transform_simple_node(&mut self, src_node: &Self::SrcNode) -> Self::DstNode {
-        let mut node = BackendNode {
+        let op = if let Some(sop) = SpvNode::try_from_opt_node(src_node) {
+            BackendOp::SpirvOp(sop)
+        } else {
+            BackendOp::Dummy
+        };
+
+        let node = BackendNode {
             inputs: smallvec![Input::default(); src_node.node.inputs().len()],
             output: Output::default(),
-            op: crate::graph::BackendOp::Dummy,
+            op,
         };
 
         node
