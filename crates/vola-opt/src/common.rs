@@ -8,7 +8,7 @@
 use ahash::AHashMap;
 use rvsdg::{attrib::AttribStore, edge::OutportLocation, smallvec::SmallVec, NodeRef};
 use vola_ast::{
-    alge::{FieldAccessor, ImplBlock},
+    alge::ImplBlock,
     csg::{CSGConcept, CSGNodeDef},
 };
 
@@ -21,6 +21,9 @@ pub enum Ty {
     //Shouldn't be used by the frontend and optimizer. However sometimes we can't (yet?) get around
     //it in the Spirv backend
     Void,
+    //A _Natural_ number. Basically a uint, but with unknown resolution.
+    Nat,
+    //A _Real_ number. Basically a float, but with unknown resolution.
     Scalar,
     Vector {
         width: usize,
@@ -76,130 +79,57 @@ impl Ty {
         }
     }
 
-    pub(crate) fn try_access_pattern(
-        &self,
-        access_pattern: &[FieldAccessor],
-    ) -> Result<Option<Ty>, OptError> {
-        if access_pattern.len() == 0 {
-            return Err(OptError::Any {
-                text: "empty access pattern is invalid".to_owned(),
-            });
-        }
-
-        //TODO refactor to recursive sub_slice testting or something.
+    ///Tries to derive a type that would be produced by indexing with `index` into the `Ty`.
+    pub(crate) fn try_derive_access_index(&self, index: usize) -> Result<Ty, OptError> {
         match self {
             Ty::Scalar => Err(OptError::Any {
-                text: format!("Cannot access field {:?} of a Scalar", access_pattern[0]),
+                text: format!("Scalar cannot be indexd with {}", index),
             }),
             Ty::Vector { width } => {
-                if access_pattern.len() != 1 {
+                if index >= *width {
                     Err(OptError::Any {
-                        text: format!(
-                            "vector must be accessed with one accessor, like .x or .0, not {}",
-                            access_pattern.len()
-                        ),
+                        text: format!("Vector of width {width} cannot be index with {index}"),
                     })
                 } else {
-                    //check if we can change to an accessor in vector's width
-                    if let Some(idx) = access_pattern[0].try_to_index() {
-                        if idx < *width {
-                            //yay it worked, in this case the accessed type is always a scalar
-                            Ok(Some(Ty::Scalar))
-                        } else {
-                            //NOTE: yay static bound checking!
-                            Err(OptError::Any {
-                                text: format!(
-                                    "Cannot access element {} on vector with only {} elements",
-                                    idx, width
-                                ),
-                            })
-                        }
-                    } else {
-                        Err(OptError::Any {
-                            text: format!(
-                                "Could not convert {:?} to access index",
-                                access_pattern[0]
-                            ),
-                        })
-                    }
+                    //Otherwise always resolves to an scalar
+                    Ok(Ty::Scalar)
                 }
             }
             Ty::Matrix { width, height } => {
-                //Connvert the first remaining access to index, if possible, try to propagate to sub-vector type
-                if let Some(idx) = access_pattern[0].try_to_index() {
-                    //this index selects the _line_ of the matrix, thefore sub-check vector with _width_
-
-                    if idx < *height {
-                        let vecty = Ty::Vector { width: *width };
-                        if access_pattern[1..].len() > 0 {
-                            //subtry
-                            vecty.try_access_pattern(&access_pattern[1..])
-                        } else {
-                            //Was the last access
-                            Ok(Some(vecty))
-                        }
-                    } else {
+                if index >= *height {
+                    Err(OptError::Any {
+                        text: format!("Matrix {width}x{height} cannot be index with {index}"),
+                    })
+                } else {
+                    Ok(Ty::Vector { width: *width })
+                }
+            }
+            Ty::Tensor { dim } => match dim.len() {
+                0 => Err(OptError::Any {
+                    text: "Encountered zero dimensional tensor!".to_owned(),
+                }),
+                1 => Ty::Vector { width: dim[0] }.try_derive_access_index(index),
+                2 => Ty::Matrix {
+                    width: dim[1],
+                    height: dim[0],
+                }
+                .try_derive_access_index(index),
+                _any => {
+                    if index >= dim[0] {
                         Err(OptError::Any {
                             text: format!(
-                                "Cannot access {}-th element of matrix with height {}",
-                                idx, height
+                                "Cannot index tensor dimension of width={} with {index}",
+                                dim[0]
                             ),
                         })
-                    }
-                } else {
-                    Err(OptError::Any {
-                        text: format!("Could not convert {:?} to access index", access_pattern[0]),
-                    })
-                }
-            }
-            Ty::Tensor { dim } => {
-                //Reduce tensors till either the indices end, or we get into the 2D category, which are
-                // matrices.
-
-                //change to matrix check and try again
-                match dim.len() {
-                    //TODO: handle 0 but currently too tired 😫
-                    0 => panic!("encountered zero dimensional tensor"),
-                    1 => {
-                        //is a vector, try that instead
-                        Ty::Vector { width: dim[0] }.try_access_pattern(access_pattern)
-                    }
-                    2 => {
-                        let matrix_type = Ty::Matrix {
-                            width: dim[1],
-                            height: dim[0],
-                        };
-                        matrix_type.try_access_pattern(access_pattern)
-                    }
-                    _x => {
-                        //pop of access if valid, check against last dim element. If valid as well, reduce tensor and recurse
-                        if let Some(idx) = access_pattern[0].try_to_index() {
-                            if idx < dim[0] {
-                                //reduce dimension and recurse
-                                let new_dim = dim[1..].iter().map(|d| *d).collect();
-                                let tensorty = Ty::Tensor { dim: new_dim };
-                                tensorty.try_access_pattern(&access_pattern[1..])
-                            } else {
-                                Err(OptError::Any {
-                                    text: format!(
-                                        "Cannot access {}-th element of tensor with dimension on axis of {}",
-                                        idx, dim[0]
-                                    ),
-                                })
-                            }
-                        } else {
-                            Err(OptError::Any {
-                                text: format!(
-                                    "Could not convert {:?} to access index",
-                                    access_pattern[0]
-                                ),
-                            })
-                        }
+                    } else {
+                        let new_dim = dim[1..].iter().map(|d| *d).collect();
+                        Ok(Ty::Tensor { dim: new_dim })
                     }
                 }
-            }
-            _ => Err(OptError::Any {
-                text: "FieldAccess must be on scalar, vector, matrix or tensor".to_owned(),
+            },
+            other_ty => Err(OptError::Any {
+                text: format!("Cannot index into {:?}", other_ty),
             }),
         }
     }

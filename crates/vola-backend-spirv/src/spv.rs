@@ -11,7 +11,7 @@
 
 use rvsdg::smallvec::SmallVec;
 use vola_opt::{
-    alge::{CallOp, FieldAccess, Imm, ListConst, Literal, WkOp},
+    alge::{CallOp, ConstantIndex, Construct, ImmNat, ImmScalar, WkOp},
     OptNode,
 };
 
@@ -44,41 +44,42 @@ impl SpvNode {
     pub fn try_from_opt_node(optnode: &OptNode) -> Option<Self> {
         //in practice we try to cast to the different alge-dialect nodes for now.
 
-        if let Some(imm) = optnode.try_downcast_ref::<Imm>() {
-            return Some(Self::from_imm(imm));
+        if let Some(imm) = optnode.try_downcast_ref::<ImmScalar>() {
+            return Some(Self::from_imm_scalar(imm));
+        }
+
+        if let Some(imm) = optnode.try_downcast_ref::<ImmNat>() {
+            return Some(Self::from_imm_nat(imm));
         }
 
         if let Some(callop) = optnode.try_downcast_ref::<CallOp>() {
             return Some(Self::from_wk(&callop.op));
         }
 
-        if let Some(facc) = optnode.try_downcast_ref::<FieldAccess>() {
-            return Some(Self::from_field_access(facc));
+        if let Some(facc) = optnode.try_downcast_ref::<ConstantIndex>() {
+            return Some(Self::from_const_index(facc));
         }
 
-        if let Some(lconst) = optnode.try_downcast_ref::<ListConst>() {
-            return Some(Self::from_list_constructor(lconst));
+        if let Some(lconst) = optnode.try_downcast_ref::<Construct>() {
+            return Some(Self::from_construct(lconst));
         }
 
         None
     }
 
-    fn from_imm(imm: &Imm) -> Self {
+    fn from_imm_scalar(imm: &ImmScalar) -> Self {
         //FIXME: kinda dirty atm. At some point we might want to
         //       track resolutions and stuff. Right now we just cast :D
-        //
-        //       Also, right now we just have floats.
-        let as_f32 = match imm.lit {
-            Literal::IntegerLiteral(i) => i as f32,
-            Literal::FloatLiteral(f) => f as f32,
-        };
-
         Self {
             op: SpvOp::ConstantFloat {
                 resolution: 32,
-                bits: as_f32.to_bits(),
+                bits: (imm.lit as f32).to_bits(),
             },
         }
+    }
+
+    fn from_imm_nat(imm: &ImmNat) -> Self {
+        todo!()
     }
 
     fn from_wk(wk: &WkOp) -> Self {
@@ -109,7 +110,7 @@ impl SpvNode {
         Self { op: spvop }
     }
 
-    fn from_field_access(fac: &FieldAccess) -> Self {
+    fn from_const_index(fac: &ConstantIndex) -> Self {
         //for the field access we have to construct the OpCompositeExtract
         //
         // Right now the source language does not allow things like shuffeling etc. So in the end we always get a
@@ -117,6 +118,9 @@ impl SpvNode {
         //TODO: At some point it might be possible to do shuffeling and extracting based on a variable, in that case
         //      We would have to handle that here :(
 
+        todo!()
+
+        /*
         let accessor_list = fac
             .access_list
             .iter()
@@ -131,9 +135,10 @@ impl SpvNode {
         Self {
             op: SpvOp::ConstantExtract(accessor_list),
         }
+        */
     }
 
-    fn from_list_constructor(_lc: &ListConst) -> Self {
+    fn from_construct(_lc: &Construct) -> Self {
         Self {
             op: SpvOp::ConstantConstruct,
         }

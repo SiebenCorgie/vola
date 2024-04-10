@@ -82,7 +82,12 @@ impl ColorOw<sub> for Color(at){
 
 
 define some_cube(){
-     Box([1.0, 1.0, 1.0])
+    let some_mat = [
+        [1.0, 1.0, 1.0],
+        [2.0, 2.0, 2.0],
+        [3.0, 4.0, 2.0]
+    ];
+    Box(some_mat.1.1)
 }
 
 //Some reusable field definition
