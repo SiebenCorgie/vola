@@ -21,6 +21,9 @@ pub enum Ty {
     //Shouldn't be used by the frontend and optimizer. However sometimes we can't (yet?) get around
     //it in the Spirv backend
     Void,
+    //A _Natural_ number. Basically a uint, but with unknown resolution.
+    Nat,
+    //A _Real_ number. Basically a float, but with unknown resolution.
     Scalar,
     Vector {
         width: usize,

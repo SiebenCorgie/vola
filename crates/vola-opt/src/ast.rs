@@ -21,7 +21,7 @@ use vola_ast::{
 use vola_common::report;
 
 use crate::{
-    alge::{CallOp, EvalNode, FieldAccess, Imm, ListConst, WkOp},
+    alge::{CallOp, ConstantIndex, Construct, EvalNode, ImmNat, ImmScalar, WkOp},
     common::{LmdContext, Ty},
     csg::CsgOp,
     error::OptError,
@@ -245,13 +245,15 @@ impl<'a> AstLambdaBuilder<'a> {
                     return Err(err);
                 };
 
+                //collect into SmallColl
+                let accessors = accessors.into_iter().collect();
                 let opnode = self
                     .opt
                     .graph
                     .on_region(&self.lambda_region, |regbuilder| {
                         let (opnode, _) = regbuilder
                             .connect_node(
-                                OptNode::new(FieldAccess::new(accessors), expr_span),
+                                OptNode::new(ConstantIndex::new(accessors), expr_span),
                                 &[src],
                             )
                             .unwrap();
@@ -288,7 +290,7 @@ impl<'a> AstLambdaBuilder<'a> {
                     items.push(self.setup_alge_expr(itm, parent)?);
                 }
 
-                let mut node = ListConst::new();
+                let mut node = Construct::new();
                 node.inputs = smallvec![Input::default(); items.len()];
 
                 let opnode = self
@@ -304,11 +306,20 @@ impl<'a> AstLambdaBuilder<'a> {
                 Ok(opnode)
             }
             AlgeExprTy::Literal(lit) => {
+                let optnode = match lit {
+                    vola_ast::common::Literal::IntegerLiteral(i) => {
+                        OptNode::new(ImmNat::new(i), expr_span)
+                    }
+                    vola_ast::common::Literal::FloatLiteral(f) => {
+                        OptNode::new(ImmScalar::new(f), expr_span)
+                    }
+                };
+
                 let opnode = self
                     .opt
                     .graph
                     .on_region(&self.lambda_region, |regbuilder| {
-                        let opnode = regbuilder.insert_node(OptNode::new(Imm::new(lit), expr_span));
+                        let opnode = regbuilder.insert_node(optnode);
                         opnode.output(0)
                     })
                     .unwrap();
