@@ -87,7 +87,7 @@ define some_cube(){
         [2.0, 2.0, 2.0],
         [3.0, 4.0, 2.0]
     ];
-    Box(some_mat.1.1)
+    Box(some_mat.1)
 }
 
 //Some reusable field definition
