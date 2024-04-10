@@ -16,10 +16,7 @@ use rvsdg::{
     smallvec::{smallvec, SmallVec},
     SmallColl,
 };
-use vola_ast::{
-    alge::FieldAccessor,
-    csg::{CSGConcept, CSGNodeDef},
-};
+use vola_ast::csg::{CSGConcept, CSGNodeDef};
 
 pub use vola_ast::common::Literal;
 
@@ -793,44 +790,21 @@ pub struct ConstantIndex {
     #[output]
     pub output: Output,
 
-    ///The constant access list
-    pub access_list: SmallColl<FieldAccessor>,
+    ///Constant value of what element being indexed.
+    pub access: usize,
 }
 
 impl ConstantIndex {
-    pub fn new(access_list: SmallColl<FieldAccessor>) -> Self {
+    pub fn new(access_index: usize) -> Self {
         ConstantIndex {
             input: Input::default(),
-            access_list,
+            access: access_index,
             output: Output::default(),
         }
     }
 }
 
-//NOTE hand implementing for nicer field_acces_list
-impl rvsdg_viewer::View for ConstantIndex {
-    fn color(&self) -> rvsdg_viewer::macroquad::color::Color {
-        rvsdg_viewer::macroquad::color::Color::from_rgba(200, 170, 170, 255)
-    }
-
-    fn name(&self) -> String {
-        use std::fmt::Write;
-        let mut string = format!("ConstIndex: ");
-        for acc in &self.access_list {
-            match acc {
-                FieldAccessor::Digit { digit, .. } => write!(string, ".{}", digit).unwrap(),
-                FieldAccessor::Ident { ident, .. } => write!(string, ".{}", ident.0).unwrap(),
-            }
-        }
-
-        string
-    }
-
-    fn stroke(&self) -> rvsdg_viewer::Stroke {
-        rvsdg_viewer::Stroke::Line
-    }
-}
-
+implViewAlgeOp!(ConstantIndex, "CIndex: {}", access);
 impl DialectNode for ConstantIndex {
     fn dialect(&self) -> &'static str {
         "alge"
@@ -849,7 +823,7 @@ impl DialectNode for ConstantIndex {
                 ty: TypeState::Derived(t) | TypeState::Set(t),
             } = &graph.edge(edg).ty
             {
-                t.try_access_pattern(&self.access_list)
+                t.try_derive_access_index(self.access).map(|r| Some(r))
             } else {
                 Ok(None)
             }
@@ -862,7 +836,7 @@ impl DialectNode for ConstantIndex {
         OptNode {
             span,
             node: Box::new(ConstantIndex {
-                access_list: self.access_list.clone(),
+                access: self.access,
                 input: Input::default(),
                 output: Output::default(),
             }),

@@ -11,7 +11,7 @@
 
 use rvsdg::smallvec::SmallVec;
 use vola_opt::{
-    alge::{CallOp, ConstantIndex, Construct, ImmNat, ImmScalar, Literal, WkOp},
+    alge::{CallOp, ConstantIndex, Construct, ImmNat, ImmScalar, WkOp},
     OptNode,
 };
 
@@ -118,6 +118,9 @@ impl SpvNode {
         //TODO: At some point it might be possible to do shuffeling and extracting based on a variable, in that case
         //      We would have to handle that here :(
 
+        todo!()
+
+        /*
         let accessor_list = fac
             .access_list
             .iter()
@@ -132,6 +135,7 @@ impl SpvNode {
         Self {
             op: SpvOp::ConstantExtract(accessor_list),
         }
+        */
     }
 
     fn from_construct(_lc: &Construct) -> Self {
