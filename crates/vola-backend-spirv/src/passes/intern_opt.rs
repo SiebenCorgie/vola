@@ -8,7 +8,10 @@
 
 //! Simple `GraphTypeTransformer` pass that transforms an optimizer-graph to the spirv-backend graph.
 
+use ahash::AHashMap;
 use rvsdg::{
+    attrib::{AttribLocation, AttribStore, FlagStore},
+    edge::OutportLocation,
     region::{Input, Output},
     smallvec::smallvec,
     util::graph_type_transform::{GraphTypeTransformer, GraphTypeTransformerError},
@@ -17,11 +20,12 @@ use vola_opt::{OptEdge, OptNode, Optimizer};
 
 use crate::{
     graph::{BackendEdge, BackendNode, BackendOp},
-    spv::SpvNode,
+    spv::{SpvNode, SpvType},
     SpirvBackend,
 };
 
 pub struct InterningTransformer;
+
 impl GraphTypeTransformer for InterningTransformer {
     type SrcNode = OptNode;
     type SrcEdge = OptEdge;
@@ -32,7 +36,15 @@ impl GraphTypeTransformer for InterningTransformer {
         //This basically just erases the type information atm.
         match src_edge {
             OptEdge::State => BackendEdge::State,
-            OptEdge::Value { ty: _ } => BackendEdge::Value,
+            OptEdge::Value { ty } => BackendEdge::Value(
+                ty.get_type()
+                    .map(|t| {
+                        t.try_into().expect(
+                            "Failed to convert opt-edge type to SPIR-V type. This indicates a bug!",
+                        )
+                    })
+                    .unwrap_or(SpvType::undefined()),
+            ),
         }
     }
     fn transform_simple_node(&mut self, src_node: &Self::SrcNode) -> Self::DstNode {
@@ -50,6 +62,39 @@ impl GraphTypeTransformer for InterningTransformer {
 
         node
     }
+    /*
+    fn on_mapping(
+        &mut self,
+        src_graph: &rvsdg::Rvsdg<Self::SrcNode, Self::SrcEdge>,
+        src_node: rvsdg::NodeRef,
+        dst_graph: &mut rvsdg::Rvsdg<Self::DstNode, Self::DstEdge>,
+        dst_node: rvsdg::NodeRef,
+    ) {
+        //for each mapping, check if there is a port-type, if so we add the mapped-type to
+        //the node in `dst_graph`.
+        for outty in src_graph.node(src_node).outport_types() {
+            let edge_count = src_graph
+                .node(src_node)
+                .outport(&outty)
+                .unwrap()
+                .edges
+                .len();
+            for edg_idx in 0..edge_count {
+                let src_edge_id = src_graph.node(src_node).outport(&outty).unwrap().edges[edg_idx];
+                let dst_edg_id = dst_graph.node(dst_node).outport(&outty).unwrap().edges[edg_idx];
+
+                if let Some(ty) = src_graph.edge(src_edge_id).ty.get_type() {
+                    if let BackendEdge::Value(dst_ty) = &mut dst_graph.edge_mut(dst_edg_id).ty {
+                        *dst_ty = ty.clone().into();
+                    } else {
+                        #[cfg(feature = "log")]
+                        log::warn!("expected typed value-edge");
+                    }
+                }
+            }
+        }
+    }
+    */
 }
 
 impl SpirvBackend {
@@ -67,7 +112,7 @@ impl SpirvBackend {
 
         let mut transformer = InterningTransformer;
         //to be sure that we carry over all exports, first transform into a local graph, then merge with the existing one.
-        let new_graph = opt.graph.transform_new(&mut transformer)?;
+        let (new_graph, _rampping) = opt.graph.transform_new(&mut transformer)?;
 
         #[cfg(feature = "log")]
         {
@@ -85,7 +130,10 @@ impl SpirvBackend {
             }
         }
 
+        //As part of the interning progress we try to recover all known type information from the opt-graph
+        //and move that into the backend-graph.
         self.graph = new_graph;
+
         Ok(())
     }
 }

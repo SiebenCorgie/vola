@@ -118,6 +118,15 @@ pub enum TypeState {
     Unset,
 }
 
+impl TypeState {
+    pub fn get_type(&self) -> Option<Ty> {
+        match self {
+            Self::Set(t) | Self::Derived(t) => Some(t.clone()),
+            Self::Unset => None,
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum OptEdge {
     State,

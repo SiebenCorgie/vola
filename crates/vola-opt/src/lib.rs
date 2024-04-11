@@ -74,10 +74,10 @@ pub struct Optimizer {
     pub(crate) field_def: AHashMap<String, FieldDef>,
 
     ///All known type tags of ports and nodes. Can be used to do type checking, or infer edge types.
-    pub(crate) typemap: AttribStore<Ty>,
+    pub typemap: AttribStore<Ty>,
 
     ///Can be used to tag source Spans for nodes that are no OptNodes
-    pub(crate) span_tags: AttribStore<Span>,
+    pub span_tags: AttribStore<Span>,
 
     ///Can be used to name nodes, which might be interesting for passes that
     ///do not have knowledge of the original AST/Source, but still need to emit human

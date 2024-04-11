@@ -18,7 +18,7 @@ use rvsdg::{
 };
 use rvsdg_viewer::View;
 
-use crate::spv::SpvNode;
+use crate::spv::{SpvNode, SpvType};
 
 pub enum BackendOp {
     SpirvOp(SpvNode),
@@ -45,9 +45,9 @@ impl Debug for BackendNode {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub enum BackendEdge {
-    Value,
+    Value(SpvType),
     State,
 }
 
@@ -66,13 +66,13 @@ impl View for BackendNode {
 impl View for BackendEdge {
     fn name(&self) -> String {
         match self {
-            Self::Value => "Value".to_owned(),
+            Self::Value(ty) => format!("Value<{:?}>", ty),
             Self::State => "State".to_owned(),
         }
     }
     fn color(&self) -> rvsdg_viewer::Color {
         match self {
-            Self::Value => rvsdg_viewer::Color::from_rgba(0, 0, 0, 255),
+            Self::Value(_) => rvsdg_viewer::Color::from_rgba(0, 0, 0, 255),
             Self::State => rvsdg_viewer::Color::from_rgba(200, 0, 0, 255),
         }
     }
@@ -80,14 +80,14 @@ impl View for BackendEdge {
 
 impl LangEdge for BackendEdge {
     fn value_edge() -> Self {
-        Self::Value
+        Self::Value(SpvType::undefined())
     }
     fn state_edge() -> Self {
         Self::State
     }
 
     fn is_value_edge(&self) -> bool {
-        if let Self::Value = self {
+        if let Self::Value(_) = self {
             true
         } else {
             false

@@ -7,7 +7,7 @@ use crate::{
     edge::LangEdge,
     nodes::{LangNode, NodeType},
     region::RegionLocation,
-    Rvsdg,
+    NodeRef, Rvsdg,
 };
 
 use super::copy::StructuralClone;
@@ -39,6 +39,18 @@ pub trait GraphTypeTransformer {
     ///Defines how a `src_edge` maps to a `Self::DST_EDGE`.
     fn transform_edge(&mut self, src_edge: &Self::SrcEdge) -> Self::DstEdge;
     fn transform_simple_node(&mut self, src_node: &Self::SrcNode) -> Self::DstNode;
+    ///called on each newly added mapping from a `src_node` in the `src_graph` to the `dst_node` in the `dst_graph`.
+    ///
+    /// Is called on _all_ nodes, not just the `SimpleNode`s.
+    #[allow(unused)]
+    fn on_mapping(
+        &mut self,
+        src_graph: &Rvsdg<Self::SrcNode, Self::SrcEdge>,
+        src_node: NodeRef,
+        dst_graph: &mut Rvsdg<Self::DstNode, Self::DstEdge>,
+        dst_node: NodeRef,
+    ) {
+    }
     //TODO: do we want to allow defining how other node types are transformed? That makes stuff way _involved_... but might
     //      be nice.
 }
@@ -57,6 +69,8 @@ pub enum GraphTypeTransformerError {
 
 impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
     ///Appends the rewritten `src_graph` to the `dst_graph` based on the given `transformer`.
+    ///
+    ///Returns the mapping from a node `A` in `self` to a node `B` in `dst_graph`.
     pub fn transform_into<DN: LangNode + 'static, DE: LangEdge + 'static>(
         &self,
         dst_graph: &mut Rvsdg<DN, DE>,
@@ -66,7 +80,7 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
             DstNode = DN,
             DstEdge = DE,
         >,
-    ) -> Result<(), GraphTypeTransformerError> {
+    ) -> Result<AHashMap<NodeRef, NodeRef>, GraphTypeTransformerError> {
         //tracks the node-remapping which lets us connect the right edges
         let mut node_remapping = AHashMap::new();
 
@@ -146,6 +160,8 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
                     .unwrap();
                 //now add to mapping
                 node_remapping.insert(*node, inserted_as);
+                //finally call post_mapping hook
+                transformer.on_mapping(self, *node, dst_graph, inserted_as);
             }
 
             //now hook-up all edges via the transformator
@@ -162,10 +178,12 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
             }
         }
 
-        Ok(())
+        Ok(node_remapping)
     }
 
     ///Helper that tranforms the whole `src_graph` into a new graph based on the transformator.
+    ///    
+    ///Returns the new graph `B` and the mapping from a node `A` in `self` to a node `B` in `dst_graph`.
     pub fn transform_new<DN: LangNode + 'static, DE: LangEdge + 'static>(
         &self,
         tranformer: &mut dyn GraphTypeTransformer<
@@ -174,7 +192,7 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
             DstNode = DN,
             DstEdge = DE,
         >,
-    ) -> Result<Rvsdg<DN, DE>, GraphTypeTransformerError> {
+    ) -> Result<(Rvsdg<DN, DE>, AHashMap<NodeRef, NodeRef>), GraphTypeTransformerError> {
         let mut new_graph = Rvsdg::new();
         //take care of argument / result count
         let argcount = self
@@ -194,7 +212,7 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
             }
         });
 
-        self.transform_into(&mut new_graph, tranformer)?;
-        Ok(new_graph)
+        let remapping = self.transform_into(&mut new_graph, tranformer)?;
+        Ok((new_graph, remapping))
     }
 }

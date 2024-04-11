@@ -21,4 +21,6 @@ pub enum BackendSpirvError {
     Any { text: String },
     #[error("Failed to intern optimizer graph: {0}")]
     InterningError(GraphTypeTransformerError),
+    #[error("Could not convert type {0:?} into SPIR-V type!")]
+    TypeConversionError(vola_opt::common::Ty),
 }
