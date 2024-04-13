@@ -6,4 +6,5 @@
  * 2024 Tendsin Mende
  */
 mod intern_opt;
+mod legalization;
 mod spv;

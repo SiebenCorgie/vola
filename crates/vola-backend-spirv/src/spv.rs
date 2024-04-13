@@ -9,7 +9,11 @@
 //! Defines the SPIR-V dialect nodes for the backend. We use the [rspirv crate's](https://docs.rs/rspirv/latest/rspirv/grammar) grammar specification to
 //! work with spir-v ops in the graph.
 
+use ahash::AHashMap;
+use rspirv::grammar::{LogicalOperand, OperandKind};
 use rvsdg::smallvec::{smallvec, SmallVec};
+use spirv_grammar_rules::{GrammarRules, Rule};
+use vola_common::dot::graphviz_rust::attributes::width;
 use vola_opt::{
     alge::{CallOp, ConstantIndex, Construct, ImmNat, ImmScalar, WkOp},
     OptNode,
@@ -18,22 +22,214 @@ use vola_opt::{
 use crate::BackendSpirvError;
 
 type CoreOp = rspirv::spirv::Op;
-type GlOp = rspirv::spirv::GLOp;
 
-#[derive(Debug, Clone)]
+enum OperatorSrc {
+    Result,
+    Input(usize),
+}
+
+fn type_pattern_check_core_op(
+    crules: &mut GrammarRules,
+    coreop: &CoreOp,
+    input_types: &[SpvType],
+    output: &SpvType,
+) -> bool {
+    //TODO: implement all the _case-dependent checks, or emit an warning if we don't know them_
+    //TODO: Or find a way to generate those checks from the spec, cause this stuff is pain. but
+    //      Looking at [this](https://github.com/KhronosGroup/SPIRV-Tools/blob/6761288d39e2af51d73a5d8edb328dafc2054b1c/source/val/validate_constants.cpp#L47)
+    //      thought it'll probably stay like that :((.
+
+    //TODO: I'm rolling my on thing over on [github](https://github.com/SiebenCorgie/spirv-grammar-rules)
+
+    //try to get a rule that matchen the opcode
+    //NOTE: Right now the enum matches the one in the spec, if that ever breaks, someone did
+    //      something wrong there.
+    let opcode = *coreop as u32;
+
+    if let Some(instruction_rules) = crules.lookup_opcode(opcode) {
+        if instruction_rules.rules.len() == 0 {
+            #[cfg(feature = "log")]
+            log::error!("{:?} had no rules associated in grammar-rules!", coreop);
+        }
+
+        //NOTE: The core instructionset always starts with [ResultTypeId, ResultId, operands ..],
+        //      which is what we'll express here
+        let mut operator_mapping = AHashMap::with_capacity(input_types.len() + 1);
+        //result mapping
+        let _ = operator_mapping.insert(
+            instruction_rules.operand_mapping[1].as_str(),
+            OperatorSrc::Result,
+        );
+
+        //operands
+        for (opidx, op) in instruction_rules.operand_mapping[2..].iter().enumerate() {
+            let _ = operator_mapping.insert(op, OperatorSrc::Input(opidx));
+        }
+        //now test all rules with the given mapping
+        for rule in &instruction_rules.rules {
+            if !test_rule(&operator_mapping, input_types, output, rule) {
+                #[cfg(feature = "log")]
+                log::error!("{:?} failed rule {:?}", coreop, rule);
+                return false;
+            }
+        }
+
+        true
+    } else {
+        #[cfg(feature = "log")]
+        log::error!(
+            "{:?} did not exist in grammar-rules {}!",
+            coreop,
+            crules.source_grammar
+        );
+        true
+    }
+}
+
+type GlOp = rspirv::spirv::GLOp;
+fn type_pattern_check_gl_op(
+    grules: &mut GrammarRules,
+    glop: &GlOp,
+    input_types: &[SpvType],
+    output: &SpvType,
+) -> bool {
+    let opcode = *glop as u32;
+
+    if let Some(instruction_rules) = grules.lookup_opcode(opcode) {
+        if instruction_rules.rules.len() == 0 {
+            #[cfg(feature = "log")]
+            log::error!("{:?} had no rules associated in grammar-rules!", glop);
+        }
+
+        let mut operator_mapping = AHashMap::with_capacity(input_types.len() + 1);
+        //in the case of the GLOperator we add _Result_ for the output, since the actual
+        //IdResult_1 is set by the OpExtsInst.
+        let _ = operator_mapping.insert("Output", OperatorSrc::Result);
+
+        for (opidx, op) in instruction_rules.operand_mapping.iter().enumerate() {
+            let _ = operator_mapping.insert(op, OperatorSrc::Input(opidx));
+        }
+
+        //now test all rules with the given mapping
+        for rule in &instruction_rules.rules {
+            if !test_rule(&operator_mapping, input_types, output, rule) {
+                #[cfg(feature = "log")]
+                log::error!("{:?} failed rule {:?}", glop, rule);
+                return false;
+            }
+        }
+
+        true
+    } else {
+        #[cfg(feature = "log")]
+        log::error!(
+            "{:?} did not exist in grammar-rules {}!",
+            glop,
+            grules.source_grammar
+        );
+        true
+    }
+}
+
+///Tests the `rule` for a given operand_mapping on `input_types` and `output`.
+fn test_rule<'a>(
+    operand_mapping: &AHashMap<&'a str, OperatorSrc>,
+    input_types: &[SpvType],
+    output: &SpvType,
+    rule: &Rule,
+) -> bool {
+    match rule {
+        Rule::BaseType {
+            operand,
+            base_types,
+        } => {
+            #[cfg(feature = "log")]
+            log::warn!("Rule unimplemented!");
+            true
+        }
+        Rule::TypeConstraint { operand, ty } => {
+            #[cfg(feature = "log")]
+            log::warn!("Rule unimplemented!");
+            true
+        }
+        Rule::ResultEqualType(ty) => {
+            #[cfg(feature = "log")]
+            log::warn!("Rule unimplemented!");
+            true
+        }
+        Rule::ComponentCountEqual { a, b } => {
+            #[cfg(feature = "log")]
+            log::warn!("Rule unimplemented!");
+            true
+        }
+        Rule::ComponentWidthEqual { a, b } => {
+            #[cfg(feature = "log")]
+            log::warn!("Rule unimplemented!");
+
+            true
+        }
+        Rule::ComponentTypeEqual { a, b } => {
+            #[cfg(feature = "log")]
+            log::warn!("Rule unimplemented!");
+            true
+        }
+        Rule::IsSigned { operand, is_signed } => {
+            #[cfg(feature = "log")]
+            log::warn!("Rule unimplemented!");
+            true
+        }
+        Rule::ComponentWidth { operand, allowed } => {
+            let ty = match operand_mapping.get((*operand).as_str()).unwrap() {
+                OperatorSrc::Result => output,
+                OperatorSrc::Input(idx) => &input_types[*idx],
+            };
+            match ty {
+                SpvType::Arith(a) => allowed.contains(&(a.resolution as usize)),
+                _ => false,
+            }
+        }
+        Rule::ComponentCount { operand, allowed } => {
+            let ty = match operand_mapping.get((*operand).as_str()).unwrap() {
+                OperatorSrc::Result => output,
+                OperatorSrc::Input(idx) => &input_types[*idx],
+            };
+            match ty {
+                SpvType::Arith(a) => allowed.contains(&a.shape.component_count()),
+                _ => false,
+            }
+        }
+        Rule::Unknown(other) => {
+            #[cfg(feature = "log")]
+            log::error!("Rule {:?} not implemented!", other);
+            true
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ArithBaseTy {
     Integer { signed: bool },
     Float,
 }
 
-#[derive(Debug, Clone)]
+impl ArithBaseTy {
+    fn is_of_typestring(&self, string: &str) -> bool {
+        match (self, string) {
+            (Self::Integer { .. }, "Integer") => true,
+            (Self::Float, "FloatingPoint") => true,
+            _ => false,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ArithTy {
     base: ArithBaseTy,
     shape: TyShape,
     resolution: u32,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TyShape {
     Scalar,
     Vector { width: u32 },
@@ -41,7 +237,18 @@ pub enum TyShape {
     Tensor { dim: SmallVec<[u32; 3]> },
 }
 
-#[derive(Debug, Clone)]
+impl TyShape {
+    fn component_count(&self) -> usize {
+        match self {
+            Self::Scalar => 1,
+            Self::Vector { width } => *width as usize,
+            Self::Matrix { width, height } => (*width as usize) * (*height as usize),
+            Self::Tensor { dim } => dim.iter().fold(1usize, |a, b| a * (*b as usize)),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PointerType {}
 
 ///At this point we _need_ to move into the strange SPIR-V type system.
@@ -55,10 +262,11 @@ pub enum PointerType {}
 ///
 /// Sadly we don't get away with just _typed pointers_, cause there are different _types_ of pointer. So we
 /// have to make that explicit atm.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SpvType {
     Void,
     Undefined,
+    State,
     Arith(ArithTy),
     RuntimeArray,
     //TODO: This would be, where we add TypeImage, buffers etc.
@@ -67,6 +275,32 @@ pub enum SpvType {
 impl SpvType {
     pub fn undefined() -> Self {
         SpvType::Undefined
+    }
+
+    pub fn check_logical_operand_input(&self, operand: &LogicalOperand) -> bool {
+        //Currently pretty simple, since we are just wireing up ~data~ at the moment.
+        operand.kind == OperandKind::IdRef
+    }
+
+    ///True if the base type is a float. So for instance for a Matrix of floats
+    pub fn is_float_base(&self) -> bool {
+        if let Self::Arith(a) = self {
+            a.base == ArithBaseTy::Float
+        } else {
+            false
+        }
+    }
+
+    pub fn is_int_base(&self) -> bool {
+        if let Self::Arith(a) = self {
+            if let ArithBaseTy::Integer { .. } = a.base {
+                true
+            } else {
+                false
+            }
+        } else {
+            false
+        }
     }
 }
 
@@ -245,5 +479,107 @@ impl SpvNode {
             SpvOp::Extract(ex) => format!("Extract: {:?}", ex),
             SpvOp::Construct => "ConstantConstruct".to_owned(),
         }
+    }
+
+    pub fn legalize_for_pattern(
+        &mut self,
+        core_grammar: &mut GrammarRules,
+        glsl_grammar: &mut GrammarRules,
+        inputs: &[SpvType],
+        output: &SpvType,
+    ) -> Result<(), BackendSpirvError> {
+        //right now we mostly check that the input and output type are the same as
+        //found in the grammar.
+        match &self.op {
+            SpvOp::CoreOp(coreop) => {
+                let core_instruction = rspirv::grammar::CoreInstructionTable::get(*coreop);
+                //NOTE: result operand is _usally_ the first followed by its type-id.
+                if core_instruction.operands.len() != (inputs.len() + 2) {
+                    return Err(BackendSpirvError::Any {
+                        text: format!(
+                            "Operation {} expected {} operands, but got {}",
+                            core_instruction.opname,
+                            core_instruction.operands.len(),
+                            inputs.len() + 2
+                        ),
+                    });
+                }
+
+                //now check that the operands are in fact the right ones
+
+                //For results we just _expect_ to have a result id and result-type-id. The others are only checked to be
+                //IdRefs, since we are currently not supporting anything else.
+                if core_instruction.operands[0].kind != OperandKind::IdResultType
+                    || core_instruction.operands[1].kind != OperandKind::IdResult
+                {
+                    return Err(BackendSpirvError::Any { text: format!("Output of node {} did not match grammar. Got type {:?}, but expected {:?}", core_instruction.opname, output, core_instruction.operands[1]) });
+                }
+                for input_idx in 0..inputs.len() {
+                    if !inputs[input_idx]
+                        .check_logical_operand_input(&core_instruction.operands[input_idx + 2])
+                    {
+                        #[cfg(feature = "log")]
+                        log::warn!("Whole Instruction: {:#?}", core_instruction);
+                        return Err(BackendSpirvError::Any { text: format!("Input of node {} did not match grammar. Got type {:?}, but expected {:?}", core_instruction.opname, inputs[input_idx], core_instruction.operands[input_idx + 2]) });
+                    }
+                }
+
+                if !type_pattern_check_core_op(core_grammar, coreop, inputs, output) {
+                    return Err(BackendSpirvError::Any {
+                        text: format!(
+                            "{} did not pass type pattern check for input={:?} output={:?}",
+                            core_instruction.opname, inputs, output
+                        ),
+                    });
+                }
+            }
+            SpvOp::GlslOp(glslop) => {
+                let glinst = rspirv::grammar::GlslStd450InstructionTable::get(*glslop);
+                //NOTE: glsl instructions are called by the OpExtinst, so the instruction-table does not encode the result-type / result-id
+                if glinst.operands.len() != inputs.len() {
+                    return Err(BackendSpirvError::Any {
+                        text: format!(
+                            "Operation {} expected {} operands, but got {}",
+                            glinst.opname,
+                            glinst.operands.len(),
+                            inputs.len()
+                        ),
+                    });
+                }
+
+                //now check that the operands are in fact the right ones
+                for input_idx in 0..inputs.len() {
+                    if !inputs[input_idx].check_logical_operand_input(&glinst.operands[input_idx]) {
+                        #[cfg(feature = "log")]
+                        log::warn!(
+                            "Failed glop:\nop = {:#?}, operands={:#?}",
+                            glinst.opname,
+                            glinst.operands
+                        );
+                        return Err(BackendSpirvError::Any { text: format!("Input of node {} did not match grammar. Got type {:?}, but expected {:?}", glinst.opname, inputs[input_idx], glinst.operands[input_idx]) });
+                    }
+                }
+
+                if !type_pattern_check_gl_op(glsl_grammar, glslop, inputs, output) {
+                    return Err(BackendSpirvError::Any {
+                        text: format!(
+                            "{} did not pass type pattern check for input={:?} output={:?}",
+                            glinst.opname, inputs, output
+                        ),
+                    });
+                }
+            }
+            SpvOp::ConstantFloat { .. } | SpvOp::ConstantInt { .. } => {
+                //thats always cool I think :eyes:
+            }
+            SpvOp::Extract(idx) => {
+                //todo!("do bound check")
+            }
+            SpvOp::Construct => {
+                //todo!("Do ... things?")
+            }
+        }
+
+        Ok(())
     }
 }

@@ -99,7 +99,7 @@ impl Pipeline {
                 backend.intern_module(&opt)?;
 
                 backend.dump_svg("eyo.svg", false);
-
+                backend.legalize().unwrap();
                 let spvmodule = backend.build();
                 //now write to file
 
