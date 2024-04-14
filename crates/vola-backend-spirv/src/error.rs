@@ -7,6 +7,7 @@
  */
 
 use rvsdg::util::graph_type_transform::GraphTypeTransformerError;
+use spirv_grammar_rules::Rule;
 use vola_common::{
     miette::{self, Diagnostic},
     thiserror::{self, Error},
@@ -23,4 +24,18 @@ pub enum BackendSpirvError {
     InterningError(GraphTypeTransformerError),
     #[error("Could not convert type {0:?} into SPIR-V type!")]
     TypeConversionError(vola_opt::common::Ty),
+    #[error("SPIR-V Instruction {inst} does not respect rule {rule:?}")]
+    SpvLegalizationRuleFailed { inst: String, rule: Rule },
+    #[error("SPIR-V Instruction {inst} was malformed: {text}")]
+    SpvLegalizationMalformed { inst: String, text: String },
+}
+
+impl BackendSpirvError {
+    pub fn set_opname(&mut self, opname: String) {
+        match self {
+            BackendSpirvError::SpvLegalizationRuleFailed { inst, rule: _ } => *inst = opname,
+            BackendSpirvError::SpvLegalizationMalformed { inst, text: _ } => *inst = opname,
+            _ => {}
+        }
+    }
 }

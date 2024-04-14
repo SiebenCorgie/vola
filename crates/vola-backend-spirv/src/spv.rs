@@ -13,7 +13,6 @@ use ahash::AHashMap;
 use rspirv::grammar::{LogicalOperand, OperandKind};
 use rvsdg::smallvec::{smallvec, SmallVec};
 use spirv_grammar_rules::{GrammarRules, Rule};
-use vola_common::dot::graphviz_rust::attributes::width;
 use vola_opt::{
     alge::{CallOp, ConstantIndex, Construct, ImmNat, ImmScalar, WkOp},
     OptNode,
@@ -33,7 +32,7 @@ fn type_pattern_check_core_op(
     coreop: &CoreOp,
     input_types: &[SpvType],
     output: &SpvType,
-) -> bool {
+) -> Result<(), BackendSpirvError> {
     //TODO: implement all the _case-dependent checks, or emit an warning if we don't know them_
     //TODO: Or find a way to generate those checks from the spec, cause this stuff is pain. but
     //      Looking at [this](https://github.com/KhronosGroup/SPIRV-Tools/blob/6761288d39e2af51d73a5d8edb328dafc2054b1c/source/val/validate_constants.cpp#L47)
@@ -67,14 +66,13 @@ fn type_pattern_check_core_op(
         }
         //now test all rules with the given mapping
         for rule in &instruction_rules.rules {
-            if !test_rule(&operator_mapping, input_types, output, rule) {
-                #[cfg(feature = "log")]
-                log::error!("{:?} failed rule {:?}", coreop, rule);
-                return false;
-            }
+            test_rule(&operator_mapping, input_types, output, rule).map_err(|mut e| {
+                e.set_opname(format!("{:?}", coreop));
+                e
+            })?;
         }
 
-        true
+        Ok(())
     } else {
         #[cfg(feature = "log")]
         log::error!(
@@ -82,7 +80,7 @@ fn type_pattern_check_core_op(
             coreop,
             crules.source_grammar
         );
-        true
+        Ok(())
     }
 }
 
@@ -92,7 +90,7 @@ fn type_pattern_check_gl_op(
     glop: &GlOp,
     input_types: &[SpvType],
     output: &SpvType,
-) -> bool {
+) -> Result<(), BackendSpirvError> {
     let opcode = *glop as u32;
 
     if let Some(instruction_rules) = grules.lookup_opcode(opcode) {
@@ -104,7 +102,7 @@ fn type_pattern_check_gl_op(
         let mut operator_mapping = AHashMap::with_capacity(input_types.len() + 1);
         //in the case of the GLOperator we add _Result_ for the output, since the actual
         //IdResult_1 is set by the OpExtsInst.
-        let _ = operator_mapping.insert("Output", OperatorSrc::Result);
+        let _ = operator_mapping.insert("Result", OperatorSrc::Result);
 
         for (opidx, op) in instruction_rules.operand_mapping.iter().enumerate() {
             let _ = operator_mapping.insert(op, OperatorSrc::Input(opidx));
@@ -112,14 +110,13 @@ fn type_pattern_check_gl_op(
 
         //now test all rules with the given mapping
         for rule in &instruction_rules.rules {
-            if !test_rule(&operator_mapping, input_types, output, rule) {
-                #[cfg(feature = "log")]
-                log::error!("{:?} failed rule {:?}", glop, rule);
-                return false;
-            }
+            test_rule(&operator_mapping, input_types, output, rule).map_err(|mut e| {
+                e.set_opname(format!("{:?}", glop));
+                e
+            })?;
         }
 
-        true
+        Ok(())
     } else {
         #[cfg(feature = "log")]
         log::error!(
@@ -127,7 +124,7 @@ fn type_pattern_check_gl_op(
             glop,
             grules.source_grammar
         );
-        true
+        Ok(())
     }
 }
 
@@ -137,71 +134,226 @@ fn test_rule<'a>(
     input_types: &[SpvType],
     output: &SpvType,
     rule: &Rule,
-) -> bool {
+) -> Result<(), BackendSpirvError> {
     match rule {
         Rule::BaseType {
             operand,
             base_types,
         } => {
-            #[cfg(feature = "log")]
-            log::warn!("Rule unimplemented!");
-            true
+            let ty_src = match operand_mapping
+                .get((*operand).as_str())
+                .expect("Operand was not in mapping")
+            {
+                OperatorSrc::Result => output,
+                OperatorSrc::Input(idx) => &input_types[*idx],
+            };
+
+            if let Some(basetype) = ty_src.base_type(){
+                if base_types.contains(&basetype){
+                   Ok(()) 
+                }else{
+                    Err(BackendSpirvError::SpvLegalizationRuleFailed { inst: String::with_capacity(0), rule: rule.clone() })
+                }
+            }else{
+                Err(BackendSpirvError::SpvLegalizationMalformed { inst: String::with_capacity(0), text: format!("Rule checks for base type, but operand {} of type {:?} had no base-type", operand, ty_src) })
+            }
         }
         Rule::TypeConstraint { operand, ty } => {
-            #[cfg(feature = "log")]
-            log::warn!("Rule unimplemented!");
-            true
+            let ty_src = match operand_mapping
+                .get((*operand).as_str())
+                .expect("Operand was not in mapping")
+            {
+                OperatorSrc::Result => output,
+                OperatorSrc::Input(idx) => &input_types[*idx],
+            };
+
+            if let Some(rule_ty_str) = ty_src.as_rule_ty(){
+                for t in ty.iter(){
+                    if *t == rule_ty_str{
+                        return Ok(())
+                    }
+                }
+
+                Err(BackendSpirvError::SpvLegalizationRuleFailed { inst: String::with_capacity(0), rule: rule.clone() })
+            }else{
+                Err(BackendSpirvError::SpvLegalizationMalformed { inst: String::with_capacity(0), text: format!("Operand {} of type {:?} has no type, that could be expressed as a SPIR-V TypeConstrain rule.", operand, ty_src) })
+            }
         }
-        Rule::ResultEqualType(ty) => {
-            #[cfg(feature = "log")]
-            log::warn!("Rule unimplemented!");
-            true
+        Rule::ResultEqualType(src) => {
+            let ty_src = match operand_mapping
+                .get((*src).as_str())
+                .expect("Operand was not in mapping")
+            {
+                OperatorSrc::Result => output,
+                OperatorSrc::Input(idx) => &input_types[*idx],
+            };
+
+            if output != ty_src{
+                #[cfg(feature="log")]
+                log::error!("output is of type {:?}, src is of type {:?}", output,ty_src);
+
+                Err(BackendSpirvError::SpvLegalizationRuleFailed { inst: String::with_capacity(0), rule: rule.clone() })
+            }else{
+                Ok(())
+            }
         }
         Rule::ComponentCountEqual { a, b } => {
-            #[cfg(feature = "log")]
-            log::warn!("Rule unimplemented!");
-            true
-        }
-        Rule::ComponentWidthEqual { a, b } => {
-            #[cfg(feature = "log")]
-            log::warn!("Rule unimplemented!");
+            let tya = match operand_mapping
+                .get((*a).as_str())
+                .expect("Operand was not in mapping")
+            {
+                OperatorSrc::Result => output,
+                OperatorSrc::Input(idx) => &input_types[*idx],
+            };
+            let tyb = match operand_mapping
+                .get((*b).as_str())
+                .expect("Operand was not in mapping")
+            {
+                OperatorSrc::Result => output,
+                OperatorSrc::Input(idx) => &input_types[*idx],
+            };
 
-            true
+            let count_a = if let SpvType::Arith(a) = tya{
+                a.shape.component_count()
+            }else{
+                return Err(BackendSpirvError::SpvLegalizationMalformed { inst: String::with_capacity(0), text: format!("Rule tests component count, but Operand {} of type {:?} has no components", a, tya) });
+            };
+            
+            let count_b = if let SpvType::Arith(b) = tyb{
+                b.shape.component_count()
+            }else{
+                return Err(BackendSpirvError::SpvLegalizationMalformed { inst: String::with_capacity(0), text: format!("Rule tests component count, but Operand {} of type {:?} has no components", b, tyb) });
+            };
+
+            if count_a != count_b{
+                Err(BackendSpirvError::SpvLegalizationRuleFailed { inst: String::with_capacity(0), rule: rule.clone() })
+            }else{
+                Ok(())
+            }
+        }
+        Rule::ComponentWidthEqual { a, b } => {           
+            let tya = match operand_mapping
+                .get((*a).as_str())
+                .expect("Operand was not in mapping")
+            {
+                OperatorSrc::Result => output,
+                OperatorSrc::Input(idx) => &input_types[*idx],
+            };
+            let tyb = match operand_mapping
+                .get((*b).as_str())
+                .expect("Operand was not in mapping")
+            {
+                OperatorSrc::Result => output,
+                OperatorSrc::Input(idx) => &input_types[*idx],
+            };
+
+            let count_a = if let SpvType::Arith(a) = tya{
+                a.resolution
+            }else{
+                return Err(BackendSpirvError::SpvLegalizationMalformed { inst: String::with_capacity(0), text: format!("Rule tests component width, but Operand {} of type {:?} has no components", a, tya) });
+            };
+            
+            let count_b = if let SpvType::Arith(b) = tyb{
+                b.resolution
+            }else{
+                return Err(BackendSpirvError::SpvLegalizationMalformed { inst: String::with_capacity(0), text: format!("Rule tests component width, but Operand {} of type {:?} has no components", b, tyb) });
+            };
+
+            if count_a != count_b{
+                Err(BackendSpirvError::SpvLegalizationRuleFailed { inst: String::with_capacity(0), rule: rule.clone() })
+            }else{
+                Ok(())
+            }
         }
         Rule::ComponentTypeEqual { a, b } => {
-            #[cfg(feature = "log")]
-            log::warn!("Rule unimplemented!");
-            true
+             
+            let tya = match operand_mapping
+                .get((*a).as_str())
+                .expect("Operand was not in mapping")
+            {
+                OperatorSrc::Result => output,
+                OperatorSrc::Input(idx) => &input_types[*idx],
+            };
+            let tyb = match operand_mapping
+                .get((*b).as_str())
+                .expect("Operand was not in mapping")
+            {
+                OperatorSrc::Result => output,
+                OperatorSrc::Input(idx) => &input_types[*idx],
+            };
+
+            if tya != tyb{
+                Err(BackendSpirvError::SpvLegalizationRuleFailed { inst: String::with_capacity(0), rule: rule.clone() })
+            }else{
+                Ok(())
+            }
         }
         Rule::IsSigned { operand, is_signed } => {
-            #[cfg(feature = "log")]
-            log::warn!("Rule unimplemented!");
-            true
-        }
-        Rule::ComponentWidth { operand, allowed } => {
-            let ty = match operand_mapping.get((*operand).as_str()).unwrap() {
+            let ty = match operand_mapping
+                .get((*operand).as_str())
+                .expect("Operand was not in mapping")
+            {
                 OperatorSrc::Result => output,
                 OperatorSrc::Input(idx) => &input_types[*idx],
             };
             match ty {
-                SpvType::Arith(a) => allowed.contains(&(a.resolution as usize)),
-                _ => false,
+                SpvType::Arith(a) => match a.base {
+                    ArithBaseTy::Integer { signed } => if signed == *is_signed{
+                        Ok(())
+                    }else{
+                         Err(BackendSpirvError::SpvLegalizationRuleFailed { inst: String::with_capacity(0), rule: rule.clone() })   
+                    },
+                    ArithBaseTy::Float => Err(BackendSpirvError::SpvLegalizationRuleFailed { inst: String::with_capacity(0), rule: rule.clone() }),
+                },
+                _ => Err(BackendSpirvError::SpvLegalizationMalformed { inst: String::with_capacity(0), text: format!("Rule checks component signedness, but operand {} of type {:?} has no arithmetic type!", operand, ty) }),
+            }
+        }
+        Rule::ComponentWidth { operand, allowed } => {
+            let ty = match operand_mapping
+                .get((*operand).as_str())
+                .expect("Operand was not in mapping")
+            {
+                OperatorSrc::Result => output,
+                OperatorSrc::Input(idx) => &input_types[*idx],
+            };
+            match ty {
+                SpvType::Arith(a) => if !allowed.contains(&a.resolution){
+                        Err(BackendSpirvError::SpvLegalizationRuleFailed {
+                            inst: String::with_capacity(0),
+                            rule: rule.clone(),
+                        })
+                }else{
+                    Ok(())
+                },
+                _ => Err(BackendSpirvError::SpvLegalizationMalformed { inst: String::with_capacity(0), text: format!("Rule checks component width, but operand {} of type {:?} has no components!", operand, ty) }),
             }
         }
         Rule::ComponentCount { operand, allowed } => {
-            let ty = match operand_mapping.get((*operand).as_str()).unwrap() {
+            let ty = match operand_mapping
+                .get((*operand).as_str())
+                .expect("Operand was not in mapping")
+            {
                 OperatorSrc::Result => output,
                 OperatorSrc::Input(idx) => &input_types[*idx],
             };
             match ty {
-                SpvType::Arith(a) => allowed.contains(&a.shape.component_count()),
-                _ => false,
+                SpvType::Arith(a) => {
+                    if !allowed.contains(&a.shape.component_count()) {
+                        Err(BackendSpirvError::SpvLegalizationRuleFailed {
+                            inst: String::with_capacity(0),
+                            rule: rule.clone(),
+                        })
+                    } else {
+                        Ok(())
+                    }
+                }
+                _ => Err(BackendSpirvError::SpvLegalizationMalformed { inst: String::with_capacity(0), text: format!("Rule checks component count, but operand {} of type {:?} has no components!", operand, ty) }),
             }
         }
         Rule::Unknown(other) => {
             #[cfg(feature = "log")]
-            log::error!("Rule {:?} not implemented!", other);
-            true
+            log::error!("Unknown Rule: {:#?}!", other);
+            Ok(())
         }
     }
 }
@@ -238,12 +390,12 @@ pub enum TyShape {
 }
 
 impl TyShape {
-    fn component_count(&self) -> usize {
+    fn component_count(&self) -> u32 {
         match self {
             Self::Scalar => 1,
-            Self::Vector { width } => *width as usize,
-            Self::Matrix { width, height } => (*width as usize) * (*height as usize),
-            Self::Tensor { dim } => dim.iter().fold(1usize, |a, b| a * (*b as usize)),
+            Self::Vector { width } => *width,
+            Self::Matrix { width, height } => *width * *height,
+            Self::Tensor { dim } => dim.iter().fold(1u32, |a, b| a * *b),
         }
     }
 }
@@ -300,6 +452,28 @@ impl SpvType {
             }
         } else {
             false
+        }
+    }
+
+    pub fn as_rule_ty(&self) -> Option<spirv_grammar_rules::Type>{
+        match self{
+            Self::Arith(a) => match a.shape{
+                TyShape::Scalar => Some(spirv_grammar_rules::Type::Scalar),
+                TyShape::Vector { .. } => Some(spirv_grammar_rules::Type::Vector),
+                TyShape::Matrix { .. } => Some(spirv_grammar_rules::Type::Matrix),
+                TyShape::Tensor { .. } => None,
+            },
+            _ => None
+        }
+    }
+
+    pub fn base_type(&self) -> Option<spirv_grammar_rules::Type>{
+        match self{
+            Self::Arith(a) => match a.base{
+                ArithBaseTy::Integer { .. } => Some(spirv_grammar_rules::Type::Integer),
+                ArithBaseTy::Float => Some(spirv_grammar_rules::Type::FloatingPoint),
+            },
+            _ => None
         }
     }
 }
@@ -524,14 +698,7 @@ impl SpvNode {
                     }
                 }
 
-                if !type_pattern_check_core_op(core_grammar, coreop, inputs, output) {
-                    return Err(BackendSpirvError::Any {
-                        text: format!(
-                            "{} did not pass type pattern check for input={:?} output={:?}",
-                            core_instruction.opname, inputs, output
-                        ),
-                    });
-                }
+                type_pattern_check_core_op(core_grammar, coreop, inputs, output)
             }
             SpvOp::GlslOp(glslop) => {
                 let glinst = rspirv::grammar::GlslStd450InstructionTable::get(*glslop);
@@ -560,26 +727,20 @@ impl SpvNode {
                     }
                 }
 
-                if !type_pattern_check_gl_op(glsl_grammar, glslop, inputs, output) {
-                    return Err(BackendSpirvError::Any {
-                        text: format!(
-                            "{} did not pass type pattern check for input={:?} output={:?}",
-                            glinst.opname, inputs, output
-                        ),
-                    });
-                }
+                type_pattern_check_gl_op(glsl_grammar, glslop, inputs, output)
             }
             SpvOp::ConstantFloat { .. } | SpvOp::ConstantInt { .. } => {
                 //thats always cool I think :eyes:
+                Ok(())
             }
-            SpvOp::Extract(idx) => {
+            SpvOp::Extract(_idx) => {
                 //todo!("do bound check")
+                Ok(())
             }
             SpvOp::Construct => {
                 //todo!("Do ... things?")
+                Ok(())
             }
         }
-
-        Ok(())
     }
 }
