@@ -6,7 +6,12 @@
  * 2024 Tendsin Mende
  */
 use ahash::AHashMap;
-use rvsdg::{attrib::AttribStore, edge::OutportLocation, smallvec::SmallVec, NodeRef};
+use rvsdg::{
+    attrib::{AttribStore, FlagStore},
+    edge::OutportLocation,
+    smallvec::SmallVec,
+    NodeRef,
+};
 use vola_ast::{
     alge::ImplBlock,
     csg::{CSGConcept, CSGNodeDef},
@@ -151,7 +156,7 @@ pub struct LmdContext {
 impl LmdContext {
     pub fn new_for_impl_block(
         graph: &mut OptGraph,
-        type_map: &mut AttribStore<Ty>,
+        type_map: &mut FlagStore<Ty>,
         lmd: NodeRef,
         block: &ImplBlock,
         entity_or_op: &CSGNodeDef,
@@ -180,8 +185,8 @@ impl LmdContext {
                 },
             );
             //tag the type as well
-            type_map.push_attrib(
-                &argport.into(),
+            type_map.set(
+                argport.into(),
                 arg.ty
                     .clone()
                     .try_into()
@@ -213,8 +218,8 @@ impl LmdContext {
                 },
             );
             //tag the type as well
-            type_map.push_attrib(
-                &argport.into(),
+            type_map.set(
+                argport.into(),
                 ty.try_into()
                     .expect("Could not convert impl block's arg to an opt-type"),
             );
@@ -227,7 +232,7 @@ impl LmdContext {
 
     pub fn new_for_exportfn(
         graph: &mut OptGraph,
-        type_map: &mut AttribStore<Ty>,
+        type_map: &mut FlagStore<Ty>,
         lmd: NodeRef,
         exportfn: &vola_ast::csg::ExportFn,
     ) -> Self {
@@ -256,8 +261,8 @@ impl LmdContext {
                 },
             );
             //tag the type as well
-            type_map.push_attrib(
-                &argport.into(),
+            type_map.set(
+                argport.into(),
                 arg.ty
                     .clone()
                     .try_into()
@@ -270,7 +275,7 @@ impl LmdContext {
 
     pub fn new_for_fielddef(
         graph: &mut OptGraph,
-        type_map: &mut AttribStore<Ty>,
+        type_map: &mut FlagStore<Ty>,
         lmd: NodeRef,
         fielddef: &vola_ast::csg::FieldDef,
     ) -> Self {
@@ -299,8 +304,8 @@ impl LmdContext {
                 },
             );
             //tag the type as well
-            type_map.push_attrib(
-                &argport.into(),
+            type_map.set(
+                argport.into(),
                 arg.ty
                     .clone()
                     .try_into()

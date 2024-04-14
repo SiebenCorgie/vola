@@ -13,7 +13,10 @@ use crate::common::Ty;
 use crate::error::OptError;
 use ahash::AHashMap;
 use rvsdg::{
-    attrib::AttribStore, edge::LangEdge, nodes::LangNode, rvsdg_derive_lang::LangNode,
+    attrib::{AttribStore, FlagStore},
+    edge::LangEdge,
+    nodes::LangNode,
+    rvsdg_derive_lang::LangNode,
     util::copy::StructuralClone,
 };
 
@@ -34,7 +37,7 @@ pub trait DialectNode: LangNode + Any + View {
     /// Ok(None). In that case the type resolution will try again later.
     fn try_derive_type(
         &self,
-        _typemap: &AttribStore<Ty>,
+        _typemap: &FlagStore<Ty>,
         _graph: &OptGraph,
         _concepts: &AHashMap<String, CSGConcept>,
         _csg_defs: &AHashMap<String, CSGNodeDef>,

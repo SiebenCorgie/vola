@@ -100,14 +100,16 @@ impl Pipeline {
 
                 backend.dump_svg("eyo.svg", false);
                 backend.legalize().unwrap();
-                let spvmodule = backend.build();
+                let spvmodule = backend
+                    .build()
+                    .expect("Failed to build SPIR-V module from backend graph.");
                 //now write to file
 
                 if target_name.exists() {
                     std::fs::remove_file(&target_name)?;
                 }
                 let words = spvmodule.assemble();
-                let bytes = bytemuck::cast_vec(words);
+                let bytes = bytemuck::cast_slice(&words);
                 std::fs::write(&target_name, bytes)?;
 
                 Ok(target_name)

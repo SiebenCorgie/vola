@@ -23,8 +23,12 @@
 
 use ahash::AHashSet;
 use graph::{BackendEdge, BackendNode};
-use rvsdg::{attrib::FlagStore, Rvsdg};
+use rvsdg::{
+    attrib::{AttribStore, FlagStore},
+    Rvsdg,
+};
 use spv::SpvType;
+use vola_common::Span;
 use vola_opt::Optimizer;
 
 pub use rspirv;
@@ -55,11 +59,14 @@ pub struct SpirvConfig {
 
 impl Default for SpirvConfig {
     fn default() -> Self {
+        let mut ext_inst = AHashSet::default();
+        ext_inst.insert("GLSL.std.450".to_owned());
+
         SpirvConfig {
             version_major: 1,
-            version_minor: 6,
+            version_minor: 5,
             extensions: AHashSet::default(),
-            ext_inst: AHashSet::default(),
+            ext_inst,
         }
     }
 }
@@ -68,6 +75,10 @@ pub struct SpirvBackend {
     //NOTE: option allows us to temporarly take
     //      the builder
     graph: Rvsdg<BackendNode, BackendEdge>,
+    ///Can be used to tag things with their identifiers
+    idents: FlagStore<String>,
+    ///Can be used to tag things with a source-span, if there is such a thing.
+    spans: FlagStore<Span>,
     config: SpirvConfig,
 }
 
@@ -75,6 +86,8 @@ impl SpirvBackend {
     pub fn new(config: SpirvConfig) -> Self {
         SpirvBackend {
             graph: Rvsdg::new(),
+            idents: FlagStore::new(),
+            spans: FlagStore::new(),
             config,
         }
     }
@@ -89,7 +102,7 @@ impl SpirvBackend {
     }
 
     ///Builds the module based on the current configuration and graph.
-    pub fn build(&self) -> SpirvModule {
+    pub fn build(&self) -> Result<SpirvModule, BackendSpirvError> {
         self.into_spv_module(&self.config)
     }
 

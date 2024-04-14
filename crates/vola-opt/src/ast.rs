@@ -225,7 +225,7 @@ impl<'a> AstLambdaBuilder<'a> {
                     .unwrap();
 
                 //tag output type
-                self.opt.typemap.push_attrib(&opnode.into(), eval_cv_type);
+                self.opt.typemap.set(opnode.into(), eval_cv_type);
 
                 Ok(opnode)
             }
@@ -373,8 +373,8 @@ impl<'a> AstLambdaBuilder<'a> {
                             span: tree.head_span().into(),
                             span_text: "used here".to_owned(),
                         };
-                        if let Some(localcsgty) = self.opt.typemap.attrib(&localcsg.port.into()) {
-                            if localcsgty.get(0) != Some(&Ty::CSGTree) {
+                        if let Some(localcsgty) = self.opt.typemap.get(&localcsg.port.into()) {
+                            if localcsgty != &Ty::CSGTree {
                                 report(err.clone(), tree.span.get_file());
                                 return Err(err);
                             }
@@ -460,9 +460,7 @@ impl<'a> AstLambdaBuilder<'a> {
                                 .unwrap();
                             //NOTE: We tag the apply node with a span, since the apply-node itself has no span
                             //associated, but in this case we have an actual source-level location.
-                            self.opt
-                                .span_tags
-                                .push_attrib(&call_node.into(), tree.span.clone());
+                            self.opt.span_tags.set(call_node.into(), tree.span.clone());
                             return Ok(call_node.output(0));
                         } else {
                             let err = OptError::AnySpanned { span: tree.head_span().into(), text: format!("{} does not name an entity, local csg variable or field def", tree.op.0), span_text: "try defining a local variable, an entity or a field with that name".to_owned() };

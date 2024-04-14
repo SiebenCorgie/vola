@@ -89,7 +89,7 @@ impl Optimizer {
         }
     }
 
-    ///Dispatches the export_field with the given `ident`ifier.
+    ///Dispatches the export_field with the given `identifier.
     pub fn dispatch_export(&mut self, ident: &str) -> Result<(), OptError> {
         //Find all TreeAccess nodes, and prepare regions for specialization.
         //This currently means creating a λ-Copy of the export region for each access,

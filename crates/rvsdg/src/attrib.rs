@@ -24,9 +24,20 @@ impl From<RegionLocation> for AttribLocation {
         AttribLocation::Region(value)
     }
 }
+impl From<&RegionLocation> for AttribLocation {
+    fn from(value: &RegionLocation) -> Self {
+        AttribLocation::Region(value.clone())
+    }
+}
+
 impl From<InportLocation> for AttribLocation {
     fn from(value: InportLocation) -> Self {
         AttribLocation::InPort(value)
+    }
+}
+impl From<&InportLocation> for AttribLocation {
+    fn from(value: &InportLocation) -> Self {
+        AttribLocation::InPort(value.clone())
     }
 }
 
@@ -35,16 +46,31 @@ impl From<OutportLocation> for AttribLocation {
         AttribLocation::OutPort(value)
     }
 }
+impl From<&OutportLocation> for AttribLocation {
+    fn from(value: &OutportLocation) -> Self {
+        AttribLocation::OutPort(value.clone())
+    }
+}
 
 impl From<NodeRef> for AttribLocation {
     fn from(value: NodeRef) -> Self {
         AttribLocation::Node(value)
     }
 }
+impl From<&NodeRef> for AttribLocation {
+    fn from(value: &NodeRef) -> Self {
+        AttribLocation::Node(value.clone())
+    }
+}
 
 impl From<EdgeRef> for AttribLocation {
     fn from(value: EdgeRef) -> Self {
         AttribLocation::Edge(value)
+    }
+}
+impl From<&EdgeRef> for AttribLocation {
+    fn from(value: &EdgeRef) -> Self {
+        AttribLocation::Edge(value.clone())
     }
 }
 
@@ -78,6 +104,7 @@ impl<ATTRIB: 'static> AttribStore<ATTRIB> {
 }
 
 ///Stores zero or one single flag of type `F` for any component of the RVSDG.
+#[derive(Clone, Debug)]
 pub struct FlagStore<F: 'static> {
     pub flags: AHashMap<AttribLocation, F>,
 }

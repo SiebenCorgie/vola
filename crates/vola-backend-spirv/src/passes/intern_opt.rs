@@ -8,6 +8,8 @@
 
 //! Simple `GraphTypeTransformer` pass that transforms an optimizer-graph to the spirv-backend graph.
 
+use std::ops::Deref;
+
 use ahash::AHashMap;
 use rvsdg::{
     attrib::{AttribLocation, AttribStore, FlagStore},
@@ -15,7 +17,9 @@ use rvsdg::{
     region::{Input, Output},
     smallvec::smallvec,
     util::graph_type_transform::{GraphTypeTransformer, GraphTypeTransformerError},
+    NodeRef,
 };
+use vola_common::dot::graphviz_rust::dot_structures::NodeId;
 use vola_opt::{OptEdge, OptNode, Optimizer};
 
 use crate::{
@@ -112,7 +116,10 @@ impl SpirvBackend {
 
         let mut transformer = InterningTransformer;
         //to be sure that we carry over all exports, first transform into a local graph, then merge with the existing one.
-        let (new_graph, _rampping) = opt.graph.transform_new(&mut transformer)?;
+        let (new_graph, remapping) = opt.graph.transform_new(&mut transformer)?;
+
+        //now use the remapping to transfer identifiers and source spans
+        self.transfer_debug_info(&remapping, opt);
 
         #[cfg(feature = "log")]
         {
@@ -135,5 +142,16 @@ impl SpirvBackend {
         self.graph = new_graph;
 
         Ok(())
+    }
+
+    fn transfer_debug_info(&mut self, remapping: &AHashMap<NodeRef, NodeRef>, opt: &Optimizer) {
+        for (src_node, dst_node) in remapping {
+            if let Some(name) = opt.names.get(&src_node.into()) {
+                self.idents.set(dst_node.into(), name.clone());
+            }
+            if let Some(span) = opt.span_tags.get(&src_node.into()) {
+                self.spans.set(dst_node.into(), span.clone());
+            }
+        }
     }
 }

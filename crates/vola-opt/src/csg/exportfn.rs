@@ -225,10 +225,7 @@ Note that vola does not support shadowing. If you just want to change the value 
         );
 
         //register type for port
-        builder
-            .opt
-            .typemap
-            .push_attrib(&def_port.into(), Ty::CSGTree);
+        builder.opt.typemap.set(def_port.into(), Ty::CSGTree);
 
         Ok(())
     }
@@ -333,6 +330,13 @@ impl Optimizer {
         let interned_exportfn = new_exportfn.build_block(lmd_builder, exportfn)?;
 
         let export_name = interned_exportfn.ident.0.clone();
+        //Set the name of this function
+        self.names
+            .set(interned_exportfn.lambda.into(), export_name.clone());
+        self.span_tags.set(
+            interned_exportfn.lambda.into(),
+            interned_exportfn.span.clone(),
+        );
         self.export_fn.insert(export_name, interned_exportfn);
 
         Ok(lambda)

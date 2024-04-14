@@ -25,7 +25,7 @@ impl Optimizer {
         }
 
         //edge seems to have no type, so try to use the port tag
-        if let Some([ty]) = self.typemap.attrib(&port.into()) {
+        if let Some(ty) = self.typemap.get(&port.into()) {
             Some(ty.clone())
         } else {
             None
@@ -63,23 +63,16 @@ impl Optimizer {
             }
 
             //if we didn't find a type yet, try typemap
-            match self.typemap.attrib(
+            match self.typemap.get(
                 &OutportLocation {
                     node,
                     output: OutputType::Argument(argidx),
                 }
                 .into(),
             ) {
-                Some([ty]) => {
+                Some(ty) => {
                     //Use that type then
                     signature.push(Some(ty.clone()));
-                }
-                Some(multiple) => {
-                    #[cfg(feature = "log")]
-                    log::warn!("outport had multiple types register, using first one.");
-
-                    //Push the first one then
-                    signature.push(Some(multiple.get(0).unwrap().clone()));
                 }
                 None => {
                     //Found none no where

@@ -10,7 +10,7 @@
 
 use ahash::AHashMap;
 use rvsdg::{
-    attrib::AttribStore,
+    attrib::{AttribStore, FlagStore},
     region::{Input, Output},
     rvsdg_derive_lang::LangNode,
     smallvec::{smallvec, SmallVec},
@@ -412,7 +412,7 @@ impl DialectNode for CallOp {
 
     fn try_derive_type(
         &self,
-        _typemap: &AttribStore<Ty>,
+        _typemap: &FlagStore<Ty>,
         graph: &OptGraph,
         _concepts: &AHashMap<String, CSGConcept>,
         _csg_defs: &AHashMap<String, CSGNodeDef>,
@@ -497,7 +497,7 @@ impl DialectNode for EvalNode {
 
     fn try_derive_type(
         &self,
-        _typemap: &AttribStore<Ty>,
+        _typemap: &FlagStore<Ty>,
         graph: &OptGraph,
         concepts: &AHashMap<String, CSGConcept>,
         _csg_defs: &AHashMap<String, CSGNodeDef>,
@@ -613,7 +613,7 @@ impl DialectNode for ImmScalar {
 
     fn try_derive_type(
         &self,
-        _typemap: &AttribStore<Ty>,
+        _typemap: &FlagStore<Ty>,
         _graph: &OptGraph,
         _concepts: &AHashMap<String, CSGConcept>,
         _csg_defs: &AHashMap<String, CSGNodeDef>,
@@ -659,7 +659,7 @@ impl DialectNode for ImmNat {
 
     fn try_derive_type(
         &self,
-        _typemap: &AttribStore<Ty>,
+        _typemap: &FlagStore<Ty>,
         _graph: &OptGraph,
         _concepts: &AHashMap<String, CSGConcept>,
         _csg_defs: &AHashMap<String, CSGNodeDef>,
@@ -715,7 +715,7 @@ impl DialectNode for Construct {
 
     fn try_derive_type(
         &self,
-        _typemap: &AttribStore<Ty>,
+        _typemap: &FlagStore<Ty>,
         graph: &OptGraph,
         _concepts: &AHashMap<String, CSGConcept>,
         _csg_defs: &AHashMap<String, CSGNodeDef>,
@@ -812,7 +812,7 @@ impl DialectNode for ConstantIndex {
 
     fn try_derive_type(
         &self,
-        _typemap: &AttribStore<Ty>,
+        _typemap: &FlagStore<Ty>,
         graph: &OptGraph,
         _concepts: &AHashMap<String, CSGConcept>,
         _csg_defs: &AHashMap<String, CSGNodeDef>,

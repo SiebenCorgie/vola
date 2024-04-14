@@ -29,7 +29,10 @@ use ahash::AHashMap;
 use alge::implblock::{ConceptImpl, ConceptImplKey};
 use common::Ty;
 use csg::{exportfn::ExportFn, fielddef::FieldDef};
-use rvsdg::{attrib::AttribStore, Rvsdg};
+use rvsdg::{
+    attrib::{AttribStore, FlagStore},
+    Rvsdg,
+};
 
 use rvsdg_viewer::layout::LayoutConfig;
 use vola_ast::{
@@ -74,15 +77,15 @@ pub struct Optimizer {
     pub(crate) field_def: AHashMap<String, FieldDef>,
 
     ///All known type tags of ports and nodes. Can be used to do type checking, or infer edge types.
-    pub typemap: AttribStore<Ty>,
+    pub typemap: FlagStore<Ty>,
 
     ///Can be used to tag source Spans for nodes that are no OptNodes
-    pub span_tags: AttribStore<Span>,
+    pub span_tags: FlagStore<Span>,
 
     ///Can be used to name nodes, which might be interesting for passes that
     ///do not have knowledge of the original AST/Source, but still need to emit human
     /// readable names.
-    pub names: AttribStore<String>,
+    pub names: FlagStore<String>,
 }
 
 impl Optimizer {
@@ -94,9 +97,9 @@ impl Optimizer {
             concept_impl: AHashMap::default(),
             export_fn: AHashMap::default(),
             field_def: AHashMap::default(),
-            typemap: AttribStore::new(),
-            span_tags: AttribStore::new(),
-            names: AttribStore::new(),
+            typemap: FlagStore::new(),
+            span_tags: FlagStore::new(),
+            names: FlagStore::new(),
         }
     }
 
