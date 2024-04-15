@@ -7,16 +7,15 @@
  */
 //! Module that definse the OptNode and OptEdge related structures.
 
+use core::panic;
 use std::{any::Any, fmt::Debug};
 
-use crate::common::Ty;
 use crate::error::OptError;
+use crate::{common::Ty, Optimizer};
 use ahash::AHashMap;
+use rvsdg::attrib::AttribLocation;
 use rvsdg::{
-    attrib::{AttribStore, FlagStore},
-    edge::LangEdge,
-    nodes::LangNode,
-    rvsdg_derive_lang::LangNode,
+    attrib::FlagStore, edge::LangEdge, nodes::LangNode, rvsdg_derive_lang::LangNode,
     util::copy::StructuralClone,
 };
 
@@ -241,6 +240,67 @@ impl View for OptEdge {
         match self {
             Self::State => rvsdg_viewer::Stroke::Line,
             Self::Value { .. } => rvsdg_viewer::Stroke::Line,
+        }
+    }
+}
+
+impl Optimizer {
+    ///Utility that tries to find type information in the vicinity of `loc`
+    pub fn find_type(&self, loc: &AttribLocation) -> Option<Ty> {
+        if let Some(t) = self.typemap.get(loc) {
+            return Some(t.clone());
+        }
+
+        //try the _vicinity_ This means the ports of an edge, or all edges that are connected to a port.
+        match loc {
+            AttribLocation::InPort(portloc) => {
+                if let Some(edg) = self
+                    .graph
+                    .node(portloc.node)
+                    .inport(&portloc.input)
+                    .unwrap()
+                    .edge
+                {
+                    self.graph.edge(edg).ty.get_type().cloned()
+                } else {
+                    None
+                }
+            }
+            AttribLocation::OutPort(portloc) => {
+                //check if any of the edges has a type for us. We actually unify all edges and
+                //panic if we encounter inconsistensies.
+                let mut unified_type = None;
+                for edg in &self
+                    .graph
+                    .node(portloc.node)
+                    .outport(&portloc.output)
+                    .unwrap()
+                    .edges
+                {
+                    match self.graph.edge(*edg).ty.get_type() {
+                        Some(new_ty) => {
+                            if let Some(set_ty) = &unified_type {
+                                if new_ty != set_ty {
+                                    panic!("Found edge inconsistensy on edege {edg}. There are two edge types on the same port: {new_ty:?} & {set_ty:?}" )
+                                }
+                            } else {
+                                unified_type = Some(new_ty.clone());
+                            }
+                        }
+                        None => {}
+                    }
+                }
+                unified_type
+            }
+            AttribLocation::Region(_) => None,
+            AttribLocation::Node(_) => None,
+            AttribLocation::Edge(edg) => {
+                println!("Trying vicinity!");
+                if let Some(t) = self.find_type(&self.graph.edge(*edg).src().into()) {
+                    return Some(t);
+                }
+                self.find_type(&self.graph.edge(*edg).dst().into())
+            }
         }
     }
 }

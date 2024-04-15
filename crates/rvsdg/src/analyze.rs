@@ -318,6 +318,15 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
             // If not, check if we can map _out_ or _into_ a node. If so, add that port to the stack.
             // otherwise terminate.
 
+            //Do not try to break out of the omega node.
+            //NOTE: we could make the for-loop-header catch a None port, but this
+            //      case _should_ really be the only way how the unwrap fails. Otherwise
+            //      there is some kind of bug in the graph.
+            if self.node(next.node).node_type.is_omega() {
+                continue;
+            }
+
+            //NOTE: checkout above if this panics
             for edg in &self.node(next.node).outport(&next.output).unwrap().edges {
                 let dst = self.edge(*edg).dst();
                 if self.node(dst.node).node_type.is_apply() {

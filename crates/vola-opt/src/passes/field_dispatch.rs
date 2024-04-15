@@ -43,7 +43,7 @@ use rvsdg::{
     region::{Inport, RegionLocation},
     smallvec::{smallvec, SmallVec},
     util::copy::StructuralClone,
-    NodeRef,
+    NodeRef, SmallColl,
 };
 use rvsdg_viewer::View;
 use vola_common::{report, Span};
@@ -94,7 +94,7 @@ impl Optimizer {
         //Find all TreeAccess nodes, and prepare regions for specialization.
         //This currently means creating a λ-Copy of the export region for each access,
         //that then gets called in place of the access node.
-        let (copy_node_list, export_fn_region, argcount) =
+        let (copy_node_list, export_fn_region, arg_tys, result_type) =
             if let Some(exp) = self.export_fn.get(ident) {
                 let mut copy_nodes: SmallVec<[NodeRef; 3]> = SmallVec::default();
                 let result_count = self.graph.region(&exp.lambda_region).unwrap().results.len();
@@ -109,13 +109,31 @@ impl Optimizer {
                     }
                 }
 
-                let argcount = self
-                    .graph
-                    .node(exp.lambda)
-                    .node_type
-                    .unwrap_lambda_ref()
-                    .argument_count();
-                (copy_nodes, exp.lambda_region.clone(), argcount)
+                let lmd = self.graph.node(exp.lambda).node_type.unwrap_lambda_ref();
+                let argcount = lmd.argument_count();
+                let argtys = (0..argcount)
+                    .map(|idx| {
+                        self.find_type(
+                            &OutportLocation {
+                                node: exp.lambda,
+                                output: OutputType::Argument(idx),
+                            }
+                            .into(),
+                        )
+                        .expect("failed to get argument type")
+                    })
+                    .collect::<SmallColl<_>>();
+
+                let result_ty = self
+                    .find_type(
+                        &InportLocation {
+                            node: exp.lambda,
+                            input: InputType::Result(0),
+                        }
+                        .into(),
+                    )
+                    .expect("Could not find result type");
+                (copy_nodes, exp.lambda_region.clone(), argtys, result_ty)
             } else {
                 //No such export fn
                 return Err(OptError::Any {
@@ -185,28 +203,37 @@ impl Optimizer {
             );
             //Since we saved the outport dst we can finally remove the node, and setup the new apply node.
             self.graph.remove_node(*src_field_access).unwrap();
-
-            let input_args = (0..argcount)
+            //NOTE: clone since we are in a loop :eyes:
+            let arg_tys = arg_tys.clone();
+            let input_args = (0..arg_tys.len())
                 .map(|idx| OutportLocation {
                     node: export_fn_region.node,
                     output: OutputType::Argument(idx),
                 })
                 .collect::<SmallVec<[OutportLocation; 3]>>();
-            self.graph.on_region(&export_fn_region, |reg| {
-                let (call_node, _) = reg
-                    .call(import_cv_port_out, &input_args)
-                    .expect("Failed to hook up replacement Apply node");
 
-                reg.ctx_mut()
-                    .connect(
-                        call_node.output(0),
-                        target_port,
-                        OptEdge::Value {
-                            ty: TypeState::Unset,
-                        },
-                    )
-                    .unwrap();
-            });
+            self.graph
+                .on_region(&export_fn_region, |reg| {
+                    let (call_node, input_edges) = reg
+                        .call(import_cv_port_out, &input_args)
+                        .expect("Failed to hook up replacement Apply node");
+                    //the +1 is the call edge that gets added by `call`
+                    assert!(input_edges.len() == arg_tys.len() + 1);
+                    //NOTE: skip, since the first edge is the call edge
+                    for (edg, ty) in input_edges.into_iter().skip(1).zip(arg_tys.into_iter()) {
+                        reg.ctx_mut().edge_mut(edg).ty.set_type(ty);
+                    }
+                    reg.ctx_mut()
+                        .connect(
+                            call_node.output(0),
+                            target_port,
+                            OptEdge::Value {
+                                ty: TypeState::Set(result_type.clone()),
+                            },
+                        )
+                        .unwrap();
+                })
+                .unwrap();
         }
 
         //For some house keeping, remove unused imports on the export after trace
