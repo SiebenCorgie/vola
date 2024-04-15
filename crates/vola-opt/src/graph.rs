@@ -167,6 +167,21 @@ impl OptEdge {
             } => Some(t),
         }
     }
+
+    ///Sets the type of this edge, if it is a Value edge. Does nothing if its a state
+    /// edge.
+    ///
+    /// Returns the old type state
+    pub fn set_type(&mut self, set_ty: Ty) -> Option<TypeState> {
+        match self {
+            Self::Value { ty } => {
+                let mut new_type = TypeState::Set(set_ty);
+                std::mem::swap(ty, &mut new_type);
+                Some(new_type)
+            }
+            Self::State => None,
+        }
+    }
 }
 
 impl LangEdge for OptEdge {

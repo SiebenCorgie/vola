@@ -52,17 +52,14 @@ pub enum Ty {
     },
 }
 
-impl TryFrom<vola_ast::common::Ty> for Ty {
-    type Error = OptError;
-    fn try_from(value: vola_ast::common::Ty) -> Result<Self, Self::Error> {
+impl From<vola_ast::common::Ty> for Ty {
+    fn from(value: vola_ast::common::Ty) -> Self {
         match value {
-            vola_ast::common::Ty::Scalar => Ok(Self::Scalar),
-            vola_ast::common::Ty::Vec { width } => Ok(Self::Vector { width }),
-            vola_ast::common::Ty::Matrix { width, height } => Ok(Self::Matrix { width, height }),
-            vola_ast::common::Ty::Tensor { dim } => Ok(Self::Tensor { dim }),
-            vola_ast::common::Ty::CSGTree => Err(OptError::TypeConversionError {
-                srcty: vola_ast::common::Ty::CSGTree,
-            }),
+            vola_ast::common::Ty::Scalar => Self::Scalar,
+            vola_ast::common::Ty::Vec { width } => Self::Vector { width },
+            vola_ast::common::Ty::Matrix { width, height } => Self::Matrix { width, height },
+            vola_ast::common::Ty::Tensor { dim } => Self::Tensor { dim },
+            vola_ast::common::Ty::CSGTree => Self::CSGTree,
         }
     }
 }
@@ -185,13 +182,7 @@ impl LmdContext {
                 },
             );
             //tag the type as well
-            type_map.set(
-                argport.into(),
-                arg.ty
-                    .clone()
-                    .try_into()
-                    .expect("Could not convert impl block's arg to an opt-type"),
-            );
+            type_map.set(argport.into(), arg.ty.clone().into());
         }
 
         for (arg_local_idx, renamed) in block.concept_arg_naming.iter().enumerate() {
@@ -218,11 +209,7 @@ impl LmdContext {
                 },
             );
             //tag the type as well
-            type_map.set(
-                argport.into(),
-                ty.try_into()
-                    .expect("Could not convert impl block's arg to an opt-type"),
-            );
+            type_map.set(argport.into(), ty.into());
         }
 
         LmdContext {
@@ -261,13 +248,7 @@ impl LmdContext {
                 },
             );
             //tag the type as well
-            type_map.set(
-                argport.into(),
-                arg.ty
-                    .clone()
-                    .try_into()
-                    .expect("Could not convert impl block's arg to an opt-type"),
-            );
+            type_map.set(argport.into(), arg.ty.clone().into());
         }
 
         LmdContext { defined_vars }
@@ -304,13 +285,7 @@ impl LmdContext {
                 },
             );
             //tag the type as well
-            type_map.set(
-                argport.into(),
-                arg.ty
-                    .clone()
-                    .try_into()
-                    .expect("Could not convert fielddef's arg to an opt-type"),
-            );
+            type_map.set(argport.into(), arg.ty.clone().into());
         }
 
         LmdContext { defined_vars }

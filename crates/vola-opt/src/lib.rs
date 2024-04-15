@@ -185,7 +185,7 @@ impl Optimizer {
         );
 
         if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("DUMP_AST_ADD").is_ok() {
-            self.dump_svg("ast_add.svg", true);
+            self.dump_svg("ast_add.svg", false);
         }
 
         if error_counter > 0 {

@@ -112,13 +112,7 @@ impl ExportFn {
         let concept_name = concept.name.clone();
 
         //We use the concept's return type to infer the output signature.
-        let return_type: Ty = match concept.dst_ty.clone().try_into() {
-            Ok(ty) => ty,
-            Err(e) => {
-                report(e.clone(), concept.span.get_file());
-                return Err(e);
-            }
-        };
+        let return_type: Ty = concept.dst_ty.clone().into();
 
         //register in output signature
         self.output_signature.push(return_type.clone());
@@ -175,7 +169,6 @@ impl ExportFn {
                 let _ = reg
                     .connect_to_result(node.output(0), InputType::Result(resultidx))
                     .unwrap();
-
                 node.output(0)
             })
             .unwrap();
@@ -284,14 +277,7 @@ impl Optimizer {
 
         let mut input_signature = SmallVec::new();
         for typed_ident in exportfn.inputs.iter() {
-            let ty: Ty = match typed_ident.ty.clone().try_into() {
-                Ok(ty) => ty,
-                Err(e) => {
-                    report(e.clone(), typed_ident.span.get_file());
-                    return Err(e);
-                }
-            };
-
+            let ty: Ty = typed_ident.ty.clone().into();
             input_signature.push((typed_ident.ident.clone(), ty));
         }
 
@@ -348,6 +334,19 @@ impl Optimizer {
                 .into(),
                 inputty.clone(),
             );
+
+            for edg in self
+                .graph
+                .node(interned_exportfn.lambda)
+                .node_type
+                .unwrap_lambda_ref()
+                .argument(inpidx)
+                .unwrap()
+                .edges
+                .clone()
+            {
+                self.graph.edge_mut(edg).ty.set_type(inputty.clone());
+            }
         }
 
         for (outpidx, ty) in interned_exportfn.output_signature.iter().enumerate() {
@@ -359,6 +358,19 @@ impl Optimizer {
                 .into(),
                 ty.clone(),
             );
+
+            if let Some(edg) = self
+                .graph
+                .node(interned_exportfn.lambda)
+                .node_type
+                .unwrap_lambda_ref()
+                .result(outpidx)
+                .unwrap()
+                .edge
+                .clone()
+            {
+                self.graph.edge_mut(edg).ty.set_type(ty.clone());
+            }
         }
 
         self.export_fn.insert(export_name, interned_exportfn);

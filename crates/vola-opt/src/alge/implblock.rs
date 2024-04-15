@@ -1,3 +1,5 @@
+use std::borrow::BorrowMut;
+
 /*
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
@@ -15,7 +17,7 @@ use ahash::AHashMap;
 use rvsdg::{
     edge::{InputType, OutportLocation, OutputType},
     region::RegionLocation,
-    NodeRef,
+    NodeRef, SmallColl,
 };
 use vola_ast::{
     alge::{AlgeStmt, AssignStmt, EvalExpr, ImplBlock, LetStmt},
@@ -369,6 +371,23 @@ impl Optimizer {
             &src_concept,
         );
 
+        //This effectively builds us the type-signature of the impl block based on the calling-convention
+        // that is realised in LmdContext::new_for_impl_block.
+        // this means that first all csg-def args are supplied, followed by the args to the concept that is implemented.
+        let impl_block_arg_signature = src_csg_def
+            .args
+            .iter()
+            .map(|t| t.ty.clone())
+            .chain(
+                //NOTE: now chain the concept-args. This is we do that by indexing into the src_concept's definition
+                implblock
+                    .concept_arg_naming
+                    .iter()
+                    .enumerate()
+                    .map(|(idx, _)| src_concept.src_ty[idx].clone()),
+            )
+            .collect::<SmallColl<_>>();
+        let result_sig = src_concept.dst_ty.clone().into();
         //Temporary builder that tracks things like the defined variables etc.
         // Is dropped within the concept_impl.build_block()
         let lmd_builder = AstLambdaBuilder {
@@ -395,6 +414,54 @@ impl Optimizer {
         // find that later on if needed and return
         //NOTE: _should be the same, but could also be changed at some point I guess_
         let lmd = build_concept_impl.lambda.clone();
+
+        //now append types to edges based on impl-block signature, as well add some general debug info for later.
+        self.names
+            .set(lmd.into(), build_concept_impl.concept.0.clone());
+        self.span_tags
+            .set(lmd.into(), build_concept_impl.span.clone());
+
+        //This iterator maps us the concept's argument types in order
+
+        //now we chain first the csg-def's arg-types, followed by the concept args (which is our definition), to
+        // setup the edge types accordingly
+        for (inpidx, inputty) in impl_block_arg_signature.into_iter().enumerate() {
+            for edg in self
+                .graph
+                .node(lmd)
+                .node_type
+                .unwrap_lambda_ref()
+                .argument(inpidx)
+                .unwrap()
+                .edges
+                .clone()
+            {
+                self.graph.edge_mut(edg).ty.set_type(inputty.clone().into());
+            }
+        }
+
+        //now do the output. Thats a little easier, since we have, by definition just one output
+        assert!(
+            self.graph
+                .node(lmd)
+                .node_type
+                .unwrap_lambda_ref()
+                .result_count()
+                == 1
+        );
+        self.graph
+            .edge_mut(
+                self.graph
+                    .node(lmd)
+                    .node_type
+                    .unwrap_lambda_ref()
+                    .result(0)
+                    .unwrap()
+                    .edge
+                    .unwrap(),
+            )
+            .ty
+            .set_type(result_sig);
 
         let old = self.concept_impl.insert(concept_key, build_concept_impl);
         assert!(old.is_none(), "Had an old concept + node combination already, should have been caught before adding it!");

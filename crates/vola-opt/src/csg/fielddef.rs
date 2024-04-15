@@ -224,14 +224,7 @@ impl Optimizer {
 
         let mut input_signature = SmallVec::new();
         for typed_ident in fielddef.inputs.iter() {
-            let ty: Ty = match typed_ident.ty.clone().try_into() {
-                Ok(ty) => ty,
-                Err(e) => {
-                    report(e.clone(), typed_ident.span.get_file());
-                    return Err(e);
-                }
-            };
-
+            let ty: Ty = typed_ident.ty.clone().into();
             input_signature.push((typed_ident.ident.clone(), ty));
         }
 
@@ -264,8 +257,57 @@ impl Optimizer {
         };
 
         let interned_fielddef = new_def.build_block(lmd_builder, fielddef)?;
-
         let fieldef_name = interned_fielddef.name.0.clone();
+
+        //carry over debug information
+        self.names.set(
+            interned_fielddef.lambda.into(),
+            interned_fielddef.name.0.clone(),
+        );
+        self.span_tags.set(
+            interned_fielddef.lambda.into(),
+            interned_fielddef.span.clone(),
+        );
+        //now tag all argument and result edges as defined. ArgTys are specified by the input-signature.
+        //the refult will always be a csg-tree
+
+        for (input_idx, (_, inputty)) in interned_fielddef.input_signature.iter().enumerate() {
+            for edg in self
+                .graph
+                .node(interned_fielddef.lambda)
+                .node_type
+                .unwrap_lambda_ref()
+                .argument(input_idx)
+                .unwrap()
+                .edges
+                .clone()
+            {
+                self.graph.edge_mut(edg).ty.set_type(inputty.clone());
+            }
+        }
+
+        assert!(
+            self.graph
+                .node(interned_fielddef.lambda)
+                .node_type
+                .unwrap_lambda_ref()
+                .result_count()
+                == 1
+        );
+        self.graph
+            .edge_mut(
+                self.graph
+                    .node(interned_fielddef.lambda)
+                    .node_type
+                    .unwrap_lambda_ref()
+                    .result(0)
+                    .unwrap()
+                    .edge
+                    .unwrap(),
+            )
+            .ty
+            .set_type(Ty::CSGTree);
+
         self.field_def.insert(fieldef_name, interned_fielddef);
 
         Ok(lambda)
