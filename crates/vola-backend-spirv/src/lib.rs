@@ -79,6 +79,9 @@ pub struct SpirvBackend {
     idents: FlagStore<String>,
     ///Can be used to tag things with a source-span, if there is such a thing.
     spans: FlagStore<Span>,
+    ///Used to declare types on _none-edge_ things. Mostly ports to derive a type for an unused
+    ///attribute later on.
+    typemap: FlagStore<SpvType>,
     config: SpirvConfig,
 }
 
@@ -88,6 +91,7 @@ impl SpirvBackend {
             graph: Rvsdg::new(),
             idents: FlagStore::new(),
             spans: FlagStore::new(),
+            typemap: FlagStore::new(),
             config,
         }
     }

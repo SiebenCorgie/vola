@@ -45,12 +45,6 @@ impl Debug for BackendNode {
     }
 }
 
-#[derive(Debug, Clone)]
-pub enum BackendEdge {
-    Value(SpvType),
-    State,
-}
-
 impl View for BackendNode {
     fn name(&self) -> String {
         match &self.op {
@@ -63,6 +57,35 @@ impl View for BackendNode {
     }
 }
 
+#[derive(Debug, Clone)]
+pub enum BackendEdge {
+    Value(SpvType),
+    State,
+}
+
+impl BackendEdge {
+    pub fn get_type(&self) -> Option<&SpvType> {
+        if let Self::Value(ty) = self {
+            Some(ty)
+        } else {
+            None
+        }
+    }
+
+    ///Sets the type of `self` to `ty`, if this is a value edge.
+    /// Returns the type that was set before, if there is any.
+    pub fn set_type(&mut self, ty: SpvType) -> Option<SpvType> {
+        match self {
+            Self::Value(v) => {
+                let mut ty = ty;
+                std::mem::swap(v, &mut ty);
+                Some(ty)
+            }
+            Self::State => None,
+        }
+    }
+}
+
 impl View for BackendEdge {
     fn name(&self) -> String {
         match self {
@@ -72,7 +95,11 @@ impl View for BackendEdge {
     }
     fn color(&self) -> rvsdg_viewer::Color {
         match self {
-            Self::Value(_) => rvsdg_viewer::Color::from_rgba(0, 0, 0, 255),
+            Self::Value(ty) => match ty {
+                SpvType::Undefined => rvsdg_viewer::Color::from_rgba(255, 0, 255, 255),
+                SpvType::Arith(_) => rvsdg_viewer::Color::from_rgba(20, 20, 20, 255),
+                _ => rvsdg_viewer::Color::from_rgba(0, 255, 0, 255),
+            },
             Self::State => rvsdg_viewer::Color::from_rgba(200, 0, 0, 255),
         }
     }

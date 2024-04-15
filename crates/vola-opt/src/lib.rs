@@ -29,10 +29,7 @@ use ahash::AHashMap;
 use alge::implblock::{ConceptImpl, ConceptImplKey};
 use common::Ty;
 use csg::{exportfn::ExportFn, fielddef::FieldDef};
-use rvsdg::{
-    attrib::{AttribStore, FlagStore},
-    Rvsdg,
-};
+use rvsdg::{attrib::FlagStore, Rvsdg};
 
 use rvsdg_viewer::layout::LayoutConfig;
 use vola_ast::{
@@ -186,6 +183,10 @@ impl Optimizer {
             ast_add_start.elapsed().as_millis(),
             ast_add_start.elapsed().as_nanos()
         );
+
+        if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("DUMP_AST_ADD").is_ok() {
+            self.dump_svg("ast_add.svg", true);
+        }
 
         if error_counter > 0 {
             Err(OptError::ErrorsOccurred(error_counter))

@@ -358,7 +358,7 @@ fn test_rule<'a>(
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ArithBaseTy {
     Integer { signed: bool },
     Float,
@@ -374,14 +374,14 @@ impl ArithBaseTy {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ArithTy {
-    base: ArithBaseTy,
-    shape: TyShape,
-    resolution: u32,
+    pub base: ArithBaseTy,
+    pub shape: TyShape,
+    pub resolution: u32,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum TyShape {
     Scalar,
     Vector { width: u32 },
@@ -400,7 +400,7 @@ impl TyShape {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum PointerType {}
 
 ///At this point we _need_ to move into the strange SPIR-V type system.
@@ -414,13 +414,13 @@ pub enum PointerType {}
 ///
 /// Sadly we don't get away with just _typed pointers_, cause there are different _types_ of pointer. So we
 /// have to make that explicit atm.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum SpvType {
     Void,
     Undefined,
     State,
     Arith(ArithTy),
-    RuntimeArray,
+    RuntimeArray(ArithTy),
     //TODO: This would be, where we add TypeImage, buffers etc.
 }
 

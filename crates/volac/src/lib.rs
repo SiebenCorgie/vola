@@ -89,6 +89,7 @@ impl Pipeline {
         //do some _post_everyting_ cleanup
         opt.cleanup_export_lmd();
 
+        opt.dump_svg("final_opt.svg", true);
         //finally use the expected backend
         match self.target_format {
             Backend::Spirv => {

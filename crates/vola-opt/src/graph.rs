@@ -200,7 +200,9 @@ impl View for OptEdge {
         match self {
             Self::State => rvsdg_viewer::macroquad::color::Color::from_rgba(255, 0, 0, 255),
             Self::Value { ty } => match ty {
-                TypeState::Unset => rvsdg_viewer::macroquad::color::Color::from_rgba(0, 0, 0, 255),
+                TypeState::Unset => {
+                    rvsdg_viewer::macroquad::color::Color::from_rgba(255, 0, 255, 255)
+                }
                 TypeState::Set(_) => {
                     rvsdg_viewer::macroquad::color::Color::from_rgba(0, 255, 0, 255)
                 }

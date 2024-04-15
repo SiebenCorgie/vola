@@ -6,7 +6,7 @@
  * 2024 Tendsin Mende
  */
 use rvsdg::{
-    edge::{InputType, OutportLocation},
+    edge::{InportLocation, InputType, OutportLocation, OutputType},
     region::RegionLocation,
     smallvec::SmallVec,
     NodeRef,
@@ -337,6 +337,30 @@ impl Optimizer {
             interned_exportfn.lambda.into(),
             interned_exportfn.span.clone(),
         );
+
+        //add port type information
+        for (inpidx, (_, inputty)) in interned_exportfn.input_signature.iter().enumerate() {
+            self.typemap.set(
+                OutportLocation {
+                    node: interned_exportfn.lambda,
+                    output: OutputType::Argument(inpidx),
+                }
+                .into(),
+                inputty.clone(),
+            );
+        }
+
+        for (outpidx, ty) in interned_exportfn.output_signature.iter().enumerate() {
+            self.typemap.set(
+                InportLocation {
+                    node: interned_exportfn.lambda,
+                    input: InputType::Result(outpidx),
+                }
+                .into(),
+                ty.clone(),
+            );
+        }
+
         self.export_fn.insert(export_name, interned_exportfn);
 
         Ok(lambda)

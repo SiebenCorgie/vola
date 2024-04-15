@@ -214,7 +214,7 @@ impl Optimizer {
         self.graph
             .remove_unused_context_variables(export_fn_region.node);
 
-        if env::var("VOLA_DUMP_ALL").is_ok() || env::var("DUMP_BEFOR_SPECIALIZE").is_ok() {
+        if env::var("VOLA_DUMP_ALL").is_ok() || env::var("DUMP_BEFORE_SPECIALIZE").is_ok() {
             self.dump_svg("before_specialize.svg", true);
         }
 

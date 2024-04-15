@@ -190,12 +190,17 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
 
     ///Returns reference to the edge, assuming that it exists. Panics if it does not exist.
     pub fn edge(&self, eref: EdgeRef) -> &Edge<E> {
-        self.edges.get(eref).as_ref().unwrap()
+        self.edges
+            .get(eref)
+            .as_ref()
+            .expect("edge does not exist in graph")
     }
 
     ///Returns reference to the edge, assuming that it exists. Panics if it does not exist.
     pub fn edge_mut(&mut self, eref: EdgeRef) -> &mut Edge<E> {
-        self.edges.get_mut(eref).unwrap()
+        self.edges
+            .get_mut(eref)
+            .expect("Edge does not exist in graph")
     }
 
     ///Returns the region at the given location, if it exists.

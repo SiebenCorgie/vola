@@ -7,7 +7,7 @@ use crate::{
     edge::LangEdge,
     nodes::{LangNode, NodeType},
     region::RegionLocation,
-    NodeRef, Rvsdg,
+    EdgeRef, NodeRef, Rvsdg,
 };
 
 use super::copy::StructuralClone;
@@ -67,6 +67,18 @@ pub enum GraphTypeTransformerError {
     TopLevelResultMissmatch { src: usize, dst: usize },
 }
 
+///Collects the mapping information of one graph into another while doing the [Rvsdg::tranform_into] pass.
+///
+/// # Warning
+///
+/// Take extra care, that you only use the keys with the source graph, and the values with the destination graph!.
+pub struct GraphMapping {
+    ///How a node from the src graph mapps to the dst graph
+    pub node_mapping: AHashMap<NodeRef, NodeRef>,
+    ///How a edge mapps from the src graph to the dst graph.
+    pub edge_mapping: AHashMap<EdgeRef, EdgeRef>,
+}
+
 impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
     ///Appends the rewritten `src_graph` to the `dst_graph` based on the given `transformer`.
     ///
@@ -80,10 +92,10 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
             DstNode = DN,
             DstEdge = DE,
         >,
-    ) -> Result<AHashMap<NodeRef, NodeRef>, GraphTypeTransformerError> {
+    ) -> Result<GraphMapping, GraphTypeTransformerError> {
         //tracks the node-remapping which lets us connect the right edges
         let mut node_remapping = AHashMap::new();
-
+        let mut edge_remapping = AHashMap::new();
         //check that we can hook-up all results/args in the toplevel.
         //all others will be taken care of by the structural-clone process.
 
@@ -174,11 +186,15 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
                 new_dst.node = *node_remapping.get(&new_dst.node).unwrap();
                 //now insert accordingly
 
-                let _ = dst_graph.connect(new_src, new_dst, tbi).unwrap();
+                let new_edge = dst_graph.connect(new_src, new_dst, tbi).unwrap();
+                edge_remapping.insert(*edg, new_edge);
             }
         }
 
-        Ok(node_remapping)
+        Ok(GraphMapping {
+            node_mapping: node_remapping,
+            edge_mapping: edge_remapping,
+        })
     }
 
     ///Helper that tranforms the whole `src_graph` into a new graph based on the transformator.
@@ -192,7 +208,7 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
             DstNode = DN,
             DstEdge = DE,
         >,
-    ) -> Result<(Rvsdg<DN, DE>, AHashMap<NodeRef, NodeRef>), GraphTypeTransformerError> {
+    ) -> Result<(Rvsdg<DN, DE>, GraphMapping), GraphTypeTransformerError> {
         let mut new_graph = Rvsdg::new();
         //take care of argument / result count
         let argcount = self

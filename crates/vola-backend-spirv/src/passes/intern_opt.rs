@@ -13,10 +13,10 @@ use std::ops::Deref;
 use ahash::AHashMap;
 use rvsdg::{
     attrib::{AttribLocation, AttribStore, FlagStore},
-    edge::OutportLocation,
+    edge::{InportLocation, OutportLocation},
     region::{Input, Output},
     smallvec::smallvec,
-    util::graph_type_transform::{GraphTypeTransformer, GraphTypeTransformerError},
+    util::graph_type_transform::{GraphMapping, GraphTypeTransformer, GraphTypeTransformerError},
     NodeRef,
 };
 use vola_common::dot::graphviz_rust::dot_structures::NodeId;
@@ -118,9 +118,6 @@ impl SpirvBackend {
         //to be sure that we carry over all exports, first transform into a local graph, then merge with the existing one.
         let (new_graph, remapping) = opt.graph.transform_new(&mut transformer)?;
 
-        //now use the remapping to transfer identifiers and source spans
-        self.transfer_debug_info(&remapping, opt);
-
         #[cfg(feature = "log")]
         {
             //emit error if the current graph is not empty
@@ -141,11 +138,81 @@ impl SpirvBackend {
         //and move that into the backend-graph.
         self.graph = new_graph;
 
+        //now use the remapping to transfer identifiers and source spans
+        self.transfer_debug_info(&remapping, opt);
+        self.transfer_type_info(&remapping, opt);
+
         Ok(())
     }
 
-    fn transfer_debug_info(&mut self, remapping: &AHashMap<NodeRef, NodeRef>, opt: &Optimizer) {
-        for (src_node, dst_node) in remapping {
+    fn transfer_type_info(&mut self, remapping: &GraphMapping, opt: &Optimizer) {
+        for (location, ty) in opt.typemap.flags.iter() {
+            let remapped_attrib_location = match location {
+                AttribLocation::InPort(port) => {
+                    let mut remapped_port = port.clone();
+                    if let Some(remapped_node) = remapping.node_mapping.get(&port.node) {
+                        remapped_port.node = *remapped_node;
+                        AttribLocation::InPort(remapped_port)
+                    } else {
+                        //Could not remap, therfore ignore
+                        continue;
+                    }
+                }
+                AttribLocation::OutPort(port) => {
+                    let mut remapped_port = port.clone();
+                    if let Some(remapped_node) = remapping.node_mapping.get(&port.node) {
+                        remapped_port.node = *remapped_node;
+                        AttribLocation::OutPort(remapped_port)
+                    } else {
+                        //Could not remap, therfore ignore
+                        continue;
+                    }
+                }
+                AttribLocation::Region(reg) => {
+                    if let Some(remapped_reg_node) = remapping.node_mapping.get(&reg.node) {
+                        let mut regloc = reg.clone();
+                        regloc.node = *remapped_reg_node;
+                        AttribLocation::Region(regloc)
+                    } else {
+                        continue;
+                    }
+                }
+                AttribLocation::Node(node) => {
+                    if let Some(rmn) = remapping.node_mapping.get(node) {
+                        AttribLocation::Node(*rmn)
+                    } else {
+                        continue;
+                    }
+                }
+                AttribLocation::Edge(_edg) => {
+                    //Those are taken care of later
+                    continue;
+                }
+            };
+
+            //now try to get the type info, and if there is some, transfore it to the new attribloc
+            if let Ok(newty) = ty.clone().try_into() {
+                self.typemap.set(remapped_attrib_location, newty);
+            }
+        }
+        //now do all the edges explicitly
+        for (src_edg, dst_edg) in remapping.edge_mapping.iter() {
+            if let Some(ty) = opt.graph.edge(*src_edg).ty.get_type() {
+                if let Ok(converted_type) = ty.clone().try_into() {
+                    //replace type info, make sure we only overide untyped edges
+                    assert!(self
+                        .graph
+                        .edge_mut(*dst_edg)
+                        .ty
+                        .set_type(converted_type)
+                        .is_some());
+                }
+            }
+        }
+    }
+
+    fn transfer_debug_info(&mut self, remapping: &GraphMapping, opt: &Optimizer) {
+        for (src_node, dst_node) in remapping.node_mapping.iter() {
             if let Some(name) = opt.names.get(&src_node.into()) {
                 self.idents.set(dst_node.into(), name.clone());
             }
