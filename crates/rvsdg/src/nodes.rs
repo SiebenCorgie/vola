@@ -463,6 +463,20 @@ impl<N: LangNode + 'static> Node<N> {
         }
     }
 
+    ///Collects all [Self::input_src] of the node. The collection always has the length of `Self::inputs().len()`.
+    /// If a port has no connection, its corresbonding index in the collection is empty.
+    pub fn input_srcs<E: LangEdge + 'static>(
+        &self,
+        ctx: &Rvsdg<N, E>,
+    ) -> SmallColl<Option<OutportLocation>> {
+        let input_count = self.inputs().len();
+        let mut srcs = SmallColl::with_capacity(input_count);
+        for idx in 0..input_count {
+            srcs.push(self.input_src(ctx, idx));
+        }
+        srcs
+    }
+
     ///Accesses the `output`-th output port of the node, and tries to resolve it to a set of
     /// connected nodes.
     pub fn output_dsts<E: LangEdge + 'static>(
@@ -480,6 +494,20 @@ impl<N: LangNode + 'static> Node<N> {
         } else {
             None
         }
+    }
+
+    ///Similar to [Self::input_srcs], but this time, if a port has no connection, the collection of the corresbonding
+    ///index is empty.
+    pub fn all_output_dsts<E: LangEdge + 'static>(
+        &self,
+        ctx: &Rvsdg<N, E>,
+    ) -> SmallColl<Option<SmallColl<InportLocation>>> {
+        let output_count = self.outputs().len();
+        let mut coll = SmallColl::with_capacity(output_count);
+        for idx in 0..output_count {
+            coll.push(self.output_dsts(ctx, idx));
+        }
+        coll
     }
 
     ///Returns the input port's connected edges. This is guranteed to have the length

@@ -8,3 +8,4 @@
 mod intern_opt;
 mod legalization;
 mod spv;
+pub use spv::EmitCtx;

@@ -10,15 +10,16 @@
 //! work with spir-v ops in the graph.
 
 use ahash::AHashMap;
-use rspirv::grammar::{LogicalOperand, OperandKind};
+use rspirv::{dr::{Instruction, Operand}, grammar::{LogicalOperand, OperandKind}, spirv::Word};
 use rvsdg::smallvec::{smallvec, SmallVec};
 use spirv_grammar_rules::{GrammarRules, Rule};
+use vola_common::dot::graphviz_rust::attributes::resolution;
 use vola_opt::{
     alge::{CallOp, ConstantIndex, Construct, ImmNat, ImmScalar, WkOp},
     OptNode,
 };
 
-use crate::BackendSpirvError;
+use crate::{passes::EmitCtx, BackendSpirvError};
 
 type CoreOp = rspirv::spirv::Op;
 
@@ -546,7 +547,7 @@ pub enum SpvOp {
 ///A single SPIR-V dialect node.
 pub struct SpvNode {
     ///The Op represented by this node.
-    op: SpvOp,
+    pub op: SpvOp,
 }
 
 impl SpvNode {
@@ -734,12 +735,76 @@ impl SpvNode {
                 Ok(())
             }
             SpvOp::Extract(_idx) => {
-                //todo!("do bound check")
+                //TODO: implement
+                #[cfg(feature="log")]
+                log::warn!("Extract bound checking not yet implemented!");
                 Ok(())
             }
             SpvOp::Construct => {
-                //todo!("Do ... things?")
+                //TODO: implement
+                #[cfg(feature="log")]
+                log::warn!("Construct checking not yet implemented!");
                 Ok(())
+            }
+        }
+    }
+
+    pub fn instruction_is_type_or_constant(&self) -> bool{
+        match self.op{
+            SpvOp::ConstantFloat { .. } | SpvOp::ConstantInt { .. } => true,
+            _ => false
+        }
+    }
+
+    pub fn build_instruction(&self, ctx: &EmitCtx, input_ids: &[Word], result_type_id: Word, result_id: Word) -> Instruction{
+        match &self.op{
+            SpvOp::CoreOp(coreop) => {
+                Instruction::new(*coreop, Some(result_type_id), Some(result_id), input_ids.iter().map(|id| Operand::IdRef(*id)).collect() )
+            },
+            SpvOp::GlslOp(glslop) => {
+                //use the extinst to call glslop
+                let glsl_inst_set_id = ctx.extinst_ids.get("GLSL.std.450").unwrap();
+                let mut operands = Vec::with_capacity(2 + input_ids.len());
+
+                //first push the instset
+                operands.push(Operand::IdRef(*glsl_inst_set_id));
+                //now push the instruction literal as defined by the spec
+                operands.push(Operand::LiteralBit32(*glslop as u32));
+                //finally append the inputs
+                for iid in input_ids{
+                    operands.push(Operand::IdRef(*iid));
+                }
+                
+                Instruction::new(CoreOp::ExtInst, Some(result_type_id), Some(result_id), operands)
+            },
+            SpvOp::ConstantFloat { resolution, bits } | SpvOp::ConstantInt { resolution, bits } => {
+                let operand = if *resolution <= 32{
+                    Operand::LiteralBit32(*bits)
+                }else{
+                    if *resolution <= 64{
+                        Operand::LiteralBit64((*bits).into())
+                    }else{
+                        panic!("Can only create constants up to 64bit, but got {resolution}");
+                    }
+                };
+                
+                Instruction::new(CoreOp::Constant, Some(result_type_id), Some(result_id), vec![operand])
+            },
+            SpvOp::Extract(chain) => {
+                //right now this always translates to OpCompositeExtract
+                let mut operands = Vec::with_capacity(1 + chain.len());
+
+                assert!(input_ids.len() == 1, "Expected a single ref to the composite thats being extracted!");
+                operands.push(Operand::IdRef(input_ids[0]));
+                for offset in chain{
+                    operands.push(Operand::LiteralBit32(*offset));
+                }
+                
+                Instruction::new(CoreOp::CompositeExtract, Some(result_type_id), Some(result_id), operands)
+            }
+            SpvOp::Construct => {
+                
+                Instruction::new(CoreOp::CompositeConstruct, Some(result_type_id), Some(result_id), input_ids.iter().map(|id| Operand::IdRef(*id)).collect() )
             }
         }
     }

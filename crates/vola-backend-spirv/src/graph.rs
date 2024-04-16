@@ -15,10 +15,14 @@ use rvsdg::{
     region::{Input, Output},
     rvsdg_derive_lang::LangNode,
     smallvec::SmallVec,
+    NodeRef,
 };
 use rvsdg_viewer::View;
 
-use crate::spv::{SpvNode, SpvType};
+use crate::{
+    spv::{SpvNode, SpvType},
+    SpirvBackend,
+};
 
 pub enum BackendOp {
     SpirvOp(SpvNode),
@@ -126,5 +130,40 @@ impl LangEdge for BackendEdge {
         } else {
             false
         }
+    }
+}
+
+impl SpirvBackend {
+    ///Returns the _single_ return type of `node`, assuming its a _simple-node_ or a apply node.
+    ///Returns None, if `node` is not a _simple-node_.
+    pub fn get_single_node_result_type(&self, node: NodeRef) -> Option<SpvType> {
+        {
+            let node = &self.graph.node(node).node_type;
+            if !node.is_simple() && !node.is_apply() {
+                return None;
+            }
+        }
+
+        assert!(self.graph.node(node).outputs().len() == 1);
+        let mut unified_type = None;
+        for edg in &self.graph.node(node).outputs()[0].edges {
+            let edgty = self
+                .graph
+                .edge(*edg)
+                .ty
+                .get_type()
+                .cloned()
+                .expect("Expected edge to be type set!");
+            if let Some(set_type) = &unified_type {
+                assert!(
+                    edgty == *set_type,
+                    "had different edge types connected to outport of simple node!"
+                )
+            } else {
+                unified_type = Some(edgty)
+            }
+        }
+
+        unified_type
     }
 }

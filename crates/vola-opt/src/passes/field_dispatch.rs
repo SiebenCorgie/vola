@@ -94,7 +94,7 @@ impl Optimizer {
         //Find all TreeAccess nodes, and prepare regions for specialization.
         //This currently means creating a λ-Copy of the export region for each access,
         //that then gets called in place of the access node.
-        let (copy_node_list, export_fn_region, arg_tys, result_type) =
+        let (copy_node_list, export_fn_region, arg_tys) =
             if let Some(exp) = self.export_fn.get(ident) {
                 let mut copy_nodes: SmallVec<[NodeRef; 3]> = SmallVec::default();
                 let result_count = self.graph.region(&exp.lambda_region).unwrap().results.len();
@@ -124,16 +124,7 @@ impl Optimizer {
                     })
                     .collect::<SmallColl<_>>();
 
-                let result_ty = self
-                    .find_type(
-                        &InportLocation {
-                            node: exp.lambda,
-                            input: InputType::Result(0),
-                        }
-                        .into(),
-                    )
-                    .expect("Could not find result type");
-                (copy_nodes, exp.lambda_region.clone(), argtys, result_ty)
+                (copy_nodes, exp.lambda_region.clone(), argtys)
             } else {
                 //No such export fn
                 return Err(OptError::Any {
@@ -180,6 +171,17 @@ impl Optimizer {
                     },
                 )
                 .unwrap();
+
+            //derive the result type from the accessed concept
+            let result_type = self
+                .find_type(
+                    &InportLocation {
+                        node: *new_lambda,
+                        input: InputType::Result(0),
+                    }
+                    .into(),
+                )
+                .unwrap();
             //hook up the node internally
 
             let target_port = {
@@ -223,6 +225,8 @@ impl Optimizer {
                     for (edg, ty) in input_edges.into_iter().skip(1).zip(arg_tys.into_iter()) {
                         reg.ctx_mut().edge_mut(edg).ty.set_type(ty);
                     }
+
+                    println!("Setting arg to {result_type:?}");
                     reg.ctx_mut()
                         .connect(
                             call_node.output(0),
@@ -468,7 +472,6 @@ impl Optimizer {
 
         //NOTE we seed the specialization with the entry_csg node, and the TreeAccess node we start at.
         let _specialized_entry_node = self.specialize_eval_node(&spec_ctx, seeding_eval_node)?;
-        println!("Start post-inliner");
         //After specializing, use recursive inliner again, to bring all ops into the same region
         self.fully_inline_region(region).unwrap();
 
