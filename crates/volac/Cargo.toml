@@ -2,6 +2,7 @@
 name = "volac"
 version = "0.1.0"
 edition = "2021"
+license = "MPL-2.0"
 
 [dependencies]
 vola-ast = {path = "../vola-ast"}

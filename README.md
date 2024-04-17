@@ -79,25 +79,20 @@ by using this as a library. Servers as interface between the Vola frontend, and 
 
 _Working on the first, powerful implementation aka. MVB or Milestone 0_.
 
-## Building
+## Building & Running
 
-✨ _Just run `cargo build`_ ✨
+To build ✨ _Just run `cargo build`_ ✨.
 
-### Runtime SDF patching
-**Currently not implemented!**
-Application that runtime patches a SDF function of a SPIR-V shader from time to time
+### vola-cli
+
+To compile some file to a SPIR-V file, use the `vola-cli` package. By default it'll output a `output_file_name.spv` in the SPIR-V format.
 ``` shell
-cargo run --bin runtime-patch
+cargo run --bin vola-cli -- path/to/some/file.vola output_file_name
 ```
 
-### Dry Run
-**Currently not implemented!**
-Single shot dry run that takes a vola file and compiles it to a SPIR-V function (if possible).
+### Rendering
 
-If no file is provided, `examples/dry-run/default.vola` will be used.
-``` shell
-cargo run --bin dry-run -- path/to/vola/file
-```
+There is a repository that implements a renderer over at [vola-sdf-renderer](https://gitlab.com/tendsinmende/vola-sdf-renderer). It is not included here, since it has some heavy dependencies and is not compiler related.
 
 ### Debugging
 You can set `VOLA_BACKTRACE=1` to print a backtrace whenever an error is reported. There are `cargo test` units in place, as well as tree-sitter tests. Those should always 
@@ -120,9 +115,9 @@ If you are interested in the runtime SPIR-V patching, have a look at [spv-patche
 
 - [x] Simple grammar to get started
 - [x] Simple middle end pass (static-dispatch, type resolving etc.)
-- [ ] middle-end => SPIR-T pass for gpu code emission. 
-- [ ] SPIR-V test app (`dry-run`) that tests the whole text-file -> SPIR-V chain
-- [ ] Vulkan test app (`runtime-patch`) that tests runtime patching of actually executed shaders.
+- [x] middle-end => SPIR-T pass for gpu code emission. (Is a rspirv based backend for now. )
+- [x] SPIR-V test app (`vola-cli`) that tests the whole text-file -> SPIR-V chain
+- [ ] Vulkan test app (`runtime-patch`) that tests runtime patching of actually executed shaders. => Checkout [vola-sdf-renderer](https://gitlab.com/tendsinmende/vola-sdf-renderer).
 
 **Milestone 1**
 
