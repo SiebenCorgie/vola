@@ -42,6 +42,51 @@ impl Backend {
     }
 }
 
+///Target the output of the pipeline is compiled to.
+#[derive(Clone, Debug)]
+pub enum Target {
+    File(PathBuf),
+    Buffer(Vec<u8>),
+}
+
+impl Target {
+    pub fn file(file: &dyn AsRef<Path>) -> Self {
+        Self::File(file.as_ref().to_path_buf())
+    }
+
+    pub fn buffer() -> Self {
+        Self::Buffer(Vec::with_capacity(0))
+    }
+
+    fn update_from_buffer(&mut self, buffer: &[u8]) {
+        match self {
+            Self::File(f) => {
+                if f.exists() {
+                    std::fs::remove_file(&f).unwrap();
+                };
+                std::fs::write(&f, buffer).unwrap();
+            }
+            Self::Buffer(buf) => {
+                *buf = buffer.to_vec();
+            }
+        }
+    }
+
+    fn target_file_name(&self, format: &Backend) -> Option<PathBuf> {
+        if let Self::File(filepath) = self {
+            if filepath.extension().is_none() {
+                let mut name = filepath.clone();
+                name.set_extension(format.suffix());
+                Some(name)
+            } else {
+                Some(filepath.clone())
+            }
+        } else {
+            None
+        }
+    }
+}
+
 ///An executable compilation pipeline.
 /// There are always four main steps, with possible sub steps:
 /// 1. _somehow_ get an AST,
@@ -60,22 +105,19 @@ impl Backend {
 pub struct Pipeline {
     ///The format this pipeline compiles to
     pub target_format: Backend,
-    pub target_file: PathBuf,
+    pub target: Target,
 }
 
 impl Pipeline {
-    fn target_file_name(&self) -> PathBuf {
-        if self.target_file.extension().is_none() {
-            let mut name = self.target_file.clone();
-            name.set_extension(self.target_format.suffix());
-            name
-        } else {
-            self.target_file.clone()
+    pub fn new(output_file: &dyn AsRef<Path>) -> Self {
+        Pipeline {
+            target_format: Backend::Spirv,
+            target: Target::file(output_file),
         }
     }
 
     ///Takes an already prepared AST and tries to turn it into a compiled program / module.
-    pub fn execute_on_ast(&self, ast: VolaAst) -> Result<PathBuf, PipelineError> {
+    pub fn execute_on_ast(&self, ast: VolaAst) -> Result<Target, PipelineError> {
         let mut opt = Optimizer::new();
         //TODO: add all the _standard_library_stuff_. Would be nice if we'd had them
         //      serialized somewhere.
@@ -94,31 +136,33 @@ impl Pipeline {
             Backend::Spirv => {
                 let spvconfig = SpirvConfig::default();
                 let mut backend = vola_backend_spirv::SpirvBackend::new(spvconfig);
-                let target_name = self.target_file_name();
-                println!("Emitting SPIR-V as {target_name:?}");
+
                 backend.intern_module(&opt)?;
 
                 backend.legalize().unwrap();
                 let spvmodule = backend
                     .build()
                     .expect("Failed to build SPIR-V module from backend graph.");
-                //now write to file
 
-                if target_name.exists() {
-                    std::fs::remove_file(&target_name)?;
-                }
                 let words = spvmodule.assemble();
                 let bytes = bytemuck::cast_slice(&words);
-                std::fs::write(&target_name, bytes)?;
 
-                Ok(target_name)
+                let mut target = self.target.clone();
+                if let Target::File(f) = &mut target {
+                    if let Some(new_path) = self.target.target_file_name(&self.target_format) {
+                        *f = new_path;
+                    }
+                    println!("Emitting SPIR-V as {f:?}");
+                }
+                target.update_from_buffer(bytes);
+                Ok(target)
             }
             _ => panic!("Backend {:?} not implemented yet 🫠", self.target_format),
         }
     }
 
     ///Tries to interpret `data` as a string in vola's language
-    pub fn execute_on_bytes(&self, data: &[u8]) -> Result<PathBuf, PipelineError> {
+    pub fn execute_on_bytes(&self, data: &[u8]) -> Result<Target, PipelineError> {
         let ast = vola_ast::parse_from_bytes(data).map_err(|(_, mut err)| {
             println!("there where {} errors while parsing data!", err.len());
             err.remove(0)
@@ -127,7 +171,7 @@ impl Pipeline {
     }
 
     ///Tries to parse `file`, and turn that into a program, based on the pipeline conifguration.
-    pub fn execute_on_file(&self, file: &Path) -> Result<PathBuf, PipelineError> {
+    pub fn execute_on_file(&self, file: &Path) -> Result<Target, PipelineError> {
         let ast = vola_ast::parse_file(file).map_err(|(_, mut err)| {
             println!("There where {} errors while parsing {file:?}", err.len());
             err.remove(0)

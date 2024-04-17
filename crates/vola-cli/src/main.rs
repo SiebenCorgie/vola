@@ -55,7 +55,7 @@ fn main() {
     //configure volac based on the args and execute
     let pipeline = volac::Pipeline {
         target_format,
-        target_file: args.output_name,
+        target: volac::Target::File(args.output_name),
     };
 
     pipeline.execute_on_file(&args.src_file).unwrap();
