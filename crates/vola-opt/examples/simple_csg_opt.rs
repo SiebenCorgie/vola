@@ -40,8 +40,8 @@ pub fn main() {
 
     opt.dump_svg("after_type_resolution.svg", true);
 
-    let mut disp_start = Instant::now();
-    if let Err(e) = opt.dispatch_all_exports() {
+    let disp_start = Instant::now();
+    if let Err(_e) = opt.dispatch_all_exports() {
         println!("Dispatching exports failed!");
     }
     println!(

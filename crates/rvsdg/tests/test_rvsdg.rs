@@ -32,6 +32,7 @@ impl LNode {
         self.outputs = vec![Output::default(); n];
         self
     }
+    #[allow(unused)]
     pub fn with_name(mut self, name: &str) -> Self {
         self.name = name.to_owned();
         self
@@ -66,6 +67,7 @@ impl View for LNode {
     }
 }
 
+#[allow(unused)]
 pub fn dump_graph_to_svg(graph: &Rvsdg<LNode, VSEdge>, name: &str) {
     let config = rvsdg_viewer::layout::LayoutConfig {
         ignore_dead_node: false,

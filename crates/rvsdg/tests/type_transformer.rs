@@ -344,7 +344,7 @@ fn simple_type_transform() {
     let g = emit();
     //FIXME: Right now doing this visually :(
     //rvsdg_viewer::into_svg(&g, "simple_type_transform_before.svg");
-    let transformed = g.transform_new(&mut TestTransformer).unwrap();
+    let (transformed, _mapping) = g.transform_new(&mut TestTransformer).unwrap();
     //rvsdg_viewer::into_svg(&transformed, "simple_type_transform_after.svg");
     assert!(
         transformed
@@ -359,7 +359,7 @@ fn simple_type_transform() {
 #[test]
 fn type_transform_empty() {
     let g = Rvsdg::new();
-    let transed = g.transform_new(&mut TestTransformer).unwrap();
+    let (transed, _mapping) = g.transform_new(&mut TestTransformer).unwrap();
     //check that the toplevel region is in fact empty
     assert!(
         transed
