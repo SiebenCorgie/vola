@@ -1,5 +1,3 @@
-use std::borrow::BorrowMut;
-
 /*
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
@@ -352,7 +350,7 @@ impl Optimizer {
         });
 
         //register the context ports in the same order as the operands map was build
-        for (idx, name) in implblock.operands.iter().enumerate() {
+        for (idx, _name) in implblock.operands.iter().enumerate() {
             let lmdcvidx = self
                 .graph
                 .node_mut(lmd)

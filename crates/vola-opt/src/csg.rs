@@ -9,13 +9,11 @@
 
 use rvsdg::{
     attrib::FlagStore,
-    nodes::NodeType,
     region::{Input, Output},
     rvsdg_derive_lang::LangNode,
     smallvec::{smallvec, SmallVec},
     EdgeRef,
 };
-use rvsdg_viewer::View;
 use vola_ast::{common::Ident, csg::CSGNodeDef};
 
 use crate::{common::Ty, error::OptError, DialectNode, OptNode};

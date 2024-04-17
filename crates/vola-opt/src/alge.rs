@@ -10,7 +10,7 @@
 
 use ahash::AHashMap;
 use rvsdg::{
-    attrib::{AttribStore, FlagStore},
+    attrib::FlagStore,
     region::{Input, Output},
     rvsdg_derive_lang::LangNode,
     smallvec::{smallvec, SmallVec},

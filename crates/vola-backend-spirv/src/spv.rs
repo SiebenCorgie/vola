@@ -13,7 +13,6 @@ use ahash::AHashMap;
 use rspirv::{dr::{Instruction, Operand}, grammar::{LogicalOperand, OperandKind}, spirv::Word};
 use rvsdg::smallvec::{smallvec, SmallVec};
 use spirv_grammar_rules::{GrammarRules, Rule};
-use vola_common::dot::graphviz_rust::attributes::resolution;
 use vola_opt::{
     alge::{CallOp, ConstantIndex, Construct, ImmNat, ImmScalar, WkOp},
     OptNode,
@@ -366,6 +365,7 @@ pub enum ArithBaseTy {
 }
 
 impl ArithBaseTy {
+    #[allow(unused)]
     fn is_of_typestring(&self, string: &str) -> bool {
         match (self, string) {
             (Self::Integer { .. }, "Integer") => true,

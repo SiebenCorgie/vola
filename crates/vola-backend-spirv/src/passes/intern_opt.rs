@@ -8,18 +8,12 @@
 
 //! Simple `GraphTypeTransformer` pass that transforms an optimizer-graph to the spirv-backend graph.
 
-use std::ops::Deref;
-
-use ahash::AHashMap;
 use rvsdg::{
-    attrib::{AttribLocation, AttribStore, FlagStore},
-    edge::{InportLocation, OutportLocation},
+    attrib::AttribLocation,
     region::{Input, Output},
     smallvec::smallvec,
     util::graph_type_transform::{GraphMapping, GraphTypeTransformer, GraphTypeTransformerError},
-    NodeRef,
 };
-use vola_common::dot::graphviz_rust::dot_structures::NodeId;
 use vola_opt::{OptEdge, OptNode, Optimizer};
 
 use crate::{

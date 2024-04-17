@@ -6,18 +6,16 @@ use rspirv::{
     spirv::{FunctionControl, Word},
 };
 use rvsdg::{
-    builder,
     edge::{InportLocation, InputType, OutportLocation, OutputType},
     nodes::{NodeType, StructuralNode},
     region::RegionLocation,
     smallvec::{smallvec, SmallVec},
     NodeRef, SmallColl,
 };
-use rvsdg_viewer::View;
 
 use crate::{
     graph::BackendOp,
-    spv::{ArithBaseTy, SpvNode, SpvOp, SpvType, TyShape},
+    spv::{ArithBaseTy, SpvType, TyShape},
     BackendSpirvError, SpirvBackend, SpirvConfig, SpirvModule,
 };
 

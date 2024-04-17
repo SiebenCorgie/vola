@@ -6,12 +6,7 @@
  * 2024 Tendsin Mende
  */
 use ahash::AHashMap;
-use rvsdg::{
-    attrib::{AttribStore, FlagStore},
-    edge::OutportLocation,
-    smallvec::SmallVec,
-    NodeRef,
-};
+use rvsdg::{attrib::FlagStore, edge::OutportLocation, smallvec::SmallVec, NodeRef};
 use vola_ast::{
     alge::ImplBlock,
     csg::{CSGConcept, CSGNodeDef},

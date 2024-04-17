@@ -23,10 +23,7 @@
 
 use ahash::AHashSet;
 use graph::{BackendEdge, BackendNode};
-use rvsdg::{
-    attrib::{AttribStore, FlagStore},
-    Rvsdg,
-};
+use rvsdg::{attrib::FlagStore, Rvsdg};
 use spv::SpvType;
 use vola_common::Span;
 use vola_opt::Optimizer;
