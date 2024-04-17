@@ -16,5 +16,5 @@ rvsdg-viewer = {path = "../rvsdg-viewer"}
 rspirv.workspace = true
 ahash.workspace = true
 log = {workspace = true, optional = true}
-#spirv-grammar-rules = {git = "https://gitlab.com/tendsinmende/spirv-grammar-rules.git"}
-spirv-grammar-rules = {path = "../../../spirv-grammar-rules/crates/spirv-grammar-rules"}
+spirv-grammar-rules = {git = "https://gitlab.com/tendsinmende/spirv-grammar-rules.git"}
+#spirv-grammar-rules = {path = "../../../spirv-grammar-rules/crates/spirv-grammar-rules"}

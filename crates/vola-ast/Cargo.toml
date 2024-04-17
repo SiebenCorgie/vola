@@ -13,8 +13,7 @@ serde = ["dep:serde"]
 dot = ["vola-common/dot"]
 
 [dependencies]
-#tree-sitter-vola = {git = "https://gitlab.com/tendsinmende/tree-sitter-vola.git"}
-tree-sitter-vola = {path = "../../../tree-sitter-vola"}
+tree-sitter-vola = {git = "https://gitlab.com/tendsinmende/tree-sitter-vola.git"}
 vola-common = {path = "../vola-common"}
 thiserror.workspace = true
 tree-sitter.workspace = true
