@@ -27,6 +27,8 @@ pub struct Ident(pub String);
 pub enum Ty {
     CSGTree,
     Scalar,
+    //Similar to the scalar, but always positive and whole numbers.
+    Nat,
     Vec { width: usize },
     Matrix { width: usize, height: usize },
     Tensor { dim: SmallVec<[usize; 3]> },
@@ -47,7 +49,7 @@ impl Display for Literal {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Literal::FloatLiteral(fl) => write!(f, "{}f", fl),
-            Literal::IntegerLiteral(i) => write!(f, "{}", i),
+            Literal::IntegerLiteral(i) => write!(f, "{}i", i),
         }
     }
 }

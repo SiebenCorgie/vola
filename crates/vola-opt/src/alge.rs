@@ -524,32 +524,33 @@ impl DialectNode for EvalNode {
             });
         }
 
+        //Make sure that the concept that is being called exists at all
+        if !concepts.get(self.concept()).is_some() {
+            return Err(OptError::Any {
+                text: format!(
+                    "the concept {} which is called here is not defined!",
+                    self.concept()
+                ),
+            });
+        }
+
         //Build the expected signature type
-        let (expected_signature, output_ty, concept_name): (SmallVec<[Ty; 3]>, Ty, &String) =
-            if let Ty::Callable { concept } = &signature[0] {
-                if let Some(conc) = concepts.get(concept) {
-                    (
-                        conc.src_ty
-                            .iter()
-                            .map(|t| t.clone().try_into().expect("failed to convert type"))
-                            .collect(),
-                        conc.dst_ty
-                            .clone()
-                            .try_into()
-                            .expect("failed to convert type"),
-                        concept,
-                    )
-                } else {
-                    return Err(OptError::Any {
-                        text: format!(
-                            "the concept {} which is called here is not defined!",
-                            concept
-                        ),
-                    });
-                }
+        let (expected_signature, output_ty, concept_name): (SmallVec<[Ty; 3]>, Ty, String) =
+            if let Ty::CSGTree = &signature[0] {
+                let concept = concepts.get(self.concept()).unwrap();
+
+                (
+                    concept
+                        .src_ty
+                        .iter()
+                        .map(|astty| astty.clone().into())
+                        .collect(),
+                    concept.dst_ty.clone().into(),
+                    concept.name.0.clone(),
+                )
             } else {
                 return Err(OptError::Any {
-                    text: format!("Expected a Callable as first input, got {:?}", signature[0]),
+                    text: format!("Expected a CSGTree as first input, got {:?}", signature[0]),
                 });
             };
 
@@ -605,7 +606,7 @@ impl ImmScalar {
     }
 }
 
-implViewAlgeOp!(ImmScalar, "{}", lit);
+implViewAlgeOp!(ImmScalar, "{}f", lit);
 impl DialectNode for ImmScalar {
     fn dialect(&self) -> &'static str {
         "alge"
@@ -651,7 +652,7 @@ impl ImmNat {
     }
 }
 
-implViewAlgeOp!(ImmNat, "{}", lit);
+implViewAlgeOp!(ImmNat, "{}i", lit);
 impl DialectNode for ImmNat {
     fn dialect(&self) -> &'static str {
         "alge"

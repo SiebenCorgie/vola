@@ -352,7 +352,7 @@ impl Optimizer {
         });
 
         //register the context ports in the same order as the operands map was build
-        for (idx, _name) in implblock.operands.iter().enumerate() {
+        for (idx, name) in implblock.operands.iter().enumerate() {
             let lmdcvidx = self
                 .graph
                 .node_mut(lmd)
@@ -360,6 +360,15 @@ impl Optimizer {
                 .unwrap_lambda_mut()
                 .add_context_variable();
             assert!(idx == lmdcvidx);
+            //Preset the CVs with the CSGTree type. Since we don't known the exact node at the moment
+            self.typemap.set(
+                OutportLocation {
+                    node: lmd,
+                    output: OutputType::ContextVariableArgument(lmdcvidx),
+                }
+                .into(),
+                Ty::CSGTree,
+            );
         }
 
         let lmd_context = LmdContext::new_for_impl_block(

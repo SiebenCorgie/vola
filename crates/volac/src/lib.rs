@@ -99,7 +99,6 @@ impl Pipeline {
                 println!("Emitting SPIR-V as {target_name:?}");
                 backend.intern_module(&opt)?;
 
-                backend.dump_svg("eyo.svg", false);
                 backend.legalize().unwrap();
                 let spvmodule = backend
                     .build()

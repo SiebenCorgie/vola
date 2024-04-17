@@ -14,6 +14,7 @@ use crate::error::OptError;
 use crate::{common::Ty, Optimizer};
 use ahash::AHashMap;
 use rvsdg::attrib::AttribLocation;
+use rvsdg::NodeRef;
 use rvsdg::{
     attrib::FlagStore, edge::LangEdge, nodes::LangNode, rvsdg_derive_lang::LangNode,
     util::copy::StructuralClone,
@@ -295,12 +296,22 @@ impl Optimizer {
             AttribLocation::Region(_) => None,
             AttribLocation::Node(_) => None,
             AttribLocation::Edge(edg) => {
-                println!("Trying vicinity!");
                 if let Some(t) = self.find_type(&self.graph.edge(*edg).src().into()) {
                     return Some(t);
                 }
                 self.find_type(&self.graph.edge(*edg).dst().into())
             }
+        }
+    }
+
+    pub fn node_name(&self, node: NodeRef) -> String {
+        if let Some(name) = self.names.get(&node.into()) {
+            return name.clone();
+        }
+
+        match &self.graph.node(node).node_type {
+            rvsdg::nodes::NodeType::Simple(s) => s.name(),
+            other => format!("{other:?}"),
         }
     }
 }

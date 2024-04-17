@@ -204,6 +204,10 @@ impl Optimizer {
             self.verify_export_fn(exp)?;
         }
 
+        if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("DUMP_TYPE_DERIVE").is_ok() {
+            self.dump_svg("post_type_derive.svg", true);
+        }
+
         if error_count > 0 {
             Err(OptError::Any {
                 text: format!("Type derivation did not end successfully!"),
@@ -516,10 +520,18 @@ impl Optimizer {
         //Preset all edges where we know the type already
         for edg in &edges {
             let src = self.graph.edge(*edg).src().clone();
-            if let Some(ty) = self.typemap.get(&src.into()) {
-                self.graph.edge_mut(*edg).ty = OptEdge::Value {
-                    ty: TypeState::Set(ty.clone()),
-                };
+            if let Some(ty) = self.find_type(&src.into()) {
+                if let Some(preset) = self.graph.edge(*edg).ty.get_type() {
+                    if preset != &ty {
+                        let err = OptError::AnySpanned { span: region_src_span.clone().into(), text: format!("Edge was already set to {:?}, but was about to be overwriten with an incompatible type {:?}", preset, ty), span_text: "Somewhere in this region".to_owned() };
+                        report(err.clone(), region_src_span.get_file());
+                        return Err(err);
+                    }
+                } else {
+                    self.graph.edge_mut(*edg).ty = OptEdge::Value {
+                        ty: TypeState::Set(ty.clone()),
+                    };
+                }
             }
         }
 
@@ -530,32 +542,9 @@ impl Optimizer {
 
             let mut local_stack = VecDeque::new();
             std::mem::swap(&mut local_stack, &mut build_stack);
+
             for node in local_stack {
                 //gather all inputs and let the node try to resolve itself
-
-                //if the node's output edge is already set, skip node.
-                if let Some(ty) = self.typemap.get(
-                    &OutportLocation {
-                        node,
-                        output: OutputType::Output(0),
-                    }
-                    .into(),
-                ) {
-                    //has type set already, skip node but propagate type if needed
-                    for edg in self
-                        .graph
-                        .node(node)
-                        .outport(&OutputType::Output(0))
-                        .unwrap()
-                        .edges
-                        .clone()
-                        .iter()
-                    {
-                        self.graph.edge_mut(*edg).ty.set_derived_state(ty.clone());
-                    }
-                    continue;
-                }
-
                 let type_resolve_try = match &self.graph.node(node).node_type {
                     NodeType::Simple(s) => s.node.try_derive_type(
                         &self.typemap,

@@ -55,7 +55,6 @@ impl SpirvBackend {
         }
 
         for ext_inst in &config.ext_inst {
-            println!("Adding ext_inst {ext_inst}");
             let id = b.ext_inst_import(ext_inst.clone());
             assert!(ctx.extinst_ids.insert(ext_inst.clone(), id).is_none());
         }
@@ -194,9 +193,7 @@ impl SpirvBackend {
         lmd: NodeRef,
         exported: Option<String>,
     ) -> Result<Word, BackendSpirvError> {
-        println!("Emitting lmd {lmd}");
         //init function
-
         //get return type and map to struct if needed
         let rettys = self.get_return_type(lmd).unwrap();
         let retty = match rettys.len() {
@@ -420,14 +417,6 @@ impl SpirvBackend {
                     .unwrap()
                     .result_src(&self.graph, 0)
                     .unwrap();
-                println!(
-                    "<- {result_connected:?}, aka {}",
-                    self.graph
-                        .node(result_connected.node)
-                        .node_type
-                        .unwrap_simple_ref()
-                        .name()
-                );
                 let result_id = ctx.node_mapping.get(&result_connected).unwrap();
                 Ok(Some(*result_id))
             }
@@ -569,7 +558,6 @@ impl SpirvBackend {
 
         //find the calle of lmd
         let caller = self.graph.find_caller(lmd)?;
-        println!("Found {} caller!", caller.len());
         if caller.len() == 0 {
             #[cfg(feature = "log")]
             log::error!("Cannot produce signature from caller, since λ {lmd} is never called. Substituting unknown args with Void.");
@@ -597,7 +585,6 @@ impl SpirvBackend {
 
     fn build_input_sig_of_apply_node(&self, apply: NodeRef) -> SmallColl<SpvType> {
         let mut tys = SmallColl::new();
-        println!("ApplyNode {apply}");
         //NOTE: skipping callee input.
         for input in self.graph.node(apply).inputs().iter().skip(1) {
             let ty = self

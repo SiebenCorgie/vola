@@ -56,6 +56,7 @@ impl From<vola_ast::common::Ty> for Ty {
     fn from(value: vola_ast::common::Ty) -> Self {
         match value {
             vola_ast::common::Ty::Scalar => Self::Scalar,
+            vola_ast::common::Ty::Nat => Self::Nat,
             vola_ast::common::Ty::Vec { width } => Self::Vector { width },
             vola_ast::common::Ty::Matrix { width, height } => Self::Matrix { width, height },
             vola_ast::common::Ty::Tensor { dim } => Self::Tensor { dim },
@@ -68,8 +69,12 @@ impl Ty {
     ///Returns true for scalar, vector, matrix and tensor_type
     pub fn is_algebraic(&self) -> bool {
         match self {
-            Self::Scalar | Self::Vector { .. } | Self::Matrix { .. } | Self::Tensor { .. } => true,
-            _ => false,
+            Self::Scalar
+            | Self::Vector { .. }
+            | Self::Matrix { .. }
+            | Self::Tensor { .. }
+            | Self::Nat => true,
+            Self::CSGTree | Self::Callable { .. } | Self::Void => false,
         }
     }
 
@@ -85,7 +90,10 @@ impl Ty {
     pub(crate) fn try_derive_access_index(&self, index: usize) -> Result<Ty, OptError> {
         match self {
             Ty::Scalar => Err(OptError::Any {
-                text: format!("Scalar cannot be indexd with {}", index),
+                text: format!("Scalar cannot be indexed with {}", index),
+            }),
+            Ty::Nat => Err(OptError::Any {
+                text: format!("Nat cannot be indexed with {}", index),
             }),
             Ty::Vector { width } => {
                 if index >= *width {

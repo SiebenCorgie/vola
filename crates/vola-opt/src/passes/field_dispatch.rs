@@ -226,7 +226,6 @@ impl Optimizer {
                         reg.ctx_mut().edge_mut(edg).ty.set_type(ty);
                     }
 
-                    println!("Setting arg to {result_type:?}");
                     reg.ctx_mut()
                         .connect(
                             call_node.output(0),
@@ -405,7 +404,6 @@ impl Optimizer {
             }
         }
 
-        //        println!("Inlined {ninline}");
         //for good measures, remove all unused CVs after importing _everything_
         self.graph.remove_unused_context_variables(region.node);
         Ok(())

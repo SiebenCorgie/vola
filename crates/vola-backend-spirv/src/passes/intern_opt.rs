@@ -199,14 +199,6 @@ impl SpirvBackend {
         for (src_edg, dst_edg) in remapping.edge_mapping.iter() {
             if let Some(ty) = opt.graph.edge(*src_edg).ty.get_type() {
                 if let Ok(converted_type) = ty.clone().try_into() {
-                    if self
-                        .graph
-                        .node(self.graph.edge(*dst_edg).src().node)
-                        .node_type
-                        .is_apply()
-                    {
-                        println!("Converting {ty:?} -> {converted_type:?} for apply-node out edge");
-                    }
                     //replace type info, make sure we only overide untyped edges
                     assert!(self
                         .graph
@@ -222,7 +214,6 @@ impl SpirvBackend {
     fn transfer_debug_info(&mut self, remapping: &GraphMapping, opt: &Optimizer) {
         for (src_node, dst_node) in remapping.node_mapping.iter() {
             if let Some(name) = opt.names.get(&src_node.into()) {
-                println!("Transfer ident {name} to {dst_node}");
                 self.idents.set(dst_node.into(), name.clone());
             }
             if let Some(span) = opt.span_tags.get(&src_node.into()) {
