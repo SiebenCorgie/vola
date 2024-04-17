@@ -7,6 +7,8 @@
  */
 //! The Algebraic AST
 
+use std::fmt::Display;
+
 use crate::common::{Call, Ident, Literal};
 use smallvec::SmallVec;
 use vola_common::Span;
@@ -85,6 +87,15 @@ impl AlgeExpr {
 pub enum FieldAccessor {
     Digit { span: Span, digit: usize },
     Ident { span: Span, ident: Ident },
+}
+
+impl Display for FieldAccessor {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Digit { digit, .. } => write!(f, "{digit}"),
+            Self::Ident { ident, .. } => write!(f, "{}", ident.0),
+        }
+    }
 }
 
 impl FieldAccessor {

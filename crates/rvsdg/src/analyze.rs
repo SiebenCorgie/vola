@@ -5,7 +5,7 @@
 
 use std::collections::VecDeque;
 
-use ahash::AHashSet;
+use ahash::{AHashMap, AHashSet};
 
 mod region_walker;
 pub use region_walker::RegionWalker;
@@ -14,7 +14,7 @@ use crate::{
     edge::{InportLocation, InputType, LangEdge, OutportLocation, OutputType},
     nodes::LangNode,
     region::RegionLocation,
-    NodeRef, Rvsdg,
+    NodeRef, Rvsdg, SmallColl,
 };
 
 use self::region_walker::RegionLocationWalker;
@@ -291,6 +291,73 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
         }
     }
 
+    ///Traverses all connections of the `node` definition port and collects all `apply` nods that are connected
+    /// to it. This includes connections through context variables and recursion variables.
+    ///
+    /// Returns None if `lmd` is not a λ node.
+    ///
+    /// All returned node references are guaranteed to be Apply nodes.
+    pub fn find_caller(&self, node: NodeRef) -> Option<SmallColl<NodeRef>> {
+        if !self.node(node).node_type.is_lambda() {
+            return None;
+        }
+
+        let mut results = SmallColl::new();
+        //init stack with the definition_port
+        let mut stack = VecDeque::new();
+        stack.push_back(OutportLocation {
+            node,
+            output: OutputType::LambdaDeclaration,
+        });
+
+        while !stack.is_empty() {
+            let next = stack.pop_front().unwrap();
+            //checkout all connections. For each connection, go from the source (next) to the
+            // dst, and check if we found an apply node.
+            // If so, add the apply node to the result list
+            // If not, check if we can map _out_ or _into_ a node. If so, add that port to the stack.
+            // otherwise terminate.
+
+            //Do not try to break out of the omega node.
+            //NOTE: we could make the for-loop-header catch a None port, but this
+            //      case _should_ really be the only way how the unwrap fails. Otherwise
+            //      there is some kind of bug in the graph.
+            if self.node(next.node).node_type.is_omega() {
+                continue;
+            }
+
+            //NOTE: checkout above if this panics
+            for edg in &self.node(next.node).outport(&next.output).unwrap().edges {
+                let dst = self.edge(*edg).dst();
+                if self.node(dst.node).node_type.is_apply() {
+                    assert!(dst.input == InputType::Input(0), "λ-Decleration was connected to apply node, but not on input 0, which is invalid!");
+                    results.push(dst.node);
+                } else {
+                    //try to map into (all) regions that are connected. Mostly used for
+                    //context variables, but this would also map a λ into a loop through the loop-variables etc.
+                    for regidx in 0..self.node(dst.node).regions().len() {
+                        if let Some(mapped_into) = dst.input.map_to_in_region(regidx) {
+                            stack.push_back(OutportLocation {
+                                node: dst.node,
+                                output: mapped_into,
+                            });
+                        }
+                    }
+                    //try to map _out_ of a region. This is mostly done if a λ thats defined in a recursive context
+                    // is exported through a recursion variable.
+                    if let Some(mapped_out) = dst.input.map_out_of_region() {
+                        stack.push_back(OutportLocation {
+                            node: dst.node,
+                            output: mapped_out,
+                        });
+                    }
+                }
+            }
+        }
+
+        Some(results)
+    }
+
     ///Iterates over all predecessors of this node, see [PredWalker] for more info.
     pub fn walk_predecessors<'a>(&'a self, node: NodeRef) -> PredWalker<'a, N, E> {
         PredWalker::new(self, node)
@@ -423,4 +490,31 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
 
         false
     }
+
+    ///Builds the dependecy graph for this region's nodes. Only includes region-local nodes.
+    /// the `region.node` is a dependecy, if a nodes depends on any _outside-region_ value.
+    pub fn region_node_dependecy_graph(&self, region: RegionLocation) -> DependencyGraph {
+        let mut graph = AHashMap::default();
+
+        for node in &self.region(&region).unwrap().nodes {
+            let mut dependencies = AHashSet::new();
+            let inputcount = self.node(*node).inputs().len();
+            for input in 0..inputcount {
+                if let Some(src) = self.node(*node).input_src(&self, input) {
+                    assert!(dependencies.insert(src.node));
+                }
+            }
+
+            let old = graph.insert(*node, dependencies);
+            assert!(old.is_none());
+        }
+
+        DependencyGraph { graph }
+    }
+}
+
+///
+pub struct DependencyGraph {
+    ///Maps a node to all nodes it depends on
+    pub graph: AHashMap<NodeRef, AHashSet<NodeRef>>,
 }

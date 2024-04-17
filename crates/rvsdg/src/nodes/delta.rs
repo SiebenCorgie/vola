@@ -1,5 +1,7 @@
 use std::slice;
 
+use smallvec::{smallvec, SmallVec};
+
 use crate::{
     edge::{InputType, OutputType},
     region::{Argument, Input, Output, RegResult, Region},
@@ -85,6 +87,52 @@ impl StructuralNode for DeltaNode {
     fn outputs_mut(&mut self) -> &mut [Output] {
         slice::from_mut(&mut self.output)
     }
+
+    fn outport_types(&self) -> SmallVec<[OutputType; 3]> {
+        smallvec![OutputType::DeltaDeclaration]
+    }
+    fn input_types(&self) -> SmallVec<[InputType; 3]> {
+        let mut inputs = SmallVec::default();
+
+        for i in 0..self.inputs.len() {
+            if i < self.cv_count {
+                inputs.push(InputType::ContextVariableInput(i));
+            } else {
+                panic!("There shouldn't be anything besides cvargs");
+            }
+        }
+
+        inputs
+    }
+    fn argument_types(&self, region_index: usize) -> SmallVec<[OutputType; 3]> {
+        //Does not exist!
+        if region_index != 0 {
+            return SmallVec::new();
+        }
+
+        let mut args = SmallVec::new();
+        for i in 0..self.body.arguments.len() {
+            if i < self.cv_count {
+                args.push(OutputType::ContextVariableArgument(i))
+            } else {
+                args.push(OutputType::Argument(i - self.cv_count))
+            }
+        }
+        args
+    }
+    fn result_types(&self, region_index: usize) -> SmallVec<[InputType; 3]> {
+        //Does not exist!
+        if region_index != 0 {
+            return SmallVec::new();
+        }
+
+        let mut res = SmallVec::new();
+        for i in 0..self.body.results.len() {
+            res.push(InputType::Result(i));
+        }
+
+        res
+    }
 }
 
 impl DeltaNode {
@@ -147,3 +195,47 @@ impl DeltaNode {
 }
 
 pub type GlobalVariable = DeltaNode;
+
+#[cfg(test)]
+mod phitests {
+    use smallvec::{smallvec, SmallVec};
+
+    use crate::{
+        edge::{InputType, OutputType},
+        nodes::{DeltaNode, StructuralNode},
+    };
+
+    //TODO write those tests for the others as well!
+    #[test]
+    fn sig_inputs_test() {
+        let mut dlt = DeltaNode::new();
+        assert!(dlt.add_context_variable() == 0);
+        assert!(dlt.add_context_variable() == 1);
+        let insig = dlt.input_types();
+        let expected_in_sig: SmallVec<[InputType; 3]> = smallvec![
+            InputType::ContextVariableInput(0),
+            InputType::ContextVariableInput(1),
+        ];
+        assert!(
+            insig == expected_in_sig,
+            "{:?} != {:?}",
+            insig,
+            expected_in_sig
+        );
+
+        let argsig = dlt.argument_types(0);
+        let expected_arg_sig: SmallVec<[OutputType; 3]> = smallvec![
+            OutputType::ContextVariableArgument(0),
+            OutputType::ContextVariableArgument(1),
+        ];
+        assert!(argsig == expected_arg_sig);
+
+        let ressig = dlt.result_types(0);
+        let expected_ressig: SmallVec<[InputType; 3]> = smallvec![InputType::Result(0)];
+        assert!(ressig == expected_ressig);
+
+        let outsig = dlt.outport_types();
+        let expected_outsig: SmallVec<[OutputType; 3]> = smallvec![OutputType::DeltaDeclaration];
+        assert!(outsig == expected_outsig);
+    }
+}

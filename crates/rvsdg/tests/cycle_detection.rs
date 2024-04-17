@@ -147,7 +147,7 @@ fn build_rvsdg_with_inner_cycle() -> Rvsdg<LNode, VSEdge> {
 
         //We bulid a λ with an inner region, that has a cycle. And hook that up to an apply node in the toplevel
         let (lambda, _) = omg.new_function(false, |lmd| {
-            let arg = lmd.add_argument();
+            let _arg = lmd.add_argument();
             let res = lmd.add_result();
             lmd.on_region(|reg| {
                 let a = reg.insert_node(LNode::new().with_inputs(2).with_outputs(2));
@@ -195,7 +195,7 @@ fn build_rvsdg_without_inner_cycle() -> Rvsdg<LNode, VSEdge> {
 
         //We bulid a λ with an inner region, that has a cycle. And hook that up to an apply node in the toplevel
         let (lambda, _) = omg.new_function(false, |lmd| {
-            let arg = lmd.add_argument();
+            let _arg = lmd.add_argument();
             let res = lmd.add_result();
             lmd.on_region(|reg| {
                 let a = reg.insert_node(LNode::new().with_inputs(1).with_outputs(1));

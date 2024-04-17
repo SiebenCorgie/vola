@@ -1,3 +1,11 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ *
+ * 2024 Tendsin Mende
+ */
+
 use std::time::Instant;
 
 use vola_opt::Optimizer;
@@ -18,7 +26,7 @@ pub fn main() {
         println!("Opt did not parse AST successfully :(");
     }
 
-    opt.dump_svg("before_type_resolution.svg");
+    opt.dump_svg("before_type_resolution.svg", true);
 
     let tyder_start = Instant::now();
     if let Err(e) = opt.type_derive() {
@@ -30,10 +38,10 @@ pub fn main() {
         tyder_start.elapsed().as_nanos()
     );
 
-    opt.dump_svg("after_type_resolution.svg");
+    opt.dump_svg("after_type_resolution.svg", true);
 
-    let mut disp_start = Instant::now();
-    if let Err(e) = opt.dispatch_all_exports() {
+    let disp_start = Instant::now();
+    if let Err(_e) = opt.dispatch_all_exports() {
         println!("Dispatching exports failed!");
     }
     println!(
@@ -42,5 +50,5 @@ pub fn main() {
         disp_start.elapsed().as_nanos()
     );
 
-    opt.dump_svg("after_dispatch.svg");
+    opt.dump_svg("after_dispatch.svg", true);
 }

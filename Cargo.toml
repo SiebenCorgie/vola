@@ -6,7 +6,11 @@ members = [
 "crates/vola-common",
 "crates/vola-opt",
 "examples/runtime-patch",
-"examples/rvsdg-simple", "crates/rvsdg-derive-lang",
+"examples/rvsdg-simple", 
+"crates/rvsdg-derive-lang", 
+"crates/vola-backend-spirv", 
+"crates/volac", 
+"crates/vola-cli",
 ]
 
 resolver = "2"
@@ -26,3 +30,6 @@ serde = "1.0.196"
 miette = "7.1"
 log = "0.4"
 pretty_env_logger = "0.5"
+rspirv = "0.12.0"
+clap = "4.5.3"
+bytemuck = "1.15.0"

@@ -209,13 +209,16 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
 
     ///Utility that collects all node, that are `live`, so connected to any result
     ///in some way.
+    ///
+    /// Note that there is also a liveness analysis that builds a liveness lookuptable
+    /// for all ports, which is more precise.
     pub fn live_nodes(&self, region: RegionLocation) -> Vec<NodeRef> {
         let mut live_variables = AHashSet::default();
 
         let region_content = self.region(&region).unwrap();
         for resultidx in 0..region_content.results.len() {
             if let Some(src) = region_content.result_src(self, resultidx) {
-                //insert the seeding node. If this wasn't already in the map, wal the predecessors as well
+                //insert the seeding node. If this wasn't already in the map, walk the predecessors as well
                 if live_variables.insert(src.node) {
                     for pred in self.walk_predecessors(src.node) {
                         //ignore the src region

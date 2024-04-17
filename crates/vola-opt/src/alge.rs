@@ -10,15 +10,15 @@
 
 use ahash::AHashMap;
 use rvsdg::{
-    attrib::AttribStore,
+    attrib::FlagStore,
     region::{Input, Output},
     rvsdg_derive_lang::LangNode,
     smallvec::{smallvec, SmallVec},
+    SmallColl,
 };
-use vola_ast::{
-    alge::FieldAccessor,
-    csg::{CSGConcept, CSGNodeDef},
-};
+use vola_ast::csg::{CSGConcept, CSGNodeDef};
+
+pub use vola_ast::common::Literal;
 
 use crate::{common::Ty, error::OptError, DialectNode, OptEdge, OptGraph, OptNode, TypeState};
 
@@ -54,6 +54,7 @@ pub enum WkOp {
 
     Abs,
     Frac,
+    //TODO: basically implement the rest of the glsl-ext-inst, cause people might be used to those.
 }
 
 impl WkOp {
@@ -381,11 +382,11 @@ macro_rules! implViewAlgeOp {
 #[derive(LangNode)]
 pub struct CallOp {
     #[inputs]
-    inputs: SmallVec<[Input; 2]>,
+    pub inputs: SmallVec<[Input; 2]>,
     #[output]
-    output: Output,
+    pub output: Output,
 
-    op: WkOp,
+    pub op: WkOp,
 }
 
 impl CallOp {
@@ -411,7 +412,7 @@ impl DialectNode for CallOp {
 
     fn try_derive_type(
         &self,
-        _typemap: &AttribStore<Ty>,
+        _typemap: &FlagStore<Ty>,
         graph: &OptGraph,
         _concepts: &AHashMap<String, CSGConcept>,
         _csg_defs: &AHashMap<String, CSGNodeDef>,
@@ -449,37 +450,6 @@ impl DialectNode for CallOp {
     }
 }
 
-///Dummy sink node for unimplemented stuff
-#[derive(LangNode)]
-pub struct DummyNode {
-    #[output]
-    out: Output,
-}
-
-impl DummyNode {
-    #[allow(unused)]
-    pub fn new() -> Self {
-        DummyNode {
-            out: Output::default(),
-        }
-    }
-}
-
-implViewAlgeOp!(DummyNode, "Dummynode");
-impl DialectNode for DummyNode {
-    fn dialect(&self) -> &'static str {
-        "dummy"
-    }
-    fn structural_copy(&self, span: vola_common::Span) -> crate::OptNode {
-        OptNode {
-            span,
-            node: Box::new(DummyNode {
-                out: Output::default(),
-            }),
-        }
-    }
-}
-
 ///The Eval node in itself is a call-site to some connected λ-node, when specialised.
 ///
 /// By definition the first argument is the callable that will be called, and all following ports are arguments
@@ -487,12 +457,12 @@ impl DialectNode for DummyNode {
 #[derive(LangNode, Debug)]
 pub struct EvalNode {
     ///The concept that is being called.
-    called_concept: String,
+    pub called_concept: String,
     #[inputs]
-    inputs: SmallVec<[Input; 3]>,
+    pub inputs: SmallVec<[Input; 3]>,
     ///The eval node itsel has only one output, the state that is produced by the called concept.
     #[output]
-    out: Output,
+    pub out: Output,
 }
 
 impl EvalNode {
@@ -527,7 +497,7 @@ impl DialectNode for EvalNode {
 
     fn try_derive_type(
         &self,
-        _typemap: &AttribStore<Ty>,
+        _typemap: &FlagStore<Ty>,
         graph: &OptGraph,
         concepts: &AHashMap<String, CSGConcept>,
         _csg_defs: &AHashMap<String, CSGNodeDef>,
@@ -554,32 +524,33 @@ impl DialectNode for EvalNode {
             });
         }
 
+        //Make sure that the concept that is being called exists at all
+        if !concepts.get(self.concept()).is_some() {
+            return Err(OptError::Any {
+                text: format!(
+                    "the concept {} which is called here is not defined!",
+                    self.concept()
+                ),
+            });
+        }
+
         //Build the expected signature type
-        let (expected_signature, output_ty, concept_name): (SmallVec<[Ty; 3]>, Ty, &String) =
-            if let Ty::Callable { concept } = &signature[0] {
-                if let Some(conc) = concepts.get(concept) {
-                    (
-                        conc.src_ty
-                            .iter()
-                            .map(|t| t.clone().try_into().expect("failed to convert type"))
-                            .collect(),
-                        conc.dst_ty
-                            .clone()
-                            .try_into()
-                            .expect("failed to convert type"),
-                        concept,
-                    )
-                } else {
-                    return Err(OptError::Any {
-                        text: format!(
-                            "the concept {} which is called here is not defined!",
-                            concept
-                        ),
-                    });
-                }
+        let (expected_signature, output_ty, concept_name): (SmallVec<[Ty; 3]>, Ty, String) =
+            if let Ty::CSGTree = &signature[0] {
+                let concept = concepts.get(self.concept()).unwrap();
+
+                (
+                    concept
+                        .src_ty
+                        .iter()
+                        .map(|astty| astty.clone().into())
+                        .collect(),
+                    concept.dst_ty.clone().into(),
+                    concept.name.0.clone(),
+                )
             } else {
                 return Err(OptError::Any {
-                    text: format!("Expected a Callable as first input, got {:?}", signature[0]),
+                    text: format!("Expected a CSGTree as first input, got {:?}", signature[0]),
                 });
             };
 
@@ -616,33 +587,34 @@ impl DialectNode for EvalNode {
     }
 }
 
+///An immediate scalar number.
 #[derive(LangNode, Debug)]
-pub struct Imm {
+pub struct ImmScalar {
     ///The immediate value
-    pub lit: vola_ast::common::Literal,
+    pub lit: f64,
     ///the output port the `lit` value is passed down to.
     #[output]
-    out: Output,
+    pub out: Output,
 }
 
-impl Imm {
-    pub fn new(lit: vola_ast::common::Literal) -> Self {
-        Imm {
+impl ImmScalar {
+    pub fn new(lit: f64) -> Self {
+        ImmScalar {
             lit,
             out: Output::default(),
         }
     }
 }
 
-implViewAlgeOp!(Imm, "{}", lit);
-impl DialectNode for Imm {
+implViewAlgeOp!(ImmScalar, "{}f", lit);
+impl DialectNode for ImmScalar {
     fn dialect(&self) -> &'static str {
         "alge"
     }
 
     fn try_derive_type(
         &self,
-        _typemap: &AttribStore<Ty>,
+        _typemap: &FlagStore<Ty>,
         _graph: &OptGraph,
         _concepts: &AHashMap<String, CSGConcept>,
         _csg_defs: &AHashMap<String, CSGNodeDef>,
@@ -654,7 +626,7 @@ impl DialectNode for Imm {
     fn structural_copy(&self, span: vola_common::Span) -> OptNode {
         OptNode {
             span,
-            node: Box::new(Imm {
+            node: Box::new(ImmScalar {
                 lit: self.lit.clone(),
                 out: Output::default(),
             }),
@@ -662,108 +634,72 @@ impl DialectNode for Imm {
     }
 }
 
-///Highlevel "field access" node. Can only be legalized when all types are resolved and the field is specialized.
+///An immediate natural number.
 #[derive(LangNode, Debug)]
-pub struct FieldAccess {
-    #[input]
-    access_src: Input,
-    access_list: SmallVec<[FieldAccessor; 1]>,
+pub struct ImmNat {
+    //The natural value
+    pub lit: u64,
     #[output]
-    output: Output,
+    pub out: Output,
 }
 
-impl FieldAccess {
-    pub fn new(access_list: SmallVec<[FieldAccessor; 1]>) -> Self {
-        FieldAccess {
-            access_src: Input::default(),
-            access_list,
-            output: Output::default(),
+impl ImmNat {
+    pub fn new(lit: usize) -> Self {
+        ImmNat {
+            lit: lit as u64,
+            out: Output::default(),
         }
     }
 }
 
-//NOTE hand implementing for nicer field_acces_list
-impl rvsdg_viewer::View for FieldAccess {
-    fn color(&self) -> rvsdg_viewer::macroquad::color::Color {
-        rvsdg_viewer::macroquad::color::Color::from_rgba(200, 170, 170, 255)
-    }
-
-    fn name(&self) -> String {
-        use std::fmt::Write;
-        let mut string = format!("FieldAccess: ");
-        for acc in &self.access_list {
-            match acc {
-                FieldAccessor::Digit { digit, .. } => write!(string, ".{}", digit).unwrap(),
-                FieldAccessor::Ident { ident, .. } => write!(string, ".{}", ident.0).unwrap(),
-            }
-        }
-
-        string
-    }
-
-    fn stroke(&self) -> rvsdg_viewer::Stroke {
-        rvsdg_viewer::Stroke::Line
-    }
-}
-
-impl DialectNode for FieldAccess {
+implViewAlgeOp!(ImmNat, "{}i", lit);
+impl DialectNode for ImmNat {
     fn dialect(&self) -> &'static str {
         "alge"
     }
 
     fn try_derive_type(
         &self,
-        _typemap: &AttribStore<Ty>,
-        graph: &OptGraph,
+        _typemap: &FlagStore<Ty>,
+        _graph: &OptGraph,
         _concepts: &AHashMap<String, CSGConcept>,
         _csg_defs: &AHashMap<String, CSGNodeDef>,
     ) -> Result<Option<Ty>, OptError> {
-        if let Some(edg) = self.access_src.edge {
-            //List access can only be done on algebraic types. The type can decide itself if it fits the access pattern.
-            if let OptEdge::Value {
-                ty: TypeState::Derived(t) | TypeState::Set(t),
-            } = &graph.edge(edg).ty
-            {
-                t.try_access_pattern(&self.access_list)
-            } else {
-                Ok(None)
-            }
-        } else {
-            Ok(None)
-        }
+        //NOTE: all literals are translated to a _scalar_
+        Ok(Some(Ty::Nat))
     }
 
     fn structural_copy(&self, span: vola_common::Span) -> OptNode {
         OptNode {
             span,
-            node: Box::new(FieldAccess {
-                access_list: self.access_list.clone(),
-                access_src: Input::default(),
-                output: Output::default(),
+            node: Box::new(ImmNat {
+                lit: self.lit.clone(),
+                out: Output::default(),
             }),
         }
     }
 }
 
+///Constructs some _aggregated_ type, i.e. A vector of _numbers_, a matrix of vectors or a tensor of matrices.
 #[derive(LangNode, Debug)]
-pub struct ListConst {
+pub struct Construct {
     #[inputs]
-    pub inputs: SmallVec<[Input; 3]>,
+    pub inputs: SmallColl<Input>,
     #[output]
     pub output: Output,
 }
 
-impl ListConst {
+impl Construct {
     pub fn new() -> Self {
-        ListConst {
+        Construct {
             inputs: SmallVec::new(),
             output: Output::default(),
         }
     }
 }
 
-implViewAlgeOp!(ListConst, "ListConst");
-impl DialectNode for ListConst {
+implViewAlgeOp!(Construct, "Construct");
+impl DialectNode for Construct {
     fn dialect(&self) -> &'static str {
         "alge"
     }
@@ -771,7 +707,7 @@ impl DialectNode for ListConst {
     fn structural_copy(&self, span: vola_common::Span) -> OptNode {
         OptNode {
             span,
-            node: Box::new(ListConst {
+            node: Box::new(Construct {
                 inputs: smallvec![Input::default(); self.inputs.len()],
                 output: Output::default(),
             }),
@@ -780,7 +716,7 @@ impl DialectNode for ListConst {
 
     fn try_derive_type(
         &self,
-        _typemap: &AttribStore<Ty>,
+        _typemap: &FlagStore<Ty>,
         graph: &OptGraph,
         _concepts: &AHashMap<String, CSGConcept>,
         _csg_defs: &AHashMap<String, CSGNodeDef>,
@@ -842,6 +778,69 @@ impl DialectNode for ListConst {
                 Ok(Some(Ty::Tensor { dim }))
             }
             _ => panic!("enountered non-algebraic type"),
+        }
+    }
+}
+
+///Selects a subset of an _aggregated_ value. For instance an element of a matrix, a row in a matrix or a sub-matrix of an tensor.
+#[derive(LangNode, Debug)]
+pub struct ConstantIndex {
+    ///The _value_ that is being indexed
+    #[input]
+    pub input: Input,
+    #[output]
+    pub output: Output,
+
+    ///Constant value of what element being indexed.
+    pub access: usize,
+}
+
+impl ConstantIndex {
+    pub fn new(access_index: usize) -> Self {
+        ConstantIndex {
+            input: Input::default(),
+            access: access_index,
+            output: Output::default(),
+        }
+    }
+}
+
+implViewAlgeOp!(ConstantIndex, "CIndex: {}", access);
+impl DialectNode for ConstantIndex {
+    fn dialect(&self) -> &'static str {
+        "alge"
+    }
+
+    fn try_derive_type(
+        &self,
+        _typemap: &FlagStore<Ty>,
+        graph: &OptGraph,
+        _concepts: &AHashMap<String, CSGConcept>,
+        _csg_defs: &AHashMap<String, CSGNodeDef>,
+    ) -> Result<Option<Ty>, OptError> {
+        if let Some(edg) = self.input.edge {
+            //List access can only be done on algebraic types. The type can decide itself if it fits the access pattern.
+            if let OptEdge::Value {
+                ty: TypeState::Derived(t) | TypeState::Set(t),
+            } = &graph.edge(edg).ty
+            {
+                t.try_derive_access_index(self.access).map(|r| Some(r))
+            } else {
+                Ok(None)
+            }
+        } else {
+            Ok(None)
+        }
+    }
+
+    fn structural_copy(&self, span: vola_common::Span) -> OptNode {
+        OptNode {
+            span,
+            node: Box::new(ConstantIndex {
+                access: self.access,
+                input: Input::default(),
+                output: Output::default(),
+            }),
         }
     }
 }

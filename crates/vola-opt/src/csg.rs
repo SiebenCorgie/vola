@@ -8,7 +8,7 @@
 //! # CSG Dialect
 
 use rvsdg::{
-    nodes::LangNode,
+    attrib::FlagStore,
     region::{Input, Output},
     rvsdg_derive_lang::LangNode,
     smallvec::{smallvec, SmallVec},
@@ -100,7 +100,7 @@ impl DialectNode for CsgOp {
 
     fn try_derive_type(
         &self,
-        _typemap: &rvsdg::attrib::AttribStore<crate::common::Ty>,
+        _typemap: &FlagStore<crate::common::Ty>,
         graph: &crate::OptGraph,
         _concepts: &ahash::AHashMap<String, vola_ast::csg::CSGConcept>,
         csg_defs: &ahash::AHashMap<String, CSGNodeDef>,
@@ -182,94 +182,6 @@ impl DialectNode for CsgOp {
     }
 }
 
-/*
-///CsgTree call into a defined sub tree. Akin to a function call, but gets inlined at dispatch-time.
-///
-/// NOTE: We *don't* use a λ-Node+Apply node pair here, since we don't known _yet_ which concept on this CSGNode (Entity or Operation) is called.
-/// So in turn we can't known which λ-Node to import.
-#[derive(LangNode, Debug)]
-pub struct CsgCall {
-    ///The field that thas is called
-    pub op: String,
-
-    ///Expected signature for this call.
-    pub input_signature: SmallVec<[Ty; 2]>,
-
-    #[inputs]
-    pub inputs: SmallVec<[Input; 2]>,
-    #[output]
-    pub output: Output,
-}
-
-impl CsgCall {
-    pub fn new(op: Ident, signature: SmallVec<[Ty; 2]>) -> Self {
-        CsgCall {
-            op: op.0,
-            inputs: smallvec![Input::default(); signature.len()],
-            input_signature: signature,
-            output: Output::default(),
-        }
-    }
-}
-
-implViewCsgOp!(CsgCall, "fieldcall {:?}", op);
-impl DialectNode for CsgCall {
-    fn dialect(&self) -> &'static str {
-        "csg"
-    }
-
-    fn structural_copy(&self, span: vola_common::Span) -> OptNode {
-        OptNode {
-            span,
-            node: Box::new(CsgCall {
-                op: self.op.clone(),
-                input_signature: self.input_signature.clone(),
-                inputs: smallvec![Input::default(); self.inputs.len()],
-                output: Output::default(),
-            }),
-        }
-    }
-
-    fn try_derive_type(
-        &self,
-        _typemap: &rvsdg::attrib::AttribStore<Ty>,
-        graph: &crate::OptGraph,
-        _concepts: &ahash::AHashMap<String, vola_ast::csg::CSGConcept>,
-        _csg_defs: &ahash::AHashMap<String, CSGNodeDef>,
-    ) -> Result<Option<Ty>, OptError> {
-        //We know the expected signature. Just check each input
-
-        for i in 0..self.input_signature.len() {
-            if let Some(port) = self.inputs.get(i) {
-                if let Some(edg) = port.edge {
-                    match graph.edge(edg).ty.get_type() {
-                        Some(ty) => {
-                            if ty != &self.input_signature[i] {
-                                return Err(OptError::Any {
-                                    text: format!(
-                                        "Field argument {i} was {:?} but expected {:?}",
-                                        ty, self.input_signature[i]
-                                    ),
-                                });
-                            }
-                        }
-                        None => {
-                            //Not set
-                            return Ok(None);
-                        }
-                    }
-                }
-            } else {
-                //edge not yet set
-                return Ok(None);
-            }
-        }
-
-        //If we made it till here, we known that the field-call always returns a CSGTree
-        Ok(Some(Ty::CSGTree))
-    }
-}
-*/
 ///Access description for a tree.
 #[derive(LangNode, Debug)]
 pub struct TreeAccess {
@@ -295,11 +207,11 @@ impl TreeAccess {
             output: Output::default(),
         }
     }
-
+    #[allow(unused)]
     pub fn get_op_edge(&self) -> Option<EdgeRef> {
         self.inputs[0].edge.clone()
     }
-
+    #[allow(unused)]
     pub fn get_args(&self) -> SmallVec<[Option<EdgeRef>; 3]> {
         self.inputs[1..]
             .iter()
@@ -329,7 +241,7 @@ impl DialectNode for TreeAccess {
 
     fn try_derive_type(
         &self,
-        _typemap: &rvsdg::attrib::AttribStore<Ty>,
+        _typemap: &FlagStore<Ty>,
         graph: &crate::OptGraph,
         _concepts: &ahash::AHashMap<String, vola_ast::csg::CSGConcept>,
         _csg_defs: &ahash::AHashMap<String, CSGNodeDef>,

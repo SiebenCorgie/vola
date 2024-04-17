@@ -1,5 +1,7 @@
 use std::slice;
 
+use smallvec::SmallVec;
+
 use crate::{
     edge::{InputType, OutputType},
     region::{Argument, Input, Output, RegResult, Region},
@@ -109,6 +111,63 @@ impl StructuralNode for PhiNode {
     fn recursion_variable_count(&self) -> usize {
         self.rv_count
     }
+
+    fn outport_types(&self) -> SmallVec<[OutputType; 3]> {
+        let mut outs = SmallVec::new();
+        for i in 0..self.rv_count {
+            outs.push(OutputType::RecursionVariableOutput(i));
+        }
+        outs
+    }
+    fn input_types(&self) -> SmallVec<[InputType; 3]> {
+        let mut inputs = SmallVec::default();
+        //now append all the args
+        for i in 0..self.inputs.len() {
+            if i < self.cv_count {
+                inputs.push(InputType::ContextVariableInput(i));
+            } else {
+                panic!("ϕ-Node can't have other inputs than CV-inputs.")
+            }
+        }
+
+        inputs
+    }
+    fn argument_types(&self, region_index: usize) -> SmallVec<[OutputType; 3]> {
+        if region_index > 0 {
+            return SmallVec::new();
+        }
+
+        let mut args = SmallVec::new();
+        for i in 0..self.body.arguments.len() {
+            if i < self.cv_count {
+                args.push(OutputType::ContextVariableArgument(i));
+            } else {
+                if i < (self.cv_count + self.rv_count) {
+                    args.push(OutputType::RecursionVariableArgument(i - self.cv_count));
+                } else {
+                    args.push(OutputType::Argument(i - self.cv_count - self.rv_count));
+                }
+            }
+        }
+        args
+    }
+    fn result_types(&self, region_index: usize) -> SmallVec<[InputType; 3]> {
+        //Does not exist!
+        if region_index > 0 {
+            return SmallVec::new();
+        }
+
+        let mut res = SmallVec::new();
+        for i in 0..self.body.results.len() {
+            if i < self.rv_count {
+                res.push(InputType::RecursionVariableResult(i));
+            } else {
+                res.push(InputType::Result(i - self.rv_count));
+            }
+        }
+
+        res
+    }
 }
 
 impl PhiNode {
@@ -155,7 +214,7 @@ impl PhiNode {
     /// a result to the later evaluated procedure of the body.
     pub fn add_result(&mut self) -> usize {
         self.body.results.push(RegResult::default());
-        self.body.results.len() - 1
+        self.body.results.len() - self.rv_count - 1
     }
 
     pub fn cv_input(&self, n: usize) -> Option<&Input> {
@@ -244,5 +303,69 @@ impl PhiNode {
 
     pub fn result_count(&self) -> usize {
         self.body.results.len() - self.rv_count
+    }
+}
+
+#[cfg(test)]
+mod phitests {
+    use smallvec::{smallvec, SmallVec};
+
+    use crate::{
+        edge::{InputType, OutputType},
+        nodes::{PhiNode, StructuralNode},
+    };
+
+    //TODO write those tests for the others as well!
+    #[test]
+    fn sig_inputs_test() {
+        let mut phi = PhiNode::new();
+
+        assert!(phi.add_context_variable() == 0);
+        assert!(phi.add_context_variable() == 1);
+        assert!(phi.add_recursion_variable() == 0);
+        assert!(phi.add_recursion_variable() == 1);
+        assert!(phi.add_argument() == 0);
+        assert!(phi.add_argument() == 1);
+        assert!(phi.add_result() == 0);
+        assert!(phi.add_result() == 1);
+
+        let insig = phi.input_types();
+        let expected_in_sig: SmallVec<[InputType; 3]> = smallvec![
+            InputType::ContextVariableInput(0),
+            InputType::ContextVariableInput(1),
+        ];
+        assert!(
+            insig == expected_in_sig,
+            "{:?} != {:?}",
+            insig,
+            expected_in_sig
+        );
+
+        let argsig = phi.argument_types(0);
+        let expected_arg_sig: SmallVec<[OutputType; 3]> = smallvec![
+            OutputType::ContextVariableArgument(0),
+            OutputType::ContextVariableArgument(1),
+            OutputType::RecursionVariableArgument(0),
+            OutputType::RecursionVariableArgument(1),
+            OutputType::Argument(0),
+            OutputType::Argument(1),
+        ];
+        assert!(argsig == expected_arg_sig);
+
+        let ressig = phi.result_types(0);
+        let expected_ressig: SmallVec<[InputType; 3]> = smallvec![
+            InputType::RecursionVariableResult(0),
+            InputType::RecursionVariableResult(1),
+            InputType::Result(0),
+            InputType::Result(1),
+        ];
+        assert!(ressig == expected_ressig);
+
+        let outsig = phi.outport_types();
+        let expected_outsig: SmallVec<[OutputType; 3]> = smallvec![
+            OutputType::RecursionVariableOutput(0),
+            OutputType::RecursionVariableOutput(1),
+        ];
+        assert!(outsig == expected_outsig);
     }
 }

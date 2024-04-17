@@ -131,6 +131,7 @@ impl Ty {
                 //Scalar is easy
                 Ok(Ty::Scalar)
             }
+            "t_nat" => Ok(Ty::Nat),
             "t_vec" => {
                 //try to parse the first digit
                 let width = Digit::parse(ctx, dta, &node.child(0).unwrap().child(1).unwrap())?;

@@ -43,7 +43,7 @@ use rvsdg::{
     region::{Inport, RegionLocation},
     smallvec::{smallvec, SmallVec},
     util::copy::StructuralClone,
-    NodeRef,
+    NodeRef, SmallColl,
 };
 use rvsdg_viewer::View;
 use vola_common::{report, Span};
@@ -89,12 +89,12 @@ impl Optimizer {
         }
     }
 
-    ///Dispatches the export_field with the given `ident`ifier.
+    ///Dispatches the export_field with the given `identifier.
     pub fn dispatch_export(&mut self, ident: &str) -> Result<(), OptError> {
         //Find all TreeAccess nodes, and prepare regions for specialization.
         //This currently means creating a λ-Copy of the export region for each access,
         //that then gets called in place of the access node.
-        let (copy_node_list, export_fn_region, argcount) =
+        let (copy_node_list, export_fn_region, arg_tys) =
             if let Some(exp) = self.export_fn.get(ident) {
                 let mut copy_nodes: SmallVec<[NodeRef; 3]> = SmallVec::default();
                 let result_count = self.graph.region(&exp.lambda_region).unwrap().results.len();
@@ -109,13 +109,22 @@ impl Optimizer {
                     }
                 }
 
-                let argcount = self
-                    .graph
-                    .node(exp.lambda)
-                    .node_type
-                    .unwrap_lambda_ref()
-                    .argument_count();
-                (copy_nodes, exp.lambda_region.clone(), argcount)
+                let lmd = self.graph.node(exp.lambda).node_type.unwrap_lambda_ref();
+                let argcount = lmd.argument_count();
+                let argtys = (0..argcount)
+                    .map(|idx| {
+                        self.find_type(
+                            &OutportLocation {
+                                node: exp.lambda,
+                                output: OutputType::Argument(idx),
+                            }
+                            .into(),
+                        )
+                        .expect("failed to get argument type")
+                    })
+                    .collect::<SmallColl<_>>();
+
+                (copy_nodes, exp.lambda_region.clone(), argtys)
             } else {
                 //No such export fn
                 return Err(OptError::Any {
@@ -162,6 +171,17 @@ impl Optimizer {
                     },
                 )
                 .unwrap();
+
+            //derive the result type from the accessed concept
+            let result_type = self
+                .find_type(
+                    &InportLocation {
+                        node: *new_lambda,
+                        input: InputType::Result(0),
+                    }
+                    .into(),
+                )
+                .unwrap();
             //hook up the node internally
 
             let target_port = {
@@ -185,28 +205,38 @@ impl Optimizer {
             );
             //Since we saved the outport dst we can finally remove the node, and setup the new apply node.
             self.graph.remove_node(*src_field_access).unwrap();
-
-            let input_args = (0..argcount)
+            //NOTE: clone since we are in a loop :eyes:
+            let arg_tys = arg_tys.clone();
+            let input_args = (0..arg_tys.len())
                 .map(|idx| OutportLocation {
                     node: export_fn_region.node,
                     output: OutputType::Argument(idx),
                 })
                 .collect::<SmallVec<[OutportLocation; 3]>>();
-            self.graph.on_region(&export_fn_region, |reg| {
-                let (call_node, _) = reg
-                    .call(import_cv_port_out, &input_args)
-                    .expect("Failed to hook up replacement Apply node");
 
-                reg.ctx_mut()
-                    .connect(
-                        call_node.output(0),
-                        target_port,
-                        OptEdge::Value {
-                            ty: TypeState::Unset,
-                        },
-                    )
-                    .unwrap();
-            });
+            self.graph
+                .on_region(&export_fn_region, |reg| {
+                    let (call_node, input_edges) = reg
+                        .call(import_cv_port_out, &input_args)
+                        .expect("Failed to hook up replacement Apply node");
+                    //the +1 is the call edge that gets added by `call`
+                    assert!(input_edges.len() == arg_tys.len() + 1);
+                    //NOTE: skip, since the first edge is the call edge
+                    for (edg, ty) in input_edges.into_iter().skip(1).zip(arg_tys.into_iter()) {
+                        reg.ctx_mut().edge_mut(edg).ty.set_type(ty);
+                    }
+
+                    reg.ctx_mut()
+                        .connect(
+                            call_node.output(0),
+                            target_port,
+                            OptEdge::Value {
+                                ty: TypeState::Set(result_type.clone()),
+                            },
+                        )
+                        .unwrap();
+                })
+                .unwrap();
         }
 
         //For some house keeping, remove unused imports on the export after trace
@@ -214,8 +244,8 @@ impl Optimizer {
         self.graph
             .remove_unused_context_variables(export_fn_region.node);
 
-        if env::var("VOLA_DUMP_ALL").is_ok() || env::var("DUMP_BEFOR_SPECIALIZE").is_ok() {
-            self.dump_svg("before_specialize.svg");
+        if env::var("VOLA_DUMP_ALL").is_ok() || env::var("DUMP_BEFORE_SPECIALIZE").is_ok() {
+            self.dump_svg("before_specialize.svg", true);
         }
 
         //NOTE: the first NodeRef of the pair's is invalid at this point
@@ -374,7 +404,6 @@ impl Optimizer {
             }
         }
 
-        //        println!("Inlined {ninline}");
         //for good measures, remove all unused CVs after importing _everything_
         self.graph.remove_unused_context_variables(region.node);
         Ok(())
@@ -391,7 +420,7 @@ impl Optimizer {
         //NOTE: This dump is _specific_, but good if you need to know if some CSG-Tree inline failes
         //      unexpectedly.
         if env::var("VOLA_DUMP_ALL").is_ok() || env::var("DUMP_AFTER_INLINE_CALL_TREE").is_ok() {
-            self.dump_svg(&format!("after_inline_call_tree_{}.svg", region.node));
+            self.dump_svg(&format!("after_inline_call_tree_{}.svg", region.node), true);
         }
 
         let access_field_node_port = self
@@ -433,12 +462,14 @@ impl Optimizer {
             .unwrap();
 
         if env::var("VOLA_DUMP_ALL").is_ok() || env::var("DUMP_AFTER_ACCESSNODE_REWRITE").is_ok() {
-            self.dump_svg(&format!("after_access_node_rewrite_{}.svg", region.node));
+            self.dump_svg(
+                &format!("after_access_node_rewrite_{}.svg", region.node),
+                true,
+            );
         }
 
         //NOTE we seed the specialization with the entry_csg node, and the TreeAccess node we start at.
         let _specialized_entry_node = self.specialize_eval_node(&spec_ctx, seeding_eval_node)?;
-        println!("Start post-inliner");
         //After specializing, use recursive inliner again, to bring all ops into the same region
         self.fully_inline_region(region).unwrap();
 
@@ -452,10 +483,13 @@ impl Optimizer {
         dispatch_node: NodeRef,
     ) -> Result<NodeRef, OptError> {
         if env::var("VOLA_DUMP_ALL").is_ok() || env::var("DUMP_DISPATCH").is_ok() {
-            self.dump_svg(&format!(
-                "dispatch_reg_{:?}_{dispatch_node:?}.svg",
-                ctx.spec_region.node
-            ));
+            self.dump_svg(
+                &format!(
+                    "dispatch_reg_{:?}_{dispatch_node:?}.svg",
+                    ctx.spec_region.node
+                ),
+                true,
+            );
         }
 
         let region = self

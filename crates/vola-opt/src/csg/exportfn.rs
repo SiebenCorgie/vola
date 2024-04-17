@@ -6,7 +6,7 @@
  * 2024 Tendsin Mende
  */
 use rvsdg::{
-    edge::{InputType, OutportLocation},
+    edge::{InportLocation, InputType, OutportLocation, OutputType},
     region::RegionLocation,
     smallvec::SmallVec,
     NodeRef,
@@ -31,6 +31,7 @@ use super::TreeAccess;
 pub struct ExportFn {
     pub span: Span,
     ///The input signature that is exported to the linkage-attributes
+    #[allow(unused)]
     pub input_signature: SmallVec<[(Ident, Ty); 3]>,
     ///The outputs that are exported from the module.
     pub output_signature: SmallVec<[Ty; 3]>,
@@ -111,13 +112,7 @@ impl ExportFn {
         let concept_name = concept.name.clone();
 
         //We use the concept's return type to infer the output signature.
-        let return_type: Ty = match concept.dst_ty.clone().try_into() {
-            Ok(ty) => ty,
-            Err(e) => {
-                report(e.clone(), concept.span.get_file());
-                return Err(e);
-            }
-        };
+        let return_type: Ty = concept.dst_ty.clone().into();
 
         //register in output signature
         self.output_signature.push(return_type.clone());
@@ -174,7 +169,6 @@ impl ExportFn {
                 let _ = reg
                     .connect_to_result(node.output(0), InputType::Result(resultidx))
                     .unwrap();
-
                 node.output(0)
             })
             .unwrap();
@@ -224,10 +218,7 @@ Note that vola does not support shadowing. If you just want to change the value 
         );
 
         //register type for port
-        builder
-            .opt
-            .typemap
-            .push_attrib(&def_port.into(), Ty::CSGTree);
+        builder.opt.typemap.set(def_port.into(), Ty::CSGTree);
 
         Ok(())
     }
@@ -286,14 +277,7 @@ impl Optimizer {
 
         let mut input_signature = SmallVec::new();
         for typed_ident in exportfn.inputs.iter() {
-            let ty: Ty = match typed_ident.ty.clone().try_into() {
-                Ok(ty) => ty,
-                Err(e) => {
-                    report(e.clone(), typed_ident.span.get_file());
-                    return Err(e);
-                }
-            };
-
+            let ty: Ty = typed_ident.ty.clone().into();
             input_signature.push((typed_ident.ident.clone(), ty));
         }
 
@@ -332,6 +316,63 @@ impl Optimizer {
         let interned_exportfn = new_exportfn.build_block(lmd_builder, exportfn)?;
 
         let export_name = interned_exportfn.ident.0.clone();
+        //Set the name of this function
+        self.names
+            .set(interned_exportfn.lambda.into(), export_name.clone());
+        self.span_tags.set(
+            interned_exportfn.lambda.into(),
+            interned_exportfn.span.clone(),
+        );
+
+        //add port type information
+        for (inpidx, (_, inputty)) in interned_exportfn.input_signature.iter().enumerate() {
+            self.typemap.set(
+                OutportLocation {
+                    node: interned_exportfn.lambda,
+                    output: OutputType::Argument(inpidx),
+                }
+                .into(),
+                inputty.clone(),
+            );
+
+            for edg in self
+                .graph
+                .node(interned_exportfn.lambda)
+                .node_type
+                .unwrap_lambda_ref()
+                .argument(inpidx)
+                .unwrap()
+                .edges
+                .clone()
+            {
+                self.graph.edge_mut(edg).ty.set_type(inputty.clone());
+            }
+        }
+
+        for (outpidx, ty) in interned_exportfn.output_signature.iter().enumerate() {
+            self.typemap.set(
+                InportLocation {
+                    node: interned_exportfn.lambda,
+                    input: InputType::Result(outpidx),
+                }
+                .into(),
+                ty.clone(),
+            );
+
+            if let Some(edg) = self
+                .graph
+                .node(interned_exportfn.lambda)
+                .node_type
+                .unwrap_lambda_ref()
+                .result(outpidx)
+                .unwrap()
+                .edge
+                .clone()
+            {
+                self.graph.edge_mut(edg).ty.set_type(ty.clone());
+            }
+        }
+
         self.export_fn.insert(export_name, interned_exportfn);
 
         Ok(lambda)

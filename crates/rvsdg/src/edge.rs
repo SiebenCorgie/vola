@@ -15,7 +15,6 @@ pub enum InputType {
         branch: usize,
         exit_variable: usize,
     },
-    LoopVariableResult(usize),
     EntryVariableInput(usize),
     RecursionVariableResult(usize),
     ContextVariableInput(usize),
@@ -26,10 +25,7 @@ impl InputType {
     /// This mostly will be 0, except for ExitVariableResult.
     pub fn result_region_index(&self) -> Option<usize> {
         match self {
-            Self::Result(_)
-            | Self::RecursionVariableResult(_)
-            | Self::LoopVariableResult(_)
-            | Self::ThetaPredicate => Some(0),
+            Self::Result(_) | Self::RecursionVariableResult(_) | Self::ThetaPredicate => Some(0),
             Self::ExitVariableResult {
                 branch,
                 exit_variable: _,
@@ -49,9 +45,38 @@ impl InputType {
             InputType::Result(_)
             | InputType::ThetaPredicate
             | InputType::RecursionVariableResult(_)
-            | InputType::LoopVariableResult(_)
             | InputType::ExitVariableResult { .. } => true,
             _ => false,
+        }
+    }
+
+    //If possible, tries to map this input to its equivalent port within a region.
+    //This only works for ContextVariableInput, EntryVariableInput
+    pub fn map_to_in_region(&self, region_index: usize) -> Option<OutputType> {
+        match self {
+            Self::ContextVariableInput(i) => {
+                assert!(region_index == 0, "region index needs to be 0, since context-variables can only map to single internal region");
+                Some(OutputType::ContextVariableArgument(*i))
+            }
+            Self::EntryVariableInput(i) => Some(OutputType::EntryVariableArgument {
+                branch: region_index,
+                entry_variable: *i,
+            }),
+            _ => None,
+        }
+    }
+
+    //If possible, maps the result-like input to an out-of-region equivalent output.
+    //works for recursion-variable-result, loop-variable-result, exit-variable-result and result.
+    pub fn map_out_of_region(&self) -> Option<OutputType> {
+        match self {
+            Self::RecursionVariableResult(i) => Some(OutputType::RecursionVariableOutput(*i)),
+            Self::ExitVariableResult {
+                branch: _,
+                exit_variable,
+            } => Some(OutputType::ExitVariableOutput(*exit_variable)),
+            Self::Result(i) => Some(OutputType::Output(*i)),
+            _ => None,
         }
     }
 }
@@ -109,6 +134,35 @@ impl OutputType {
             | OutputType::RecursionVariableArgument(_)
             | OutputType::EntryVariableArgument { .. } => true,
             _ => false,
+        }
+    }
+
+    //If possible, maps the output-like type to an region-local result.
+    //
+    // This is basically the inverse to [InputType::map_out_of_region].
+    pub fn map_to_in_region(&self, region_index: usize) -> Option<InputType> {
+        match self {
+            Self::Output(i) => Some(InputType::Result(*i)),
+            Self::RecursionVariableOutput(i) => Some(InputType::RecursionVariableResult(*i)),
+            Self::ExitVariableOutput(i) => Some(InputType::ExitVariableResult {
+                branch: region_index,
+                exit_variable: *i,
+            }),
+            _ => None,
+        }
+    }
+
+    ///If possible, maps this argument-like output type to an equivalent input type.
+    ///
+    /// Is the inverse of [InputType::map_to_in_region].
+    pub fn map_out_of_region(&self) -> Option<InputType> {
+        match self {
+            Self::ContextVariableArgument(i) => Some(InputType::ContextVariableInput(*i)),
+            Self::EntryVariableArgument {
+                branch: _,
+                entry_variable,
+            } => Some(InputType::EntryVariableInput(*entry_variable)),
+            _ => None,
         }
     }
 }

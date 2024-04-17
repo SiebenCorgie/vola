@@ -21,7 +21,7 @@ use std::collections::VecDeque;
 
 use ahash::{AHashMap, AHashSet};
 use rvsdg::{
-    edge::{InportLocation, OutportLocation, OutputType},
+    edge::{OutportLocation, OutputType},
     nodes::{ApplyNode, NodeType},
     region::RegionLocation,
     smallvec::SmallVec,
@@ -74,7 +74,8 @@ impl Optimizer {
                 error_count += 1;
             } else {
                 //Add to resolve set
-                resolve_set.insert(implblock.node).clone();
+                let was_new = resolve_set.insert(implblock.node).clone();
+                assert!(was_new);
             }
         }
 
@@ -152,7 +153,7 @@ impl Optimizer {
 
                 if dependecies_met {
                     //Try to resolve, since all dependecies are met
-                    if let Err(err) = self.derive_region(def, srcspan.clone()) {
+                    if let Err(_err) = self.derive_region(def, srcspan.clone()) {
                         error_count += 1;
                     } else {
                         //successfully resolved, so add to resolve map
@@ -201,6 +202,10 @@ impl Optimizer {
 
         for exp in self.export_fn.values() {
             self.verify_export_fn(exp)?;
+        }
+
+        if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("DUMP_TYPE_DERIVE").is_ok() {
+            self.dump_svg("post_type_derive.svg", true);
         }
 
         if error_count > 0 {
@@ -400,10 +405,6 @@ impl Optimizer {
                 //types. After that we match them to the apply_nodes actual connected types. If they match we pass
                 //the callables result argument
 
-                let call_result_port = InportLocation {
-                    node: calldef.node,
-                    input: rvsdg::edge::InputType::Result(0),
-                };
                 let result_type = {
                     let lmdregion = RegionLocation {
                         node: calldef.node,
@@ -433,7 +434,7 @@ impl Optimizer {
                     node: calldef.node,
                     region_index: 0,
                 };
-                let mut call_sig = self.get_lambda_arg_signature(callable_reg.node);
+                let call_sig = self.get_lambda_arg_signature(callable_reg.node);
                 let mut expected_call_sig: SmallVec<[Ty; 3]> = SmallVec::default();
                 for maybe_ty in call_sig {
                     if let Some(t) = maybe_ty {
@@ -519,10 +520,18 @@ impl Optimizer {
         //Preset all edges where we know the type already
         for edg in &edges {
             let src = self.graph.edge(*edg).src().clone();
-            if let Some([ty]) = self.typemap.attrib(&src.into()) {
-                self.graph.edge_mut(*edg).ty = OptEdge::Value {
-                    ty: TypeState::Set(ty.clone()),
-                };
+            if let Some(ty) = self.find_type(&src.into()) {
+                if let Some(preset) = self.graph.edge(*edg).ty.get_type() {
+                    if preset != &ty {
+                        let err = OptError::AnySpanned { span: region_src_span.clone().into(), text: format!("Edge was already set to {:?}, but was about to be overwriten with an incompatible type {:?}", preset, ty), span_text: "Somewhere in this region".to_owned() };
+                        report(err.clone(), region_src_span.get_file());
+                        return Err(err);
+                    }
+                } else {
+                    self.graph.edge_mut(*edg).ty = OptEdge::Value {
+                        ty: TypeState::Set(ty.clone()),
+                    };
+                }
             }
         }
 
@@ -533,49 +542,9 @@ impl Optimizer {
 
             let mut local_stack = VecDeque::new();
             std::mem::swap(&mut local_stack, &mut build_stack);
+
             for node in local_stack {
                 //gather all inputs and let the node try to resolve itself
-
-                //if the node's output edge is already set, skip node.
-                match self.typemap.attrib(
-                    &OutportLocation {
-                        node,
-                        output: OutputType::Output(0),
-                    }
-                    .into(),
-                ) {
-                    Some([ty]) => {
-                        //has type set already, skip node but propagate type if needed
-                        for edg in self
-                            .graph
-                            .node(node)
-                            .outport(&OutputType::Output(0))
-                            .unwrap()
-                            .edges
-                            .clone()
-                            .iter()
-                        {
-                            self.graph.edge_mut(*edg).ty.set_derived_state(ty.clone());
-                        }
-                        continue;
-                    }
-                    Some(_multiple_types) => {
-                        let span = self
-                            .graph
-                            .node(node)
-                            .node_type
-                            .unwrap_simple_ref()
-                            .span
-                            .clone();
-                        return Err(OptError::AnySpanned {
-                            span: span.into(),
-                            text: "Node hat multiple types set on output-port".to_owned(),
-                            span_text: "here".to_owned(),
-                        });
-                    }
-                    _ => {}
-                }
-
                 let type_resolve_try = match &self.graph.node(node).node_type {
                     NodeType::Simple(s) => s.node.try_derive_type(
                         &self.typemap,
@@ -606,8 +575,8 @@ impl Optimizer {
                             self.graph.node_mut(node).outputs().len() == 1,
                             "encountered node with != 1 outport"
                         );
-                        self.typemap.push_attrib(
-                            &OutportLocation {
+                        self.typemap.set(
+                            OutportLocation {
                                 node,
                                 output: OutputType::Output(0),
                             }
@@ -667,8 +636,7 @@ impl Optimizer {
                 let span = match &node.node_type {
                     NodeType::Simple(s) => s.span.clone(),
                     NodeType::Apply(_) => {
-                        if let Some([span, ..]) = self.span_tags.attrib(&failed_node.clone().into())
-                        {
+                        if let Some(span) = self.span_tags.get(&failed_node.clone().into()) {
                             span.clone()
                         } else {
                             Span::empty()

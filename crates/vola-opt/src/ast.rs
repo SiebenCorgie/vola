@@ -21,7 +21,7 @@ use vola_ast::{
 use vola_common::report;
 
 use crate::{
-    alge::{CallOp, EvalNode, FieldAccess, Imm, ListConst, WkOp},
+    alge::{CallOp, ConstantIndex, Construct, EvalNode, ImmNat, ImmScalar, WkOp},
     common::{LmdContext, Ty},
     csg::CsgOp,
     error::OptError,
@@ -225,7 +225,7 @@ impl<'a> AstLambdaBuilder<'a> {
                     .unwrap();
 
                 //tag output type
-                self.opt.typemap.push_attrib(&opnode.into(), eval_cv_type);
+                self.opt.typemap.set(opnode.into(), eval_cv_type);
 
                 Ok(opnode)
             }
@@ -245,20 +245,38 @@ impl<'a> AstLambdaBuilder<'a> {
                     return Err(err);
                 };
 
-                let opnode = self
-                    .opt
-                    .graph
-                    .on_region(&self.lambda_region, |regbuilder| {
-                        let (opnode, _) = regbuilder
-                            .connect_node(
-                                OptNode::new(FieldAccess::new(accessors), expr_span),
-                                &[src],
-                            )
-                            .unwrap();
-                        opnode.output(0)
-                    })
-                    .unwrap();
-                Ok(opnode)
+                //Unwrap the `accessors` list into a chain of `ConstantIndex`, each feeding into its
+                //successor.
+                let mut src = src;
+                for accessor in accessors {
+                    let idx = if let Some(idx) = accessor.try_to_index() {
+                        idx
+                    } else {
+                        let err = OptError::AnySpanned {
+                            span: expr_span.clone().into(),
+                            text: format!("Could not convert {} to index!", accessor),
+                            span_text: format!("here"),
+                        };
+                        report(err.clone(), expr_span.get_file());
+                        return Err(err);
+                    };
+
+                    let cinode = OptNode::new(ConstantIndex::new(idx), expr_span.clone());
+                    //now connect it to the predecessor.
+                    let new_src = self
+                        .opt
+                        .graph
+                        .on_region(&self.lambda_region, |reg| {
+                            let (opnode, _) = reg.connect_node(cinode, &[src.clone()]).unwrap();
+                            opnode.output(0)
+                        })
+                        .unwrap();
+                    //finally overwrite src
+                    src = new_src;
+                }
+
+                //last src is the opnode with the _final_ value
+                Ok(src)
             }
             AlgeExprTy::Ident(i) => {
                 //try to resolve the ident, or throw an error if not possible
@@ -288,7 +306,7 @@ impl<'a> AstLambdaBuilder<'a> {
                     items.push(self.setup_alge_expr(itm, parent)?);
                 }
 
-                let mut node = ListConst::new();
+                let mut node = Construct::new();
                 node.inputs = smallvec![Input::default(); items.len()];
 
                 let opnode = self
@@ -304,11 +322,20 @@ impl<'a> AstLambdaBuilder<'a> {
                 Ok(opnode)
             }
             AlgeExprTy::Literal(lit) => {
+                let optnode = match lit {
+                    vola_ast::common::Literal::IntegerLiteral(i) => {
+                        OptNode::new(ImmNat::new(i), expr_span)
+                    }
+                    vola_ast::common::Literal::FloatLiteral(f) => {
+                        OptNode::new(ImmScalar::new(f), expr_span)
+                    }
+                };
+
                 let opnode = self
                     .opt
                     .graph
                     .on_region(&self.lambda_region, |regbuilder| {
-                        let opnode = regbuilder.insert_node(OptNode::new(Imm::new(lit), expr_span));
+                        let opnode = regbuilder.insert_node(optnode);
                         opnode.output(0)
                     })
                     .unwrap();
@@ -346,8 +373,8 @@ impl<'a> AstLambdaBuilder<'a> {
                             span: tree.head_span().into(),
                             span_text: "used here".to_owned(),
                         };
-                        if let Some(localcsgty) = self.opt.typemap.attrib(&localcsg.port.into()) {
-                            if localcsgty.get(0) != Some(&Ty::CSGTree) {
+                        if let Some(localcsgty) = self.opt.typemap.get(&localcsg.port.into()) {
+                            if localcsgty != &Ty::CSGTree {
                                 report(err.clone(), tree.span.get_file());
                                 return Err(err);
                             }
@@ -433,9 +460,7 @@ impl<'a> AstLambdaBuilder<'a> {
                                 .unwrap();
                             //NOTE: We tag the apply node with a span, since the apply-node itself has no span
                             //associated, but in this case we have an actual source-level location.
-                            self.opt
-                                .span_tags
-                                .push_attrib(&call_node.into(), tree.span.clone());
+                            self.opt.span_tags.set(call_node.into(), tree.span.clone());
                             return Ok(call_node.output(0));
                         } else {
                             let err = OptError::AnySpanned { span: tree.head_span().into(), text: format!("{} does not name an entity, local csg variable or field def", tree.op.0), span_text: "try defining a local variable, an entity or a field with that name".to_owned() };

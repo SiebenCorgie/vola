@@ -1,0 +1,19 @@
+[package]
+name = "vola-backend-spirv"
+version = "0.1.0"
+edition = "2021"
+
+[features]
+default = ["log"]
+log = ["dep:log"]
+
+[dependencies]
+vola-opt = {path = "../vola-opt"}
+vola-common = {path = "../vola-common"}
+rvsdg = {path = "../rvsdg"}
+rvsdg-viewer = {path = "../rvsdg-viewer"}
+rspirv.workspace = true
+ahash.workspace = true
+log = {workspace = true, optional = true}
+#spirv-grammar-rules = {git = "https://gitlab.com/tendsinmende/spirv-grammar-rules.git"}
+spirv-grammar-rules = {path = "../../../spirv-grammar-rules/crates/spirv-grammar-rules"}

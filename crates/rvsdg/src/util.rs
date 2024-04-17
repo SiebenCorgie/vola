@@ -1,5 +1,8 @@
 //! Implements some helper function when working with the RVSDG.
-
+//!
+//! Usually those helpers are implemented on the [RVSDG](crate::Rvsdg) directly. For instance
+//! the [copy] module only defines a [StructuralClone](copy::StructuralClone) trait, and then implements
+//! [shallow_copy_node](crate::Rvsdg::shallow_copy_node), [deep_copy_node](crate::Rvsdg::deep_copy_node) etc.
 use std::collections::VecDeque;
 
 use crate::{
@@ -11,7 +14,10 @@ use crate::{
 };
 
 pub mod copy;
+pub mod dead_node_elimination;
+pub mod graph_type_transform;
 pub mod inline;
+pub mod liveness;
 pub mod region_utils;
 
 impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
