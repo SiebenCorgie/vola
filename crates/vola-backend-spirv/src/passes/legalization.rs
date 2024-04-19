@@ -36,14 +36,8 @@ impl SpirvBackend {
     fn legalize_grammar(&mut self) -> Result<(), BackendSpirvError> {
         //load the grammar-rules of both used grammar (core and glsl).
         //TODO: Use the bundeled ones, but right now we load from file cause thats faster
-        let mut core_rules = GrammarRules::load_from_file(
-            "../spirv-grammar-rules/rules/1.2/spirv.core.grammar-rules.json",
-        )
-        .unwrap();
-        let mut glsl_rules = GrammarRules::load_from_file(
-            "../spirv-grammar-rules/rules/1.2/extinst.glsl.std.450.grammar-rules.json",
-        )
-        .unwrap();
+        let mut core_rules = GrammarRules::load_core_grammar();
+        let mut glsl_rules = GrammarRules::load_glsl_std_450_grammar();
 
         //NOTE: need to collect upfront, so we can modify the graph in the loop :/
         let reachable = self.graph.walk_reachable().collect::<Vec<_>>();

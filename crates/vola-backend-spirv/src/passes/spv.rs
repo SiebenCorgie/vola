@@ -42,11 +42,12 @@ impl SpirvBackend {
         b.set_version(config.version_major, config.version_minor);
         b.memory_model(
             rspirv::spirv::AddressingModel::Logical,
-            rspirv::spirv::MemoryModel::GLSL450,
+            rspirv::spirv::MemoryModel::Vulkan,
         );
         //always emitting a linkable shader module
         b.capability(rspirv::spirv::Capability::Linkage);
         b.capability(rspirv::spirv::Capability::Shader);
+        b.capability(rspirv::spirv::Capability::VulkanMemoryModel);
 
         for ext in &config.extensions {
             b.extension(ext.clone());
