@@ -1,5 +1,5 @@
 use ahash::AHashMap;
-use macroquad::math::Vec2;
+use glam::Vec2;
 use priority_queue::DoublePriorityQueue;
 use rvsdg::{
     edge::{InportLocation, LangEdge, OutportLocation},

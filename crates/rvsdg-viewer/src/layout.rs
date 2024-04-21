@@ -12,11 +12,10 @@
 //! 6. For any edge that couldn't be routed, insert a straight path.
 //!
 
-use ahash::{AHashMap, AHashSet};
-use macroquad::math::Vec2;
-use rvsdg::{edge::LangEdge, nodes::LangNode, region::RegionLocation, EdgeRef, NodeRef, Rvsdg};
-
 use crate::{primitives::PrimTree, View};
+use ahash::{AHashMap, AHashSet};
+use glam::Vec2;
+use rvsdg::{edge::LangEdge, nodes::LangNode, region::RegionLocation, EdgeRef, NodeRef, Rvsdg};
 
 use self::initial::NodeGrid;
 

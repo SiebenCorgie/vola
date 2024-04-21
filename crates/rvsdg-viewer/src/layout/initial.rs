@@ -1,5 +1,5 @@
 use ahash::AHashSet;
-use macroquad::math::Vec2;
+use glam::Vec2;
 use rvsdg::{edge::LangEdge, nodes::LangNode, NodeRef, Rvsdg};
 
 use crate::View;

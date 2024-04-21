@@ -2,8 +2,7 @@ use rvsdg::{
     region::{Input, Output},
     rvsdg_derive_lang::LangNode,
 };
-pub use rvsdg_viewer::macroquad;
-use rvsdg_viewer::View;
+use rvsdg_viewer::{Color, View};
 
 //Example 2.d. of the source paper
 mod ex_2d;
@@ -69,8 +68,8 @@ impl LNode {
 }
 
 impl View for LNode {
-    fn color(&self) -> macroquad::color::Color {
-        macroquad::prelude::Color::from_rgba(255, 255, 128, 255)
+    fn color(&self) -> Color {
+        Color::from_rgba(255, 255, 128, 255)
     }
 
     fn name(&self) -> String {

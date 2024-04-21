@@ -7,6 +7,7 @@
  */
 //! # CSG Dialect
 
+use crate::{common::Ty, error::OptError, DialectNode, OptNode};
 use rvsdg::{
     attrib::FlagStore,
     region::{Input, Output},
@@ -14,9 +15,8 @@ use rvsdg::{
     smallvec::{smallvec, SmallVec},
     EdgeRef,
 };
+use rvsdg_viewer::Color;
 use vola_ast::{common::Ident, csg::CSGNodeDef};
-
-use crate::{common::Ty, error::OptError, DialectNode, OptNode};
 
 pub(crate) mod exportfn;
 pub(crate) mod fielddef;
@@ -25,8 +25,8 @@ pub(crate) mod fielddef;
 macro_rules! implViewCsgOp {
     ($opname:ident, $str:expr, $($arg:ident),*) => {
         impl rvsdg_viewer::View for $opname {
-            fn color(&self) -> rvsdg_viewer::macroquad::color::Color {
-                rvsdg_viewer::macroquad::color::Color::from_rgba(170, 200, 170, 255)
+            fn color(&self) -> Color {
+                Color::from_rgba(170, 200, 170, 255)
             }
 
             fn name(&self) -> String {
@@ -40,8 +40,8 @@ macro_rules! implViewCsgOp {
     };
     ($opname:ident, $str:expr) =>{
         impl rvsdg_viewer::View for $opname {
-            fn color(&self) -> rvsdg_viewer::macroquad::color::Color {
-                rvsdg_viewer::macroquad::color::Color::from_rgba(170, 200, 170, 255)
+            fn color(&self) -> Color {
+                Color::from_rgba(170, 200, 170, 255)
             }
 
             fn name(&self) -> String {

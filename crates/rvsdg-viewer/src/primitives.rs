@@ -1,12 +1,39 @@
-use macroquad::prelude::{Color, Vec2};
+use glam::Vec2;
 use rvsdg::attrib::AttribLocation;
+use serde::{Deserialize, Serialize};
 use std::fmt::Write;
 
 use crate::Stroke;
 
 pub type Point = Vec2;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Color {
+    pub r: f32,
+    pub g: f32,
+    pub b: f32,
+    pub a: f32,
+}
+
+impl Color {
+    pub const BLACK: Self = Self::new(0.0, 0.0, 0.0, 1.0);
+    pub const RED: Self = Self::new(1.0, 0.0, 0.0, 1.0);
+
+    pub const fn new(r: f32, g: f32, b: f32, a: f32) -> Self {
+        Self { r, g, b, a }
+    }
+
+    pub fn from_rgba(r: u8, g: u8, b: u8, a: u8) -> Self {
+        Self {
+            r: r as f32 / 255.0,
+            g: g as f32 / 255.0,
+            b: b as f32 / 255.0,
+            a: a as f32 / 255.0,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Rect {
     pub from: Point,
     pub to: Point,
@@ -51,7 +78,7 @@ impl Rect {
 }
 
 #[allow(dead_code)]
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Line {
     pub from: Point,
     pub to: Point,
@@ -59,7 +86,7 @@ pub struct Line {
     pub color: Color,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Path {
     pub points: Vec<Point>,
     pub width: f32,
@@ -91,7 +118,7 @@ impl Path {
 }
 
 #[allow(dead_code)]
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Text {
     pub at: Point,
     pub string: String,
@@ -124,7 +151,7 @@ impl Text {
 
 ///All primitives we can draw, either in macroquad or svg
 #[allow(dead_code)]
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum Prim {
     Box(Rect),
     Line(Line),
@@ -139,7 +166,7 @@ pub enum Prim {
 /// All coordinates are relative to their parent.
 ///
 /// Top left is (0,0), bottom right is (inf, inf)
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct PrimTree {
     pub id: AttribLocation,
     pub prim: Prim,

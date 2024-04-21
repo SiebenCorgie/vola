@@ -11,6 +11,7 @@ use crate::{
 };
 
 #[derive(Debug, Hash, PartialEq, Eq, Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum AttribLocation {
     InPort(InportLocation),
     OutPort(OutportLocation),

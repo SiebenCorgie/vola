@@ -10,10 +10,11 @@ categories = ["compilers"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-default = ["dot", "derive", "log"]
+default = ["dot", "derive", "log", "serde"]
 dot = ["graphviz-rust"]
 derive = ["rvsdg-derive-lang"]
 log = ["dep:log"]
+serde = ["dep:serde", "slotmap/serde"]
 
 [dependencies]
 thiserror.workspace = true
@@ -22,8 +23,8 @@ slotmap.workspace = true
 graphviz-rust = {workspace = true, optional = true}
 smallvec.workspace = true
 rvsdg-derive-lang = {path = "../rvsdg-derive-lang", optional = true}
-log= {workspace = true, optional = true}
-
+log = {workspace = true, optional = true}
+serde = {workspace = true, optional = true, features = ["derive"]}
 
 [dev-dependencies]
 rvsdg-viewer = {path = "../rvsdg-viewer"}
