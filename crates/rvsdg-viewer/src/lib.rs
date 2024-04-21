@@ -15,9 +15,10 @@
 //! }
 //! ```
 pub mod layout;
-mod primitives;
+pub mod primitives;
 
 use layout::{Layout, LayoutConfig};
+use primitives::PrimTree;
 ///The color of a node or edge.
 pub use primitives::{Color, Point};
 use rvsdg::{
@@ -28,6 +29,11 @@ use rvsdg::{
 };
 use serde::{Deserialize, Serialize};
 use std::{fmt::Debug, path::Path};
+
+#[cfg(feature = "viewer")]
+mod viewer;
+#[cfg(feature = "viewer")]
+pub use viewer::{GraphState, GraphStateBuilder, ViewerState};
 
 pub trait View {
     fn name(&self) -> String;
@@ -103,7 +109,7 @@ impl<N: View + LangNode + 'static> View for rvsdg::nodes::Node<N> {
 }
 
 ///Saves the rvsdg graph as an SVG image at `svg_path`.
-pub fn into_svg<N: View + LangNode + Debug + 'static, E: View + LangEdge + 'static>(
+pub fn into_svg<N: View + LangNode + 'static, E: View + LangEdge + 'static>(
     rvsdg: &Rvsdg<N, E>,
     svg_path: impl AsRef<Path>,
 ) {
@@ -111,7 +117,7 @@ pub fn into_svg<N: View + LangNode + Debug + 'static, E: View + LangEdge + 'stat
 }
 
 ///Saves the rvsdg graph as an SVG image at `svg_path`.
-pub fn into_svg_with_config<N: View + LangNode + Debug + 'static, E: View + LangEdge + 'static>(
+pub fn into_svg_with_config<N: View + LangNode + 'static, E: View + LangEdge + 'static>(
     rvsdg: &Rvsdg<N, E>,
     svg_path: impl AsRef<Path>,
     config: &LayoutConfig,
@@ -122,4 +128,12 @@ pub fn into_svg_with_config<N: View + LangNode + Debug + 'static, E: View + Lang
     let svg = prims.to_svg(layout.region_tree.get_extent().y);
 
     std::fs::write(svg_path.as_ref(), svg).unwrap();
+}
+
+pub fn into_primitive_tree<N: View + LangNode + 'static, E: View + LangEdge + 'static>(
+    rvsdg: &Rvsdg<N, E>,
+    config: &LayoutConfig,
+) -> PrimTree {
+    let layout = Layout::for_rvsdg(rvsdg, config);
+    layout.into_primitive_tree()
 }

@@ -15,11 +15,12 @@ dot = ["graphviz-rust"]
 thiserror.workspace = true
 backtrace.workspace = true
 tree-sitter.workspace = true
-ahash.workspace = true
-smallvec.workspace = true
+ahash = {workspace = true, features = ["serde"]}
+smallvec = {workspace = true, features = ["serde"]}
 smallstr = {workspace = true, features = ["serde"]}
 serde = {workspace = true, features = ["derive"]}
 serde-lexpr.workspace = true
 graphviz-rust = {workspace = true, optional = true}
 miette = {workspace = true, features = ["fancy"]}
 lazy_static.workspace = true
+rvsdg-viewer = {path = "../rvsdg-viewer"}

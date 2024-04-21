@@ -9,7 +9,8 @@ members = [
 "crates/rvsdg-derive-lang", 
 "crates/vola-backend-spirv", 
 "crates/volac", 
-"crates/vola-cli",
+"crates/vola-cli", 
+"crates/rvsdg-viewer-ui",
 ]
 
 resolver = "2"
@@ -34,3 +35,4 @@ clap = "4.5.3"
 bytemuck = "1.15.0"
 macroquad = "0.4.4"
 glam = "0.27"
+bincode = "1.3.3"
