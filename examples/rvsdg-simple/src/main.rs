@@ -1,9 +1,3 @@
-use rvsdg::{
-    region::{Input, Output},
-    rvsdg_derive_lang::LangNode,
-};
-use rvsdg_viewer::{Color, View};
-
 //Example 2.d. of the source paper
 mod ex_2d;
 //Example 3.a. of the source paper

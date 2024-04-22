@@ -1,30 +1,24 @@
 use core::panic;
 use std::path::Path;
 
-use font_kit::{family_name::FamilyName, properties::Properties, source::Source};
+use draw::DrawState;
 use macroquad::prelude::*;
 
 use rvsdg_viewer::ViewerState;
 
-async fn load_font() -> macroquad::text::Font {
-    let source = font_kit::source::SystemSource::new();
+mod collide;
+mod draw;
+mod ui;
 
-    match source
-        .select_best_match(&[FamilyName::SansSerif], &Properties::new())
-        .expect("Failed to load *any* font")
-    {
-        font_kit::handle::Handle::Path { path, font_index } => {
-            load_ttf_font(path.to_str().unwrap())
-                .await
-                .expect(&format!("Failed to load font from {:?}", path))
-        }
-        font_kit::handle::Handle::Memory { bytes, font_index } => {
-            load_ttf_font_from_bytes(&bytes).expect("Failed to load font from bytes")
-        }
+fn window_conf() -> Conf {
+    Conf {
+        window_title: "RVSDG Viewer".to_owned(),
+        sample_count: 4,
+        window_resizable: true,
+        ..Default::default()
     }
 }
-
-#[macroquad::main("Text")]
+#[macroquad::main(window_conf)]
 async fn main() {
     //try to load the viewer stat
     let path = if let Some(p) = std::env::args().skip(1).next() {
@@ -38,89 +32,44 @@ async fn main() {
         panic!("File {:?} does not exist!", path);
     }
 
-    let state = ViewerState::read_from_file(&path);
+    let state = ViewerState::read_from_file(&path).expect("Could not load viewer-state from disk!");
+    let mut draw_state = DrawState::new().await;
 
-    let font = load_font().await;
-
-    let mut angle = 0.0;
+    let mut ui_state = ui::UiState {
+        selected_attrib: None,
+        hover_over: None,
+        timeline_value: 0.0,
+    };
 
     loop {
-        clear_background(BLACK);
+        draw_state.update_camera();
+        clear_background(Color::from_rgba(80, 80, 80, 255));
 
-        draw_text_ex("Custom font size:", 20.0, 20.0, TextParams::default());
-        let mut y = 20.0;
+        let selected_graph_index = ui_state.get_graph_index(state.states.len());
 
-        for font_size in (30..100).step_by(20) {
-            let text = "abcdef";
-            let params = TextParams {
-                font_size,
-                ..Default::default()
-            };
+        draw_state.draw_tree(&state.states[selected_graph_index].display, &ui_state);
 
-            y += font_size as f32;
-            draw_text_ex(text, 20.0, y, params);
+        let ignore_input = ui_state.draw(&state.states[selected_graph_index]);
+
+        //Update the hover / selection state.
+        if !ignore_input {
+            let pos = draw_state.get_relative_cursor_location();
+            if let Some(attr) =
+                collide::find_collision(&state.states[selected_graph_index].display, pos)
+            {
+                ui_state.hover_over = Some(attr.clone());
+
+                if is_mouse_button_pressed(MouseButton::Left) {
+                    ui_state.selected_attrib = Some(attr);
+                }
+            } else {
+                ui_state.hover_over = None;
+
+                if is_mouse_button_pressed(MouseButton::Left) {
+                    ui_state.selected_attrib = None;
+                }
+            }
         }
-
-        draw_text_ex("Dynamic font scale:", 20.0, 400.0, TextParams::default());
-        draw_text_ex(
-            "abcd",
-            20.0,
-            450.0,
-            TextParams {
-                font_size: 50,
-                font_scale: get_time().sin() as f32 / 2.0 + 1.0,
-                ..Default::default()
-            },
-        );
-
-        draw_text_ex("Custom font:", 400.0, 20.0, TextParams::default());
-        draw_text_ex(
-            "abcd",
-            400.0,
-            70.0,
-            TextParams {
-                font_size: 50,
-                font: Some(&font),
-                ..Default::default()
-            },
-        );
-
-        draw_text_ex(
-            "abcd",
-            400.0,
-            160.0,
-            TextParams {
-                font_size: 100,
-                font: Some(&font),
-                ..Default::default()
-            },
-        );
-
-        draw_text_ex(
-            "abcd",
-            screen_width() / 4.0 * 2.0,
-            screen_height() / 3.0 * 2.0,
-            TextParams {
-                font_size: 70,
-                font: Some(&font),
-                rotation: angle,
-                ..Default::default()
-            },
-        );
-
-        let center = get_text_center("abcd", Option::None, 70, 1.0, angle * 2.0);
-        draw_text_ex(
-            "abcd",
-            screen_width() / 4.0 * 3.0 - center.x,
-            screen_height() / 3.0 * 2.0 - center.y,
-            TextParams {
-                font_size: 70,
-                rotation: angle * 2.0,
-                ..Default::default()
-            },
-        );
-
-        angle -= 0.030;
 
         next_frame().await
     }

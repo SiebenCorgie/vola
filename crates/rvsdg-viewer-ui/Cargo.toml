@@ -7,7 +7,4 @@ edition = "2021"
 rvsdg-viewer = {path = "../rvsdg-viewer", features = ["viewer"]}
 macroquad.workspace = true
 font-kit = "0.13.0"
-
-
-[dev-dependencies]
 rvsdg = {path = "../rvsdg"}

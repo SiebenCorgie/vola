@@ -1,6 +1,7 @@
 #[path = "../../../examples/rvsdg-simple/src/nodes.rs"]
 mod nodes;
 pub use nodes::{LNode, MyNodes};
+use rvsdg::attrib::{AttribStore, FlagStore};
 
 #[path = "../../../examples/rvsdg-simple/src/ex_3a.rs"]
 mod ex_3a;
@@ -9,10 +10,27 @@ mod ex_3a;
 ///write that to disk and start the viewer for that state.
 fn main() {
     let graph = ex_3a::emit();
+    let mut tagging_data = AttribStore::new();
+    let mut flags = FlagStore::new();
+
+    let toplevel_region = graph.toplevel_region();
+    tagging_data.push_attrib(
+        &toplevel_region.into(),
+        "This is the Toplevel region!".to_string(),
+    );
+    tagging_data.push_attrib(
+        &toplevel_region.into(),
+        "And this is additional data.".to_string(),
+    );
+
+    flags.set(toplevel_region.into(), format!("True"));
+
     let mut viewer_state = rvsdg_viewer::ViewerState::new();
 
     viewer_state
         .new_state_builder("My Graph State :3", &graph)
+        .with_store("MyStringStore", &tagging_data)
+        .with_flags("SomeFlags", &flags)
         .build();
 
     //now write to disk and load the viewer
@@ -23,14 +41,16 @@ fn main() {
     //NOTE: you might want to configure this to a prebuild .exe or something in a real world scenarion.
     //      OR
     //      just write your viewer state and load the viewer ui afterwards _by hand_.
-    std::process::Command::new("cargo")
+    let spawned = std::process::Command::new("cargo")
         .arg("run")
         .arg("--bin")
         .arg("rvsdg-viewer-ui")
         .arg("--")
         .arg("myViewerState.bin")
-        .output()
+        .spawn()
         .expect("Failed to run viewer!");
 
-    println!("bye bye!");
+    if let Err(_e) = spawned.wait_with_output() {
+        println!("Viewer failed")
+    }
 }

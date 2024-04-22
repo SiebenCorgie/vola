@@ -200,7 +200,7 @@ impl RegionLayout {
                 .inports
                 .iter()
                 .chain(node.outports.iter())
-                .fold(0.0f32, |max, loc| max.max(loc.x));
+                .fold(0.0f32, |max, loc| max.max(loc.0.x));
 
             let ext = Vec2::new(
                 label_ext
@@ -219,7 +219,7 @@ impl RegionLayout {
             node.extent = ext;
             //update the inports location based on the extent
             for inp in node.inports.iter_mut() {
-                inp.y = node.extent.y;
+                inp.0.y = node.extent.y;
             }
         }
 
@@ -250,7 +250,7 @@ impl RegionLayout {
                 self.arg_ports
                     .iter()
                     .chain(self.res_ports.iter())
-                    .fold(0.0f32, |a, p| a.max(p.x + config.port_spacing as f32)),
+                    .fold(0.0f32, |a, p| a.max(p.0.x + config.port_spacing as f32)),
             ),
             offset_y.max(config.grid_empty_spacing as f32),
         );
@@ -259,7 +259,7 @@ impl RegionLayout {
     pub fn set_height(&mut self, height: f32, config: &LayoutConfig) {
         self.extent.y = height;
         for arg in &mut self.arg_ports {
-            arg.y = height - config.port_height as f32;
+            arg.0.y = height - config.port_height as f32;
         }
     }
 }

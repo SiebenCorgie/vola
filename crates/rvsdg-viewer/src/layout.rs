@@ -15,7 +15,13 @@
 use crate::{primitives::PrimTree, View};
 use ahash::{AHashMap, AHashSet};
 use glam::Vec2;
-use rvsdg::{edge::LangEdge, nodes::LangNode, region::RegionLocation, EdgeRef, NodeRef, Rvsdg};
+use rvsdg::{
+    attrib::AttribLocation,
+    edge::{InportLocation, LangEdge, OutportLocation},
+    nodes::LangNode,
+    region::RegionLocation,
+    EdgeRef, NodeRef, Rvsdg,
+};
 
 use self::initial::NodeGrid;
 
@@ -65,8 +71,8 @@ pub struct LayoutNode {
     location: Vec2,
     extent: Vec2,
     src: NodeRef,
-    inports: Vec<Vec2>,
-    outports: Vec<Vec2>,
+    inports: Vec<(Vec2, AttribLocation)>,
+    outports: Vec<(Vec2, AttribLocation)>,
     sub_regions: Vec<RegionLayout>,
 }
 
@@ -80,8 +86,8 @@ pub struct LayoutEdge {
 pub struct RegionLayout {
     //Source loc of the region
     src: RegionLocation,
-    arg_ports: Vec<Vec2>,
-    res_ports: Vec<Vec2>,
+    arg_ports: Vec<(Vec2, AttribLocation)>,
+    res_ports: Vec<(Vec2, AttribLocation)>,
     extent: Vec2,
     node_grid: Option<NodeGrid>,
     nodes: AHashMap<NodeRef, LayoutNode>,
@@ -149,14 +155,23 @@ impl RegionLayout {
                     Vec::with_capacity(0)
                 };
 
+                let inputtys = node.inport_types();
+                let outputtys = node.outport_types();
                 let inports = node
                     .inputs()
                     .iter()
                     .enumerate()
                     .map(|(idx, _p)| {
-                        Vec2::new(
-                            config.port_width as f32 + config.port_spacing as f32 * idx as f32,
-                            0.0,
+                        (
+                            Vec2::new(
+                                config.port_width as f32 + config.port_spacing as f32 * idx as f32,
+                                0.0,
+                            ),
+                            InportLocation {
+                                node: *nref,
+                                input: inputtys[idx],
+                            }
+                            .into(),
                         )
                     })
                     .collect();
@@ -165,9 +180,16 @@ impl RegionLayout {
                     .iter()
                     .enumerate()
                     .map(|(idx, _p)| {
-                        Vec2::new(
-                            config.port_width as f32 + config.port_spacing as f32 * idx as f32,
-                            -(config.port_height as f32),
+                        (
+                            Vec2::new(
+                                config.port_width as f32 + config.port_spacing as f32 * idx as f32,
+                                -(config.port_height as f32),
+                            ),
+                            OutportLocation {
+                                node: *nref,
+                                output: outputtys[idx],
+                            }
+                            .into(),
                         )
                     })
                     .collect();
@@ -197,6 +219,8 @@ impl RegionLayout {
             })
             .collect();
 
+        let argtys = rvsdg.node(region.node).argument_types(region.region_index);
+        let restys = rvsdg.node(region.node).result_types(region.region_index);
         let arg_ports = rvsdg
             .region(&region)
             .unwrap()
@@ -204,9 +228,16 @@ impl RegionLayout {
             .iter()
             .enumerate()
             .map(|(idx, _)| {
-                Vec2::new(
-                    config.port_width as f32 + config.port_spacing as f32 * idx as f32,
-                    0.0,
+                (
+                    Vec2::new(
+                        config.port_width as f32 + config.port_spacing as f32 * idx as f32,
+                        0.0,
+                    ),
+                    OutportLocation {
+                        node: region.node,
+                        output: argtys[idx],
+                    }
+                    .into(),
                 )
             })
             .collect();
@@ -218,9 +249,16 @@ impl RegionLayout {
             .iter()
             .enumerate()
             .map(|(idx, _)| {
-                Vec2::new(
-                    config.port_width as f32 + config.port_spacing as f32 * idx as f32,
-                    0.0,
+                (
+                    Vec2::new(
+                        config.port_width as f32 + config.port_spacing as f32 * idx as f32,
+                        0.0,
+                    ),
+                    InportLocation {
+                        node: region.node,
+                        input: restys[idx],
+                    }
+                    .into(),
                 )
             })
             .collect();

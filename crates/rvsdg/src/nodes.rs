@@ -364,7 +364,7 @@ impl<N: LangNode + 'static> Node<N> {
             NodeType::Lambda(g) => g.input_types(),
             NodeType::Apply(g) => {
                 let mut ins = SmallVec::new();
-                for i in 0..g.outputs.len() {
+                for i in 0..g.inputs.len() {
                     ins.push(InputType::Input(i));
                 }
                 ins

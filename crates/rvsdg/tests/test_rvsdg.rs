@@ -62,8 +62,8 @@ impl View for LNode {
             self.name.clone()
         }
     }
-    fn color(&self) -> rvsdg_viewer::macroquad::color::Color {
-        rvsdg_viewer::macroquad::color::Color::from_rgba(255, 240, 50, 255)
+    fn color(&self) -> rvsdg_viewer::Color {
+        rvsdg_viewer::Color::from_rgba(255, 240, 50, 255)
     }
 }
 

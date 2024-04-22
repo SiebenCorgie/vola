@@ -21,10 +21,13 @@ use smallvec::{smallvec, SmallVec};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct GraphState {
-    display: PrimTree,
-    name: String,
+    pub display: PrimTree,
+    pub name: String,
     ///Auxilary data of the graph safed in a way, that it is easyly accessible.
-    auxilary_data: AHashMap<AttribLocation, AHashMap<String, SmallVec<[String; 3]>>>,
+    ///
+    /// This basically safes a Set of _attributes_, keyed by the attribute's name for each
+    /// attrib location that has _any_ attribute associated.
+    pub auxilary_data: AHashMap<AttribLocation, AHashMap<String, SmallVec<[String; 3]>>>,
 }
 
 pub struct GraphStateBuilder<'a> {
@@ -50,18 +53,21 @@ impl<'a> GraphStateBuilder<'a> {
     }
 
     ///Adds the given _displayable_ flags to the currently build graph state
-    pub fn with_flags<T: ToString>(&mut self, name: &str, flags: &FlagStore<T>) {
+    pub fn with_flags<T: ToString>(mut self, name: &str, flags: &FlagStore<T>) -> Self {
         for (loc, attr) in flags.flags.iter() {
             self.push_str_loc(loc, name, attr.to_string());
         }
+        self
     }
 
-    pub fn with_store<T: ToString>(&mut self, name: &str, store: &AttribStore<T>) {
+    pub fn with_store<T: ToString>(mut self, name: &str, store: &AttribStore<T>) -> Self {
         for (loc, attribs) in store.attribs.iter() {
             for attrib in attribs {
                 self.push_str_loc(loc, name, attrib.to_string());
             }
         }
+
+        self
     }
 
     pub fn build(self) {
@@ -73,7 +79,7 @@ impl<'a> GraphStateBuilder<'a> {
 ///able to be serialized and deserialized.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ViewerState {
-    states: Vec<GraphState>,
+    pub states: Vec<GraphState>,
 }
 
 impl ViewerState {
