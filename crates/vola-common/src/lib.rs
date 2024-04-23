@@ -7,6 +7,8 @@
  */
 //! Common diagnosis helper. This is mostly Span of nodes, as well their reporting.
 
+use std::fmt::Display;
+
 use miette::{SourceOffset, SourceSpan};
 pub use reporter::ErrorReporter;
 use serde::{Deserialize, Serialize};
@@ -73,6 +75,16 @@ impl Span {
         } else {
             Some(&self.file)
         }
+    }
+}
+
+impl Display for Span {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{} {}:{} .. {}:{}",
+            self.file, self.from.0, self.from.1, self.to.0, self.to.1
+        )
     }
 }
 

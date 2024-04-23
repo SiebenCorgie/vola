@@ -113,6 +113,7 @@ impl Sandbox for Ui {
             }
             Message::TimelineSelect(s) => {
                 self.selected_state = s;
+                self.graph_canvas.reques_redraw();
             }
             _ => println!("Au bagge!"),
         }
@@ -165,12 +166,14 @@ impl Sandbox for Ui {
                 .size(20),
             row![
                 column![
-                    self.graph_canvas.view(&self.viewer.states[0]).map(|msg| {
-                        match msg {
-                            GraphCanvasMessage::Redraw => Message::ResetCanvas,
-                            GraphCanvasMessage::Select(s) => Message::Select(s),
-                        }
-                    }),
+                    self.graph_canvas
+                        .view(&self.viewer.states[self.selected_state])
+                        .map(|msg| {
+                            match msg {
+                                GraphCanvasMessage::Redraw => Message::ResetCanvas,
+                                GraphCanvasMessage::Select(s) => Message::Select(s),
+                            }
+                        }),
                     column![text("Timeline"), timeline_slider]
                 ],
                 sidepanel.padding(20.0).max_width(400.0)

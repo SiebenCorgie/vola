@@ -83,6 +83,9 @@ pub struct Optimizer {
     ///do not have knowledge of the original AST/Source, but still need to emit human
     /// readable names.
     pub names: FlagStore<String>,
+
+    #[cfg(feature = "viewer")]
+    pub viewer_state: rvsdg_viewer::ViewerState,
 }
 
 impl Optimizer {
@@ -97,6 +100,8 @@ impl Optimizer {
             typemap: FlagStore::new(),
             span_tags: FlagStore::new(),
             names: FlagStore::new(),
+            #[cfg(feature = "viewer")]
+            viewer_state: rvsdg_viewer::ViewerState::new(),
         }
     }
 
@@ -186,6 +191,7 @@ impl Optimizer {
 
         if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("DUMP_AST_ADD").is_ok() {
             self.dump_svg("ast_add.svg", false);
+            self.push_debug_state("AST add");
         }
 
         if error_counter > 0 {
@@ -203,5 +209,19 @@ impl Optimizer {
             ..Default::default()
         };
         rvsdg_viewer::into_svg_with_config(&self.graph, name, &conf)
+    }
+
+    ///Pushes the current graph state under the given name.
+    pub fn push_debug_state(&mut self, name: &str) {
+        self.viewer_state
+            .new_state_builder(name, &self.graph)
+            .with_flags("Type", &self.typemap)
+            .with_flags("Span", &self.span_tags)
+            .with_flags("Name", &self.names)
+            .build();
+    }
+
+    pub fn dump_depug_state(&self, path: &dyn AsRef<std::path::Path>) {
+        self.viewer_state.write_to_file(path)
     }
 }

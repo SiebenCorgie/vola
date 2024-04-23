@@ -113,25 +113,3 @@ export myField(p: vec3, translation: vec3, some_lerp: s){
     };
     (all_field.SDF3D(p), all_field.Color(p))
 }
-
-
-operation MultiTrans();
-concept Whalla: vec3 -> s;
-
-impl Box for Whalla(p){
-    p.x
-}
-
-impl MultiTrans<a> for SDF3D(p){
-    let x = eval a.Color(p);
-    let y = eval a.Whalla(p);
-    y + x.x
-}
-
-export testField(p: vec3){
-    csg f = MultiTrans(){
-        Box([1.0, 1.0, 1.0])
-    };
-
-    f.SDF3D(p)
-}

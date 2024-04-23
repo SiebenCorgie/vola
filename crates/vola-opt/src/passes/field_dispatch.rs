@@ -246,6 +246,7 @@ impl Optimizer {
 
         if env::var("VOLA_DUMP_ALL").is_ok() || env::var("DUMP_BEFORE_SPECIALIZE").is_ok() {
             self.dump_svg("before_specialize.svg", true);
+            self.push_debug_state("before specialize");
         }
 
         //NOTE: the first NodeRef of the pair's is invalid at this point

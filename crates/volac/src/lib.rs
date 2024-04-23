@@ -131,6 +131,14 @@ impl Pipeline {
         //do some _post_everyting_ cleanup
         opt.cleanup_export_lmd();
 
+        if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("DUMP_FINAL_OPT").is_ok() {
+            opt.push_debug_state("Final Optimizer state");
+        }
+
+        if std::env::var("VOLA_DUMP_VIEWER").is_ok() {
+            opt.dump_depug_state(&"optstate.bin");
+        }
+
         //finally use the expected backend
         match self.target_format {
             Backend::Spirv => {
