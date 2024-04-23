@@ -5,6 +5,5 @@ edition = "2021"
 
 [dependencies]
 rvsdg-viewer = {path = "../rvsdg-viewer", features = ["viewer"]}
-macroquad.workspace = true
-font-kit = "0.13.0"
 rvsdg = {path = "../rvsdg"}
+iced = {version = "0.12", features = ["canvas", "debug"]}

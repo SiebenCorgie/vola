@@ -1,6 +1,8 @@
-use macroquad::math::Vec2;
 use rvsdg::attrib::AttribLocation;
-use rvsdg_viewer::primitives::{Prim, PrimTree};
+use rvsdg_viewer::{
+    glam::Vec2,
+    primitives::{Prim, PrimTree},
+};
 
 const COLLISION_LINE_WIDTH: f32 = 2.0;
 ///Queries the `tree`, reutrns an ID of `AttribLocation`, if any is found at `at` relative to the

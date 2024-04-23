@@ -1,7 +1,8 @@
-use font_kit::{family_name::FamilyName, properties::Properties};
-use macroquad::prelude::*;
 use rvsdg::attrib::AttribLocation;
-use rvsdg_viewer::primitives::{Prim, PrimTree};
+use rvsdg_viewer::{
+    glam::Vec2,
+    primitives::{Prim, PrimTree},
+};
 
 use crate::ui::UiState;
 
@@ -10,42 +11,15 @@ use crate::ui::UiState;
 /// It mostly selects a node that is used as _origin_ to draw and allows
 /// zooming _out_ of this node till the root level
 pub struct DrawState {
-    font: Font,
     zoom: f32,
-    cam: Camera2D,
     offset: Vec2,
     is_dragging: bool,
 }
 
-async fn load_font() -> macroquad::text::Font {
-    let source = font_kit::source::SystemSource::new();
-
-    match source
-        .select_best_match(&[FamilyName::SansSerif], &Properties::new())
-        .expect("Failed to load *any* font")
-    {
-        font_kit::handle::Handle::Path {
-            path,
-            font_index: _,
-        } => load_ttf_font(path.to_str().unwrap())
-            .await
-            .expect(&format!("Failed to load font from {:?}", path)),
-        font_kit::handle::Handle::Memory {
-            bytes,
-            font_index: _,
-        } => load_ttf_font_from_bytes(&bytes).expect("Failed to load font from bytes"),
-    }
-}
-
 impl DrawState {
-    pub async fn new() -> Self {
+    pub fn new() -> Self {
         DrawState {
             zoom: 0.001,
-            font: load_font().await,
-            cam: Camera2D {
-                rotation: 0.0,
-                ..Default::default()
-            },
             offset: Vec2::ZERO,
             is_dragging: false,
         }

@@ -17,6 +17,7 @@
 pub mod layout;
 pub mod primitives;
 
+pub use glam;
 use layout::{Layout, LayoutConfig};
 use primitives::PrimTree;
 ///The color of a node or edge.
