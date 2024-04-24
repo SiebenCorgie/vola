@@ -1,6 +1,6 @@
 use iced::{
     event,
-    mouse::{self, Cursor},
+    mouse::{self},
     widget::{
         canvas::{self, Fill, Frame, Geometry, LineDash, Path, Stroke, Text},
         Canvas,
@@ -174,9 +174,9 @@ impl<'a> canvas::Program<GraphCanvasMessage> for GraphDrawer<'a> {
         &self,
         state: &Self::State,
         renderer: &Renderer,
-        theme: &Theme,
+        _theme: &Theme,
         bounds: iced::Rectangle,
-        cursor: mouse::Cursor,
+        _cursor: mouse::Cursor,
     ) -> Vec<Geometry> {
         let content = self
             .gs

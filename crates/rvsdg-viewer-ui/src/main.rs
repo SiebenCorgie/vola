@@ -1,45 +1,5 @@
 use graph_canvas::{GraphCanvas, GraphCanvasMessage};
-use iced::widget::canvas::path::lyon_path::geom::euclid::num::Round;
-/*
-use core::panic;
-use std::path::Path;
-
-use draw::DrawState;
-
-use rvsdg_viewer::ViewerState;
-
-mod collide;
-mod draw;
-mod ui;
-
-
-fn main() {
-    //try to load the viewer stat
-    let path = if let Some(p) = std::env::args().skip(1).next() {
-        p
-    } else {
-        panic!("expected file argument!");
-    };
-
-    let path = Path::new(&path);
-    if !path.exists() {
-        panic!("File {:?} does not exist!", path);
-    }
-
-    let state = ViewerState::read_from_file(&path).expect("Could not load viewer-state from disk!");
-    let mut draw_state = DrawState::new();
-
-    let mut ui_state = ui::UiState {
-        selected_attrib: None,
-        hover_over: None,
-        timeline_value: 0.0,
-    };
-}
-*/
-use iced::widget::{
-    button, column, container, row, scrollable, slider, text, vertical_space, Column, Rule,
-    Scrollable,
-};
+use iced::widget::{column, container, row, slider, text, Column, Rule, Scrollable, Toggler};
 use iced::{Alignment, Element, Length, Sandbox, Settings, Theme};
 use rvsdg::attrib::AttribLocation;
 use rvsdg_viewer::ViewerState;
@@ -60,6 +20,7 @@ struct Ui {
     viewer: ViewerState,
     selected_state: usize,
     graph_canvas: GraphCanvas,
+    is_dark: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -67,6 +28,8 @@ pub enum Message {
     Select(Option<AttribLocation>),
     TimelineSelect(usize),
     ResetCanvas,
+    ToggleTheme(bool),
+
     Dummy,
 }
 
@@ -95,6 +58,15 @@ impl Sandbox for Ui {
             viewer,
             selected_state: 0,
             graph_canvas: GraphCanvas::new(),
+            is_dark: false,
+        }
+    }
+
+    fn theme(&self) -> Theme {
+        if self.is_dark {
+            Theme::SolarizedDark
+        } else {
+            Theme::SolarizedLight
         }
     }
 
@@ -112,6 +84,7 @@ impl Sandbox for Ui {
                 self.selected_state = s;
                 self.graph_canvas.reques_redraw();
             }
+            Message::ToggleTheme(pl) => self.is_dark = pl,
             _ => println!("Au bagge!"),
         }
     }
@@ -163,7 +136,16 @@ impl Sandbox for Ui {
                 .width(Length::Shrink)
                 .size(20),
             Rule::horizontal(2.0),
-            column![text("Timeline"), timeline_slider],
+            column![
+                text("Timeline"),
+                timeline_slider,
+                row![Toggler::new(
+                    "Toggle dark mode".to_owned(),
+                    self.is_dark,
+                    |state| { Message::ToggleTheme(state) }
+                ),],
+            ]
+            .spacing(10.0),
             Rule::horizontal(2.0),
             row![
                 sidepanel.padding(20.0).width(350.0),

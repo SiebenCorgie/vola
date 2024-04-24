@@ -245,7 +245,7 @@ impl Optimizer {
             .remove_unused_context_variables(export_fn_region.node);
 
         if env::var("VOLA_DUMP_ALL").is_ok() || env::var("DUMP_BEFORE_SPECIALIZE").is_ok() {
-            self.dump_svg("before_specialize.svg", true);
+            //self.dump_svg("before_specialize.svg", true);
             self.push_debug_state("before specialize");
         }
 
@@ -421,7 +421,8 @@ impl Optimizer {
         //NOTE: This dump is _specific_, but good if you need to know if some CSG-Tree inline failes
         //      unexpectedly.
         if env::var("VOLA_DUMP_ALL").is_ok() || env::var("DUMP_AFTER_INLINE_CALL_TREE").is_ok() {
-            self.dump_svg(&format!("after_inline_call_tree_{}.svg", region.node), true);
+            //self.dump_svg(&format!("after_inline_call_tree_{}.svg", region.node), true);
+            self.push_debug_state(&format!("post inline call-tree on {}", region.node));
         }
 
         let access_field_node_port = self
@@ -463,10 +464,11 @@ impl Optimizer {
             .unwrap();
 
         if env::var("VOLA_DUMP_ALL").is_ok() || env::var("DUMP_AFTER_ACCESSNODE_REWRITE").is_ok() {
-            self.dump_svg(
+            /*self.dump_svg(
                 &format!("after_access_node_rewrite_{}.svg", region.node),
                 true,
-            );
+            );*/
+            self.push_debug_state(&format!("after access-node rewrite on {}", region.node));
         }
 
         //NOTE we seed the specialization with the entry_csg node, and the TreeAccess node we start at.
@@ -484,13 +486,17 @@ impl Optimizer {
         dispatch_node: NodeRef,
     ) -> Result<NodeRef, OptError> {
         if env::var("VOLA_DUMP_ALL").is_ok() || env::var("DUMP_DISPATCH").is_ok() {
-            self.dump_svg(
+            /*self.dump_svg(
                 &format!(
                     "dispatch_reg_{:?}_{dispatch_node:?}.svg",
                     ctx.spec_region.node
                 ),
                 true,
-            );
+            );*/
+            self.push_debug_state(&format!(
+                "dispatch region {}[{}] on {}",
+                ctx.spec_region.node, ctx.spec_region.region_index, dispatch_node
+            ));
         }
 
         let region = self

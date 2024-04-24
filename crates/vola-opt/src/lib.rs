@@ -190,7 +190,7 @@ impl Optimizer {
         );
 
         if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("DUMP_AST_ADD").is_ok() {
-            self.dump_svg("ast_add.svg", false);
+            //self.dump_svg("ast_add.svg", false);
             self.push_debug_state("AST add");
         }
 
@@ -212,15 +212,25 @@ impl Optimizer {
     }
 
     ///Pushes the current graph state under the given name.
+    #[cfg(feature = "viewer")]
     pub fn push_debug_state(&mut self, name: &str) {
+        //NOTE propbably do not rebuild this each time?
+        let mut typemap = self.typemap.clone();
+        for edge in self.graph.edges() {
+            if let Some(ty) = self.graph.edge(edge).ty.get_type() {
+                typemap.set(rvsdg::attrib::AttribLocation::Edge(edge).into(), ty.clone());
+            }
+        }
+
         self.viewer_state
             .new_state_builder(name, &self.graph)
-            .with_flags("Type", &self.typemap)
+            .with_flags("Type", &typemap)
             .with_flags("Span", &self.span_tags)
             .with_flags("Name", &self.names)
             .build();
     }
 
+    #[cfg(feature = "viewer")]
     pub fn dump_depug_state(&self, path: &dyn AsRef<std::path::Path>) {
         self.viewer_state.write_to_file(path)
     }
