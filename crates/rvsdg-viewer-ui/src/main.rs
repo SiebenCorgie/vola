@@ -37,7 +37,8 @@ fn main() {
 }
 */
 use iced::widget::{
-    button, column, container, row, scrollable, slider, text, vertical_space, Column, Scrollable,
+    button, column, container, row, scrollable, slider, text, vertical_space, Column, Rule,
+    Scrollable,
 };
 use iced::{Alignment, Element, Length, Sandbox, Settings, Theme};
 use rvsdg::attrib::AttribLocation;
@@ -71,10 +72,6 @@ pub enum Message {
 
 impl Sandbox for Ui {
     type Message = Message;
-
-    fn theme(&self) -> Theme {
-        Theme::GruvboxDark
-    }
 
     fn new() -> Self {
         //read states from command line
@@ -137,18 +134,19 @@ impl Sandbox for Ui {
                 for (pname, props) in properties {
                     items = items.push(
                         container(
-                            row![text(pname.clone()), {
+                            row![text(pname.clone()).size(20.0), {
                                 let mut plist = Column::new();
                                 for p in props {
                                     plist = plist.push(text(p.clone()));
                                 }
-
                                 plist.padding(2.5)
                             }]
                             .spacing(5.0),
                         )
                         .padding(10.0),
                     );
+
+                    items = items.push(Rule::horizontal(1.0));
                 }
 
                 Scrollable::new(items).into()
@@ -158,13 +156,18 @@ impl Sandbox for Ui {
         } else {
             text("Nothing selected!").into()
         };
-        let sidepanel = column![text("Properties").size(20.0), properties];
+        let sidepanel = column![text("Properties").size(30.0), properties];
 
         column![
             text(&self.viewer.states[self.selected_state].name)
                 .width(Length::Shrink)
                 .size(20),
+            Rule::horizontal(2.0),
+            column![text("Timeline"), timeline_slider],
+            Rule::horizontal(2.0),
             row![
+                sidepanel.padding(20.0).width(350.0),
+                Rule::vertical(2.0),
                 column![
                     self.graph_canvas
                         .view(&self.viewer.states[self.selected_state])
@@ -174,9 +177,8 @@ impl Sandbox for Ui {
                                 GraphCanvasMessage::Select(s) => Message::Select(s),
                             }
                         }),
-                    column![text("Timeline"), timeline_slider]
+                    Rule::horizontal(2.0),
                 ],
-                sidepanel.padding(20.0).max_width(400.0)
             ]
         ]
         .padding(20)

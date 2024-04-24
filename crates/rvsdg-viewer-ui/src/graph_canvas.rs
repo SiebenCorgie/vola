@@ -102,15 +102,28 @@ impl<'a> canvas::Program<GraphCanvasMessage> for GraphDrawer<'a> {
         match event {
             canvas::Event::Mouse(mouse::Event::WheelScrolled { delta }) => {
                 let delta = match delta {
-                    mouse::ScrollDelta::Lines { x, y } => y,
-                    mouse::ScrollDelta::Pixels { x, y } => y,
+                    mouse::ScrollDelta::Lines { x: _, y } => y,
+                    mouse::ScrollDelta::Pixels { x: _, y } => y,
                 };
 
-                if delta < 0.0 {
-                    state.graph_zoom *= 0.5;
+                //calculate the offset in a way, that we don't zoom in/out of the
+                //top left corner, but the center.
+
+                let new_graph_zoom = if delta < 0.0 {
+                    state.graph_zoom * 0.5
                 } else if delta > 0.0 {
-                    state.graph_zoom += 2.0;
-                }
+                    state.graph_zoom * 2.0
+                } else {
+                    state.graph_zoom
+                };
+
+                let bound_difference: Vector = (Vector::from(bounds.size())
+                    * (1.0 / state.graph_zoom))
+                    - (Vector::from(bounds.size()) * (1.0 / new_graph_zoom));
+                //offset _half_ the bound difference
+
+                state.graph_offset = state.graph_offset - (bound_difference * 0.5);
+                state.graph_zoom = new_graph_zoom;
                 (event::Status::Captured, Some(GraphCanvasMessage::Redraw))
             }
             canvas::Event::Mouse(mouse::Event::CursorMoved { position }) => {
