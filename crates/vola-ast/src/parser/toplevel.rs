@@ -13,7 +13,7 @@ use crate::{
     common::{Ident, TypedIdent},
     csg::{AccessDesc, CSGBinding, CSGConcept, CSGNodeDef, CSGOp, CSGStmt, ExportFn, FieldDef},
     error::ParserError,
-    AstEntry,
+    AstEntry, Module,
 };
 
 use super::{FromTreeSitter, ParserCtx};
@@ -44,6 +44,10 @@ impl FromTreeSitter for AstEntry {
                 Ok(AstEntry::Concept(def))
             }
             "impl_block" => Ok(AstEntry::ImplBlock(ImplBlock::parse(ctx, dta, node)?)),
+            "module" => {
+                let module = Module::parse(ctx, dta, node)?;
+                Ok(AstEntry::Module(module))
+            }
             _ => {
                 let err = ParserError::UnknownAstNode {
                     kind: node.kind().to_owned(),

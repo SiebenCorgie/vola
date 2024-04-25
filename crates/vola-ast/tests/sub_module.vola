@@ -1,0 +1,12 @@
+
+concept Con: vec3 -> s;
+
+entity Prim();
+
+impl Prim for Con(t){
+	t.x
+}
+
+define some_sub_field(){
+	Prim()
+}

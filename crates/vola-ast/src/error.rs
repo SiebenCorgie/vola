@@ -7,6 +7,7 @@
  */
 use std::{
     num::{ParseFloatError, ParseIntError},
+    path::PathBuf,
     str::Utf8Error,
 };
 
@@ -180,4 +181,25 @@ impl ParserError {
             Ok(())
         }
     }
+}
+
+impl Reportable for AstError {}
+
+///Errors that happen while working on the AST.
+#[derive(Debug, Error, Clone, Diagnostic)]
+pub enum AstError {
+    #[error("Failed to parse file {path:?}: {err}")]
+    ParsingError { path: PathBuf, err: ParserError },
+
+    #[error("Not parsing from file. Therfore no sub-module can be used.")]
+    NoRootFile {
+        #[label("Can't use module when parsing from data")]
+        span: SourceSpan,
+    },
+    #[error("Module file {path:?} does not exist")]
+    NoModuleFile {
+        path: PathBuf,
+        #[label("Can't import this module")]
+        span: SourceSpan,
+    },
 }

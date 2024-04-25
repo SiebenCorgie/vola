@@ -1,0 +1,8 @@
+
+module self_cyclic;
+
+export teddys_test(){
+	csg t = Test();
+
+	t.MyConcept()
+}

@@ -185,6 +185,9 @@ impl Pipeline {
             println!("there where {} errors while parsing data!", err.len());
             err.remove(0)
         })?;
+        if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("VOLA_DUMP_AST").is_ok() {
+            vola_ast::dot::ast_to_svg(&ast, "ast.svg");
+        }
         self.execute_on_ast(ast)
     }
 
@@ -194,6 +197,11 @@ impl Pipeline {
             println!("There where {} errors while parsing {file:?}", err.len());
             err.remove(0)
         })?;
+
+        if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("VOLA_DUMP_AST").is_ok() {
+            vola_ast::dot::ast_to_svg(&ast, "ast.svg");
+        }
+
         self.execute_on_ast(ast)
     }
 }

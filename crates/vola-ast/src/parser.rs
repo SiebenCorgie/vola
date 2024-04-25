@@ -97,7 +97,7 @@ fn parser() -> Parser {
     let mut parser = Parser::new();
     parser
         .set_language(tree_sitter_vola::language())
-        .expect("Failed to load treesitter minisdf");
+        .expect("Failed to load tree-sitter-vola");
     parser
 }
 

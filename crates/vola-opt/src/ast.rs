@@ -34,6 +34,11 @@ impl Optimizer {
         match tlnode.entry {
             //We ignore those atm
             AstEntry::Comment(_) => Ok(None),
+            AstEntry::Module(m) => {
+                let err = OptError::AnySpanned { span: m.span.clone().into(), text: "Encountered \"module\" while transforming AST to RVSDG. Modules should be resolved beforehand.".to_owned(), span_text: "This module was not resolved".to_owned() };
+                report(err.clone(), m.span.get_file());
+                Err(err)
+            }
             AstEntry::Concept(csgcon) => {
                 if let Some(existing_concept) = self.concepts.get(&csgcon.name.0) {
                     let err = OptError::AnySpannedWithSource {
