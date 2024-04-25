@@ -24,6 +24,8 @@
 use ahash::AHashSet;
 use graph::{BackendEdge, BackendNode};
 use rvsdg::{attrib::FlagStore, Rvsdg};
+#[cfg(feature = "viewer")]
+use rvsdg_viewer::ViewerState;
 use spv::SpvType;
 use vola_common::Span;
 use vola_opt::Optimizer;
@@ -80,6 +82,9 @@ pub struct SpirvBackend {
     ///attribute later on.
     typemap: FlagStore<SpvType>,
     config: SpirvConfig,
+
+    #[cfg(feature = "viewer")]
+    viewer: ViewerState,
 }
 
 impl SpirvBackend {
@@ -90,6 +95,8 @@ impl SpirvBackend {
             spans: FlagStore::new(),
             typemap: FlagStore::new(),
             config,
+            #[cfg(feature = "viewer")]
+            viewer: ViewerState::new(),
         }
     }
 
@@ -115,5 +122,26 @@ impl SpirvBackend {
             ..Default::default()
         };
         rvsdg_viewer::into_svg_with_config(&self.graph, name, &conf)
+    }
+
+    #[cfg(feature = "viewer")]
+    pub fn push_debug_state(&mut self, name: &str) {
+        let mut local_typemap = self.typemap.clone();
+        for edg in self.graph.edges() {
+            if let Some(ty) = self.graph.edge(edg).ty.get_type() {
+                local_typemap.set(edg.into(), ty.clone());
+            }
+        }
+
+        self.viewer
+            .new_state_builder(name, &self.graph)
+            .with_flags("Name", &self.idents)
+            .with_flags("Span", &self.spans)
+            .with_flags("Type", &local_typemap)
+            .build();
+    }
+    #[cfg(feature = "viewer")]
+    pub fn dump_depug_state(&self, path: &dyn AsRef<std::path::Path>) {
+        self.viewer.write_to_file(path)
     }
 }

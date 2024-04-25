@@ -471,4 +471,13 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
 
         Ok(edge)
     }
+
+    ///All references to all currently valid edges.
+    pub fn edges(&self) -> slotmap::basic::Keys<EdgeRef, Edge<E>> {
+        self.edges.keys()
+    }
+
+    pub fn nodes(&self) -> slotmap::basic::Keys<NodeRef, Node<N>> {
+        self.nodes.keys()
+    }
 }

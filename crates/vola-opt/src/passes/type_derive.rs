@@ -205,7 +205,8 @@ impl Optimizer {
         }
 
         if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("DUMP_TYPE_DERIVE").is_ok() {
-            self.dump_svg("post_type_derive.svg", true);
+            //self.dump_svg("post_type_derive.svg", true);
+            self.push_debug_state("post type derive");
         }
 
         if error_count > 0 {

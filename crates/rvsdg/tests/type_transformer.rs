@@ -96,7 +96,7 @@ impl View for TestNode {
     fn name(&self) -> String {
         format!("Into({:?})", self.inner)
     }
-    fn color(&self) -> rvsdg_viewer::macroquad::color::Color {
+    fn color(&self) -> rvsdg_viewer::Color {
         rvsdg_viewer::Color::from_rgba(200, 180, 50, 255)
     }
 }

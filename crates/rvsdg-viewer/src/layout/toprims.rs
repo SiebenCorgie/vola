@@ -1,8 +1,7 @@
-use macroquad::{color::Color, math::Vec2};
 use rvsdg::{edge::LangEdge, nodes::LangNode};
 
 use crate::{
-    primitives::{Path, Point, Prim, PrimTree, Rect, Text},
+    primitives::{Color, Path, Point, Prim, PrimTree, Rect, Text},
     Stroke, View,
 };
 
@@ -112,10 +111,10 @@ impl<'a, N: LangNode + View + 'static, E: LangEdge + View + 'static> Layout<'a, 
         //Now add the ports to the sub regions
         for port in node.inports.iter().chain(node.outports.iter()) {
             pt_wrap.children.push(PrimTree {
-                id: node.src.into(),
+                id: port.1.clone(),
                 prim: Prim::Box(Rect {
-                    from: *port,
-                    to: *port + Vec2::new(config.port_width as f32, config.port_height as f32),
+                    from: port.0,
+                    to: port.0 + Point::new(config.port_width as f32, config.port_height as f32),
                     color: Color::from_rgba(0, 0, 0, 255),
                 }),
                 children: Vec::with_capacity(0),
@@ -147,13 +146,13 @@ impl<'a, N: LangNode + View + 'static, E: LangEdge + View + 'static> Layout<'a, 
         }
 
         //add ports to tree
-        let port_ext = Vec2::new(config.port_width as f32, config.port_height as f32);
+        let port_ext = Point::new(config.port_width as f32, config.port_height as f32);
         for port in reg.arg_ports.iter().chain(reg.res_ports.iter()) {
             tree_node.children.push(PrimTree {
-                id: reg.src.into(),
+                id: port.1.clone(),
                 prim: Prim::Box(Rect {
-                    from: *port,
-                    to: *port + port_ext,
+                    from: port.0,
+                    to: port.0 + port_ext,
                     color: Color::from_rgba(0, 0, 0, 255),
                 }),
                 children: Vec::with_capacity(0),

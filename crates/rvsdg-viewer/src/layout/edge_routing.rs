@@ -1,5 +1,5 @@
 use ahash::AHashMap;
-use macroquad::math::Vec2;
+use glam::Vec2;
 use priority_queue::DoublePriorityQueue;
 use rvsdg::{
     edge::{InportLocation, LangEdge, OutportLocation},
@@ -486,7 +486,7 @@ impl RegionLayout {
                 .enumerate()
             {
                 if arg.edges.contains(&edge) {
-                    return Some(self.arg_ports[idx]);
+                    return Some(self.arg_ports[idx].0);
                 }
             }
             panic!("Edge {edge:?} of type {port:?} was not contained in arguments!");
@@ -496,7 +496,7 @@ impl RegionLayout {
             if let Some(node) = self.nodes.get(&port.node) {
                 for (idx, outport) in rvsdg.node(port.node).outputs().iter().enumerate() {
                     if outport.edges.contains(&edge) {
-                        return Some(node.outports[idx] + node.location);
+                        return Some(node.outports[idx].0 + node.location);
                     }
                 }
             }
@@ -517,7 +517,7 @@ impl RegionLayout {
             //Similarly to below, search for the edge in all result ports
             for (idx, res) in rvsdg.region(&self.src).unwrap().results.iter().enumerate() {
                 if res.edge == Some(edge) {
-                    return Some(self.res_ports[idx]);
+                    return Some(self.res_ports[idx].0);
                 }
             }
             panic!("Edge was not contained in results!");
@@ -527,7 +527,7 @@ impl RegionLayout {
             if let Some(node) = self.nodes.get(&port.node) {
                 for (idx, inports) in rvsdg.node(port.node).inputs().iter().enumerate() {
                     if inports.edge == Some(edge) {
-                        return Some(node.inports[idx] + node.location);
+                        return Some(node.inports[idx].0 + node.location);
                     }
                 }
             }

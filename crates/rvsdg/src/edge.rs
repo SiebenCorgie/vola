@@ -1,6 +1,7 @@
 use crate::NodeRef;
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum InputType {
     ///Any input to the node. Could also be a exit variable etc.
     Input(usize),
@@ -82,12 +83,14 @@ impl InputType {
 }
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct InportLocation {
     pub node: NodeRef,
     pub input: InputType,
 }
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum OutputType {
     ///Any output of the node. Could be a lambda definition, or a exit-variable output.
     Output(usize),
@@ -168,6 +171,7 @@ impl OutputType {
 }
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct OutportLocation {
     pub node: NodeRef,
     pub output: OutputType,

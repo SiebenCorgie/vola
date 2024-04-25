@@ -9,6 +9,8 @@
 //! Defines the SPIR-V dialect nodes for the backend. We use the [rspirv crate's](https://docs.rs/rspirv/latest/rspirv/grammar) grammar specification to
 //! work with spir-v ops in the graph.
 
+use std::fmt::Display;
+
 use ahash::AHashMap;
 use rspirv::{dr::{Instruction, Operand}, grammar::{LogicalOperand, OperandKind}, spirv::Word};
 use rvsdg::smallvec::{smallvec, SmallVec};
@@ -364,6 +366,19 @@ pub enum ArithBaseTy {
     Float,
 }
 
+impl Display for ArithBaseTy{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self{
+            Self::Integer { signed } => if *signed{
+                write!(f, "Int")
+            }else{
+                write!(f, "Uint")
+            },
+            Self::Float => write!(f, "Float")
+        }
+    }
+}
+
 impl ArithBaseTy {
     #[allow(unused)]
     fn is_of_typestring(&self, string: &str) -> bool {
@@ -382,6 +397,12 @@ pub struct ArithTy {
     pub resolution: u32,
 }
 
+impl Display for ArithTy{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}<{} @ {}>", self.shape, self.base, self.resolution)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum TyShape {
     Scalar,
@@ -397,6 +418,17 @@ impl TyShape {
             Self::Vector { width } => *width,
             Self::Matrix { width, height } => *width * *height,
             Self::Tensor { dim } => dim.iter().fold(1u32, |a, b| a * *b),
+        }
+    }
+}
+
+impl Display for TyShape{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self{
+             TyShape::Scalar => write!(f, "Scalar"),
+             TyShape::Vector { width } => write!(f, "Vec{width}"),
+             TyShape::Matrix { width, height } => write!(f, "Mat{width}x{height}"),
+             TyShape::Tensor { dim } => write!(f, "Tensor[{dim:?}]")
         }
     }
 }
@@ -523,6 +555,18 @@ impl TryFrom<vola_opt::common::Ty> for SpvType {
         };
 
         Ok(res)
+    }
+}
+
+impl Display for SpvType{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self{
+            SpvType::Void => write!(f, "Void"),
+            SpvType::Undefined => write!(f, "Undefined"),
+            SpvType::State => write!(f, "State"),
+            SpvType::Arith(a) => write!(f, "{a}"),
+            SpvType::RuntimeArray(a) => write!(f, "RA<{a}>")
+        }
     }
 }
 

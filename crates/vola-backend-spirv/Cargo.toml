@@ -5,14 +5,15 @@ edition = "2021"
 license = "MPL-2.0"
 
 [features]
-default = ["log"]
+default = ["log", "viewer"]
 log = ["dep:log"]
+viewer = ["rvsdg-viewer"]
 
 [dependencies]
 vola-opt = {path = "../vola-opt"}
 vola-common = {path = "../vola-common"}
 rvsdg = {path = "../rvsdg"}
-rvsdg-viewer = {path = "../rvsdg-viewer"}
+rvsdg-viewer = {path = "../rvsdg-viewer", optional = true}
 rspirv.workspace = true
 ahash.workspace = true
 log = {workspace = true, optional = true}

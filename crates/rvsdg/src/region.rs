@@ -112,6 +112,7 @@ impl Default for Region {
 
 ///Specifies the location of a certain `node`'s `region_index`-th region.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct RegionLocation {
     pub node: NodeRef,
     pub region_index: usize,

@@ -131,6 +131,14 @@ impl Pipeline {
         //do some _post_everyting_ cleanup
         opt.cleanup_export_lmd();
 
+        if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("DUMP_FINAL_OPT").is_ok() {
+            opt.push_debug_state("Final Optimizer state");
+        }
+
+        if std::env::var("VOLA_DUMP_VIEWER").is_ok() {
+            opt.dump_depug_state(&"OptState.bin");
+        }
+
         //finally use the expected backend
         match self.target_format {
             Backend::Spirv => {
@@ -140,10 +148,20 @@ impl Pipeline {
                 backend.intern_module(&opt)?;
 
                 backend.legalize().unwrap();
+
+                if std::env::var("VOLA_DUMP_ALL").is_ok()
+                    || std::env::var("VOLA_SPIRV_FINAL").is_ok()
+                {
+                    backend.push_debug_state("Final SPIR-V Graph");
+                }
+
                 let spvmodule = backend
                     .build()
                     .expect("Failed to build SPIR-V module from backend graph.");
 
+                if std::env::var("VOLA_DUMP_VIEWER").is_ok() {
+                    backend.dump_depug_state(&"SpirvState.bin");
+                }
                 let words = spvmodule.assemble();
                 let bytes = bytemuck::cast_slice(&words);
 

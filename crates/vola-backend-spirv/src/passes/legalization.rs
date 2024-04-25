@@ -29,6 +29,10 @@ impl SpirvBackend {
         //      We then use increasingly specialized passes to check for things like type-matching,
         //      and common repairable patterns.
         self.legalize_grammar()?;
+
+        if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("VOLA_SPIRV_LEGALIZE").is_ok() {
+            self.push_debug_state("SPIR-V Legalized");
+        }
         Ok(())
     }
 

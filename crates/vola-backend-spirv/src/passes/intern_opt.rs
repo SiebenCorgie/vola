@@ -136,6 +136,10 @@ impl SpirvBackend {
         self.transfer_debug_info(&remapping, opt);
         self.transfer_type_info(&remapping, opt);
 
+        if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("VOLA_OPT_INTERN").is_ok() {
+            self.push_debug_state("Post opt interning");
+        }
+
         Ok(())
     }
 

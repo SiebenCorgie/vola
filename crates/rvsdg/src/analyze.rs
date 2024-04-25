@@ -513,7 +513,6 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
     }
 }
 
-///
 pub struct DependencyGraph {
     ///Maps a node to all nodes it depends on
     pub graph: AHashMap<NodeRef, AHashSet<NodeRef>>,

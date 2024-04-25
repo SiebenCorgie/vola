@@ -15,30 +15,36 @@
 //! }
 //! ```
 pub mod layout;
-mod primitives;
+pub mod primitives;
 
+pub use glam;
 use layout::{Layout, LayoutConfig};
-pub use macroquad;
+use primitives::PrimTree;
 ///The color of a node or edge.
-pub use macroquad::color::Color;
-use macroquad::prelude::{BLACK, RED};
+pub use primitives::{Color, Point};
 use rvsdg::{
     common::VSEdge,
     edge::LangEdge,
     nodes::{LangNode, NodeType},
     Rvsdg,
 };
+use serde::{Deserialize, Serialize};
 use std::{fmt::Debug, path::Path};
+
+#[cfg(feature = "viewer")]
+mod viewer;
+#[cfg(feature = "viewer")]
+pub use viewer::{GraphState, GraphStateBuilder, ViewerState};
 
 pub trait View {
     fn name(&self) -> String;
-    fn color(&self) -> macroquad::color::Color;
+    fn color(&self) -> Color;
     fn stroke(&self) -> Stroke {
         Stroke::Line
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Stroke {
     Line,
     Dashs,
@@ -62,10 +68,10 @@ impl View for rvsdg::common::VSEdge {
             VSEdge::Value { .. } => "ValueEdge".to_owned(),
         }
     }
-    fn color(&self) -> macroquad::color::Color {
+    fn color(&self) -> Color {
         match self {
-            VSEdge::State { .. } => RED,
-            VSEdge::Value { .. } => BLACK,
+            VSEdge::State { .. } => Color::RED,
+            VSEdge::Value { .. } => Color::BLACK,
         }
     }
     fn stroke(&self) -> Stroke {
@@ -77,7 +83,7 @@ impl View for rvsdg::common::VSEdge {
 }
 
 impl<N: View + LangNode + 'static> View for rvsdg::nodes::Node<N> {
-    fn color(&self) -> macroquad::color::Color {
+    fn color(&self) -> Color {
         match &self.node_type {
             NodeType::Apply(_) => Color::from_rgba(255, 255, 128, 255),
             NodeType::Delta(_) => Color::from_rgba(128, 128, 0, 100),
@@ -104,7 +110,7 @@ impl<N: View + LangNode + 'static> View for rvsdg::nodes::Node<N> {
 }
 
 ///Saves the rvsdg graph as an SVG image at `svg_path`.
-pub fn into_svg<N: View + LangNode + Debug + 'static, E: View + LangEdge + 'static>(
+pub fn into_svg<N: View + LangNode + 'static, E: View + LangEdge + 'static>(
     rvsdg: &Rvsdg<N, E>,
     svg_path: impl AsRef<Path>,
 ) {
@@ -112,7 +118,7 @@ pub fn into_svg<N: View + LangNode + Debug + 'static, E: View + LangEdge + 'stat
 }
 
 ///Saves the rvsdg graph as an SVG image at `svg_path`.
-pub fn into_svg_with_config<N: View + LangNode + Debug + 'static, E: View + LangEdge + 'static>(
+pub fn into_svg_with_config<N: View + LangNode + 'static, E: View + LangEdge + 'static>(
     rvsdg: &Rvsdg<N, E>,
     svg_path: impl AsRef<Path>,
     config: &LayoutConfig,
@@ -125,16 +131,10 @@ pub fn into_svg_with_config<N: View + LangNode + Debug + 'static, E: View + Lang
     std::fs::write(svg_path.as_ref(), svg).unwrap();
 }
 
-/*
-///Uses [macroquad](macroquad) to display the graph in an interactive window.
-pub async fn view<N: View + LangNode + 'static, E: View + LangEdge + 'static>(rvsdg: &Rvsdg<N, E>) {
-    loop {
-        clear_background(BLUE);
-
-        set_default_camera();
-        draw_text("WELCOME TO RVSDG", 10.0, 20.0, 30.0, BLACK);
-
-        next_frame().await
-    }
+pub fn into_primitive_tree<N: View + LangNode + 'static, E: View + LangEdge + 'static>(
+    rvsdg: &Rvsdg<N, E>,
+    config: &LayoutConfig,
+) -> PrimTree {
+    let layout = Layout::for_rvsdg(rvsdg, config);
+    layout.into_primitive_tree()
 }
-*/

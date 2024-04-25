@@ -20,7 +20,7 @@ use rvsdg::{
     util::copy::StructuralClone,
 };
 
-use rvsdg_viewer::View;
+use rvsdg_viewer::{Color, View};
 use vola_ast::csg::{CSGConcept, CSGNodeDef};
 use vola_common::Span;
 
@@ -97,7 +97,7 @@ impl StructuralClone for OptEdge {
 }
 
 impl View for OptNode {
-    fn color(&self) -> rvsdg_viewer::macroquad::color::Color {
+    fn color(&self) -> Color {
         self.node.color()
     }
     fn name(&self) -> String {
@@ -211,19 +211,13 @@ impl LangEdge for OptEdge {
 }
 
 impl View for OptEdge {
-    fn color(&self) -> rvsdg_viewer::macroquad::color::Color {
+    fn color(&self) -> Color {
         match self {
-            Self::State => rvsdg_viewer::macroquad::color::Color::from_rgba(255, 0, 0, 255),
+            Self::State => Color::from_rgba(255, 0, 0, 255),
             Self::Value { ty } => match ty {
-                TypeState::Unset => {
-                    rvsdg_viewer::macroquad::color::Color::from_rgba(255, 0, 255, 255)
-                }
-                TypeState::Set(_) => {
-                    rvsdg_viewer::macroquad::color::Color::from_rgba(0, 255, 0, 255)
-                }
-                TypeState::Derived(_) => {
-                    rvsdg_viewer::macroquad::color::Color::from_rgba(0, 0, 255, 255)
-                }
+                TypeState::Unset => Color::from_rgba(255, 0, 255, 255),
+                TypeState::Set(_) => Color::from_rgba(0, 255, 0, 255),
+                TypeState::Derived(_) => Color::from_rgba(0, 0, 255, 255),
             },
         }
     }

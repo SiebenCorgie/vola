@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 /*
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
@@ -56,6 +58,21 @@ impl From<vola_ast::common::Ty> for Ty {
             vola_ast::common::Ty::Matrix { width, height } => Self::Matrix { width, height },
             vola_ast::common::Ty::Tensor { dim } => Self::Tensor { dim },
             vola_ast::common::Ty::CSGTree => Self::CSGTree,
+        }
+    }
+}
+
+impl Display for Ty {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Ty::Void => write!(f, "Void"),
+            Ty::Nat => write!(f, "Nat"),
+            Ty::Scalar => write!(f, "Scalar"),
+            Ty::Vector { width } => write!(f, "Vec{width}"),
+            Ty::Matrix { width, height } => write!(f, "Matrix{width}x{height}"),
+            Ty::Tensor { dim } => write!(f, "Tensor[{dim:?}]"),
+            Ty::CSGTree => write!(f, "CSGTree"),
+            Ty::Callable { concept } => write!(f, "Callable(\"{concept}\")"),
         }
     }
 }

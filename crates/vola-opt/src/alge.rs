@@ -16,9 +16,8 @@ use rvsdg::{
     smallvec::{smallvec, SmallVec},
     SmallColl,
 };
+use rvsdg_viewer::Color;
 use vola_ast::csg::{CSGConcept, CSGNodeDef};
-
-pub use vola_ast::common::Literal;
 
 use crate::{common::Ty, error::OptError, DialectNode, OptEdge, OptGraph, OptNode, TypeState};
 
@@ -342,8 +341,8 @@ impl From<vola_ast::alge::BinaryOp> for WkOp {
 macro_rules! implViewAlgeOp {
     ($opname:ident, $str:expr, $($arg:ident),*) => {
         impl rvsdg_viewer::View for $opname {
-            fn color(&self) -> rvsdg_viewer::macroquad::color::Color {
-                rvsdg_viewer::macroquad::color::Color::from_rgba(200, 170, 170, 255)
+            fn color(&self) -> Color {
+                Color::from_rgba(200, 170, 170, 255)
             }
 
             fn name(&self) -> String {
@@ -357,8 +356,8 @@ macro_rules! implViewAlgeOp {
     };
     ($opname:ident, $str:expr) =>{
         impl rvsdg_viewer::View for $opname {
-            fn color(&self) -> rvsdg_viewer::macroquad::color::Color {
-                rvsdg_viewer::macroquad::color::Color::from_rgba(200, 170, 170, 255)
+            fn color(&self) -> Color {
+                Color::from_rgba(200, 170, 170, 255)
             }
 
             fn name(&self) -> String {
