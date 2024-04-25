@@ -29,8 +29,7 @@ mod module;
 mod parser;
 mod passes;
 
-use error::AstError;
-pub use error::ParserError;
+pub use error::{AstError, ParserError};
 use smallvec::smallvec;
 
 use std::path::Path;

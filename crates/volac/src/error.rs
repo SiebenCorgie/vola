@@ -12,9 +12,11 @@ pub enum PipelineError {
     #[error(transparent)]
     OptError(#[from] OptError),
     #[error(transparent)]
-    AstError(#[from] ParserError),
+    ParserError(#[from] ParserError),
     #[error(transparent)]
     RVSDGError(#[from] GraphError),
     #[error(transparent)]
     SpirvError(#[from] vola_backend_spirv::BackendSpirvError),
+    #[error(transparent)]
+    AstError(#[from] vola_ast::AstError),
 }

@@ -103,7 +103,7 @@ impl DotNode for AstEntry {
             AstEntry::ImplBlock(b) => b.build_children(builder),
             AstEntry::FieldDefine(fd) => fd.build_children(builder),
             AstEntry::ExportFn(ef) => ef.build_children(builder),
-            AstEntry::Module(m) => builder,
+            AstEntry::Module(_m) => builder,
         }
     }
 }
