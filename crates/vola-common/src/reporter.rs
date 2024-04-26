@@ -85,6 +85,12 @@ impl ErrorReporter {
     }
 }
 
+///Resets the file cache of the reporter. Needs to be called whenever
+///The compiler re-compiles _changed_ files without exiting the process first
+pub fn reset_file_cache() {
+    REPORTER.lock().unwrap().cached_files.clear();
+}
+
 ///Sends a `err` reportable and reports the error, possibly based on some source-`file`.
 pub fn report(err: impl Reportable, file: Option<&str>) {
     if let Some(f) = file {

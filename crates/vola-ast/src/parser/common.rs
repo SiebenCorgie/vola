@@ -12,6 +12,7 @@ use crate::{
     alge::AlgeExpr,
     common::{CTArg, Call, Digit, Ident, Literal, Ty, TypedIdent},
     error::ParserError,
+    Module,
 };
 
 use super::{FromTreeSitter, ParserCtx};
@@ -304,5 +305,65 @@ impl FromTreeSitter for CTArg {
         ParserError::assert_node_no_error(ctx, node)?;
 
         Ok(CTArg { span, ident, args })
+    }
+}
+
+impl FromTreeSitter for Module {
+    fn parse(ctx: &mut ParserCtx, dta: &[u8], node: &tree_sitter::Node) -> Result<Self, ParserError>
+    where
+        Self: Sized,
+    {
+        ParserError::assert_node_kind(ctx, node, "module")?;
+
+        let mut walker = node.walk();
+        let mut children = node.children(&mut walker);
+        ParserError::consume_expected_node_kind(ctx, children.next(), "module")?;
+        let mut path = SmallVec::new();
+
+        while let Some(next_node) = children.next() {
+            match next_node.kind() {
+                "identifier" => path.push(Ident::parse(ctx, dta, &next_node)?),
+                _ => {
+                    let err = ParserError::UnexpectedAstNode {
+                        span: ctx.span(&next_node).into(),
+                        kind: next_node.kind().to_string(),
+                        expected: "identifier".to_owned(),
+                    };
+                    report(err.clone(), ctx.get_file());
+                    return Err(err);
+                }
+            }
+
+            let next_node = if let Some(n) = children.next() {
+                n
+            } else {
+                let e = ParserError::NoChildAvailable;
+                report(e.clone(), ctx.get_file());
+                return Err(e);
+            };
+            match next_node.kind() {
+                //can end
+                ";" => break,
+                //or continue
+                "::" => {}
+                _ => {
+                    let err = ParserError::UnexpectedAstNode {
+                        span: ctx.span(&next_node).into(),
+                        kind: next_node.kind().to_string(),
+                        expected: "\"::\" or \";\"".to_owned(),
+                    };
+                    report(err.clone(), ctx.get_file());
+                    return Err(err);
+                }
+            }
+        }
+
+        ParserError::assert_ast_level_empty(ctx, children.next())?;
+        ParserError::assert_node_no_error(ctx, node)?;
+
+        Ok(Module {
+            path,
+            span: Span::from(node).with_file_maybe(ctx.get_file()),
+        })
     }
 }

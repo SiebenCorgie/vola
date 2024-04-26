@@ -1,0 +1,30 @@
+module std;
+
+
+concept Sdf2d: vec2 -> s;
+
+operation Extrude(h: s);
+
+//Note not _correct_, but thats the part we wanna test.
+impl Extrude<sub> for SDF3D(at){
+	eval sub.Sdf2d([at.x, at.y])
+}
+
+impl Box for Sdf2d(at){
+	at.x
+}
+
+
+export myField(at: vec3){
+	csg f = Union(){
+		Translate([0.0, 1.0, 0.0]){
+			Sphere(1.0)
+		}
+	}{
+		Extrude(1.0){
+			Box([1.0, 1.0, 2.0])
+		}
+	};
+
+	f.SDF3D(at)
+}

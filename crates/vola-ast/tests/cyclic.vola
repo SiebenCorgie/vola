@@ -1,0 +1,8 @@
+
+module cyclic_sub;
+
+export teddys_test(){
+	csg t = Test();
+
+	t.MyConcept()
+}

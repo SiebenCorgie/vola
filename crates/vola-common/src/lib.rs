@@ -25,7 +25,7 @@ pub mod dot;
 
 mod reporter;
 
-pub use reporter::{report, Reportable};
+pub use reporter::{report, reset_file_cache, Reportable};
 
 pub type FileString = SmallString<[u8; 32]>;
 

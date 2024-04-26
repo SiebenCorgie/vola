@@ -11,3 +11,4 @@ vola-backend-spirv = {path = "../vola-backend-spirv"}
 vola-common = {path = "../vola-common"}
 rvsdg = {path = "../rvsdg"}
 bytemuck.workspace = true
+log.workspace = true

@@ -1,0 +1,50 @@
+entity Sphere(radius: s);
+entity Box(extent: vec3);
+concept SDF3D: vec3 -> s;
+
+
+///Simple union operation
+operation Union();
+///Translation operation, with explicitly no identity implementation
+#[define(no_identity)]
+operation Translate(trans: vec3);
+//SmoothUnion
+operation SmoothUnion(suradius: s);
+//Color overwrite operation
+operation ColorOw(owcol: vec3);
+operation Round(rad: s);
+
+//Declares that we need the parameter `@` to define SDF3D of Sphere
+impl Sphere for SDF3D(at){
+     length(at) - radius
+}
+
+impl Box for SDF3D(at){
+     let q = abs(at) - extent;
+     length(max(q, [0.0, 0.0, 0.0])) + min(max(q.x, max(q.y, q.z)), 0.0)
+}
+
+
+//declares that `translate` takes a sub-expression and the
+//field
+impl Translate<sub> for SDF3D(at){
+    at = at - trans;
+    eval sub.SDF3D(at)
+}
+
+
+impl Union<l, r> for SDF3D(at) {
+    let left = eval l.SDF3D(at);
+    let right = eval r.SDF3D(at);
+    let new_result = min(left, right);
+    new_result
+}
+
+
+impl SmoothUnion<left, right> for SDF3D(at){
+    let l = eval left.SDF3D(at);
+    let r = eval right.SDF3D(at);
+    let h = clamp( 0.5 + 0.5 * (r-l) / suradius, 0.0, 1.0);
+    let dist = mix(l, r, h) * - suradius * h * (1.0 - h);
+    dist
+}

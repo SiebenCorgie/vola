@@ -12,12 +12,17 @@
 //!
 //!
 
-use std::path::{Path, PathBuf};
+use std::{
+    io::Write,
+    path::{Path, PathBuf},
+    process::Stdio,
+};
 use vola_ast::VolaAst;
 
 mod error;
 pub use error::PipelineError;
 use vola_backend_spirv::{rspirv::binary::Assemble, SpirvConfig};
+use vola_common::reset_file_cache;
 use vola_opt::Optimizer;
 
 #[derive(Debug, Clone, Copy)]
@@ -85,6 +90,52 @@ impl Target {
             None
         }
     }
+
+    ///tries to use the `spirv-val` command (if installed) to verify the code
+    pub fn try_verify(&self) -> Result<(), String> {
+        match self {
+            //start the validator on the src
+            Self::File(path) => {
+                let output = std::process::Command::new("spirv-val")
+                    .arg(path)
+                    .output()
+                    .map_err(|e| e.to_string())?;
+                //push output stream
+                std::io::stdout().write_all(&output.stdout).unwrap();
+                std::io::stderr().write_all(&output.stderr).unwrap();
+                if !output.status.success() {
+                    Err(format!("Failed to validate module with: {}", output.status))
+                } else {
+                    Ok(())
+                }
+            }
+            //stream the buffer on stdin.
+            Self::Buffer(b) => {
+                let mut command = std::process::Command::new("spirv-val")
+                    .stdin(Stdio::piped())
+                    .spawn()
+                    .unwrap();
+                let buffcpy = b.clone();
+                let mut command_in = command.stdin.take().unwrap();
+                std::thread::spawn(move || {
+                    command_in
+                        .write_all(&buffcpy)
+                        .expect("Failed to write to stdin");
+                    command_in.flush().unwrap();
+                });
+                //now wait for it to end and output
+                let output = command.wait_with_output().map_err(|e| e.to_string())?;
+
+                std::io::stdout().write_all(&output.stdout).unwrap();
+                std::io::stderr().write_all(&output.stderr).unwrap();
+                if !output.status.success() {
+                    Err(format!("Failed to validate module with: {}", output.status))
+                } else {
+                    Ok(())
+                }
+            }
+        }
+    }
 }
 
 ///An executable compilation pipeline.
@@ -113,6 +164,14 @@ impl Pipeline {
         Pipeline {
             target_format: Backend::Spirv,
             target: Target::file(output_file),
+        }
+    }
+
+    ///Creates a new _in_memory_ pipeline. This will not produce a file, but a buffer after compilation.
+    pub fn new_in_memory() -> Self {
+        Pipeline {
+            target_format: Backend::Spirv,
+            target: Target::buffer(),
         }
     }
 
@@ -181,19 +240,42 @@ impl Pipeline {
 
     ///Tries to interpret `data` as a string in vola's language
     pub fn execute_on_bytes(&self, data: &[u8]) -> Result<Target, PipelineError> {
-        let ast = vola_ast::parse_from_bytes(data).map_err(|(_, mut err)| {
+        //NOTE: Always reset file cache, since the files we are reporting on might have changed.
+        reset_file_cache();
+        let mut ast = vola_ast::parse_from_bytes(data).map_err(|(_, mut err)| {
             println!("there where {} errors while parsing data!", err.len());
             err.remove(0)
         })?;
+        if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("VOLA_DUMP_AST").is_ok() {
+            vola_ast::dot::ast_to_svg(&ast, "ast.svg");
+        }
+
+        log::warn!("parsing bytes, therefore cannot use any relative modules. Trying anyways...");
+        ast.resolve_modules(&"./")?;
+
         self.execute_on_ast(ast)
     }
 
     ///Tries to parse `file`, and turn that into a program, based on the pipeline conifguration.
-    pub fn execute_on_file(&self, file: &Path) -> Result<Target, PipelineError> {
-        let ast = vola_ast::parse_file(file).map_err(|(_, mut err)| {
-            println!("There where {} errors while parsing {file:?}", err.len());
+    pub fn execute_on_file(&self, file: &dyn AsRef<Path>) -> Result<Target, PipelineError> {
+        //NOTE: Always reset file cache, since the files we are reporting on might have changed.
+        reset_file_cache();
+        let mut ast = vola_ast::parse_file(file).map_err(|(_, mut err)| {
+            println!(
+                "There where {} errors while parsing {:?}",
+                err.len(),
+                file.as_ref()
+            );
             err.remove(0)
         })?;
+
+        if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("VOLA_DUMP_AST").is_ok() {
+            vola_ast::dot::ast_to_svg(&ast, "ast.svg");
+        }
+
+        //try to resolve module imports
+        ast.resolve_modules(&file)?;
+
         self.execute_on_ast(ast)
     }
 }

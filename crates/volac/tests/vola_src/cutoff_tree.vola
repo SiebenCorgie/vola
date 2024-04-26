@@ -1,0 +1,38 @@
+module std;
+
+
+concept Color: vec3 -> vec3;
+
+impl Sphere for Color(at){
+	[1.0, 1.0, 0.0]
+}
+
+impl Box for Color(at){
+	[0.0, 1.0, 0.0]
+}
+
+impl SmoothUnion<a, b> for Color(at){
+	let a = eval a.Color(at);
+	let b = eval b.Color(at);
+
+	mix(a, b, [0.5, 0.5, 0.5])
+}
+
+
+//This is the cuttoff node. It will not evaluate the sub tree, 
+//but always return _blue_.
+impl Translate<sub> for Color(at){
+	[0.0, 0.0, 1.0]
+}
+
+export myField(at: vec3){
+	csg t = SmoothUnion(1.0){
+		Translate([0.0, 1.0, 0.0]){
+			Sphere(1.0)
+		}
+	}{
+		Box([1.0, 1.0, 1.0])
+	};
+
+	(t.SDF3D(at), t.Color(at))
+}

@@ -1,0 +1,3 @@
+module src_module;
+
+entity MyLastEntity();
