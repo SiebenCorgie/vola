@@ -40,3 +40,14 @@ fn multi_concept_impl() {
         .unwrap();
     target.try_verify().unwrap();
 }
+
+#[test]
+fn unused_arg_define() {
+    //Tests the case that one entity implements multiple concepts,
+    // and the _change_ from one concept into another on the tree
+    let pipeline = volac::Pipeline::new_in_memory();
+    let target = pipeline
+        .execute_on_file(&"tests/vola_src/unused_define_arg.vola")
+        .unwrap();
+    target.try_verify().unwrap();
+}

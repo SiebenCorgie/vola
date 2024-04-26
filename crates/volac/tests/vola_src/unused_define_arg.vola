@@ -1,0 +1,18 @@
+module std;
+
+
+define common(at: vec3, offset: vec3){
+	SmoothUnion(1.0){
+		Sphere(1.0)
+	}{
+		Translate(offset){
+			Sphere(1.0)
+		}
+	}
+}
+
+
+export eval_std(at: vec3, offset: vec3){
+	csg myfield = common(at, offset);
+	myfield.SDF3D(at)
+}

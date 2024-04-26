@@ -441,10 +441,20 @@ impl Optimizer {
                     if let Some(t) = maybe_ty {
                         expected_call_sig.push(t);
                     } else {
-                        //Shouldn't happen, so return an error in that case
-                        let err = OptError::Any {
-                            text: "Argument type was not set for lambda".to_owned(),
+                        let lambda_span = self
+                            .span_tags
+                            .get(&callable_src.node.into())
+                            .cloned()
+                            .unwrap_or(Span::empty());
+                        let err = OptError::AnySpannedWithSource {
+                            source_span: region_src_span.clone().into(),
+                            source_text: "In this region".to_owned(),
+                            text: "The argument type of one of the called concepts was not set"
+                                .to_owned(),
+                            span: lambda_span.into(),
+                            span_text: "This implementation was called".to_owned(),
                         };
+                        //Shouldn't happen, so return an error in that case
                         report(err.clone(), region_src_span.get_file());
                         return Err(err);
                     }
