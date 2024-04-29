@@ -1,0 +1,27 @@
+module std;
+
+
+export myField(at: vec3){
+	let t = [
+		[1.0, 0.0, 0.0],
+		[0.0, 1.0, 0.0],
+		[0.0, 0.0, 1.0]
+	];
+
+	let b = [
+		at, 
+		[0.0, 1.0, 0.0],
+		[0.0, 0.0, 1.0]
+	];
+	let a = t * b;
+
+	csg r = SmoothUnion(1.0){
+		Translate(a.0){
+			Sphere(1.0)
+		}
+	}{
+		Box([1.0, 1.0, 1.0])
+	};
+
+	r.SDF3D(at)
+}

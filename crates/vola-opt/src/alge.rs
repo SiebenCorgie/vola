@@ -124,8 +124,11 @@ impl WkOp {
                 Ok(Some(sig.remove(0)))
             }
 
-            WkOp::Add | WkOp::Sub | WkOp::Mul | WkOp::Div | WkOp::Min | WkOp::Max => {
+            WkOp::Add | WkOp::Sub | WkOp::Div | WkOp::Min | WkOp::Max => {
                 //For those we need _the same algebraic_ for both inputs.
+                //NOTE: Mul is a little _special_ since
+                //      there is matrix multiplication with
+                //      vectors and stuff
                 if sig.len() != 2 {
                     return Err(OptError::Any {
                         text: format!("{:?} expects two operands, got {:?}", self, sig.len()),
@@ -149,6 +152,89 @@ impl WkOp {
 
                 //Is okay, for these we return the _same_ type that we got
                 Ok(Some(sig.remove(0)))
+            }
+            WkOp::Mul => {
+                //Multiplication works on:
+                // a x b, where a,b are of the same type,
+                //        where a = Vec and b = Scalar
+                //        where a = Mat and b = Scalar
+                //        where a = Mat and b = Vec
+                //        where a = Vec and b = Mat
+                //        where a = Mat and b = Mat,
+
+                //Still always two inputs one output
+                if sig.len() != 2 {
+                    return Err(OptError::Any {
+                        text: format!("{:?} expects two operands, got {:?}", self, sig.len()),
+                    });
+                }
+
+                if !sig[0].is_algebraic() {
+                    return Err(OptError::Any {
+                        text: format!(
+                            "{:?} expects algebraic operands (scalar, vector, matrix, tensor) got {:?}",
+                            self, sig[0]
+                        ),
+                    });
+                }
+
+                if !sig[1].is_algebraic() {
+                    return Err(OptError::Any {
+                        text: format!(
+                            "{:?} expects algebraic operands (scalar, vector, matrix, tensor) got {:?}",
+                            self, sig[1]
+                        ),
+                    });
+                }
+
+                match (&sig[0], &sig[1]) {
+                    //In that case, use the vector as return type
+                    (Ty::Vector { width: _ }, Ty::Scalar) => Ok(Some(sig.remove(0))),
+                    //In that case, we return the same-sized
+                    //matrix
+                    (
+                        Ty::Matrix {
+                            width: _,
+                            height: _,
+                        },
+                        Ty::Scalar,
+                    ) => Ok(Some(sig.remove(0))),
+                    (Ty::Vector { width }, Ty::Matrix { width: _t, height }) => {
+                        //NOTE: we can only do that, if the Vector::width
+                        //      is the same has Matrix height.
+                        //TODO: Decide if we really want to make that bound check already in the optimizer.
+                        //      generally speaking this is more of a SPIR-V issue. Other backends could implement
+                        //      other Matrix/Vector multiplication
+                        if width != height {
+                            Err(OptError::Any { text: format!("Matrix-Vector multiplication expects the Matrix's \"height\" to be the same as the Vector's \"width\". Got h={height} & w={width} instead.") })
+                        } else {
+                            //Use the vector's type.
+                            Ok(Some(sig.remove(0)))
+                        }
+                    }
+                    (Ty::Matrix { width: _t, height }, Ty::Vector { width }) => {
+                        //Similar to above.
+                        if width != height {
+                            Err(OptError::Any { text: format!("Vector- Matrix multiplication expects the Matrix's \"height\" to be the same as the Vector's \"width\". Got h={height} & w={width} instead.") })
+                        } else {
+                            //Use the vector's type.
+                            Ok(Some(sig.remove(1)))
+                        }
+                    }
+                    //if none of those was used, check that
+                    // both are at least the same. Otherwise
+                    //we actually need to return Err
+                    (a, b) => {
+                        if a != b {
+                            Err(OptError::Any {
+                                text: format!("{:?} expects the two operands, to be of the same type. but got {:?} & {:?}", self, sig[0], sig[1]),
+                            })
+                        } else {
+                            //thats okay
+                            Ok(Some(sig.remove(0)))
+                        }
+                    }
+                }
             }
             WkOp::Dot => {
                 if sig.len() != 2 {

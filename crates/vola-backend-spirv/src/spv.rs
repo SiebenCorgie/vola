@@ -12,7 +12,11 @@
 use std::fmt::Display;
 
 use ahash::AHashMap;
-use rspirv::{dr::{Instruction, Operand}, grammar::{LogicalOperand, OperandKind}, spirv::Word};
+use rspirv::{
+    dr::{Instruction, Operand},
+    grammar::{LogicalOperand, OperandKind},
+    spirv::Word,
+};
 use rvsdg::smallvec::{smallvec, SmallVec};
 use spirv_grammar_rules::{GrammarRules, Rule};
 use vola_opt::{
@@ -22,7 +26,7 @@ use vola_opt::{
 
 use crate::{passes::EmitCtx, BackendSpirvError};
 
-type CoreOp = rspirv::spirv::Op;
+pub type CoreOp = rspirv::spirv::Op;
 
 enum OperatorSrc {
     Result,
@@ -150,14 +154,23 @@ fn test_rule<'a>(
                 OperatorSrc::Input(idx) => &input_types[*idx],
             };
 
-            if let Some(basetype) = ty_src.base_type(){
-                if base_types.contains(&basetype){
-                   Ok(()) 
-                }else{
-                    Err(BackendSpirvError::SpvLegalizationRuleFailed { inst: String::with_capacity(0), rule: rule.clone() })
+            if let Some(basetype) = ty_src.base_type() {
+                if base_types.contains(&basetype) {
+                    Ok(())
+                } else {
+                    Err(BackendSpirvError::SpvLegalizationRuleFailed {
+                        inst: String::with_capacity(0),
+                        rule: rule.clone(),
+                    })
                 }
-            }else{
-                Err(BackendSpirvError::SpvLegalizationMalformed { inst: String::with_capacity(0), text: format!("Rule checks for base type, but operand {} of type {:?} had no base-type", operand, ty_src) })
+            } else {
+                Err(BackendSpirvError::SpvLegalizationMalformed {
+                    inst: String::with_capacity(0),
+                    text: format!(
+                        "Rule checks for base type, but operand {} of type {:?} had no base-type",
+                        operand, ty_src
+                    ),
+                })
             }
         }
         Rule::TypeConstraint { operand, ty } => {
@@ -169,15 +182,18 @@ fn test_rule<'a>(
                 OperatorSrc::Input(idx) => &input_types[*idx],
             };
 
-            if let Some(rule_ty_str) = ty_src.as_rule_ty(){
-                for t in ty.iter(){
-                    if *t == rule_ty_str{
-                        return Ok(())
+            if let Some(rule_ty_str) = ty_src.as_rule_ty() {
+                for t in ty.iter() {
+                    if *t == rule_ty_str {
+                        return Ok(());
                     }
                 }
 
-                Err(BackendSpirvError::SpvLegalizationRuleFailed { inst: String::with_capacity(0), rule: rule.clone() })
-            }else{
+                Err(BackendSpirvError::SpvLegalizationRuleFailed {
+                    inst: String::with_capacity(0),
+                    rule: rule.clone(),
+                })
+            } else {
                 Err(BackendSpirvError::SpvLegalizationMalformed { inst: String::with_capacity(0), text: format!("Operand {} of type {:?} has no type, that could be expressed as a SPIR-V TypeConstrain rule.", operand, ty_src) })
             }
         }
@@ -190,12 +206,19 @@ fn test_rule<'a>(
                 OperatorSrc::Input(idx) => &input_types[*idx],
             };
 
-            if output != ty_src{
-                #[cfg(feature="log")]
-                log::error!("output is of type {:?}, src is of type {:?}", output,ty_src);
+            if output != ty_src {
+                #[cfg(feature = "log")]
+                log::error!(
+                    "output is of type {:?}, src is of type {:?}",
+                    output,
+                    ty_src
+                );
 
-                Err(BackendSpirvError::SpvLegalizationRuleFailed { inst: String::with_capacity(0), rule: rule.clone() })
-            }else{
+                Err(BackendSpirvError::SpvLegalizationRuleFailed {
+                    inst: String::with_capacity(0),
+                    rule: rule.clone(),
+                })
+            } else {
                 Ok(())
             }
         }
@@ -215,25 +238,40 @@ fn test_rule<'a>(
                 OperatorSrc::Input(idx) => &input_types[*idx],
             };
 
-            let count_a = if let SpvType::Arith(a) = tya{
+            let count_a = if let SpvType::Arith(a) = tya {
                 a.shape.component_count()
-            }else{
-                return Err(BackendSpirvError::SpvLegalizationMalformed { inst: String::with_capacity(0), text: format!("Rule tests component count, but Operand {} of type {:?} has no components", a, tya) });
-            };
-            
-            let count_b = if let SpvType::Arith(b) = tyb{
-                b.shape.component_count()
-            }else{
-                return Err(BackendSpirvError::SpvLegalizationMalformed { inst: String::with_capacity(0), text: format!("Rule tests component count, but Operand {} of type {:?} has no components", b, tyb) });
+            } else {
+                return Err(BackendSpirvError::SpvLegalizationMalformed {
+                    inst: String::with_capacity(0),
+                    text: format!(
+                        "Rule tests component count, but Operand {} of type {:?} has no components",
+                        a, tya
+                    ),
+                });
             };
 
-            if count_a != count_b{
-                Err(BackendSpirvError::SpvLegalizationRuleFailed { inst: String::with_capacity(0), rule: rule.clone() })
-            }else{
+            let count_b = if let SpvType::Arith(b) = tyb {
+                b.shape.component_count()
+            } else {
+                return Err(BackendSpirvError::SpvLegalizationMalformed {
+                    inst: String::with_capacity(0),
+                    text: format!(
+                        "Rule tests component count, but Operand {} of type {:?} has no components",
+                        b, tyb
+                    ),
+                });
+            };
+
+            if count_a != count_b {
+                Err(BackendSpirvError::SpvLegalizationRuleFailed {
+                    inst: String::with_capacity(0),
+                    rule: rule.clone(),
+                })
+            } else {
                 Ok(())
             }
         }
-        Rule::ComponentWidthEqual { a, b } => {           
+        Rule::ComponentWidthEqual { a, b } => {
             let tya = match operand_mapping
                 .get((*a).as_str())
                 .expect("Operand was not in mapping")
@@ -249,26 +287,40 @@ fn test_rule<'a>(
                 OperatorSrc::Input(idx) => &input_types[*idx],
             };
 
-            let count_a = if let SpvType::Arith(a) = tya{
+            let count_a = if let SpvType::Arith(a) = tya {
                 a.resolution
-            }else{
-                return Err(BackendSpirvError::SpvLegalizationMalformed { inst: String::with_capacity(0), text: format!("Rule tests component width, but Operand {} of type {:?} has no components", a, tya) });
-            };
-            
-            let count_b = if let SpvType::Arith(b) = tyb{
-                b.resolution
-            }else{
-                return Err(BackendSpirvError::SpvLegalizationMalformed { inst: String::with_capacity(0), text: format!("Rule tests component width, but Operand {} of type {:?} has no components", b, tyb) });
+            } else {
+                return Err(BackendSpirvError::SpvLegalizationMalformed {
+                    inst: String::with_capacity(0),
+                    text: format!(
+                        "Rule tests component width, but Operand {} of type {:?} has no components",
+                        a, tya
+                    ),
+                });
             };
 
-            if count_a != count_b{
-                Err(BackendSpirvError::SpvLegalizationRuleFailed { inst: String::with_capacity(0), rule: rule.clone() })
-            }else{
+            let count_b = if let SpvType::Arith(b) = tyb {
+                b.resolution
+            } else {
+                return Err(BackendSpirvError::SpvLegalizationMalformed {
+                    inst: String::with_capacity(0),
+                    text: format!(
+                        "Rule tests component width, but Operand {} of type {:?} has no components",
+                        b, tyb
+                    ),
+                });
+            };
+
+            if count_a != count_b {
+                Err(BackendSpirvError::SpvLegalizationRuleFailed {
+                    inst: String::with_capacity(0),
+                    rule: rule.clone(),
+                })
+            } else {
                 Ok(())
             }
         }
         Rule::ComponentTypeEqual { a, b } => {
-             
             let tya = match operand_mapping
                 .get((*a).as_str())
                 .expect("Operand was not in mapping")
@@ -284,9 +336,12 @@ fn test_rule<'a>(
                 OperatorSrc::Input(idx) => &input_types[*idx],
             };
 
-            if tya != tyb{
-                Err(BackendSpirvError::SpvLegalizationRuleFailed { inst: String::with_capacity(0), rule: rule.clone() })
-            }else{
+            if tya.base_type() != tyb.base_type() {
+                Err(BackendSpirvError::SpvLegalizationRuleFailed {
+                    inst: String::with_capacity(0),
+                    rule: rule.clone(),
+                })
+            } else {
                 Ok(())
             }
         }
@@ -303,7 +358,7 @@ fn test_rule<'a>(
                     ArithBaseTy::Integer { signed } => if signed == *is_signed{
                         Ok(())
                     }else{
-                         Err(BackendSpirvError::SpvLegalizationRuleFailed { inst: String::with_capacity(0), rule: rule.clone() })   
+                         Err(BackendSpirvError::SpvLegalizationRuleFailed { inst: String::with_capacity(0), rule: rule.clone() })
                     },
                     ArithBaseTy::Float => Err(BackendSpirvError::SpvLegalizationRuleFailed { inst: String::with_capacity(0), rule: rule.clone() }),
                 },
@@ -366,15 +421,17 @@ pub enum ArithBaseTy {
     Float,
 }
 
-impl Display for ArithBaseTy{
+impl Display for ArithBaseTy {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self{
-            Self::Integer { signed } => if *signed{
-                write!(f, "Int")
-            }else{
-                write!(f, "Uint")
-            },
-            Self::Float => write!(f, "Float")
+        match self {
+            Self::Integer { signed } => {
+                if *signed {
+                    write!(f, "Int")
+                } else {
+                    write!(f, "Uint")
+                }
+            }
+            Self::Float => write!(f, "Float"),
         }
     }
 }
@@ -397,7 +454,7 @@ pub struct ArithTy {
     pub resolution: u32,
 }
 
-impl Display for ArithTy{
+impl Display for ArithTy {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}<{} @ {}>", self.shape, self.base, self.resolution)
     }
@@ -420,15 +477,23 @@ impl TyShape {
             Self::Tensor { dim } => dim.iter().fold(1u32, |a, b| a * *b),
         }
     }
+
+    pub fn is_matrix(&self) -> bool {
+        if let Self::Matrix { .. } = self {
+            true
+        } else {
+            false
+        }
+    }
 }
 
-impl Display for TyShape{
+impl Display for TyShape {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self{
-             TyShape::Scalar => write!(f, "Scalar"),
-             TyShape::Vector { width } => write!(f, "Vec{width}"),
-             TyShape::Matrix { width, height } => write!(f, "Mat{width}x{height}"),
-             TyShape::Tensor { dim } => write!(f, "Tensor[{dim:?}]")
+        match self {
+            TyShape::Scalar => write!(f, "Scalar"),
+            TyShape::Vector { width } => write!(f, "Vec{width}"),
+            TyShape::Matrix { width, height } => write!(f, "Mat{width}x{height}"),
+            TyShape::Tensor { dim } => write!(f, "Tensor[{dim:?}]"),
         }
     }
 }
@@ -488,25 +553,25 @@ impl SpvType {
         }
     }
 
-    pub fn as_rule_ty(&self) -> Option<spirv_grammar_rules::Type>{
-        match self{
-            Self::Arith(a) => match a.shape{
+    pub fn as_rule_ty(&self) -> Option<spirv_grammar_rules::Type> {
+        match self {
+            Self::Arith(a) => match a.shape {
                 TyShape::Scalar => Some(spirv_grammar_rules::Type::Scalar),
                 TyShape::Vector { .. } => Some(spirv_grammar_rules::Type::Vector),
                 TyShape::Matrix { .. } => Some(spirv_grammar_rules::Type::Matrix),
                 TyShape::Tensor { .. } => None,
             },
-            _ => None
+            _ => None,
         }
     }
 
-    pub fn base_type(&self) -> Option<spirv_grammar_rules::Type>{
-        match self{
-            Self::Arith(a) => match a.base{
+    pub fn base_type(&self) -> Option<spirv_grammar_rules::Type> {
+        match self {
+            Self::Arith(a) => match a.base {
                 ArithBaseTy::Integer { .. } => Some(spirv_grammar_rules::Type::Integer),
                 ArithBaseTy::Float => Some(spirv_grammar_rules::Type::FloatingPoint),
             },
-            _ => None
+            _ => None,
         }
     }
 }
@@ -558,18 +623,19 @@ impl TryFrom<vola_opt::common::Ty> for SpvType {
     }
 }
 
-impl Display for SpvType{
+impl Display for SpvType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self{
+        match self {
             SpvType::Void => write!(f, "Void"),
             SpvType::Undefined => write!(f, "Undefined"),
             SpvType::State => write!(f, "State"),
             SpvType::Arith(a) => write!(f, "{a}"),
-            SpvType::RuntimeArray(a) => write!(f, "RA<{a}>")
+            SpvType::RuntimeArray(a) => write!(f, "RA<{a}>"),
         }
     }
 }
 
+#[derive(PartialEq, Debug, Clone)]
 pub enum SpvOp {
     CoreOp(CoreOp),
     GlslOp(GlOp),
@@ -780,31 +846,40 @@ impl SpvNode {
             }
             SpvOp::Extract(_idx) => {
                 //TODO: implement
-                #[cfg(feature="log")]
+                #[cfg(feature = "log")]
                 log::warn!("Extract bound checking not yet implemented!");
                 Ok(())
             }
             SpvOp::Construct => {
                 //TODO: implement
-                #[cfg(feature="log")]
+                #[cfg(feature = "log")]
                 log::warn!("Construct checking not yet implemented!");
                 Ok(())
             }
         }
     }
 
-    pub fn instruction_is_type_or_constant(&self) -> bool{
-        match self.op{
+    pub fn instruction_is_type_or_constant(&self) -> bool {
+        match self.op {
             SpvOp::ConstantFloat { .. } | SpvOp::ConstantInt { .. } => true,
-            _ => false
+            _ => false,
         }
     }
 
-    pub fn build_instruction(&self, ctx: &EmitCtx, input_ids: &[Word], result_type_id: Word, result_id: Word) -> Instruction{
-        match &self.op{
-            SpvOp::CoreOp(coreop) => {
-                Instruction::new(*coreop, Some(result_type_id), Some(result_id), input_ids.iter().map(|id| Operand::IdRef(*id)).collect() )
-            },
+    pub fn build_instruction(
+        &self,
+        ctx: &EmitCtx,
+        input_ids: &[Word],
+        result_type_id: Word,
+        result_id: Word,
+    ) -> Instruction {
+        match &self.op {
+            SpvOp::CoreOp(coreop) => Instruction::new(
+                *coreop,
+                Some(result_type_id),
+                Some(result_id),
+                input_ids.iter().map(|id| Operand::IdRef(*id)).collect(),
+            ),
             SpvOp::GlslOp(glslop) => {
                 //use the extinst to call glslop
                 let glsl_inst_set_id = ctx.extinst_ids.get("GLSL.std.450").unwrap();
@@ -815,41 +890,61 @@ impl SpvNode {
                 //now push the instruction literal as defined by the spec
                 operands.push(Operand::LiteralBit32(*glslop as u32));
                 //finally append the inputs
-                for iid in input_ids{
+                for iid in input_ids {
                     operands.push(Operand::IdRef(*iid));
                 }
-                
-                Instruction::new(CoreOp::ExtInst, Some(result_type_id), Some(result_id), operands)
-            },
+
+                Instruction::new(
+                    CoreOp::ExtInst,
+                    Some(result_type_id),
+                    Some(result_id),
+                    operands,
+                )
+            }
             SpvOp::ConstantFloat { resolution, bits } | SpvOp::ConstantInt { resolution, bits } => {
-                let operand = if *resolution <= 32{
+                let operand = if *resolution <= 32 {
                     Operand::LiteralBit32(*bits)
-                }else{
-                    if *resolution <= 64{
+                } else {
+                    if *resolution <= 64 {
                         Operand::LiteralBit64((*bits).into())
-                    }else{
+                    } else {
                         panic!("Can only create constants up to 64bit, but got {resolution}");
                     }
                 };
-                
-                Instruction::new(CoreOp::Constant, Some(result_type_id), Some(result_id), vec![operand])
-            },
+
+                Instruction::new(
+                    CoreOp::Constant,
+                    Some(result_type_id),
+                    Some(result_id),
+                    vec![operand],
+                )
+            }
             SpvOp::Extract(chain) => {
                 //right now this always translates to OpCompositeExtract
                 let mut operands = Vec::with_capacity(1 + chain.len());
 
-                assert!(input_ids.len() == 1, "Expected a single ref to the composite thats being extracted!");
+                assert!(
+                    input_ids.len() == 1,
+                    "Expected a single ref to the composite thats being extracted!"
+                );
                 operands.push(Operand::IdRef(input_ids[0]));
-                for offset in chain{
+                for offset in chain {
                     operands.push(Operand::LiteralBit32(*offset));
                 }
-                
-                Instruction::new(CoreOp::CompositeExtract, Some(result_type_id), Some(result_id), operands)
+
+                Instruction::new(
+                    CoreOp::CompositeExtract,
+                    Some(result_type_id),
+                    Some(result_id),
+                    operands,
+                )
             }
-            SpvOp::Construct => {
-                
-                Instruction::new(CoreOp::CompositeConstruct, Some(result_type_id), Some(result_id), input_ids.iter().map(|id| Operand::IdRef(*id)).collect() )
-            }
+            SpvOp::Construct => Instruction::new(
+                CoreOp::CompositeConstruct,
+                Some(result_type_id),
+                Some(result_id),
+                input_ids.iter().map(|id| Operand::IdRef(*id)).collect(),
+            ),
         }
     }
 }
