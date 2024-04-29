@@ -732,6 +732,8 @@ impl SpvNode {
             WkOp::Clamp => SpvOp::GlslOp(GlOp::FClamp),
             WkOp::Abs => SpvOp::GlslOp(GlOp::FAbs),
             WkOp::Frac => SpvOp::GlslOp(GlOp::Fract),
+            WkOp::Round => SpvOp::GlslOp(GlOp::Round),
+            WkOp::Inverse => SpvOp::GlslOp(GlOp::MatrixInverse),
         };
 
         Self { op: spvop }

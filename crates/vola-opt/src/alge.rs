@@ -53,7 +53,9 @@ pub enum WkOp {
 
     Abs,
     Frac,
+    Round,
     //TODO: basically implement the rest of the glsl-ext-inst, cause people might be used to those.
+    Inverse,
 }
 
 impl WkOp {
@@ -78,9 +80,12 @@ impl WkOp {
             WkOp::Max => 2,
             WkOp::Mix => 3,
             WkOp::Clamp => 3,
+            WkOp::Round => 1,
 
             WkOp::Abs => 1,
             WkOp::Frac => 1,
+
+            WkOp::Inverse => 1,
         }
     }
 
@@ -94,9 +99,12 @@ impl WkOp {
             "min" => Some(Self::Min),
             "max" => Some(Self::Max),
             "mix" | "lerp" => Some(Self::Mix),
+            "mod" => Some(Self::Mod),
             "clamp" => Some(Self::Clamp),
             "frac" => Some(Self::Frac),
             "abs" => Some(Self::Abs),
+            "round" => Some(Self::Round),
+            "inverse" | "invert" => Some(Self::Inverse),
             _ => None,
         }
     }
@@ -372,7 +380,7 @@ impl WkOp {
                 Ok(Some(sig[0].clone()))
             }
 
-            WkOp::Abs | WkOp::Frac => {
+            WkOp::Abs | WkOp::Frac | WkOp::Round => {
                 if sig.len() != 1 {
                     return Err(OptError::Any {
                         text: format!("{:?} expects one operand, got {:?}", self, sig.len()),
@@ -395,6 +403,31 @@ impl WkOp {
                 Ok(Some(sig[0].clone()))
             }
 
+            WkOp::Inverse => {
+                if sig.len() != 1 {
+                    return Err(OptError::Any {
+                        text: format!("{:?} expects one operand, got {:?}", self, sig.len()),
+                    });
+                }
+                match &sig[0] {
+                    Ty::Matrix { width, height } => {
+                        if width != height {
+                            return Err(OptError::Any { text: format!("Inverse operation expects quadratic matrix, got one with width={width} & height={height}") });
+                        }
+                    }
+                    _ => {
+                        return Err(OptError::Any {
+                            text: format!(
+                                "{:?} expects operands of type matrix, got {:?}",
+                                self, sig
+                            ),
+                        })
+                    }
+                }
+
+                //seems to be alright, return scalar
+                Ok(Some(sig[0].clone()))
+            }
             wk => Err(OptError::Any {
                 text: format!("derive not implemented for {:?}", wk),
             }),
