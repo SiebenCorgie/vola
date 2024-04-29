@@ -12,6 +12,7 @@ use std::fmt::Debug;
 
 use rvsdg::{
     edge::LangEdge,
+    nodes::{LangNode, NodeType},
     region::{Input, Output},
     rvsdg_derive_lang::LangNode,
     smallvec::SmallVec,
@@ -20,13 +21,23 @@ use rvsdg::{
 use rvsdg_viewer::View;
 
 use crate::{
-    spv::{SpvNode, SpvType},
+    spv::{CoreOp, SpvNode, SpvOp, SpvType},
     SpirvBackend,
 };
 
 pub enum BackendOp {
     SpirvOp(SpvNode),
     Dummy,
+}
+
+impl BackendOp {
+    pub fn unwrap_spv_ref(&self) -> &SpvNode {
+        if let BackendOp::SpirvOp(spv) = self {
+            spv
+        } else {
+            panic!("Was not a SPIRV backend op!");
+        }
+    }
 }
 
 ///The backend graph is characterised by SSA-like multi-input, single-output nodes.
@@ -165,5 +176,36 @@ impl SpirvBackend {
         }
 
         unified_type
+    }
+
+    ///Overrides the output-type on the edges connected to `node`
+    pub fn set_simple_note_output_type(&mut self, node: NodeRef, ty: SpvType) {
+        if let NodeType::Simple(s) = &self.graph.node(node).node_type {
+            assert!(s.outputs().len() == 1);
+            for edg in &s.outputs()[0].edges.clone() {
+                self.graph.edge_mut(*edg).ty.set_type(ty.clone());
+            }
+        } else {
+            panic!("Was not a simple node")
+        }
+    }
+
+    pub fn is_core_op(&self, node: NodeRef, op: CoreOp) -> bool {
+        if let NodeType::Simple(s) = &self.graph.node(node).node_type {
+            if let BackendOp::SpirvOp(SpvNode {
+                op: SpvOp::CoreOp(c),
+            }) = s.op
+            {
+                if c == op {
+                    true
+                } else {
+                    false
+                }
+            } else {
+                false
+            }
+        } else {
+            false
+        }
     }
 }
