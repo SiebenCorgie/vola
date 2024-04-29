@@ -22,7 +22,7 @@
 //!
 //! Used to represent algebraic expressions.
 
-//NOTE: We need that trait for the OptNode, so we can Upacast `DialectNode: Any` to `Any`.
+//NOTE: We need that trait for the OptNode, so we can Upcast `DialectNode: Any` to `Any`.
 #![feature(trait_upcasting)]
 
 use ahash::AHashMap;

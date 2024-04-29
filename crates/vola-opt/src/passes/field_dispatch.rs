@@ -12,27 +12,17 @@
 //!
 //! There are several several stages to the pass
 //!
+//! 1. Iterate all exported ports, which are always λ-Nodes.
+//! 2. For each exported λ-Node:
+//!   2.1.: For each result-connected _FieldAccess_ node, copy the connected CSG-Tree into a
+//!         new λ-Node (`Self::trace_copy()`)
+//!   2.2.: Import the new λ-Node as a CV and replace the _FieldAccess_ node with a call/ApplyNode to the newly created
+//!         λ-Node copy of the CSG-Tree. Also route all inputs to the exported λ-Node directly into the Apply node.
+//!   2.3.: Specialize the newly created field
+//!     2.3.1.:  Top-To-bottom replace all CSG-Nodes with an apply node, that calls the CSG-Nodes equivalent implementation (`full_inline_region`)
+//!     2.3.2.: Whenever inlining, continue resolving all inlined _Call_ nodes with the remaining sub-tree. (`specialize_region`)
+//!   2.4.: DNE + removal of unused context variables.
 //!
-//! For each [TreeAccess](crate::csg::TreeAccess) node create a _dispathed_ λ-Node, and replace the TreeAccess with a call to that node
-//!     For each node in the connected tree:
-//!         1 Specialize node
-//!             a) (CSGOp) inline the implementation of that nodes's concept
-//!             b) (CSGCall) inline the called field def compleatly, then update the sub tree node with the inlined tree
-//!         2. import _original_ values from the export_fn (if needed) by adding an argument to the λ-Node, and hooking it up in the export_fn to the apply-node
-//!
-//NOTE: Right now the dispatcher is pretty "dump". Another version would be, to avoid inlining, by importing the λ-Nodes via CVs, and hooking up the tree-specified
-//      correct λ-Nodes to their CVs instead.
-//      However, in that case we'd stilly have to duplicate the λ-Nodes, since we have to hook-up the CVs based on some
-//      tree-definition.
-//
-//      Right now this way works, and has the added benefit, that one tree-call has _all the formulas_ in one place. To we could do ✨optimization✨ on
-//      the _whole_ thing if wanted. Local optimization can still be done _before_ specializing.
-//
-//
-//      Another thing that should be considered. We could fuse FieldAccess with a common tree. This would allow us to practically evaluate the same tree with multiple
-//      concepts _at once_. As specially with common-node elimination this might create interesting optimization opportunities.
-//
-//      Yet another idea is, to first specialise into a meta-tree that already resolved the sub-calls in each implblock, then resolve those to the actual lambda
 
 use std::env;
 
@@ -58,7 +48,7 @@ use crate::{
 
 #[derive(Clone, Debug)]
 struct SpecializationContext {
-    //The span of the TreeAccess node based uppon we specialize.
+    //The span of the TreeAccess node based upon we specialize.
     specialization_src: Span,
     //the region we are specializing in
     spec_region: RegionLocation,

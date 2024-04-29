@@ -37,7 +37,7 @@ impl Sandbox for Ui {
     type Message = Message;
 
     fn new() -> Self {
-        //read states from command line
+        //read states from command line this is some strange text.
 
         let path = if let Some(p) = std::env::args().skip(1).next() {
             p

@@ -59,7 +59,7 @@ impl Optimizer {
         //
         // Similar to the add_ast routine we _try_ all resolves, and collect errors before returning.
 
-        //NOTE: Implblocks never have context dependecies, so we can always resolve them immediatly.
+        //NOTE: Implblocks never have context dependencies, so we can always resolve them immediately.
         //      This also gives us a nice initial _resolved_set_
 
         let mut error_count = 0;
@@ -134,7 +134,7 @@ impl Optimizer {
             let mut local_work_list = Vec::new();
             std::mem::swap(&mut worklist, &mut local_work_list);
             for (def, srcspan) in local_work_list {
-                //check if def's dependecies are met
+                //check if def's dependencies are met
                 let dependecies_met = {
                     if let Some(dependecies) = context_dependeny_map.get(&def.node) {
                         let mut is_met = true;
@@ -146,13 +146,13 @@ impl Optimizer {
                         }
                         is_met
                     } else {
-                        //Has no dependecies, therfore we can always resolve
+                        //Has no dependencies, therefore we can always resolve
                         true
                     }
                 };
 
                 if dependecies_met {
-                    //Try to resolve, since all dependecies are met
+                    //Try to resolve, since all dependencies are met
                     if let Err(_err) = self.derive_region(def, srcspan.clone()) {
                         error_count += 1;
                     } else {
@@ -187,7 +187,7 @@ impl Optimizer {
         }
 
         //NOTE: Right now we don't use the dependency driven resolution we use for field defs,
-        //      cause by definition all dependecies must be resolved that could be imported.
+        //      cause by definition all dependencies must be resolved that could be imported.
         //      However, since this is pre-alpha ware, we still check
         for (exp, span) in exports {
             if let Some(deps) = context_dependeny_map.get(&exp.node) {
@@ -221,7 +221,7 @@ impl Optimizer {
     //Verifies that the implblock has the correct input and output signature set on all edges
     fn verify_imblblock(&self, block: &ConceptImpl) -> Result<(), OptError> {
         //NOTE: we currently only check that the return type matches, since the input types are
-        // always pre-set by the impblock builder, based on the concept's decleration. So there would be some
+        // always pre-set by the impblock builder, based on the concept's deceleration. So there would be some
         // kind of type conflict within the region.
 
         let expected_result_type: Ty = self
@@ -534,7 +534,7 @@ impl Optimizer {
             if let Some(ty) = self.find_type(&src.into()) {
                 if let Some(preset) = self.graph.edge(*edg).ty.get_type() {
                     if preset != &ty {
-                        let err = OptError::AnySpanned { span: region_src_span.clone().into(), text: format!("Edge was already set to {:?}, but was about to be overwriten with an incompatible type {:?}", preset, ty), span_text: "Somewhere in this region".to_owned() };
+                        let err = OptError::AnySpanned { span: region_src_span.clone().into(), text: format!("Edge was already set to {:?}, but was about to be overwritten with an incompatible type {:?}", preset, ty), span_text: "Somewhere in this region".to_owned() };
                         report(err.clone(), region_src_span.get_file());
                         return Err(err);
                     }
@@ -627,7 +627,7 @@ impl Optimizer {
                                 .span
                                 .get_file(),
                         );
-                        //Immediatly abort, since we have no way of finishing.
+                        //Immediately abort, since we have no way of finishing.
                         // TODO: We could also collect all error at this point...
                         return Err(e);
                     }

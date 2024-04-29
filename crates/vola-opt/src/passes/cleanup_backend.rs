@@ -1,10 +1,10 @@
 use crate::Optimizer;
 
 impl Optimizer {
-    ///Smoll pass that cleans up the export lambda declerations to not reference any _unused_ context.
+    ///Smoll pass that cleans up the export lambda declarations to not reference any _unused_ context.
     /// This should in fact also make the graph _purely_ in the alge dialect.
     pub fn cleanup_export_lmd(&mut self) {
-        //first do deadnode elemintation, then
+        //first do deadnode elimination, then
 
         let dnecount = self.graph.dead_node_elimination().unwrap().len();
 
