@@ -80,7 +80,7 @@ impl DotNode for AstEntry {
             AstEntry::ImplBlock(b) => b.id(),
             AstEntry::FieldDefine(fd) => fd.id(),
             AstEntry::ExportFn(ef) => ef.id(),
-            AstEntry::Module(m) => format!("Module({:?})", m.path),
+            AstEntry::Module(m) => format!("Module {:?}..{:?}", m.span.from.0, m.span.to.0),
             AstEntry::AlgeFunc(f) => f.id(),
         }
     }
@@ -93,7 +93,7 @@ impl DotNode for AstEntry {
             AstEntry::ImplBlock(b) => b.content(),
             AstEntry::FieldDefine(fd) => fd.content(),
             AstEntry::ExportFn(ef) => ef.content(),
-            AstEntry::Module(m) => format!("Module: {:?}", m.path),
+            AstEntry::Module(m) => format!("Module"),
             AstEntry::AlgeFunc(f) => f.content(),
         }
     }

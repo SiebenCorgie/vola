@@ -181,6 +181,7 @@ impl Pipeline {
         //TODO: add all the _standard_library_stuff_. Would be nice if we'd had them
         //      serialized somewhere.
         opt.add_ast(ast)?;
+
         //do mandatory type derivation
         opt.type_derive()?;
 

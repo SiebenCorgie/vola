@@ -406,7 +406,17 @@ impl WkOp {
                 Ok(Some(sig[0].clone()))
             }
 
-            WkOp::Abs | WkOp::Fract | WkOp::Round => {
+            WkOp::Abs
+            | WkOp::Fract
+            | WkOp::Round
+            | WkOp::Ceil
+            | WkOp::Floor
+            | WkOp::Sin
+            | WkOp::Cos
+            | WkOp::Tan
+            | WkOp::ASin
+            | WkOp::ACos
+            | WkOp::ATan => {
                 if sig.len() != 1 {
                     return Err(OptError::Any {
                         text: format!("{:?} expects one operand, got {:?}", self, sig.len()),

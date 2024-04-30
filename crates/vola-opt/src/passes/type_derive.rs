@@ -91,6 +91,12 @@ impl Optimizer {
             .field_def
             .values()
             .map(|fdef| (fdef.lambda_region.clone(), fdef.span.clone()))
+            //Append all alge_fn to the dependency resolution as well
+            .chain(
+                self.alge_fn
+                    .values()
+                    .map(|algefn| (algefn.lambda_region.clone(), algefn.span.clone())),
+            )
             .collect::<Vec<_>>();
 
         let exports = self

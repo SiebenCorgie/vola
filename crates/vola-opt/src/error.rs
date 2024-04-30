@@ -1,3 +1,4 @@
+use rvsdg::util::inline::InlineError;
 /*
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
@@ -70,6 +71,13 @@ pub enum OptError {
     TypeDeriveFailed {
         errorcount: usize,
         #[label("failed with {errorcount} errors in this region")]
+        span: SourceSpan,
+    },
+
+    #[error("Failed to inline call: {error}")]
+    InlineFailed {
+        error: InlineError,
+        #[label("While inlining this call")]
         span: SourceSpan,
     },
 }
