@@ -10,6 +10,9 @@ impl Optimizer {
         //Thats pretty simple, we find all uses of all alge_fn, inline the using-apply-node
         //and then cleanup the CVs of all regions that we touched.
 
+        #[cfg(feature = "log")]
+        log::info!("inline alge functions");
+
         for algefn in self.alge_fn.values() {
             if let Some(caller) = self.graph.find_caller(algefn.lambda) {
                 for c in caller {

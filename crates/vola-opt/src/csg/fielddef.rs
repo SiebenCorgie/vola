@@ -5,7 +5,12 @@
  *
  * 2024 Tendsin Mende
  */
-use rvsdg::{edge::InputType, region::RegionLocation, smallvec::SmallVec, NodeRef};
+use rvsdg::{
+    edge::{InputType, OutportLocation, OutputType},
+    region::RegionLocation,
+    smallvec::SmallVec,
+    NodeRef,
+};
 use vola_ast::{
     alge::LetStmt,
     common::Ident,
@@ -284,6 +289,16 @@ impl Optimizer {
             {
                 self.graph.edge_mut(edg).ty.set_type(inputty.clone());
             }
+            //Just to be sure, add the port as well. Otherwise we lose the type information
+            //if _no_ edge is connected.
+            self.typemap.set(
+                OutportLocation {
+                    node: interned_fielddef.lambda,
+                    output: OutputType::Argument(input_idx),
+                }
+                .into(),
+                inputty.clone(),
+            );
         }
 
         assert!(

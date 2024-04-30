@@ -6,6 +6,9 @@ impl Optimizer {
     pub fn cleanup_export_lmd(&mut self) {
         //first do deadnode elimination, then
 
+        #[cfg(feature = "log")]
+        log::info!("cleanup export λ-Nodes");
+
         let dnecount = self.graph.dead_node_elimination().unwrap().len();
 
         #[cfg(feature = "log")]

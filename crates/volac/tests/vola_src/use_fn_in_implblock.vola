@@ -1,0 +1,25 @@
+module std;
+
+
+operation Weather(amount: s);
+
+impl Weather<sub> for SDF3D(at){
+	let subat = eval sub.SDF3D(at);
+	let noise_sample = noise(at.x);
+
+	subat + noise_sample
+}
+
+
+export myFn(at: vec3){
+	csg f = Union(){
+		Weather(1.0){
+			Sphere(1.0)
+		}
+	}{
+		Sphere(1.0)
+	};
+
+	f.SDF3D(at)
+}
+

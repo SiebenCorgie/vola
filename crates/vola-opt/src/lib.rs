@@ -124,6 +124,9 @@ impl Optimizer {
         #[cfg(feature = "profile")]
         let ast_add_start = std::time::Instant::now();
 
+        #[cfg(feature = "log")]
+        log::info!("Adding Ast to Optimizer");
+
         let mut error_counter = 0;
 
         //NOTE yes collecting into a big'ol Vec all the time is kinda wasteful, but since

@@ -71,8 +71,10 @@ impl AlgeFn {
         //finally, set the result edge with the known result_type of the alge_fn
         lmd_builder
             .opt
-            .typemap
-            .set(result_edge.into(), alge_fn.return_type.into());
+            .graph
+            .edge_mut(result_edge)
+            .ty
+            .set_type(alge_fn.return_type.into());
         Ok(self)
     }
 
