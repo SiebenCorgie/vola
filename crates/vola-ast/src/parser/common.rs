@@ -139,10 +139,63 @@ impl Ty {
                 Ok(Ty::Vec { width: width.0 })
             }
             "t_mat" => {
-                todo!()
+                let width = Digit::parse(ctx, dta, &node.child(0).unwrap().child(1).unwrap())?;
+                ParserError::consume_expected_node_kind(
+                    ctx,
+                    node.child(0).unwrap().child(2).clone(),
+                    "x",
+                )?;
+                let height = Digit::parse(ctx, dta, &node.child(0).unwrap().child(3).unwrap())?;
+
+                Ok(Ty::Matrix {
+                    width: width.0,
+                    height: height.0,
+                })
             }
             "t_tensor" => {
-                todo!()
+                let mut walker = node.child(0).unwrap().walk();
+                let mut children = node.child(0).unwrap().children(&mut walker);
+
+                ParserError::consume_expected_node_kind(ctx, children.next(), "tensor")?;
+                ParserError::consume_expected_node_kind(ctx, children.next(), "<")?;
+
+                let mut dim = SmallVec::new();
+                while let Some(next_node) = children.next() {
+                    match next_node.kind() {
+                        "digit" => dim.push(Digit::parse(ctx, dta, &next_node)?.0),
+                        x => {
+                            let err = ParserError::UnexpectedAstNode {
+                                span: ctx.span(node).into(),
+                                kind: x.to_owned(),
+                                expected: "digit or \">\"".to_owned(),
+                            };
+                            report(err.clone(), ctx.get_file());
+                            return Err(err);
+                        }
+                    };
+
+                    if let Some(next) = children.next() {
+                        match next.kind() {
+                            "," => {}
+                            ">" => {
+                                break;
+                            }
+                            x => {
+                                let err = ParserError::UnexpectedAstNode {
+                                    span: ctx.span(node).into(),
+                                    kind: x.to_owned(),
+                                    expected: ", or \">\"".to_owned(),
+                                };
+                                report(err.clone(), ctx.get_file());
+                                return Err(err);
+                            }
+                        }
+                    }
+                }
+
+                ParserError::assert_ast_level_empty(ctx, children.next())?;
+
+                Ok(Ty::Tensor { dim })
             }
             _ => {
                 let err = ParserError::UnexpectedAstNode {
