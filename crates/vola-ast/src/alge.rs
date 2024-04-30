@@ -9,7 +9,7 @@
 
 use std::fmt::Display;
 
-use crate::common::{Call, Ident, Literal};
+use crate::common::{Call, Ident, Literal, Ty, TypedIdent};
 use smallvec::SmallVec;
 use vola_common::Span;
 
@@ -184,6 +184,17 @@ pub struct ImplBlock {
     ///(Re)naming of the concepts input argument.
     pub concept_arg_naming: SmallVec<[Ident; 1]>,
 
+    pub stmts: Vec<AlgeStmt>,
+    pub return_expr: AlgeExpr,
+}
+
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[derive(Clone, Debug)]
+pub struct AlgeFunc {
+    pub span: Span,
+    pub name: Ident,
+    pub args: SmallVec<[TypedIdent; 3]>,
+    pub return_type: Ty,
     pub stmts: Vec<AlgeStmt>,
     pub return_expr: AlgeExpr,
 }

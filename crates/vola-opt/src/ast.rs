@@ -81,6 +81,7 @@ impl Optimizer {
             AstEntry::ImplBlock(implblock) => self.add_impl_block(implblock).map(|t| Some(t)),
             AstEntry::FieldDefine(fdef) => self.add_field_def(fdef).map(|t| Some(t)),
             AstEntry::ExportFn(expfn) => self.add_export_fn(expfn).map(|t| Some(t)),
+            AstEntry::AlgeFunc(algefn) => todo!("impl alge function parser"),
         }
     }
 }

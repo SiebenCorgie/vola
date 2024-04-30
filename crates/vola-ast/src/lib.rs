@@ -17,7 +17,7 @@
 //! _by name_.
 
 use ahash::AHashSet;
-use alge::ImplBlock;
+use alge::{AlgeFunc, ImplBlock};
 use common::CTArg;
 use csg::{CSGConcept, CSGNodeDef, ExportFn, FieldDef};
 
@@ -53,6 +53,7 @@ pub enum AstEntry {
     ImplBlock(ImplBlock),
     FieldDefine(FieldDef),
     ExportFn(ExportFn),
+    AlgeFunc(AlgeFunc),
     Module(Module),
 }
 
