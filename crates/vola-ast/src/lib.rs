@@ -94,6 +94,14 @@ impl AstEntry {
             false
         }
     }
+
+    pub fn is_alge_fn(&self) -> bool {
+        if let Self::AlgeFunc(_) = self {
+            true
+        } else {
+            false
+        }
+    }
 }
 
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]

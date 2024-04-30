@@ -26,7 +26,10 @@
 #![feature(trait_upcasting)]
 
 use ahash::AHashMap;
-use alge::implblock::{ConceptImpl, ConceptImplKey};
+use alge::{
+    algefn::AlgeFn,
+    implblock::{ConceptImpl, ConceptImplKey},
+};
 use common::Ty;
 use csg::{exportfn::ExportFn, fielddef::FieldDef};
 use rvsdg::{attrib::FlagStore, Rvsdg};
@@ -73,6 +76,9 @@ pub struct Optimizer {
     ///Lookup table for all field-defs
     pub(crate) field_def: AHashMap<String, FieldDef>,
 
+    ///Lookup table for all alge functions.
+    pub(crate) alge_fn: AHashMap<String, AlgeFn>,
+
     ///All known type tags of ports and nodes. Can be used to do type checking, or infer edge types.
     pub typemap: FlagStore<Ty>,
 
@@ -97,6 +103,7 @@ impl Optimizer {
             concept_impl: AHashMap::default(),
             export_fn: AHashMap::default(),
             field_def: AHashMap::default(),
+            alge_fn: AHashMap::default(),
             typemap: FlagStore::new(),
             span_tags: FlagStore::new(),
             names: FlagStore::new(),
@@ -139,8 +146,24 @@ impl Optimizer {
             })
             .collect::<Vec<_>>();
 
+        //algefunction loop
+        let sans_alge_fn = sans_defs
+            .into_iter()
+            .filter_map(|ast_entry| {
+                if ast_entry.entry.is_alge_fn() {
+                    //Early add def
+                    if let Err(_e) = self.add_tl_node(ast_entry) {
+                        error_counter += 1;
+                    }
+                    None
+                } else {
+                    Some(ast_entry)
+                }
+            })
+            .collect::<Vec<_>>();
+
         //implblock loop
-        let sans_impl_block = sans_defs
+        let sans_impl_block = sans_alge_fn
             .into_iter()
             .filter_map(|ast_entry| {
                 if ast_entry.entry.is_impl_block() {
@@ -228,10 +251,16 @@ impl Optimizer {
             .with_flags("Span", &self.span_tags)
             .with_flags("Name", &self.names)
             .build();
+
+        println!("Dumping {name}");
+        if std::env::var("VOLA_ALWAYS_WRITE_DUMP").is_ok() {
+            self.dump_debug_state(&format!("{name}.bin"));
+        }
     }
 
     #[cfg(feature = "viewer")]
-    pub fn dump_depug_state(&self, path: &dyn AsRef<std::path::Path>) {
+    pub fn dump_debug_state(&self, path: &dyn AsRef<std::path::Path>) {
+        println!("Writing debug state to {:?}", path.as_ref());
         self.viewer_state.write_to_file(path)
     }
 }

@@ -195,7 +195,7 @@ impl Pipeline {
         }
 
         if std::env::var("VOLA_DUMP_VIEWER").is_ok() {
-            opt.dump_depug_state(&"OptState.bin");
+            opt.dump_debug_state(&"OptState.bin");
         }
 
         //finally use the expected backend

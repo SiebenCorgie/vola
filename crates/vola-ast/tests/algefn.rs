@@ -20,6 +20,9 @@ fn test_parse_fn() {
                 }
         );
 
-        assert!(f.return_type == Ty::Scalar)
+        assert!(f.return_type == Ty::Scalar);
+        assert!(f.stmts.len() == 1);
+    } else {
+        panic!("Expected algefn");
     }
 }

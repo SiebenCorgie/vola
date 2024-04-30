@@ -1,0 +1,29 @@
+module std;
+
+fn rand(n: s) -> s{
+	fract(sin(n) * 43758.5453123)
+}
+
+fn noise(p: s) -> s{
+	let fl = floor(p);
+	let fc = fract(p);
+	mix(rand(fl), rand(fl + 1.0), fc)
+}
+
+
+
+export myFn(at: vec3){
+	let offsetx = noise(at.x);
+	let offsety = noise(at.y);
+
+	csg f = Union(){
+		Translate([offsetx, offsety, 0.0]){
+			Sphere(1.0)
+		}
+	}{
+		Sphere(1.0)
+	};
+
+	f.SDF3D(at)
+}
+

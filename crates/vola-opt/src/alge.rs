@@ -21,6 +21,7 @@ use vola_ast::csg::{CSGConcept, CSGNodeDef};
 
 use crate::{common::Ty, error::OptError, DialectNode, OptEdge, OptGraph, OptNode, TypeState};
 
+pub(crate) mod algefn;
 pub(crate) mod implblock;
 
 ///Well known ops for the optimizer. Includes all _BinaryOp_ of the Ast, as well as
@@ -52,8 +53,16 @@ pub enum WkOp {
     Clamp,
 
     Abs,
-    Frac,
+    Fract,
     Round,
+    Ceil,
+    Floor,
+    Sin,
+    Cos,
+    Tan,
+    ASin,
+    ACos,
+    ATan,
     //TODO: basically implement the rest of the glsl-ext-inst, cause people might be used to those.
     Inverse,
 }
@@ -83,7 +92,16 @@ impl WkOp {
             WkOp::Round => 1,
 
             WkOp::Abs => 1,
-            WkOp::Frac => 1,
+            WkOp::Fract => 1,
+            WkOp::Ceil => 1,
+            WkOp::Floor => 1,
+
+            WkOp::Sin => 1,
+            WkOp::Cos => 1,
+            WkOp::Tan => 1,
+            WkOp::ASin => 1,
+            WkOp::ACos => 1,
+            WkOp::ATan => 1,
 
             WkOp::Inverse => 1,
         }
@@ -101,9 +119,17 @@ impl WkOp {
             "mix" | "lerp" => Some(Self::Mix),
             "mod" => Some(Self::Mod),
             "clamp" => Some(Self::Clamp),
-            "frac" => Some(Self::Frac),
+            "fract" => Some(Self::Fract),
             "abs" => Some(Self::Abs),
             "round" => Some(Self::Round),
+            "ceil" => Some(Self::Ceil),
+            "floor" => Some(Self::Floor),
+            "sin" => Some(Self::Sin),
+            "cos" => Some(Self::Cos),
+            "tan" => Some(Self::Tan),
+            "asin" => Some(Self::ASin),
+            "acos" => Some(Self::ACos),
+            "atan" => Some(Self::ATan),
             "inverse" | "invert" => Some(Self::Inverse),
             _ => None,
         }
@@ -380,7 +406,7 @@ impl WkOp {
                 Ok(Some(sig[0].clone()))
             }
 
-            WkOp::Abs | WkOp::Frac | WkOp::Round => {
+            WkOp::Abs | WkOp::Fract | WkOp::Round => {
                 if sig.len() != 1 {
                     return Err(OptError::Any {
                         text: format!("{:?} expects one operand, got {:?}", self, sig.len()),
