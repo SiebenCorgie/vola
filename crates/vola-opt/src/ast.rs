@@ -8,7 +8,7 @@
 //! Module that handles the opt-graph building based on [AST](vola-ast) nodes.
 
 use rvsdg::{
-    edge::OutportLocation,
+    edge::{OutportLocation, OutputType},
     region::{Input, RegionLocation},
     smallvec::{smallvec, SmallVec},
     NodeRef,
@@ -22,10 +22,10 @@ use vola_common::report;
 
 use crate::{
     alge::{CallOp, ConstantIndex, Construct, EvalNode, ImmNat, ImmScalar, WkOp},
-    common::{LmdContext, Ty},
+    common::{FnImport, LmdContext, Ty},
     csg::CsgOp,
     error::OptError,
-    OptNode, Optimizer,
+    OptNode, Optimizer, TypeState,
 };
 
 impl Optimizer {
@@ -81,6 +81,7 @@ impl Optimizer {
             AstEntry::ImplBlock(implblock) => self.add_impl_block(implblock).map(|t| Some(t)),
             AstEntry::FieldDefine(fdef) => self.add_field_def(fdef).map(|t| Some(t)),
             AstEntry::ExportFn(expfn) => self.add_export_fn(expfn).map(|t| Some(t)),
+            AstEntry::AlgeFunc(algefn) => self.add_alge_fn(algefn).map(|t| Some(t)),
         }
     }
 }
@@ -163,22 +164,10 @@ impl<'a> AstLambdaBuilder<'a> {
             }
             AlgeExprTy::Call(c) => {
                 //For the call node we try to parse the well known ops.
-                // Since the language currently has no arbritray _functions_ a call must always resolve to one of those.
                 //
-                // NOTE: We could probably implement a subset of the glsl language, which would allow us to let people copy
-                // paste glsl expressions into vola :D
-
-                let wknode = if let Some(wknode) = WkOp::try_parse(&c.ident.0) {
-                    wknode
-                } else {
-                    let err = OptError::AnySpanned {
-                        span: expr_span.clone().into(),
-                        text: format!("Unknown function \"{}\" called.", c.ident.0),
-                        span_text: "here".to_owned(),
-                    };
-                    report(err.clone(), c.span.get_file());
-                    return Err(err);
-                };
+                //If that doesn't work, we lookup the parsed functions.
+                //if one of those has the identifier, import it as cv and
+                //call that instead.
 
                 //Build the call node with its sub args
                 let mut subargs: SmallVec<[OutportLocation; 3]> = SmallVec::new();
@@ -186,19 +175,103 @@ impl<'a> AstLambdaBuilder<'a> {
                     let arg = self.setup_alge_expr(arg, parent)?;
                     subargs.push(arg);
                 }
+                if let Some(wknode) = WkOp::try_parse(&c.ident.0) {
+                    let opnode = self
+                        .opt
+                        .graph
+                        .on_region(&self.lambda_region, |regbuilder| {
+                            let (opnode, _) = regbuilder
+                                .connect_node(
+                                    OptNode::new(CallOp::new(wknode), expr_span),
+                                    &subargs,
+                                )
+                                .unwrap();
+                            opnode.output(0)
+                        })
+                        .unwrap();
 
-                let opnode = self
-                    .opt
-                    .graph
-                    .on_region(&self.lambda_region, |regbuilder| {
-                        let (opnode, _) = regbuilder
-                            .connect_node(OptNode::new(CallOp::new(wknode), expr_span), &subargs)
+                    Ok(opnode)
+                } else {
+                    if let Some(algefn) = self.opt.alge_fn.get(&c.ident.0) {
+                        let alge_import = if let Some(imported) =
+                            self.lmd_context.known_function(&algefn.name.0)
+                        {
+                            imported
+                        } else {
+                            //import this function newly, add to context,
+                            //then use it
+
+                            let algeimportcv = self
+                                .opt
+                                .graph
+                                .import_context(
+                                    algefn
+                                        .lambda
+                                        .as_outport_location(OutputType::LambdaDeclaration),
+                                    self.lambda_region,
+                                )
+                                .unwrap();
+
+                            assert!(self
+                                .lmd_context
+                                .imported_functions
+                                .insert(
+                                    algefn.name.0.clone(),
+                                    FnImport {
+                                        port: algeimportcv,
+                                        span: algefn.span.clone(),
+                                        args: algefn.args.iter().map(|a| a.1.clone()).collect(),
+                                        ret: algefn.retty.clone()
+                                    }
+                                )
+                                .is_none());
+
+                            self.lmd_context.known_function(&algefn.name.0).unwrap()
+                        };
+                        //import the algefn into scope, then add an apply node
+                        //and hookup the arguments. Bail if the argument count does not
+                        //fit
+
+                        //import algefn
+
+                        let applynode_output = self
+                            .opt
+                            .graph
+                            .on_region(&self.lambda_region, |regbuilder| {
+                                let (applynode, input_edges) =
+                                    regbuilder.call(alge_import.port.clone(), &subargs).unwrap();
+                                //Set edge types already, since we know them
+                                //from the imported function
+                                //NOTE: that the first input is always just a callable
+                                for (argidx, edg) in input_edges.iter().skip(1).enumerate() {
+                                    assert!(
+                                        regbuilder
+                                            .ctx_mut()
+                                            .edge_mut(*edg)
+                                            .ty
+                                            .set_type(alge_import.args[argidx].clone())
+                                            == Some(TypeState::Unset)
+                                    );
+                                }
+
+                                applynode.output(0)
+                            })
                             .unwrap();
-                        opnode.output(0)
-                    })
-                    .unwrap();
-
-                Ok(opnode)
+                        //tag the output with the result type
+                        self.opt
+                            .typemap
+                            .set(applynode_output.clone().into(), alge_import.ret.clone());
+                        Ok(applynode_output)
+                    } else {
+                        let err = OptError::AnySpanned {
+                            span: expr_span.clone().into(),
+                            text: format!("\"{}\" does not name a build-in function, or declared algebraic function in this scope!", c.ident.0),
+                            span_text: "here".to_owned(),
+                        };
+                        report(err.clone(), c.span.get_file());
+                        Err(err)
+                    }
+                }
             }
             AlgeExprTy::EvalExpr(evalexpr) => {
                 //For the eval expression, first find / insert the cv_import we need.

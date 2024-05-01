@@ -40,8 +40,6 @@ impl Optimizer {
         let mut argidx = 0;
         let mut signature = SmallVec::default();
         while let Some(argport) = lmd.argument(argidx) {
-            argidx += 1;
-
             let mut found_ty = None;
             //First try to get a type for an connected edge, if possible. If not, we try to find a type_tag
             for edge in argport.edges.iter() {
@@ -79,6 +77,7 @@ impl Optimizer {
                     signature.push(None);
                 }
             }
+            argidx += 1;
         }
 
         signature

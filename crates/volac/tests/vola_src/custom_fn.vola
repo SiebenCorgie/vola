@@ -1,0 +1,17 @@
+module std;
+
+export myFn(at: vec3){
+	let offsetx = noise(at.x);
+	let offsety = noise(at.y);
+
+	csg f = Union(){
+		Translate([offsetx, offsety, 0.0]){
+			Sphere(1.0)
+		}
+	}{
+		Sphere(1.0)
+	};
+
+	f.SDF3D(at)
+}
+

@@ -9,8 +9,8 @@ use smallvec::SmallVec;
 use vola_common::{report, Span};
 
 use crate::{
-    alge::{ImplBlock, LetStmt},
-    common::{Ident, TypedIdent},
+    alge::{AlgeExpr, AlgeFunc, AlgeStmt, ImplBlock, LetStmt},
+    common::{Ident, Ty, TypedIdent},
     csg::{AccessDesc, CSGBinding, CSGConcept, CSGNodeDef, CSGOp, CSGStmt, ExportFn, FieldDef},
     error::ParserError,
     AstEntry, Module,
@@ -48,6 +48,10 @@ impl FromTreeSitter for AstEntry {
                 let module = Module::parse(ctx, dta, node)?;
                 Ok(AstEntry::Module(module))
             }
+            "fn" => {
+                let fndef = AlgeFunc::parse(ctx, dta, node)?;
+                Ok(AstEntry::AlgeFunc(fndef))
+            }
             _ => {
                 let err = ParserError::UnknownAstNode {
                     kind: node.kind().to_owned(),
@@ -57,6 +61,126 @@ impl FromTreeSitter for AstEntry {
                 Err(err)
             }
         }
+    }
+}
+
+impl FromTreeSitter for AlgeFunc {
+    fn parse(ctx: &mut ParserCtx, dta: &[u8], node: &tree_sitter::Node) -> Result<Self, ParserError>
+    where
+        Self: Sized,
+    {
+        ParserError::assert_node_kind(ctx, node, "fn")?;
+
+        let mut cursor = node.walk();
+        let mut children = node.children(&mut cursor);
+
+        ParserError::consume_expected_node_kind(ctx, children.next(), "fn")?;
+
+        let name = Ident::parse(ctx, dta, &children.next().unwrap())?;
+
+        ParserError::consume_expected_node_kind(ctx, children.next(), "(")?;
+        let mut args = SmallVec::new();
+        while let Some(next_node) = children.next() {
+            match next_node.kind() {
+                //found the end
+                ")" => break,
+                "typed_arg" => {
+                    let arg = TypedIdent::parse(ctx, dta, &next_node)?;
+                    args.push(arg);
+                }
+                //part of the list, just ignore
+                "," => {}
+                _ => {
+                    let error = ParserError::UnexpectedAstNode {
+                        span: ctx.span(node).into(),
+                        kind: next_node.kind().to_owned(),
+                        expected: "typed_arg".to_owned(),
+                    };
+                    report(error.clone(), ctx.get_file());
+                    return Err(error);
+                }
+            }
+        }
+
+        ParserError::consume_expected_node_kind(ctx, children.next(), "->")?;
+        let return_type = Ty::parse(ctx, dta, children.next().as_ref().unwrap())?;
+        ParserError::consume_expected_node_kind(ctx, children.next(), "{")?;
+
+        let block_node = children.next().unwrap();
+        let mut stmts = Vec::new();
+        let mut return_expr = None;
+
+        match block_node.kind() {
+            "block" => {
+                let mut walker = block_node.walk();
+                let mut children = block_node.children(&mut walker);
+
+                while let Some(next_node) = children.next() {
+                    match next_node.kind() {
+                        "comment" => {}
+                        "alge_expr" => {
+                            //must be the last thing in the block
+                            let ret = AlgeExpr::parse(ctx, dta, &next_node)?;
+                            return_expr = Some(ret);
+                            ParserError::assert_ast_level_empty(ctx, children.next())?;
+                            ParserError::assert_node_no_error(ctx, &next_node)?;
+
+                            break;
+                        }
+                        "let_stmt" | "assign_stmt" => {
+                            stmts.push(AlgeStmt::parse(ctx, dta, &next_node)?);
+                            ParserError::consume_expected_node_string(
+                                ctx,
+                                dta,
+                                children.next(),
+                                ";",
+                            )?;
+                        }
+                        _ => {
+                            let err = ParserError::UnexpectedAstNode {
+                                span: ctx.span(&next_node).into(),
+                                kind: next_node.kind().to_owned(),
+                                expected: "alge_stmt | alge_expr  | comment".to_owned(),
+                            };
+                            report(err.clone(), ctx.get_file());
+                            return Err(err);
+                        }
+                    }
+                }
+
+                ParserError::assert_ast_level_empty(ctx, children.next())?;
+            }
+            _ => {
+                let err = ParserError::UnexpectedAstNode {
+                    span: ctx.span(&block_node).into(),
+                    kind: block_node.kind().to_owned(),
+                    expected: "block".to_owned(),
+                };
+                report(err.clone(), ctx.get_file());
+                return Err(err);
+            }
+        }
+
+        let return_expr = match return_expr {
+            None => {
+                let err = ParserError::NoAlgeExprAtEnd;
+                report(err.clone(), ctx.get_file());
+                return Err(err);
+            }
+            Some(r) => r,
+        };
+
+        ParserError::consume_expected_node_string(ctx, dta, children.next(), "}")?;
+        ParserError::assert_ast_level_empty(ctx, children.next())?;
+        ParserError::assert_node_no_error(ctx, node)?;
+        Ok(AlgeFunc {
+            span: Span::from(node).with_file_maybe(ctx.get_file()),
+            name,
+            args,
+            return_type,
+            stmts,
+            return_expr,
+        })
     }
 }
 
@@ -80,7 +204,6 @@ impl FromTreeSitter for FieldDef {
 
         ParserError::consume_expected_node_kind(ctx, children.next(), "(")?;
         let mut args = SmallVec::new();
-
         while let Some(next_node) = children.next() {
             match next_node.kind() {
                 //found the end

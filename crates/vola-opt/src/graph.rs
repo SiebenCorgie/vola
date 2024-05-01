@@ -276,7 +276,7 @@ impl Optimizer {
                         Some(new_ty) => {
                             if let Some(set_ty) = &unified_type {
                                 if new_ty != set_ty {
-                                    panic!("Found edge inconsistensy on edege {edg}. There are two edge types on the same port: {new_ty:?} & {set_ty:?}" )
+                                    panic!("Found edge inconsistensy on edge {edg}. There are two edge types on the same port: {new_ty:?} & {set_ty:?}" )
                                 }
                             } else {
                                 unified_type = Some(new_ty.clone());

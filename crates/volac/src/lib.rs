@@ -181,6 +181,11 @@ impl Pipeline {
         //TODO: add all the _standard_library_stuff_. Would be nice if we'd had them
         //      serialized somewhere.
         opt.add_ast(ast)?;
+
+        //FIXME: This shouldn't be mandatory instead the dispatcher should be able to handle other ContextVariables
+        //       then the ones used while dispatching
+        opt.inline_alge_fn()?;
+
         //do mandatory type derivation
         opt.type_derive()?;
 
@@ -195,7 +200,7 @@ impl Pipeline {
         }
 
         if std::env::var("VOLA_DUMP_VIEWER").is_ok() {
-            opt.dump_depug_state(&"OptState.bin");
+            opt.dump_debug_state(&"OptState.bin");
         }
 
         //finally use the expected backend

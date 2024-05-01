@@ -731,8 +731,16 @@ impl SpvNode {
             WkOp::Mix => SpvOp::GlslOp(GlOp::FMix),
             WkOp::Clamp => SpvOp::GlslOp(GlOp::FClamp),
             WkOp::Abs => SpvOp::GlslOp(GlOp::FAbs),
-            WkOp::Frac => SpvOp::GlslOp(GlOp::Fract),
+            WkOp::Fract => SpvOp::GlslOp(GlOp::Fract),
             WkOp::Round => SpvOp::GlslOp(GlOp::Round),
+            WkOp::Ceil => SpvOp::GlslOp(GlOp::Ceil),
+            WkOp::Floor => SpvOp::GlslOp(GlOp::Floor),
+            WkOp::Sin => SpvOp::GlslOp(GlOp::Sin),
+            WkOp::Cos => SpvOp::GlslOp(GlOp::Cos),
+            WkOp::Tan => SpvOp::GlslOp(GlOp::Tan),
+            WkOp::ASin => SpvOp::GlslOp(GlOp::Asin),
+            WkOp::ACos => SpvOp::GlslOp(GlOp::Acos),
+            WkOp::ATan => SpvOp::GlslOp(GlOp::Atan),
             WkOp::Inverse => SpvOp::GlslOp(GlOp::MatrixInverse),
         };
 

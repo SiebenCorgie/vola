@@ -14,6 +14,19 @@ operation SmoothUnion(suradius: s);
 operation ColorOw(owcol: vec3);
 operation Round(rad: s);
 
+
+fn rand(n: s) -> s{
+	fract(sin(n) * 43758.5453123)
+}
+
+fn noise(p: s) -> s{
+	let fl = floor(p);
+	let fc = fract(p);
+	mix(rand(fl), rand(fl + 1.0), fc)
+}
+
+
+
 //Declares that we need the parameter `@` to define SDF3D of Sphere
 impl Sphere for SDF3D(at){
      length(at) - radius

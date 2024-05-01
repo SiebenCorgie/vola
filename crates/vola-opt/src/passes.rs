@@ -14,4 +14,5 @@
 
 mod cleanup_backend;
 mod field_dispatch;
+mod inline_alge_fn;
 mod type_derive;

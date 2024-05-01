@@ -21,7 +21,7 @@ use std::collections::VecDeque;
 
 use ahash::{AHashMap, AHashSet};
 use rvsdg::{
-    edge::{OutportLocation, OutputType},
+    edge::{InportLocation, InputType, OutportLocation, OutputType},
     nodes::{ApplyNode, NodeType},
     region::RegionLocation,
     smallvec::SmallVec,
@@ -62,6 +62,9 @@ impl Optimizer {
         //NOTE: Implblocks never have context dependencies, so we can always resolve them immediately.
         //      This also gives us a nice initial _resolved_set_
 
+        #[cfg(feature = "log")]
+        log::info!("type derive");
+
         let mut error_count = 0;
         let mut resolve_set = AHashSet::new();
         let implblocks = self
@@ -91,6 +94,12 @@ impl Optimizer {
             .field_def
             .values()
             .map(|fdef| (fdef.lambda_region.clone(), fdef.span.clone()))
+            //Append all alge_fn to the dependency resolution as well
+            .chain(
+                self.alge_fn
+                    .values()
+                    .map(|algefn| (algefn.lambda_region.clone(), algefn.span.clone())),
+            )
             .collect::<Vec<_>>();
 
         let exports = self
@@ -406,27 +415,23 @@ impl Optimizer {
                 //types. After that we match them to the apply_nodes actual connected types. If they match we pass
                 //the callables result argument
 
+                let span = self
+                    .span_tags
+                    .get(&calldef.node.into())
+                    .cloned()
+                    .unwrap_or(Span::empty());
                 let result_type = {
-                    let lmdregion = RegionLocation {
-                        node: calldef.node,
-                        region_index: 0,
-                    };
-                    //Checkout the connected edges type.
-                    if let Some(edg) = self.graph.region(&lmdregion).unwrap().results[0].edge {
-                        if let Some(ty) = self.graph.edge(edg).ty.get_type() {
-                            ty.clone()
-                        } else {
-                            let err = OptError::Any {
-                                text: format!("apply node's result has no type set"),
-                            };
-                            report(err.clone(), region_src_span.get_file());
-                            return Err(err);
+                    if let Some(ty) = self.find_type(
+                        &InportLocation {
+                            node: calldef.node,
+                            input: InputType::Result(0),
                         }
+                        .into(),
+                    ) {
+                        ty
                     } else {
-                        let err = OptError::Any {
-                            text: format!("apply node's result has no connected edge."),
-                        };
-                        report(err.clone(), region_src_span.get_file());
+                        let err = OptError::AnySpanned { span: span.clone().into(), text: "This call's src function output type was not set!".to_owned(), span_text: "consider checking this function for errors (and create and file an issue on GitLab).".to_owned() };
+                        report(err.clone(), span.get_file());
                         return Err(err);
                     }
                 };
@@ -437,23 +442,18 @@ impl Optimizer {
                 };
                 let call_sig = self.get_lambda_arg_signature(callable_reg.node);
                 let mut expected_call_sig: SmallVec<[Ty; 3]> = SmallVec::default();
-                for maybe_ty in call_sig {
+                for (argidx, maybe_ty) in call_sig.into_iter().enumerate() {
                     if let Some(t) = maybe_ty {
                         expected_call_sig.push(t);
                     } else {
-                        let lambda_span = self
-                            .span_tags
-                            .get(&callable_src.node.into())
-                            .cloned()
-                            .unwrap_or(Span::empty());
-                        let err = OptError::AnySpannedWithSource {
-                            source_span: region_src_span.clone().into(),
-                            source_text: "In this region".to_owned(),
-                            text: "The argument type of one of the called concepts was not set"
-                                .to_owned(),
-                            span: lambda_span.into(),
-                            span_text: "This implementation was called".to_owned(),
+                        let err = OptError::AnySpanned {
+                            span: span.clone().into(),
+                            text: format!(
+                                "Argument-Type {argidx} was not set. This indicates a bug!"
+                            ),
+                            span_text: "Of this λ-Node".to_owned(),
                         };
+
                         //Shouldn't happen, so return an error in that case
                         report(err.clone(), region_src_span.get_file());
                         return Err(err);

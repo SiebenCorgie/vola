@@ -423,8 +423,13 @@ impl Optimizer {
         let lmd = build_concept_impl.lambda.clone();
 
         //now append types to edges based on impl-block signature, as well add some general debug info for later.
-        self.names
-            .set(lmd.into(), build_concept_impl.concept.0.clone());
+        self.names.set(
+            lmd.into(),
+            format!(
+                "Impl {} for {}",
+                src_csg_def.name.0, build_concept_impl.concept.0
+            ),
+        );
         self.span_tags
             .set(lmd.into(), build_concept_impl.span.clone());
 

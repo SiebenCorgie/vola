@@ -16,7 +16,8 @@ use vola_common::dot::{
 
 use crate::{
     alge::{
-        AlgeExpr, AlgeExprTy, AlgeStmt, AssignStmt, EvalExpr, FieldAccessor, ImplBlock, LetStmt,
+        AlgeExpr, AlgeExprTy, AlgeFunc, AlgeStmt, AssignStmt, EvalExpr, FieldAccessor, ImplBlock,
+        LetStmt,
     },
     common::{CTArg, Call, TypedIdent},
     csg::{
@@ -79,7 +80,8 @@ impl DotNode for AstEntry {
             AstEntry::ImplBlock(b) => b.id(),
             AstEntry::FieldDefine(fd) => fd.id(),
             AstEntry::ExportFn(ef) => ef.id(),
-            AstEntry::Module(m) => format!("Module({:?})", m.path),
+            AstEntry::Module(m) => format!("Module {:?}..{:?}", m.span.from.0, m.span.to.0),
+            AstEntry::AlgeFunc(f) => f.id(),
         }
     }
 
@@ -91,7 +93,8 @@ impl DotNode for AstEntry {
             AstEntry::ImplBlock(b) => b.content(),
             AstEntry::FieldDefine(fd) => fd.content(),
             AstEntry::ExportFn(ef) => ef.content(),
-            AstEntry::Module(m) => format!("Module: {:?}", m.path),
+            AstEntry::Module(m) => format!("Module"),
+            AstEntry::AlgeFunc(f) => f.content(),
         }
     }
 
@@ -104,6 +107,7 @@ impl DotNode for AstEntry {
             AstEntry::FieldDefine(fd) => fd.build_children(builder),
             AstEntry::ExportFn(ef) => ef.build_children(builder),
             AstEntry::Module(_m) => builder,
+            AstEntry::AlgeFunc(f) => f.build_children(builder),
         }
     }
 }
@@ -177,6 +181,42 @@ impl DotNode for ExportFn {
             //now recurse
             builder = acc.build_children(builder)
         }
+
+        builder
+    }
+}
+
+impl DotNode for AlgeFunc {
+    fn id(&self) -> String {
+        format!("AlgeFunc {:?}..{:?}", self.span.from, self.span.to)
+    }
+
+    fn content(&self) -> String {
+        self.name.0.clone()
+    }
+
+    fn build_children(&self, mut builder: GraphvizBuilder) -> GraphvizBuilder {
+        for inp in &self.args {
+            builder.add_node(inp);
+            builder.connect(self, inp);
+
+            //now recurse
+            builder = inp.build_children(builder)
+        }
+        //Add all sub nodes and connect them to our selfs
+        for stmt in &self.stmts {
+            builder.add_node(stmt);
+            builder.connect(self, stmt);
+
+            //now recurse
+            builder = stmt.build_children(builder)
+        }
+
+        builder.add_node(&self.return_expr);
+        builder.connect(self, &self.return_expr);
+
+        //now recurse
+        builder = self.return_expr.build_children(builder);
 
         builder
     }

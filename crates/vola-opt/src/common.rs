@@ -8,7 +8,12 @@ use std::fmt::Display;
  * 2024 Tendsin Mende
  */
 use ahash::AHashMap;
-use rvsdg::{attrib::FlagStore, edge::OutportLocation, smallvec::SmallVec, NodeRef};
+use rvsdg::{
+    attrib::FlagStore,
+    edge::{OutportLocation, OutputType},
+    smallvec::SmallVec,
+    NodeRef, SmallColl,
+};
 use vola_ast::{
     alge::ImplBlock,
     csg::{CSGConcept, CSGNodeDef},
@@ -163,11 +168,20 @@ pub struct VarDef {
     pub span: vola_common::Span,
 }
 
+#[derive(Debug)]
+pub struct FnImport {
+    pub port: OutportLocation,
+    pub span: vola_common::Span,
+    pub args: SmallColl<Ty>,
+    pub ret: Ty,
+}
+
 ///Helper utility that keeps track of defined variables.
 #[derive(Debug)]
 pub struct LmdContext {
     ///Maps a variable name to an Value outport.
     pub defined_vars: AHashMap<String, VarDef>,
+    pub imported_functions: AHashMap<String, FnImport>,
 }
 
 impl LmdContext {
@@ -234,6 +248,7 @@ impl LmdContext {
 
         LmdContext {
             defined_vars: defmap,
+            imported_functions: AHashMap::with_capacity(0),
         }
     }
 
@@ -271,7 +286,10 @@ impl LmdContext {
             type_map.set(argport.into(), arg.ty.clone().into());
         }
 
-        LmdContext { defined_vars }
+        LmdContext {
+            defined_vars,
+            imported_functions: AHashMap::with_capacity(0),
+        }
     }
 
     pub fn new_for_fielddef(
@@ -293,7 +311,7 @@ impl LmdContext {
                 .add_argument();
             let argport = OutportLocation {
                 node: lmd,
-                output: rvsdg::edge::OutputType::Argument(arg_idx),
+                output: OutputType::Argument(arg_idx),
             };
 
             //TODO use the actual correct span.
@@ -308,7 +326,45 @@ impl LmdContext {
             type_map.set(argport.into(), arg.ty.clone().into());
         }
 
-        LmdContext { defined_vars }
+        LmdContext {
+            defined_vars,
+            imported_functions: AHashMap::with_capacity(0),
+        }
+    }
+
+    pub fn new_for_alge_fn(
+        graph: &mut OptGraph,
+        type_map: &mut FlagStore<Ty>,
+        lmd: NodeRef,
+        alge_fn: &vola_ast::alge::AlgeFunc,
+    ) -> Self {
+        let mut defined_vars = AHashMap::new();
+        //Build the argument map, and setup the λ-Context
+        for arg in &alge_fn.args {
+            let arg_port = graph
+                .node_mut(lmd)
+                .node_type
+                .unwrap_lambda_mut()
+                .add_argument();
+
+            let argport = OutportLocation {
+                node: lmd,
+                output: OutputType::Argument(arg_port),
+            };
+            defined_vars.insert(
+                arg.ident.0.clone(),
+                VarDef {
+                    port: argport.clone(),
+                    span: arg.span.clone(),
+                },
+            );
+            type_map.set(argport.clone().into(), Ty::from(arg.clone().ty));
+        }
+
+        LmdContext {
+            defined_vars,
+            imported_functions: AHashMap::with_capacity(0),
+        }
     }
 
     ///Checks if a variable with "name" already exists.
@@ -320,5 +376,9 @@ impl LmdContext {
     pub fn add_define(&mut self, name: String, def: VarDef) {
         let old = self.defined_vars.insert(name, def);
         assert!(old.is_none(), "Variable with that name already existed!");
+    }
+
+    pub fn known_function(&self, name: &String) -> Option<&FnImport> {
+        self.imported_functions.get(name)
     }
 }

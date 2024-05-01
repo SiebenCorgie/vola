@@ -63,6 +63,10 @@ impl Optimizer {
             .iter()
             .map(|(ident, exp)| (ident.clone(), exp.span.clone()))
             .collect::<Vec<_>>();
+
+        #[cfg(feature = "log")]
+        log::info!("dispatch {} exports", exports.len());
+
         for (ident, span) in exports {
             if let Err(err) = self.dispatch_export(&ident) {
                 report(err, span.get_file());

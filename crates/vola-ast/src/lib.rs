@@ -17,7 +17,7 @@
 //! _by name_.
 
 use ahash::AHashSet;
-use alge::ImplBlock;
+use alge::{AlgeFunc, ImplBlock};
 use common::CTArg;
 use csg::{CSGConcept, CSGNodeDef, ExportFn, FieldDef};
 
@@ -53,6 +53,7 @@ pub enum AstEntry {
     ImplBlock(ImplBlock),
     FieldDefine(FieldDef),
     ExportFn(ExportFn),
+    AlgeFunc(AlgeFunc),
     Module(Module),
 }
 
@@ -88,6 +89,14 @@ impl AstEntry {
 
     pub fn is_module_import(&self) -> bool {
         if let Self::Module(_) = self {
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn is_alge_fn(&self) -> bool {
+        if let Self::AlgeFunc(_) = self {
             true
         } else {
             false
