@@ -30,7 +30,7 @@ use rvsdg::{
 use vola_common::{report, Span};
 
 use crate::{
-    alge::implblock::ConceptImpl,
+    alge::{algefn::AlgeFn, implblock::ConceptImpl},
     common::Ty,
     csg::{exportfn::ExportFn, fielddef::FieldDef},
     error::OptError,
@@ -195,6 +195,12 @@ impl Optimizer {
             self.verify_field_def(fdef)?;
         }
 
+        for algefn in self.alge_fn.values() {
+            self.verify_alge_fn(algefn)?;
+        }
+
+        #[cfg(feature = "log")]
+        log::info!("Finished deriving dependent nodes, moving to exports...");
         //NOTE: Right now we don't use the dependency driven resolution we use for field defs,
         //      cause by definition all dependencies must be resolved that could be imported.
         //      However, since this is pre-alpha ware, we still check
@@ -218,6 +224,8 @@ impl Optimizer {
             self.push_debug_state("post type derive");
         }
 
+        #[cfg(feature = "log")]
+        log::info!("Finished type derive");
         if error_count > 0 {
             Err(OptError::Any {
                 text: format!("Type derivation did not end successfully!"),
@@ -397,6 +405,76 @@ impl Optimizer {
                 report(err.clone(), export.span.get_file());
                 return Err(err);
             }
+        }
+
+        Ok(())
+    }
+
+    fn verify_alge_fn(&self, algefn: &AlgeFn) -> Result<(), OptError> {
+        //Make sure that the result-connected edge is of the right type,
+        //and the argument-connected edges are correct as well
+        for (argidx, (_name, argty)) in algefn.args.iter().enumerate() {
+            for arg_connected_edge in &self
+                .graph
+                .node(algefn.lambda)
+                .node_type
+                .unwrap_lambda_ref()
+                .argument(argidx)
+                .unwrap()
+                .edges
+            {
+                if let Some(ty) = self.graph.edge(*arg_connected_edge).ty.get_type() {
+                    //if the types do not match, bail as well
+                    if ty != argty {
+                        let err = OptError::AnySpanned { 
+                            span: algefn.span.clone().into(), 
+                            text: format!("Argument {argidx} is of typ \"{argty:?}\", but was used as \"{ty:?}\". This is a compiler bug!"), 
+                            span_text: "user of argument {argidx} in this region".to_owned() 
+                        };
+                        report(err.clone(), algefn.span.get_file());
+                        return Err(err);
+                    }
+                } else {
+                    let err = OptError::AnySpanned { 
+                        span: algefn.span.clone().into(), 
+                        text: format!("Argument {argidx} is of type \"{argty:?}\", but connected edge was untyped. This is a compiler bug!"), 
+                        span_text: "user of argument {argidx} in this region".to_owned() 
+                    };
+                    report(err.clone(), algefn.span.get_file());
+                    return Err(err);
+                }
+            }
+        }
+
+        //Check that the result is set correctly
+        if let Some(edg) = &self.graph.node(algefn.lambda).node_type.unwrap_lambda_ref().result(0).unwrap().edge{
+            if let Some(ty) = self.graph.edge(*edg).ty.get_type(){
+                if ty != &algefn.retty{
+                    let err = OptError::AnySpanned { 
+                        span: algefn.span.clone().into(), 
+                        text: format!("Result type was \"{ty:?}\", but expected {:?}!", algefn.retty), 
+                        span_text: format!("result producer in this region should be {:?}", algefn.retty) 
+                    };
+                    report(err.clone(), algefn.span.get_file());
+                    return Err(err);
+                }
+            }else{
+                let err = OptError::AnySpanned { 
+                    span: algefn.span.clone().into(), 
+                    text: format!("Result is of type \"{:?}\", but connected edge was untyped. This is a compiler bug!", algefn.retty), 
+                    span_text: "result producer in this region".to_owned() 
+                };
+                report(err.clone(), algefn.span.get_file());
+                return Err(err);
+            }
+        }else{
+            let err = OptError::AnySpanned { 
+                span: algefn.span.clone().into(), 
+                text: format!("Result is of type \"{:?}\", but there was no return value set. This is a compiler bug!", algefn.retty), 
+                span_text: "no result producer in this region".to_owned() 
+            };
+            report(err.clone(), algefn.span.get_file());
+            return Err(err);
         }
 
         Ok(())
