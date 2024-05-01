@@ -214,7 +214,6 @@ impl Optimizer {
                 error_count += 1;
             }
         }
-
         for exp in self.export_fn.values() {
             self.verify_export_fn(exp)?;
         }
@@ -485,6 +484,10 @@ impl Optimizer {
         apply: &ApplyNode,
         region_src_span: &Span,
     ) -> Result<Option<Ty>, OptError> {
+
+        #[cfg(feature = "log")]
+        log::info!("Type derive Apply node");
+        
         //for the apply node, we search for the src λ-Node, and call
         if let Some(calldecl_edge) = apply.get_callabel_decl().edge {
             let callable_src = self.graph.edge(calldecl_edge).src().clone();
@@ -631,7 +634,6 @@ impl Optimizer {
 
             let mut local_stack = VecDeque::new();
             std::mem::swap(&mut local_stack, &mut build_stack);
-
             for node in local_stack {
                 //gather all inputs and let the node try to resolve itself
                 let type_resolve_try = match &self.graph.node(node).node_type {

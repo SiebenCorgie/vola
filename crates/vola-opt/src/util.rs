@@ -57,6 +57,7 @@ impl Optimizer {
 
             if let Some(ty) = found_ty {
                 signature.push(Some(ty));
+                argidx += 1;
                 continue;
             }
 
