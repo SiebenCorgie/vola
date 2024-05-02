@@ -221,9 +221,6 @@ impl Optimizer {
         }
 
         if errors.len() > 0 {
-            for e in errors.iter() {
-                report(e.clone(), None);
-            }
             Err(OptError::ErrorsOccurred(errors.len()))
         } else {
             Ok(())

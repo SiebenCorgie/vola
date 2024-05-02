@@ -13,16 +13,13 @@ use std::{
 
 use thiserror::Error;
 use tree_sitter::Node;
-use vola_common::{
-    miette::{self, Diagnostic, SourceSpan},
-    report, Reportable,
-};
+use vola_common::{ariadne::Label, error::error_reporter, report, Reportable, Span};
 
 use crate::parser::ParserCtx;
 
 impl Reportable for ParserError {}
 
-#[derive(Debug, Error, Clone, Diagnostic)]
+#[derive(Debug, Error, Clone)]
 pub enum ParserError {
     #[error("Unknown Error: {0}")]
     UnknownError(String),
@@ -31,33 +28,15 @@ pub enum ParserError {
     #[error("File Error occured: {0}")]
     FSError(String),
     #[error("Unknown AstNode {kind}")]
-    UnknownAstNode {
-        #[label("unknown node kind {kind}")]
-        span: SourceSpan,
-        kind: String,
-    },
+    UnknownAstNode { kind: String },
     #[error("Unexpected AstNode: {kind}, expected {expected}")]
-    UnexpectedAstNode {
-        #[label("This should be {expected}")]
-        span: SourceSpan,
-        kind: String,
-        expected: String,
-    },
+    UnexpectedAstNode { kind: String, expected: String },
 
     #[error("Unexpected value {val} expected it to be {exp}")]
-    UnexpectedNodeValue {
-        #[label("This should be {exp}")]
-        span: SourceSpan,
-        val: String,
-        exp: String,
-    },
+    UnexpectedNodeValue { val: String, exp: String },
 
     #[error("Uncaught error in this region")]
-    UncaughtError {
-        #[label("There was an uncaught error on this AST-Level, somewhere in this region!")]
-        span: SourceSpan,
-    },
-
+    UncaughtError,
     #[error("Expected child but got none")]
     NoChildAvailable,
 
@@ -84,23 +63,25 @@ pub enum ParserError {
     NoAlgeExprAtEnd,
 
     #[error("Could not parse {kind}, was empty")]
-    EmptyParse {
-        kind: String,
-        #[label("There should be at least one character!")]
-        span: SourceSpan,
-    },
+    EmptyParse { kind: String },
 }
 
 impl ParserError {
     pub fn assert_node_kind(ctx: &mut ParserCtx, node: &Node, kind: &str) -> Result<(), Self> {
         if node.kind() != kind {
             let error = Self::UnexpectedAstNode {
-                span: ctx.span(node).into(),
                 kind: node.kind().to_owned(),
                 expected: kind.to_owned(),
             };
 
-            report(error.clone(), ctx.get_file());
+            report(
+                error_reporter(error.clone(), ctx.span(node))
+                    .with_label(
+                        Label::new(ctx.span(node))
+                            .with_message(&format!("expected node of kind \"{kind}\"")),
+                    )
+                    .finish(),
+            );
 
             Err(error)
         } else {
@@ -117,11 +98,17 @@ impl ParserError {
         let node_utf8 = node.utf8_text(dta);
         if node_utf8 != Ok(string) {
             let error = Self::UnexpectedNodeValue {
-                span: ctx.span(node).into(),
                 val: node_utf8.unwrap_or("Could not parse").to_owned(),
                 exp: string.to_owned(),
             };
-            report(error.clone(), ctx.get_file());
+
+            report(
+                error_reporter(error.clone(), ctx.span(node))
+                    .with_label(
+                        Label::new(ctx.span(node)).with_message(&format!("expected {string}")),
+                    )
+                    .finish(),
+            );
 
             Err(error)
         } else {
@@ -138,7 +125,7 @@ impl ParserError {
     ) -> Result<(), Self> {
         match node {
             None => {
-                report(Self::NoChildAvailable, ctx.get_file());
+                report(error_reporter(Self::NoChildAvailable, Span::empty()).finish());
                 return Err(Self::NoChildAvailable);
             }
             Some(node) => Self::assert_node_kind(ctx, &node, kind),
@@ -153,7 +140,7 @@ impl ParserError {
     ) -> Result<(), Self> {
         match node {
             None => {
-                report(Self::NoChildAvailable, ctx.get_file());
+                report(error_reporter(Self::NoChildAvailable, Span::empty()).finish());
                 return Err(Self::NoChildAvailable);
             }
             Some(node) => Self::assert_node_string(ctx, dta, &node, string),
@@ -161,9 +148,9 @@ impl ParserError {
     }
 
     pub fn assert_ast_level_empty(ctx: &mut ParserCtx, node: Option<Node>) -> Result<(), Self> {
-        if let Some(_node) = node {
+        if let Some(node) = node {
             let err = Self::LevelNotEmpty;
-            report(err.clone(), ctx.get_file());
+            report(error_reporter(err.clone(), ctx.span(&node)).finish());
             Err(err)
         } else {
             Ok(())
@@ -172,10 +159,8 @@ impl ParserError {
 
     pub fn assert_node_no_error(ctx: &mut ParserCtx, node: &Node) -> Result<(), Self> {
         if node.has_error() {
-            let err = Self::UncaughtError {
-                span: ctx.span(node).into(),
-            };
-            report(err.clone(), ctx.get_file());
+            let err = Self::UncaughtError;
+            report(error_reporter(err.clone(), ctx.span(node)).finish());
             Err(err)
         } else {
             Ok(())
@@ -186,20 +171,13 @@ impl ParserError {
 impl Reportable for AstError {}
 
 ///Errors that happen while working on the AST.
-#[derive(Debug, Error, Clone, Diagnostic)]
+#[derive(Debug, Error, Clone)]
 pub enum AstError {
     #[error("Failed to parse file {path:?}: {err}")]
     ParsingError { path: PathBuf, err: ParserError },
 
     #[error("Not parsing from file. Therfore no sub-module can be used.")]
-    NoRootFile {
-        #[label("Can't use module when parsing from data")]
-        span: SourceSpan,
-    },
+    NoRootFile,
     #[error("Module file {path:?} does not exist")]
-    NoModuleFile {
-        path: PathBuf,
-        #[label("Can't import this module")]
-        span: SourceSpan,
-    },
+    NoModuleFile { path: PathBuf },
 }

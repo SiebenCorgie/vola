@@ -1,7 +1,6 @@
 use rvsdg::err::GraphError;
 use vola_ast::ParserError;
 use vola_common::{
-    miette::{self, Diagnostic},
     thiserror::{self, Error},
     Reportable,
 };
@@ -11,7 +10,7 @@ impl Reportable for PipelineError {}
 
 ///Error type collection that can happen at compile-time.
 ///Mostly transparent errors
-#[derive(Error, Debug, Diagnostic)]
+#[derive(Error, Debug)]
 pub enum PipelineError {
     #[error(transparent)]
     IoErr(#[from] std::io::Error),

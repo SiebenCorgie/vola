@@ -12,6 +12,7 @@
 use std::path::PathBuf;
 
 use clap::{Parser, ValueEnum};
+use vola_common::Span;
 use volac::{Backend, CraneliftTarget};
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug)]
@@ -60,7 +61,7 @@ fn main() {
 
     match pipeline.execute_on_file(&args.src_file) {
         Err(e) => {
-            vola_common::report(e, None);
+            eprintln!("CLI Error: {e:?}");
         }
         Ok(_) => {}
     }

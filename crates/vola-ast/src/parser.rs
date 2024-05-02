@@ -8,7 +8,7 @@
 use std::path::Path;
 
 use tree_sitter::{Node, Parser};
-use vola_common::{report, FileString, Span};
+use vola_common::{error::error_reporter, report, FileString, Span};
 
 use crate::{common::CTArg, error::ParserError, AstEntry, TopLevelNode, VolaAst};
 
@@ -67,7 +67,7 @@ pub fn parse_file(file: impl AsRef<Path>) -> Result<VolaAst, (VolaAst, Vec<Parse
         Ok(dta) => dta,
         Err(e) => {
             let err = ParserError::FSError(e.to_string());
-            vola_common::report(err.clone(), file.as_ref().to_str());
+            vola_common::report(error_reporter(err.clone(), Span::empty()).finish());
 
             return Err((
                 VolaAst {
@@ -118,7 +118,7 @@ fn parse_data(data: &[u8], src_file: Option<&str>) -> Result<VolaAst, (VolaAst, 
     let syn_tree = match parser.parse(&data, None) {
         None => {
             let err = ParserError::TreeSitterFailed;
-            report(err.clone(), ctx.get_file());
+            report(error_reporter(err.clone(), Span::empty()).finish());
             return Err((ast, vec![err]));
         }
         Some(syntree) => syntree,

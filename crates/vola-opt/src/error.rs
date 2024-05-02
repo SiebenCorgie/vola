@@ -7,7 +7,8 @@ use rvsdg::util::inline::InlineError;
  * 2024 Tendsin Mende
  */
 use vola_common::{
-    miette::{self, Diagnostic, SourceSpan},
+    ariadne::Label,
+    error::error_reporter,
     report,
     thiserror::{self, Error},
     Reportable,
@@ -17,48 +18,16 @@ impl Reportable for OptError {}
 
 ///Runtime optimizer errors. Note that at this point errors are pretty specific and mostly can't be recovered from.
 /// So we opt to use generic descriptions, instead of specific errors.
-#[derive(Debug, Error, Clone, Diagnostic)]
+#[derive(Debug, Error, Clone)]
 pub enum OptError {
     #[error("{text}")]
     Any { text: String },
-    #[error("{text}")]
-    AnySpanned {
-        #[label("{span_text}")]
-        span: SourceSpan,
-        text: String,
-        span_text: String,
-    },
-    #[error("{text}")]
-    AnySpannedWithSource {
-        ///Label that is tagged at the source's location. Must reside in the same file as `span`.
-        #[label("{source_text}")]
-        source_span: SourceSpan,
-        source_text: String,
-        ///Error description
-        text: String,
-        #[label("{span_text}")]
-        span: SourceSpan,
-        span_text: String,
-    },
 
     #[error("Failed to dispatch field for {opname} and concept {concept}: {errstring}!")]
     DispatchAnyError {
-        #[label("Trying to dispatch this operation")]
-        opspan: SourceSpan,
-        #[label("Trying to dispatch based on this tree-access")]
-        treeaccessspan: SourceSpan,
-        #[label("Need to dispatch concept {concept} because of this eval")]
-        evalspan: SourceSpan,
         concept: String,
         opname: String,
         errstring: String,
-    },
-
-    #[error("{err}")]
-    PostSpanned {
-        err: Box<OptError>,
-        #[label("here")]
-        span: SourceSpan,
     },
 
     #[error("Cannot convert AstType {srcty:?} to a valid optimizer type")]
@@ -68,41 +37,24 @@ pub enum OptError {
     ErrorsOccurred(usize),
 
     #[error("Type derivation failed in λ-Node")]
-    TypeDeriveFailed {
-        errorcount: usize,
-        #[label("failed with {errorcount} errors in this region")]
-        span: SourceSpan,
-    },
+    TypeDeriveFailed { errorcount: usize },
 
     #[error("Failed to inline call: {error}")]
-    InlineFailed {
-        error: InlineError,
-        #[label("While inlining this call")]
-        span: SourceSpan,
-    },
+    InlineFailed { error: InlineError },
 }
 
 impl OptError {
-    ///Converts `self` into an spanned error, if it isn't already.
-    pub fn into_spanned(self, span: &vola_common::Span) -> Self {
-        match self {
-            OptError::AnySpanned { .. }
-            | OptError::AnySpannedWithSource { .. }
-            | OptError::TypeDeriveFailed { .. } => self,
-            e => OptError::PostSpanned {
-                err: Box::new(e),
-                span: span.clone().into(),
-            },
-        }
-    }
-
     pub fn report_no_concept(span: &vola_common::Span, concept_name: &str) -> Self {
-        let err = OptError::AnySpanned {
-            span: span.clone().into(),
+        let err = OptError::Any {
             text: format!("Could not find concept \"{}\" in scope!", concept_name),
-            span_text: "Consider defining this concept".to_owned(),
         };
-        report(err.clone(), span.get_file());
+
+        report(
+            error_reporter(err.clone(), span.clone())
+                .with_label(Label::new(span.clone()).with_message("Consider defining this concept"))
+                .finish(),
+        );
+
         err
     }
 
@@ -112,28 +64,37 @@ impl OptError {
         wrong_span: &vola_common::Span,
         is_count: usize,
     ) -> Self {
-        let err = OptError::AnySpannedWithSource {
-            source_span: def_span.clone().into(),
-            source_text: format!("defined with {} arguments", right_count),
+        let err = OptError::Any {
             text: format!(
                 "call takes {} arguments, but {} are supplied",
                 right_count, is_count
             ),
-            span: wrong_span.clone().into(),
-            span_text: format!("This should have {} arguments.", right_count),
         };
 
-        report(err.clone(), def_span.get_file());
+        report(
+            error_reporter(err.clone(), wrong_span.clone())
+                .with_label(
+                    Label::new(def_span.clone())
+                        .with_message(&format!("defined with {} arguments", right_count)),
+                )
+                .with_label(
+                    Label::new(wrong_span.clone())
+                        .with_message(&format!("This should have {} arguments", right_count)),
+                )
+                .finish(),
+        );
         err
     }
 
     pub fn report_variable_not_found(def_span: &vola_common::Span, searched_for: &str) -> Self {
-        let err = OptError::AnySpanned {
-            span: def_span.clone().into(),
+        let err = OptError::Any {
             text: format!("Could not find \"{}\" in scope!", searched_for),
-            span_text: format!("found here"),
         };
-        report(err.clone(), def_span.get_file());
+        report(
+            error_reporter(err.clone(), def_span.clone())
+                .with_label(Label::new(def_span.clone()).with_message("found here"))
+                .finish(),
+        );
         err
     }
 }

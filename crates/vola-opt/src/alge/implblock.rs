@@ -22,7 +22,7 @@ use vola_ast::{
     common::Ident,
     csg::CSGNodeTy,
 };
-use vola_common::{report, Span};
+use vola_common::{ariadne::Label, error::error_reporter, report, Span};
 
 #[derive(Debug, Clone, PartialEq, Hash, Eq)]
 pub struct ConceptImplKey {
@@ -156,8 +156,7 @@ impl ConceptImpl {
         // then overwriting the last known definition of dst.
 
         if !builder.lmd_context.var_exists(&dst.0) {
-            let err = OptError::AnySpanned {
-                span: span.clone().into(),
+            let err = OptError::Any {
                 text: format!(
                     "
 Cannot assign to an undefined variable {}.
@@ -165,10 +164,13 @@ Consider using `let {} = ...;` instead, or using an defined variable.
 ",
                     dst.0, dst.0
                 ),
-                span_text: "Unknown variable".to_owned(),
             };
 
-            report(err.clone(), span.get_file());
+            report(
+                error_reporter(err.clone(), span.clone())
+                    .with_label(Label::new(span.clone()).with_message("Unknown variable"))
+                    .finish(),
+            );
             return Err(err);
         }
 
@@ -195,17 +197,21 @@ Consider using `let {} = ...;` instead, or using an defined variable.
 
         if builder.lmd_context.var_exists(&decl_name.0) {
             let existing = builder.lmd_context.defined_vars.get(&decl_name.0).unwrap();
-            let err = OptError::AnySpannedWithSource {
-                source_span: existing.span.clone().into(),
-                source_text: "first defined here".to_owned(),
+            let err = OptError::Any {
                 text: format!("
 cannot redefine variable with name \"{}\".
 Note that vola does not support shadowing. If you just want to change the value of that variable, consider doing it like this:
 `{} = ...;`",
                               decl_name.0, decl_name.0),
-                span: span.clone().into(),
-                span_text: "tried to redefine here".to_owned() };
-            report(err.clone(), span.get_file());
+            };
+            report(
+                error_reporter(err.clone(), span.clone())
+                    .with_label(
+                        Label::new(existing.span.clone()).with_message("first defined here"),
+                    )
+                    .with_label(Label::new(span.clone()).with_message("redefined here"))
+                    .finish(),
+            );
             return Err(err);
         }
 
@@ -235,21 +241,21 @@ impl Optimizer {
 
         //Check that the impl block doesn't yet exist
         if let Some(existing_key) = self.concept_impl.get(&key) {
-            let err = OptError::AnySpannedWithSource {
-                source_span: existing_key.span.clone().into(),
-                source_text: format!(
-                    "first impl of concept {} for node {}",
-                    implblock.concept.0, implblock.dst.0
-                ),
+            let err = OptError::Any {
                 text: format!(
                     "Tried to re-implement the concept {} for the entity or operation {}.",
                     implblock.concept.0, implblock.dst.0
                 ),
-                span: implblock.span.into(),
-                span_text: format!("Second implementation here"),
             };
 
-            report(err.clone(), existing_key.span.get_file());
+            report(
+                error_reporter(err.clone(), implblock.span.clone())
+                    .with_label(
+                        Label::new(existing_key.span.clone()).with_message("first defined here"),
+                    )
+                    .with_label(Label::new(implblock.span.clone()).with_message("redefined here"))
+                    .finish(),
+            );
             return Err(err);
         }
 
@@ -258,68 +264,81 @@ impl Optimizer {
             src_concept
         } else {
             //Could not find the source concept, bail!
-            let err = OptError::AnySpanned {
-                span: implblock.span.clone().into(),
+            let err = OptError::Any {
                 text: format!("Concept {} is undefined!", implblock.concept.0),
-                span_text: format!("Consider defining the concept \"{}\"", implblock.concept.0),
             };
 
-            report(err.clone(), implblock.span.get_file());
+            report(
+                error_reporter(err.clone(), implblock.span.clone())
+                    .with_label(Label::new(implblock.span.clone()).with_message(&format!(
+                        "Consider defining the concept {}",
+                        implblock.concept.0
+                    )))
+                    .finish(),
+            );
             return Err(err);
         };
 
         let src_csg_def = if let Some(src_csg_def) = self.csg_node_defs.get(&implblock.dst.0) {
             src_csg_def.clone()
         } else {
-            let err = OptError::AnySpanned {
-                span: implblock.span.clone().into(),
+            let err = OptError::Any {
                 text: format!(
                     "csg-node-type (entity or operation) {} is undefined!",
                     implblock.concept.0
                 ),
-                span_text: format!(
-                    "Consider defining an entity or operation named \"{}\"",
-                    implblock.concept.0
-                ),
             };
 
-            report(err.clone(), implblock.span.get_file());
+            report(
+                error_reporter(err.clone(), implblock.span.clone())
+                    .with_label(Label::new(implblock.span.clone()).with_message(&format!(
+                        "Consider defining the entity or operation {}",
+                        implblock.concept.0
+                    )))
+                    .finish(),
+            );
             return Err(err);
         };
 
         //Check that the amount of arguments mirror the concept's argument count.
         if src_concept.src_ty.len() != implblock.concept_arg_naming.len() {
-            let err = OptError::AnySpannedWithSource {
-                source_span: src_concept.span.clone().into(),
-                source_text: format!("Src concept defines {} arguments", src_concept.src_ty.len()),
+            let err = OptError::Any {
                 text: format!(
                     "argument definition has {} arguments",
                     src_concept.src_ty.len(),
                 ),
-                span: implblock.span.into(),
-                span_text: format!(
-                    "this should take {} arguments, not {}",
-                    src_concept.src_ty.len(),
-                    implblock.concept_arg_naming.len()
-                ),
             };
-            report(err.clone(), src_concept.span.get_file());
+            report(
+                error_reporter(err.clone(), implblock.span.clone())
+                    .with_label(Label::new(src_concept.span.clone()).with_message(&format!(
+                        "concept defines {} arguments",
+                        src_concept.src_ty.len()
+                    )))
+                    .with_label(Label::new(implblock.span.clone()).with_message(&format!(
+                        "this should take {} arguments, not {}",
+                        src_concept.src_ty.len(),
+                        implblock.concept_arg_naming.len()
+                    )))
+                    .finish(),
+            );
             return Err(err);
         }
 
         //Make sure that an entity has no sub operands
         if src_csg_def.ty == CSGNodeTy::Entity && implblock.operands.len() > 0 {
-            let err = OptError::AnySpanned {
-                span: implblock.span.clone().into(),
+            let err = OptError::Any {
                 text: format!(
                     "entity {} cannot have CSG operands. Only operations can have CSG operands!",
                     implblock.dst.0
                 ),
-                span_text: format!(
-                    "Consider removing the operands, or implementing an \"operation\" instead"
-                ),
             };
-            report(err.clone(), implblock.span.get_file());
+            report(
+                error_reporter(err.clone(), implblock.span.clone())
+                    .with_label(Label::new(implblock.span.clone()).with_message(
+                        "Consider removing the operands, or implementing an \"operation\" instead",
+                    ))
+                    .finish(),
+            );
             return Err(err);
         }
 

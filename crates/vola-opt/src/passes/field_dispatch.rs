@@ -36,7 +36,7 @@ use rvsdg::{
     NodeRef, SmallColl,
 };
 use rvsdg_viewer::View;
-use vola_common::{report, Span};
+use vola_common::{ariadne::Label, error::error_reporter, report, Span};
 
 use crate::{
     alge::{implblock::ConceptImplKey, EvalNode},
@@ -69,7 +69,11 @@ impl Optimizer {
 
         for (ident, span) in exports {
             if let Err(err) = self.dispatch_export(&ident) {
-                report(err, span.get_file());
+                report(
+                    error_reporter(err.clone(), span.clone())
+                        .with_label(Label::new(span.clone()).with_message("here"))
+                        .finish(),
+                );
                 num_errors += 1;
             }
         }
@@ -641,9 +645,6 @@ impl Optimizer {
                     .unwrap_simple_ref()
                     .name();
                 let err = OptError::DispatchAnyError {
-                    opspan: opspan.into(),
-                    treeaccessspan: ctx.specialization_src.clone().into(),
-                    evalspan: eval_span.into(),
                     concept: implblock_key.concept_name.clone(),
                     opname,
                     errstring: format!(
@@ -651,7 +652,22 @@ impl Optimizer {
                         implblock_key.concept_name, implblock_key.node_name
                     ),
                 };
-                report(err.clone(), ctx.specialization_src.get_file());
+
+                report(
+                    error_reporter(err.clone(), eval_span.clone())
+                        .with_label(
+                            Label::new(eval_span.clone()).with_message("This eval failed .."),
+                        )
+                        .with_label(
+                            Label::new(opspan.clone()).with_message(".. while dispatching this .."),
+                        )
+                        .with_label(
+                            Label::new(ctx.specialization_src.clone())
+                                .with_message(".. based on this tree-access"),
+                        )
+                        .finish(),
+                );
+
                 return Err(err);
             };
             self.graph.deep_copy_node(concept.lambda, region)
@@ -766,13 +782,18 @@ impl Optimizer {
                 }
 
                 //if we reached this, something is bugg.
-                let err = OptError::AnySpanned {
-                    span: s.span.clone().into(),
+                let err = OptError::Any {
                     text: "Expected either a TreeAccess expression, or a EvalNode expression!"
                         .to_owned(),
-                    span_text: "Failed to get this nodes called concept".to_owned(),
                 };
-                report(err.clone(), s.span.get_file());
+                report(
+                    error_reporter(err.clone(), s.span.clone())
+                        .with_label(
+                            Label::new(s.span.clone())
+                                .with_message("failed to get this node's called concept"),
+                        )
+                        .finish(),
+                );
                 Err(err)
             }
             _ => Err(OptError::Any {
@@ -789,12 +810,18 @@ impl Optimizer {
                 if let Some(csgop) = s.try_downcast_ref::<CsgOp>() {
                     Ok(csgop.op.clone())
                 } else {
-                    let err = OptError::AnySpanned {
-                        span: s.span.clone().into(),
+                    let err = OptError::Any {
                         text: "Expected operation or entity!".to_owned(),
-                        span_text: "Failed to get this nodes entity or operation name".to_owned(),
                     };
-                    report(err.clone(), s.span.get_file());
+                    report(
+                        error_reporter(err.clone(), s.span.clone())
+                            .with_label(
+                                Label::new(s.span.clone()).with_message(
+                                    "Failed to get this node's entity or operation name",
+                                ),
+                            )
+                            .finish(),
+                    );
                     Err(err)
                 }
             }

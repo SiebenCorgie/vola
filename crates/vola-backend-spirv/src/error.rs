@@ -9,14 +9,13 @@
 use rvsdg::util::graph_type_transform::GraphTypeTransformerError;
 use spirv_grammar_rules::Rule;
 use vola_common::{
-    miette::{self, Diagnostic},
     thiserror::{self, Error},
     Reportable,
 };
 
 impl Reportable for BackendSpirvError {}
 
-#[derive(Debug, Error, Clone, Diagnostic)]
+#[derive(Debug, Error, Clone)]
 pub enum BackendSpirvError {
     #[error("{text}")]
     Any { text: String },

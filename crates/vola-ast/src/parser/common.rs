@@ -6,7 +6,7 @@
  * 2024 Tendsin Mende
  */
 use smallvec::SmallVec;
-use vola_common::{report, Span};
+use vola_common::{error::error_reporter, report, Span};
 
 use crate::{
     alge::AlgeExpr,
@@ -32,16 +32,15 @@ impl FromTreeSitter for Ident {
                 if parsed.is_empty() {
                     let err = ParserError::EmptyParse {
                         kind: "identifier".to_owned(),
-                        span: ctx.span(node).into(),
                     };
-                    report(err.clone(), ctx.get_file());
+                    report(error_reporter(err.clone(), ctx.span(node)).finish());
                     return Err(err);
                 }
                 parsed
             }
             Err(e) => {
                 let err = ParserError::Utf8ParseError(e);
-                report(err.clone(), ctx.get_file());
+                report(error_reporter(err.clone(), Span::empty()).finish());
                 return Err(err);
             }
         };
@@ -59,7 +58,7 @@ impl FromTreeSitter for Digit {
         let node_text = match node.utf8_text(dta) {
             Err(e) => {
                 let err = ParserError::Utf8ParseError(e);
-                report(err.clone(), ctx.get_file());
+                report(error_reporter(err.clone(), Span::empty()).finish());
                 return Err(err);
             }
             Ok(s) => s.to_owned(),
@@ -68,9 +67,8 @@ impl FromTreeSitter for Digit {
         if node_text.is_empty() {
             let err = ParserError::EmptyParse {
                 kind: "digit".to_owned(),
-                span: ctx.span(node).into(),
             };
-            report(err.clone(), ctx.get_file());
+            report(error_reporter(err.clone(), ctx.span(node)).finish());
             return Err(err);
         }
 
@@ -78,7 +76,7 @@ impl FromTreeSitter for Digit {
             Ok(f) => f,
             Err(e) => {
                 let err = ParserError::ParseIntLiteral(e);
-                report(err.clone(), ctx.get_file());
+                report(error_reporter(err.clone(), Span::empty()).finish());
                 return Err(err);
             }
         };
@@ -95,7 +93,7 @@ impl FromTreeSitter for Ty {
         let node_text = match node.utf8_text(dta) {
             Err(e) => {
                 let err = ParserError::Utf8ParseError(e);
-                report(err.clone(), ctx.get_file());
+                report(error_reporter(err.clone(), Span::empty()).finish());
                 return Err(err);
             }
             Ok(s) => s.to_owned(),
@@ -104,9 +102,8 @@ impl FromTreeSitter for Ty {
         if node_text.is_empty() {
             let err = ParserError::EmptyParse {
                 kind: "type".to_owned(),
-                span: ctx.span(node).into(),
             };
-            report(err.clone(), ctx.get_file());
+            report(error_reporter(err.clone(), ctx.span(node)).finish());
             return Err(err);
         }
 
@@ -165,11 +162,10 @@ impl Ty {
                         "digit" => dim.push(Digit::parse(ctx, dta, &next_node)?.0),
                         x => {
                             let err = ParserError::UnexpectedAstNode {
-                                span: ctx.span(node).into(),
                                 kind: x.to_owned(),
                                 expected: "digit or \">\"".to_owned(),
                             };
-                            report(err.clone(), ctx.get_file());
+                            report(error_reporter(err.clone(), Span::empty()).finish());
                             return Err(err);
                         }
                     };
@@ -182,11 +178,10 @@ impl Ty {
                             }
                             x => {
                                 let err = ParserError::UnexpectedAstNode {
-                                    span: ctx.span(node).into(),
                                     kind: x.to_owned(),
                                     expected: ", or \">\"".to_owned(),
                                 };
-                                report(err.clone(), ctx.get_file());
+                                report(error_reporter(err.clone(), ctx.span(node)).finish());
                                 return Err(err);
                             }
                         }
@@ -199,11 +194,10 @@ impl Ty {
             }
             _ => {
                 let err = ParserError::UnexpectedAstNode {
-                    span: ctx.span(&node).into(),
                     kind: node.child(0).unwrap().kind().to_string(),
                     expected: "t_scalar | t_vec | t_mat | t_tensor".to_owned(),
                 };
-                report(err.clone(), ctx.get_file());
+                report(error_reporter(err.clone(), ctx.span(node)).finish());
                 Err(err)
             }
         }
@@ -224,7 +218,7 @@ impl FromTreeSitter for Literal {
                 let node_text = match node.utf8_text(dta) {
                     Err(e) => {
                         let err = ParserError::Utf8ParseError(e);
-                        report(err.clone(), ctx.get_file());
+                        report(error_reporter(err.clone(), Span::empty()).finish());
                         return Err(err);
                     }
                     Ok(s) => s.to_owned(),
@@ -233,9 +227,8 @@ impl FromTreeSitter for Literal {
                 if node_text.is_empty() {
                     let err = ParserError::EmptyParse {
                         kind: "float".to_owned(),
-                        span: ctx.span(node).into(),
                     };
-                    report(err.clone(), ctx.get_file());
+                    report(error_reporter(err.clone(), ctx.span(node)).finish());
                     return Err(err);
                 }
 
@@ -243,7 +236,7 @@ impl FromTreeSitter for Literal {
                     Ok(f) => f,
                     Err(e) => {
                         let err = ParserError::ParseFloatLiteral(e);
-                        report(err.clone(), ctx.get_file());
+                        report(error_reporter(err.clone(), Span::empty()).finish());
                         return Err(err);
                     }
                 };
@@ -260,11 +253,10 @@ impl FromTreeSitter for Literal {
             }
             _ => {
                 let err = ParserError::UnexpectedAstNode {
-                    span: ctx.span(&node).into(),
                     kind: node.kind().to_string(),
                     expected: "integer_literal | float_literal".to_owned(),
                 };
-                report(err.clone(), ctx.get_file());
+                report(error_reporter(err.clone(), ctx.span(node)).finish());
                 Err(err)
             }
         }
@@ -315,11 +307,10 @@ impl FromTreeSitter for Call {
                 "alge_expr" => args.push(AlgeExpr::parse(ctx, dta, &next_node)?),
                 _ => {
                     let err = ParserError::UnexpectedAstNode {
-                        span: ctx.span(&next_node).into(),
                         kind: next_node.kind().to_string(),
                         expected: "alge_expr".to_owned(),
                     };
-                    report(err.clone(), ctx.get_file());
+                    report(error_reporter(err.clone(), ctx.span(&next_node)).finish());
                     return Err(err);
                 }
             }
@@ -378,11 +369,10 @@ impl FromTreeSitter for Module {
                 "identifier" => path.push(Ident::parse(ctx, dta, &next_node)?),
                 _ => {
                     let err = ParserError::UnexpectedAstNode {
-                        span: ctx.span(&next_node).into(),
                         kind: next_node.kind().to_string(),
                         expected: "identifier".to_owned(),
                     };
-                    report(err.clone(), ctx.get_file());
+                    report(error_reporter(err.clone(), ctx.span(&next_node)).finish());
                     return Err(err);
                 }
             }
@@ -390,9 +380,9 @@ impl FromTreeSitter for Module {
             let next_node = if let Some(n) = children.next() {
                 n
             } else {
-                let e = ParserError::NoChildAvailable;
-                report(e.clone(), ctx.get_file());
-                return Err(e);
+                let err = ParserError::NoChildAvailable;
+                report(error_reporter(err.clone(), Span::empty()).finish());
+                return Err(err);
             };
             match next_node.kind() {
                 //can end
@@ -401,11 +391,10 @@ impl FromTreeSitter for Module {
                 "::" => {}
                 _ => {
                     let err = ParserError::UnexpectedAstNode {
-                        span: ctx.span(&next_node).into(),
                         kind: next_node.kind().to_string(),
                         expected: "\"::\" or \";\"".to_owned(),
                     };
-                    report(err.clone(), ctx.get_file());
+                    report(error_reporter(err.clone(), ctx.span(&next_node)).finish());
                     return Err(err);
                 }
             }

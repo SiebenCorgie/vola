@@ -6,7 +6,7 @@
  * 2024 Tendsin Mende
  */
 use smallvec::{smallvec, SmallVec};
-use vola_common::{report, Span};
+use vola_common::{ariadne::Label, error::error_reporter, report, Span};
 
 use crate::{
     alge::AlgeExpr,
@@ -75,11 +75,15 @@ impl FromTreeSitter for CSGOp {
             && node.kind() != "identifier"
         {
             let err = ParserError::UnexpectedAstNode {
-                span: ctx.span(&node).into(),
                 kind: node.kind().to_owned(),
                 expected: "csg_unary | csg_binary | fn_call | identifier".to_owned(),
             };
-            report(err.clone(), ctx.get_file());
+
+            report(
+                error_reporter(err.clone(), ctx.span(&node))
+                    .with_label(Label::new(ctx.span(&node)).with_message("On this string"))
+                    .finish(),
+            );
             return Err(err);
         }
 
@@ -127,12 +131,16 @@ impl FromTreeSitter for CSGOp {
                 "alge_expr" => params.push(AlgeExpr::parse(ctx, dta, &next_node)?),
                 _ => {
                     let err = ParserError::UnexpectedAstNode {
-                        span: ctx.span(&next_node).into(),
                         kind: next_node.kind().to_owned(),
                         expected: "alge_expr".to_owned(),
                     };
-
-                    report(err.clone(), ctx.get_file());
+                    report(
+                        error_reporter(err.clone(), ctx.span(&next_node))
+                            .with_label(
+                                Label::new(ctx.span(&next_node)).with_message("in this region"),
+                            )
+                            .finish(),
+                    );
                     return Err(err);
                 }
             }
@@ -148,12 +156,17 @@ impl FromTreeSitter for CSGOp {
                 }
                 _ => {
                     let err = ParserError::UnexpectedAstNode {
-                        span: ctx.span(&next_node).into(),
                         kind: next_node.kind().to_owned(),
                         expected: " \",\" or )".to_owned(),
                     };
 
-                    report(err.clone(), ctx.get_file());
+                    report(
+                        error_reporter(err.clone(), ctx.span(&next_node))
+                            .with_label(
+                                Label::new(ctx.span(&next_node)).with_message("in this region"),
+                            )
+                            .finish(),
+                    );
                     return Err(err);
                 }
             }
@@ -207,11 +220,15 @@ impl FromTreeSitter for CSGNodeDef {
     {
         if node.kind() != "def_entity" && node.kind() != "def_operation" {
             let err = ParserError::UnexpectedAstNode {
-                span: ctx.span(&node).into(),
                 kind: node.kind().to_owned(),
                 expected: "def_entity | def_operation".to_owned(),
             };
-            report(err.clone(), ctx.get_file());
+
+            report(
+                error_reporter(err.clone(), ctx.span(&node))
+                    .with_label(Label::new(ctx.span(&node)).with_message("in this region"))
+                    .finish(),
+            );
             return Err(err);
         }
 
@@ -229,11 +246,14 @@ impl FromTreeSitter for CSGNodeDef {
             }
             _ => {
                 let err = ParserError::UnexpectedAstNode {
-                    span: ctx.span(&ty_node).into(),
                     kind: ty_node.kind().to_owned(),
                     expected: "entity | operation".to_owned(),
                 };
-                report(err.clone(), ctx.get_file());
+                report(
+                    error_reporter(err.clone(), ctx.span(&ty_node))
+                        .with_label(Label::new(ctx.span(&ty_node)).with_message("in this region"))
+                        .finish(),
+                );
                 return Err(err);
             }
         };
@@ -253,11 +273,17 @@ impl FromTreeSitter for CSGNodeDef {
                 "typed_arg" => args.push(TypedIdent::parse(ctx, dta, &next_node)?),
                 _ => {
                     let err = ParserError::UnexpectedAstNode {
-                        span: ctx.span(&next_node).into(),
                         kind: next_node.kind().to_owned(),
                         expected: "typed_arg | )".to_owned(),
                     };
-                    report(err.clone(), ctx.get_file());
+
+                    report(
+                        error_reporter(err.clone(), ctx.span(&next_node))
+                            .with_label(
+                                Label::new(ctx.span(&next_node)).with_message("in this region"),
+                            )
+                            .finish(),
+                    );
                     return Err(err);
                 }
             }
@@ -273,11 +299,16 @@ impl FromTreeSitter for CSGNodeDef {
                 }
                 _ => {
                     let err = ParserError::UnexpectedAstNode {
-                        span: ctx.span(&next_node).into(),
                         kind: next_node.kind().to_owned(),
                         expected: "\",\" or )".to_owned(),
                     };
-                    report(err.clone(), ctx.get_file());
+                    report(
+                        error_reporter(err.clone(), ctx.span(&next_node))
+                            .with_label(
+                                Label::new(ctx.span(&next_node)).with_message("in this region"),
+                            )
+                            .finish(),
+                    );
                     return Err(err);
                 }
             }
@@ -342,11 +373,17 @@ impl FromTreeSitter for CSGConcept {
                         "alge_type" => tys.push(Ty::parse_alge_ty(ctx, dta, &next_node)?),
                         _ => {
                             let err = ParserError::UnexpectedAstNode {
-                                span: ctx.span(&next_node).into(),
                                 kind: next_node.kind().to_owned(),
                                 expected: ") | alge_ty".to_owned(),
                             };
-                            report(err.clone(), ctx.get_file());
+                            report(
+                                error_reporter(err.clone(), ctx.span(&next_node))
+                                    .with_label(
+                                        Label::new(ctx.span(&next_node))
+                                            .with_message("in this region"),
+                                    )
+                                    .finish(),
+                            );
                             return Err(err);
                         }
                     }
@@ -372,11 +409,17 @@ impl FromTreeSitter for CSGConcept {
                         }
                         _ => {
                             let err = ParserError::UnexpectedAstNode {
-                                span: ctx.span(&next_node).into(),
                                 kind: next_node.kind().to_owned(),
                                 expected: "\",\" or )".to_owned(),
                             };
-                            report(err.clone(), ctx.get_file());
+                            report(
+                                error_reporter(err.clone(), ctx.span(&next_node))
+                                    .with_label(
+                                        Label::new(ctx.span(&next_node))
+                                            .with_message("in this region"),
+                                    )
+                                    .finish(),
+                            );
                             return Err(err);
                         }
                     }
@@ -387,11 +430,14 @@ impl FromTreeSitter for CSGConcept {
             }
             _ => {
                 let err = ParserError::UnexpectedAstNode {
-                    span: ctx.span(&next_node).into(),
                     kind: next_node.kind().to_owned(),
                     expected: "-> | alge_ty | (".to_owned(),
                 };
-                report(err.clone(), ctx.get_file());
+                report(
+                    error_reporter(err.clone(), ctx.span(&next_node))
+                        .with_label(Label::new(ctx.span(&next_node)).with_message("in this region"))
+                        .finish(),
+                );
                 return Err(err);
             }
         };
