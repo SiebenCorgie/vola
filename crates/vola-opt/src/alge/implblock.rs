@@ -402,6 +402,8 @@ impl Optimizer {
             lmd_context,
             lambda: lmd,
             lambda_region: lmd_region,
+            //Only allow on Operations
+            is_eval_allowed: src_csg_def.ty == CSGNodeTy::Operation,
         };
 
         //Now reverse the game by building the initial ConceptImpl and then letting it handle itself.

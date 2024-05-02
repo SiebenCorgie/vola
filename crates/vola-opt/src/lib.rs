@@ -39,7 +39,7 @@ use vola_ast::{
     csg::{CSGConcept, CSGNodeDef},
     VolaAst,
 };
-use vola_common::Span;
+use vola_common::{report, Span};
 
 pub mod alge;
 mod ast;
@@ -127,7 +127,7 @@ impl Optimizer {
         #[cfg(feature = "log")]
         log::info!("Adding Ast to Optimizer");
 
-        let mut error_counter = 0;
+        let mut errors = Vec::with_capacity(0);
 
         //NOTE yes collecting into a big'ol Vec all the time is kinda wasteful, but since
         // we use `self` in the filter, we can't just connect multiple filter_maps :O .
@@ -139,8 +139,8 @@ impl Optimizer {
             .filter_map(|ast_entry| {
                 if ast_entry.entry.is_def_node() {
                     //Early add def
-                    if let Err(_e) = self.add_tl_node(ast_entry) {
-                        error_counter += 1;
+                    if let Err(e) = self.add_tl_node(ast_entry) {
+                        errors.push(e);
                     }
                     None
                 } else {
@@ -155,8 +155,8 @@ impl Optimizer {
             .filter_map(|ast_entry| {
                 if ast_entry.entry.is_alge_fn() {
                     //Early add def
-                    if let Err(_e) = self.add_tl_node(ast_entry) {
-                        error_counter += 1;
+                    if let Err(e) = self.add_tl_node(ast_entry) {
+                        errors.push(e)
                     }
                     None
                 } else {
@@ -171,8 +171,8 @@ impl Optimizer {
             .filter_map(|ast_entry| {
                 if ast_entry.entry.is_impl_block() {
                     //Early add def
-                    if let Err(_e) = self.add_tl_node(ast_entry) {
-                        error_counter += 1;
+                    if let Err(e) = self.add_tl_node(ast_entry) {
+                        errors.push(e);
                     }
                     None
                 } else {
@@ -187,8 +187,8 @@ impl Optimizer {
             .filter_map(|ast_entry| {
                 if ast_entry.entry.is_field_def() {
                     //Early add def
-                    if let Err(_e) = self.add_tl_node(ast_entry) {
-                        error_counter += 1;
+                    if let Err(e) = self.add_tl_node(ast_entry) {
+                        errors.push(e);
                     }
                     None
                 } else {
@@ -203,8 +203,8 @@ impl Optimizer {
             if !tl.entry.is_exportfn() {
                 println!("warning: found non-field-def in last top-level-node iterator");
             }
-            if let Err(_e) = self.add_tl_node(tl) {
-                error_counter += 1;
+            if let Err(e) = self.add_tl_node(tl) {
+                errors.push(e);
             }
         }
 
@@ -220,8 +220,11 @@ impl Optimizer {
             self.push_debug_state("AST add");
         }
 
-        if error_counter > 0 {
-            Err(OptError::ErrorsOccurred(error_counter))
+        if errors.len() > 0 {
+            for e in errors.iter() {
+                report(e.clone(), None);
+            }
+            Err(OptError::ErrorsOccurred(errors.len()))
         } else {
             Ok(())
         }

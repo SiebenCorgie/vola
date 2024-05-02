@@ -1,0 +1,8 @@
+module std;
+
+entity Test();
+
+impl Test for SDF3D(at){
+	let t = eval sub.SDF3D(at);
+	t
+}

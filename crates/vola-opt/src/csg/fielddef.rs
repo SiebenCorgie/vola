@@ -251,6 +251,7 @@ impl Optimizer {
             lmd_context,
             lambda,
             lambda_region,
+            is_eval_allowed: false,
         };
 
         let new_def = FieldDef {

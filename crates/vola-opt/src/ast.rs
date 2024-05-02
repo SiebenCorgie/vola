@@ -95,6 +95,7 @@ pub struct AstLambdaBuilder<'a> {
     pub lambda: NodeRef,
     pub lambda_region: RegionLocation,
     pub lmd_context: LmdContext,
+    pub is_eval_allowed: bool,
 }
 
 pub trait LambdaBuilderCtx {
@@ -274,6 +275,18 @@ impl<'a> AstLambdaBuilder<'a> {
                 }
             }
             AlgeExprTy::EvalExpr(evalexpr) => {
+                if !self.is_eval_allowed {
+                    let err = OptError::AnySpanned {
+                        span: evalexpr.span.clone().into(),
+                        text: "Eval expressions are only allowed in impl-blocks of operations!"
+                            .to_owned(),
+                        span_text: "Consider removing this eval".to_owned(),
+                    };
+
+                    report(err.clone(), evalexpr.span.get_file());
+                    return Err(err);
+                }
+
                 //For the eval expression, first find / insert the cv_import we need.
                 // then setup all arguments, and finally add the call.
                 let (eval_cv, eval_cv_type) = parent.get_cv_for_eval(self, &evalexpr)?;

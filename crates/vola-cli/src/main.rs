@@ -58,5 +58,10 @@ fn main() {
         target: volac::Target::File(args.output_name),
     };
 
-    pipeline.execute_on_file(&args.src_file).unwrap();
+    match pipeline.execute_on_file(&args.src_file) {
+        Err(e) => {
+            vola_common::report(e, None);
+        }
+        Ok(_) => {}
+    }
 }

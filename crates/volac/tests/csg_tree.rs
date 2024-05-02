@@ -1,3 +1,5 @@
+use volac::PipelineError;
+
 ///Tests a cutoff implementation of a sub tree.
 ///Basically given a tree like
 ///```
@@ -50,4 +52,41 @@ fn unused_arg_define() {
         .execute_on_file(&"tests/vola_src/unused_define_arg.vola")
         .unwrap();
     target.try_verify().unwrap();
+}
+
+#[test]
+fn eval_in_fn() {
+    let pipeline = volac::Pipeline::new_in_memory();
+    match pipeline.execute_on_file(&"tests/vola_src/eval_in_fn.vola") {
+        Err(PipelineError::OptError(vola_opt::OptError::ErrorsOccurred(1))) => {}
+        Err(e) => panic!("Wrong kind of error, expected ErrorsOccurred(1), got {e:?}"),
+        Ok(_) => panic!("Expected 1 error"),
+    }
+}
+#[test]
+fn eval_in_fdef() {
+    let pipeline = volac::Pipeline::new_in_memory();
+    match pipeline.execute_on_file(&"tests/vola_src/eval_in_fdef.vola") {
+        Err(PipelineError::OptError(vola_opt::OptError::ErrorsOccurred(1))) => {}
+        Err(e) => panic!("Wrong kind of error, expected ErrorsOccurred(1), got {e:?}"),
+        Ok(_) => panic!("Expected 1 error"),
+    }
+}
+#[test]
+fn eval_in_export() {
+    let pipeline = volac::Pipeline::new_in_memory();
+    match pipeline.execute_on_file(&"tests/vola_src/eval_in_export.vola") {
+        Err(PipelineError::OptError(vola_opt::OptError::ErrorsOccurred(1))) => {}
+        Err(e) => panic!("Wrong kind of error, expected ErrorsOccurred(1), got {e:?}"),
+        Ok(_) => panic!("Expected 1 error"),
+    }
+}
+#[test]
+fn eval_in_entity() {
+    let pipeline = volac::Pipeline::new_in_memory();
+    match pipeline.execute_on_file(&"tests/vola_src/eval_in_entity.vola") {
+        Err(PipelineError::OptError(vola_opt::OptError::ErrorsOccurred(1))) => {}
+        Err(e) => panic!("Wrong kind of error, expected ErrorsOccurred(1), got {e:?}"),
+        Ok(_) => panic!("Expected 1 error"),
+    }
 }
