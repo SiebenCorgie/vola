@@ -16,7 +16,7 @@ use vola_ast::{
     alge::{AlgeStmt, AssignStmt, LetStmt},
     common::Ident,
 };
-use vola_common::{report, Span};
+use vola_common::{ariadne::Label, error::error_reporter, report, Span};
 
 use crate::{
     alge::WkOp,
@@ -89,8 +89,7 @@ impl AlgeFn {
         // then overwriting the last known definition of dst.
 
         if !builder.lmd_context.var_exists(&dst.0) {
-            let err = OptError::AnySpanned {
-                span: span.clone().into(),
+            let err = OptError::Any {
                 text: format!(
                     "
 Cannot assign to an undefined variable {}.
@@ -98,10 +97,13 @@ Consider using `let {} = ...;` instead, or using an defined variable.
 ",
                     dst.0, dst.0
                 ),
-                span_text: "Unknown variable".to_owned(),
             };
 
-            report(err.clone(), span.get_file());
+            report(
+                error_reporter(err.clone(), span.clone())
+                    .with_label(Label::new(span.clone()).with_message("Unknown variable"))
+                    .finish(),
+            );
             return Err(err);
         }
 
@@ -128,17 +130,21 @@ Consider using `let {} = ...;` instead, or using an defined variable.
 
         if builder.lmd_context.var_exists(&decl_name.0) {
             let existing = builder.lmd_context.defined_vars.get(&decl_name.0).unwrap();
-            let err = OptError::AnySpannedWithSource {
-                source_span: existing.span.clone().into(),
-                source_text: "first defined here".to_owned(),
+            let err = OptError::Any {
                 text: format!("
 cannot redefine variable with name \"{}\".
 Note that vola does not support shadowing. If you just want to change the value of that variable, consider doing it like this:
 `{} = ...;`",
                               decl_name.0, decl_name.0),
-                span: span.clone().into(),
-                span_text: "tried to redefine here".to_owned() };
-            report(err.clone(), span.get_file());
+            };
+            report(
+                error_reporter(err.clone(), span.clone())
+                    .with_label(
+                        Label::new(existing.span.clone()).with_message("first defined here"),
+                    )
+                    .with_label(Label::new(span.clone()).with_message("tried to redefine here"))
+                    .finish(),
+            );
             return Err(err);
         }
 
@@ -164,21 +170,28 @@ impl Optimizer {
         //and the return expression must statify the return-type constrains (at some point ^^).
 
         if let Some(_special_node) = WkOp::try_parse(&alge_fn.name.0) {
-            let err = OptError::AnySpanned { span: alge_fn.span.clone().into(), text: format!("Cannot use name \"{}\" for algebraic function, since a that would shadow a build-in function with the same name!", alge_fn.name.0), span_text: format!("Consider renaming this function.") };
+            let err = OptError::Any{ 
+                text: format!("Cannot use name \"{}\" for algebraic function, since a that would shadow a build-in function with the same name!", alge_fn.name.0), 
+            };
 
-            report(err.clone(), alge_fn.span.get_file());
+            report(
+                error_reporter(err.clone(), alge_fn.span.clone())
+                    .with_label(Label::new(alge_fn.span.clone()).with_message("Consider renaming this function"))
+                    .finish(),
+            );
             return Err(err);
         }
 
         if let Some(existing_key) = self.alge_fn.get(&alge_fn.name.0) {
-            let err = OptError::AnySpannedWithSource {
-                source_span: existing_key.span.clone().into(),
-                source_text: format!("First implementation of \"{}\" here", alge_fn.name.0),
+            let err = OptError::Any {
                 text: format!("Cannot define \"{}\" multiple times!", alge_fn.name.0),
-                span: alge_fn.span.into(),
-                span_text: format!("Tried to redefine here"),
             };
-            report(err.clone(), existing_key.span.get_file());
+            report(
+                error_reporter(err.clone(), alge_fn.span.clone())
+                    .with_label(Label::new(existing_key.span.clone()).with_message("fist defined here"))
+                    .with_label(Label::new(alge_fn.span.clone()).with_message("Tried to redefine here"))
+                    .finish(),
+            );
             return Err(err);
         }
 
@@ -203,6 +216,7 @@ impl Optimizer {
             lmd_context,
             lambda,
             lambda_region,
+            is_eval_allowed: false,
         };
 
         let algedef = AlgeFn {

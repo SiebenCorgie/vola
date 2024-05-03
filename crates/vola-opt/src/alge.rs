@@ -158,7 +158,7 @@ impl WkOp {
                 Ok(Some(sig.remove(0)))
             }
 
-            WkOp::Add | WkOp::Sub | WkOp::Div | WkOp::Min | WkOp::Max => {
+            WkOp::Add | WkOp::Sub | WkOp::Div | WkOp::Min | WkOp::Max | WkOp::Mod => {
                 //For those we need _the same algebraic_ for both inputs.
                 //NOTE: Mul is a little _special_ since
                 //      there is matrix multiplication with
@@ -463,10 +463,11 @@ impl WkOp {
 
                 //seems to be alright, return scalar
                 Ok(Some(sig[0].clone()))
-            }
-            wk => Err(OptError::Any {
-                text: format!("derive not implemented for {:?}", wk),
-            }),
+            } /*
+              wk => Err(OptError::Any {
+                  text: format!("derive not implemented for {:?}", wk),
+              }),
+              */
         }
     }
 }

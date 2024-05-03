@@ -9,5 +9,5 @@ pub fn main() {
         }
     };
 
-    ast_to_svg(&ast, "simple_csg");
+    ast_to_svg(&ast, "simple_csg.svg");
 }

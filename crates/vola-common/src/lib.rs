@@ -9,23 +9,21 @@
 
 use std::fmt::Display;
 
-use miette::{SourceOffset, SourceSpan};
-pub use reporter::ErrorReporter;
 use serde::{Deserialize, Serialize};
 use smallstr::SmallString;
 
 pub use serde;
 pub use serde_lexpr;
 
-pub use miette;
+pub use ariadne;
 pub use thiserror;
 
 #[cfg(feature = "dot")]
 pub mod dot;
 
+pub mod error;
 mod reporter;
-
-pub use reporter::{report, reset_file_cache, Reportable};
+pub use reporter::{cache_file, report, reset_file_cache, Reportable};
 
 pub type FileString = SmallString<[u8; 32]>;
 
@@ -76,6 +74,10 @@ impl Span {
             Some(&self.file)
         }
     }
+
+    pub fn is_empty(&self) -> bool {
+        self == &Self::empty()
+    }
 }
 
 impl Display for Span {
@@ -88,12 +90,16 @@ impl Display for Span {
     }
 }
 
-impl Into<SourceSpan> for Span {
-    fn into(self) -> SourceSpan {
-        SourceSpan::new(
-            SourceOffset::from(self.byte_start),
-            self.byte_end - self.byte_start,
-        )
+impl ariadne::Span for Span {
+    type SourceId = std::path::Path;
+    fn source(&self) -> &Self::SourceId {
+        &std::path::Path::new(self.file.as_str())
+    }
+    fn start(&self) -> usize {
+        self.byte_start
+    }
+    fn end(&self) -> usize {
+        self.byte_end
     }
 }
 

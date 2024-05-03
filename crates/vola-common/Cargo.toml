@@ -21,6 +21,6 @@ smallstr = {workspace = true, features = ["serde"]}
 serde = {workspace = true, features = ["derive"]}
 serde-lexpr.workspace = true
 graphviz-rust = {workspace = true, optional = true}
-miette = {workspace = true, features = ["fancy"]}
 lazy_static.workspace = true
 rvsdg-viewer = {path = "../rvsdg-viewer"}
+ariadne = {workspace = true, features = ["auto-color"]}

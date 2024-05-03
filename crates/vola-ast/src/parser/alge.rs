@@ -8,7 +8,7 @@
 //! Algebra related parser portion.
 
 use smallvec::SmallVec;
-use vola_common::{report, Span};
+use vola_common::{ariadne::Label, error::error_reporter, report, Span};
 
 use crate::{
     alge::{
@@ -43,7 +43,7 @@ impl FromTreeSitter for AlgeExpr {
                             "Unknown Unary operation {}",
                             operator_node.kind()
                         ));
-                        report(err.clone(), ctx.get_file());
+                        report(error_reporter(err.clone(), ctx.span(&operator_node)).finish());
                         return Err(err);
                     }
                 };
@@ -73,7 +73,7 @@ impl FromTreeSitter for AlgeExpr {
                             "Unknown Binary operation {}",
                             operator_node.kind()
                         ));
-                        report(err.clone(), ctx.get_file());
+                        report(error_reporter(err.clone(), ctx.span(&operator_node)).finish());
                         return Err(err);
                     }
                 };
@@ -118,29 +118,40 @@ impl FromTreeSitter for AlgeExpr {
                                 }
                                 _ => {
                                     let err = ParserError::UnexpectedAstNode {
-                                        span: ctx.span(&next_field).into(),
                                         kind: next_field.kind().to_owned(),
                                         expected: "digit | identifier | .".to_owned(),
                                     };
-                                    report(err.clone(), ctx.get_file());
+                                    report(
+                                        error_reporter(err.clone(), ctx.span(&next_field))
+                                            .with_label(
+                                                Label::new(ctx.span(&next_field))
+                                                    .with_message("Expected this to be either a digit, or an identifier, or a \".\""))
+                                            .finish()
+                                    );
                                     return Err(err);
                                 }
                             }
                         }
                     } else {
                         let err = ParserError::UnexpectedAstNode {
-                            span: ctx.span(&next_node).into(),
                             kind: next_node.kind().to_owned(),
                             expected: "field_access_list".to_owned(),
                         };
-                        report(err.clone(), ctx.get_file());
+                        report(
+                            error_reporter(err.clone(), ctx.span(&next_node))
+                                .with_label(
+                                    Label::new(ctx.span(&next_node))
+                                        .with_message("This should be one ore more field accesses"),
+                                )
+                                .finish(),
+                        );
                         return Err(err);
                     }
                 }
 
                 if accessors.len() == 0 {
                     let err = ParserError::NoAccessedField;
-                    report(err.clone(), ctx.get_file());
+                    report(error_reporter(err.clone(), Span::empty()).finish());
                     return Err(err);
                 }
 
@@ -166,11 +177,17 @@ impl FromTreeSitter for AlgeExpr {
                         "alge_expr" => list.push(AlgeExpr::parse(ctx, dta, &next_node)?),
                         _ => {
                             let err = ParserError::UnexpectedAstNode {
-                                span: ctx.span(&next_node).into(),
                                 kind: next_node.kind().to_owned(),
                                 expected: "alge_expr ".to_owned(),
                             };
-                            report(err.clone(), ctx.get_file());
+                            report(
+                                error_reporter(err.clone(), ctx.span(&next_node))
+                                    .with_label(
+                                        Label::new(ctx.span(&next_node))
+                                            .with_message("Should be an algebraic expression"),
+                                    )
+                                    .finish(),
+                            );
                             return Err(err);
                         }
                     }
@@ -183,14 +200,20 @@ impl FromTreeSitter for AlgeExpr {
                         "]" => break,
                         _ => {
                             let err = ParserError::UnexpectedNodeValue {
-                                span: ctx.span(&next_node).into(),
                                 val: next_node
                                     .utf8_text(dta)
                                     .unwrap_or("couldn't parse")
                                     .to_owned(),
                                 exp: ", or ] ".to_owned(),
                             };
-                            report(err.clone(), ctx.get_file());
+                            report(
+                                error_reporter(err.clone(), ctx.span(&next_node))
+                                    .with_label(
+                                        Label::new(ctx.span(&next_node))
+                                            .with_message("Should be \",\" or \"]\""),
+                                    )
+                                    .finish(),
+                            );
                             return Err(err);
                         }
                     }
@@ -201,11 +224,10 @@ impl FromTreeSitter for AlgeExpr {
             }
             _ => {
                 let err = ParserError::UnexpectedAstNode {
-                    span: ctx.span(&child_node).into(),
                     kind: child_node.kind().to_owned(),
                     expected: " unary expression| binary expression | eval expression | (alge expression) | literal | field access | identifier | call | list ".to_owned(),
                 };
-                report(err.clone(), ctx.get_file());
+                report(error_reporter(err.clone(), ctx.span(&child_node)).finish());
                 return Err(err);
             }
         };
@@ -234,11 +256,10 @@ impl FromTreeSitter for FieldAccessor {
             }),
             _ => {
                 let err = ParserError::UnexpectedAstNode {
-                    span: ctx.span(&node).into(),
                     kind: node.kind().to_owned(),
                     expected: "digit | identifier".to_owned(),
                 };
-                report(err.clone(), ctx.get_file());
+                report(error_reporter(err.clone(), ctx.span(&node)).finish());
                 Err(err)
             }
         }
@@ -318,11 +339,10 @@ impl FromTreeSitter for EvalExpr {
                 "alge_expr" => eval_params.push(AlgeExpr::parse(ctx, dta, &next_node)?),
                 _ => {
                     let err = ParserError::UnexpectedAstNode {
-                        span: ctx.span(&next_node).into(),
                         kind: next_node.kind().to_owned(),
                         expected: ") | alge_expr  ".to_owned(),
                     };
-                    report(err.clone(), ctx.get_file());
+                    report(error_reporter(err.clone(), ctx.span(&next_node)).finish());
                     return Err(err);
                 }
             }
@@ -338,11 +358,10 @@ impl FromTreeSitter for EvalExpr {
                 }
                 _ => {
                     let err = ParserError::UnexpectedAstNode {
-                        span: ctx.span(&next_node).into(),
                         kind: next_node.kind().to_owned(),
                         expected: ") | , ".to_owned(),
                     };
-                    report(err.clone(), ctx.get_file());
+                    report(error_reporter(err.clone(), ctx.span(&next_node)).finish());
                     return Err(err);
                 }
             }
@@ -383,11 +402,10 @@ impl FromTreeSitter for ImplBlock {
                         "identifier" => operands.push(Ident::parse(ctx, dta, &next_node)?),
                         _ => {
                             let err = ParserError::UnexpectedAstNode {
-                                span: ctx.span(&next_node).into(),
                                 kind: next_node.kind().to_owned(),
                                 expected: "identifier".to_owned(),
                             };
-                            report(err.clone(), ctx.get_file());
+                            report(error_reporter(err.clone(), ctx.span(&next_node)).finish());
                             return Err(err);
                         }
                     }
@@ -413,11 +431,10 @@ impl FromTreeSitter for ImplBlock {
                         }
                         _ => {
                             let err = ParserError::UnexpectedAstNode {
-                                span: ctx.span(&next_node).into(),
                                 kind: next_node.kind().to_owned(),
                                 expected: " , or >".to_owned(),
                             };
-                            report(err.clone(), ctx.get_file());
+                            report(error_reporter(err.clone(), ctx.span(&next_node)).finish());
                             return Err(err);
                         }
                     }
@@ -429,11 +446,10 @@ impl FromTreeSitter for ImplBlock {
             "for" => SmallVec::new(),
             _ => {
                 let err = ParserError::UnexpectedAstNode {
-                    span: ctx.span(&next_node).into(),
                     kind: next_node.kind().to_owned(),
                     expected: "for | < ".to_owned(),
                 };
-                report(err.clone(), ctx.get_file());
+                report(error_reporter(err.clone(), ctx.span(&next_node)).finish());
                 return Err(err);
             }
         };
@@ -450,11 +466,10 @@ impl FromTreeSitter for ImplBlock {
                         "identifier" => renaming.push(Ident::parse(ctx, dta, &next_node)?),
                         _ => {
                             let err = ParserError::UnexpectedAstNode {
-                                span: ctx.span(&next_node).into(),
                                 kind: next_node.kind().to_owned(),
                                 expected: "identifier".to_owned(),
                             };
-                            report(err.clone(), ctx.get_file());
+                            report(error_reporter(err.clone(), ctx.span(&next_node)).finish());
                             return Err(err);
                         }
                     }
@@ -480,11 +495,10 @@ impl FromTreeSitter for ImplBlock {
                         }
                         _ => {
                             let err = ParserError::UnexpectedAstNode {
-                                span: ctx.span(&next_node).into(),
                                 kind: next_node.kind().to_owned(),
                                 expected: " , or ) ".to_owned(),
                             };
-                            report(err.clone(), ctx.get_file());
+                            report(error_reporter(err.clone(), ctx.span(&next_node)).finish());
                             return Err(err);
                         }
                     }
@@ -496,11 +510,10 @@ impl FromTreeSitter for ImplBlock {
             "{" => SmallVec::new(),
             _ => {
                 let err = ParserError::UnexpectedAstNode {
-                    span: ctx.span(&next_node).into(),
                     kind: next_node.kind().to_owned(),
                     expected: "{ | ( ".to_owned(),
                 };
-                report(err.clone(), ctx.get_file());
+                report(error_reporter(err.clone(), ctx.span(&next_node)).finish());
                 return Err(err);
             }
         };
@@ -539,11 +552,10 @@ impl FromTreeSitter for ImplBlock {
                         }
                         _ => {
                             let err = ParserError::UnexpectedAstNode {
-                                span: ctx.span(&next_node).into(),
                                 kind: next_node.kind().to_owned(),
                                 expected: "alge_stmt | alge_expr  | comment".to_owned(),
                             };
-                            report(err.clone(), ctx.get_file());
+                            report(error_reporter(err.clone(), ctx.span(&next_node)).finish());
                             return Err(err);
                         }
                     }
@@ -553,11 +565,10 @@ impl FromTreeSitter for ImplBlock {
             }
             _ => {
                 let err = ParserError::UnexpectedAstNode {
-                    span: ctx.span(&block_node).into(),
                     kind: block_node.kind().to_owned(),
                     expected: "block".to_owned(),
                 };
-                report(err.clone(), ctx.get_file());
+                report(error_reporter(err.clone(), ctx.span(&block_node)).finish());
                 return Err(err);
             }
         }
@@ -565,7 +576,7 @@ impl FromTreeSitter for ImplBlock {
         let return_expr = match return_expr {
             None => {
                 let err = ParserError::NoAlgeExprAtEnd;
-                report(err.clone(), ctx.get_file());
+                report(error_reporter(err.clone(), Span::empty()).finish());
                 return Err(err);
             }
             Some(r) => r,
@@ -597,11 +608,10 @@ impl FromTreeSitter for AlgeStmt {
             "assign_stmt" => Ok(Self::Assign(AssignStmt::parse(ctx, dta, node)?)),
             _ => {
                 let err = ParserError::UnexpectedAstNode {
-                    span: ctx.span(&node).into(),
                     kind: node.kind().to_owned(),
                     expected: "let_stmt | assign_stmt".to_owned(),
                 };
-                report(err.clone(), ctx.get_file());
+                report(error_reporter(err.clone(), ctx.span(&node)).finish());
                 return Err(err);
             }
         }

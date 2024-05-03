@@ -1,4 +1,4 @@
-use vola_common::{report, Span};
+use vola_common::{ariadne::Label, error::error_reporter, report, Span};
 
 use crate::{OptError, Optimizer};
 
@@ -23,12 +23,16 @@ impl Optimizer {
                             .cloned()
                             .unwrap_or(Span::empty());
 
-                        let err = OptError::InlineFailed {
-                            error: e,
-                            span: span.clone().into(),
-                        };
+                        let err = OptError::InlineFailed { error: e };
 
-                        report(err.clone(), span.get_file());
+                        report(
+                            error_reporter(err.clone(), span.clone())
+                                .with_label(
+                                    Label::new(span.clone())
+                                        .with_message("Failed to inline this function"),
+                                )
+                                .finish(),
+                        );
                         err
                     })?;
                 }

@@ -27,10 +27,10 @@ use rvsdg::{
     smallvec::SmallVec,
     NodeRef,
 };
-use vola_common::{report, Span};
+use vola_common::{ariadne::Label, error::error_reporter, report, Span};
 
 use crate::{
-    alge::implblock::ConceptImpl,
+    alge::{algefn::AlgeFn, implblock::ConceptImpl},
     common::Ty,
     csg::{exportfn::ExportFn, fielddef::FieldDef},
     error::OptError,
@@ -195,6 +195,12 @@ impl Optimizer {
             self.verify_field_def(fdef)?;
         }
 
+        for algefn in self.alge_fn.values() {
+            self.verify_alge_fn(algefn)?;
+        }
+
+        #[cfg(feature = "log")]
+        log::info!("Finished deriving dependent nodes, moving to exports...");
         //NOTE: Right now we don't use the dependency driven resolution we use for field defs,
         //      cause by definition all dependencies must be resolved that could be imported.
         //      However, since this is pre-alpha ware, we still check
@@ -208,7 +214,6 @@ impl Optimizer {
                 error_count += 1;
             }
         }
-
         for exp in self.export_fn.values() {
             self.verify_export_fn(exp)?;
         }
@@ -218,6 +223,8 @@ impl Optimizer {
             self.push_debug_state("post type derive");
         }
 
+        #[cfg(feature = "log")]
+        log::info!("Finished type derive");
         if error_count > 0 {
             Err(OptError::Any {
                 text: format!("Type derivation did not end successfully!"),
@@ -264,37 +271,43 @@ impl Optimizer {
         if let Some(result_edg) = self.graph.region(&block.lambda_region).unwrap().results[0].edge {
             match self.graph.edge(result_edg).ty.get_type() {
                 None => {
-                    let err = OptError::AnySpanned {
-                        span: block.span.clone().into(),
+                    let err = OptError::Any {
                         text: format!("impl-block's output was untyped"),
-                        span_text: "in this region".to_owned(),
                     };
-                    report(err.clone(), block.span.get_file());
+                    report(
+                        error_reporter(err.clone(), block.span.clone())
+                            .with_label(Label::new(block.span.clone()).with_message("in this region"))
+                            .finish(),
+                    );
                     Err(err)
                 }
                 Some(t) => {
                     if *t != expected_result_type {
                         if let Some(s) = result_node_span {
-                            let err = OptError::AnySpanned {
-                                span: s.clone().into(),
+                            let err = OptError::Any {
                                 text: format!(
                                     "ImplBlock's output was of type {:?} but expected {:?}",
                                     t, expected_result_type
                                 ),
-                                span_text: "tried to return this".to_owned(),
                             };
-                            report(err.clone(), s.get_file());
+                            report(
+                                error_reporter(err.clone(), s.clone())
+                                    .with_label(Label::new(s.clone()).with_message("Tried to return this"))
+                                    .finish(),
+                            );
                             Err(err)
                         } else {
-                            let err = OptError::AnySpanned {
-                                span: block.span.clone().into(),
+                            let err = OptError::Any{
                                 text: format!(
                                     "ImplBlock's output was of type {:?} but expected {:?}",
                                     t, expected_result_type
                                 ),
-                                span_text: "in this region".to_owned(),
                             };
-                            report(err.clone(), block.span.get_file());
+                            report(
+                                error_reporter(err.clone(), block.span.clone())
+                                    .with_label(Label::new(block.span.clone()).with_message("In this region"))
+                                    .finish(),
+                            );
                             Err(err)
                         }
                     } else {
@@ -303,12 +316,14 @@ impl Optimizer {
                 }
             }
         } else {
-            let err = OptError::AnySpanned {
-                span: block.span.clone().into(),
+            let err = OptError::Any {
                 text: format!("ImplBlocks's output was not connected"),
-                span_text: "in this region".to_owned(),
             };
-            report(err.clone(), block.span.get_file());
+            report(
+                error_reporter(err.clone(), block.span.clone())
+                    .with_label(Label::new(block.span.clone()).with_message("In this region"))
+                    .finish(),
+            );
             Err(err)
         }
     }
@@ -319,35 +334,41 @@ impl Optimizer {
         if let Some(result_edge) = self.graph.region(&fdef.lambda_region).unwrap().results[0].edge {
             if let Some(ty) = self.graph.edge(result_edge).ty.get_type() {
                 if ty != &Ty::CSGTree {
-                    let err = OptError::AnySpanned {
-                        span: fdef.span.clone().into(),
+                    let err = OptError::Any {
                         text: format!(
                             "field definition's output is expected to be a CSGTree, not {:?}",
                             ty
                         ),
-                        span_text: "in this region".to_owned(),
                     };
-                    report(err.clone(), fdef.span.get_file());
+                    report(
+                        error_reporter(err.clone(), fdef.span.clone())
+                            .with_label(Label::new(fdef.span.clone()).with_message("In this region"))
+                            .finish(),
+                    );
                     Err(err)
                 } else {
                     Ok(())
                 }
             } else {
-                let err = OptError::AnySpanned {
-                    span: fdef.span.clone().into(),
+                let err = OptError::Any {
                     text: format!("field definition's output was not typed"),
-                    span_text: "in this region".to_owned(),
                 };
-                report(err.clone(), fdef.span.get_file());
+                report(
+                    error_reporter(err.clone(), fdef.span.clone())
+                        .with_label(Label::new(fdef.span.clone()).with_message("In this region"))
+                        .finish(),
+                );
                 Err(err)
             }
         } else {
-            let err = OptError::AnySpanned {
-                span: fdef.span.clone().into(),
+            let err = OptError::Any {
                 text: format!("field definition's output was not connected"),
-                span_text: "in this region".to_owned(),
             };
-            report(err.clone(), fdef.span.get_file());
+            report(
+                error_reporter(err.clone(), fdef.span.clone())
+                    .with_label(Label::new(fdef.span.clone()).with_message("In this region"))
+                    .finish(),
+            );
             Err(err)
         }
     }
@@ -368,35 +389,121 @@ impl Optimizer {
             {
                 if let Some(ty) = self.graph.edge(result_edge).ty.get_type() {
                     if ty != expected_ty {
-                        let err = OptError::AnySpanned {
-                            span: export.span.clone().into(),
+                        let err = OptError::Any {
                             text: format!(
                                 "field definition's output {} is expected to be a {:?}, not {:?}",
                                 i, expected_ty, ty
                             ),
-                            span_text: "in this region".to_owned(),
                         };
-                        report(err.clone(), export.span.get_file());
+                        report(
+                            error_reporter(err.clone(), export.span.clone())
+                                .with_label(Label::new(export.span.clone()).with_message("In this region"))
+                                .finish(),
+                        );
                         return Err(err);
                     }
                 } else {
-                    let err = OptError::AnySpanned {
-                        span: export.span.clone().into(),
+                    let err = OptError::Any {
                         text: format!("field-export's output[{}] was not typed", i),
-                        span_text: "in this region".to_owned(),
                     };
-                    report(err.clone(), export.span.get_file());
+                    report(
+                        error_reporter(err.clone(), export.span.clone())
+                            .with_label(Label::new(export.span.clone()).with_message("In this region"))
+                            .finish(),
+                    );
                     return Err(err);
                 }
             } else {
-                let err = OptError::AnySpanned {
-                    span: export.span.clone().into(),
+                let err = OptError::Any {
                     text: format!("field-export's output[{}] was not connected", i),
-                    span_text: "in this region".to_owned(),
                 };
-                report(err.clone(), export.span.get_file());
+                report(
+                    error_reporter(err.clone(), export.span.clone())
+                        .with_label(Label::new(export.span.clone()).with_message("In this region"))
+                        .finish(),
+                );
                 return Err(err);
             }
+        }
+
+        Ok(())
+    }
+
+    fn verify_alge_fn(&self, algefn: &AlgeFn) -> Result<(), OptError> {
+        //Make sure that the result-connected edge is of the right type,
+        //and the argument-connected edges are correct as well
+        for (argidx, (_name, argty)) in algefn.args.iter().enumerate() {
+            for arg_connected_edge in &self
+                .graph
+                .node(algefn.lambda)
+                .node_type
+                .unwrap_lambda_ref()
+                .argument(argidx)
+                .unwrap()
+                .edges
+            {
+                if let Some(ty) = self.graph.edge(*arg_connected_edge).ty.get_type() {
+                    //if the types do not match, bail as well
+                    if ty != argty {
+                        let err = OptError::Any { 
+                            text: format!("Argument {argidx} is of typ \"{argty:?}\", but was used as \"{ty:?}\". This is a compiler bug!"), 
+                        };
+                        report(
+                            error_reporter(err.clone(), algefn.span.clone())
+                                .with_label(Label::new(algefn.span.clone()).with_message(&format!("user of argument {argidx} in this region")))
+                                .finish(),
+                        );
+                        return Err(err);
+                    }
+                } else {
+                    let err = OptError::Any { 
+                        text: format!("Argument {argidx} is of type \"{argty:?}\", but connected edge was untyped. This is a compiler bug!"), 
+                    };
+                    report(
+                        error_reporter(err.clone(), algefn.span.clone())
+                            .with_label(Label::new(algefn.span.clone()).with_message(&format!("user of argument {argidx} in this region")))
+                            .finish(),
+                    );
+                    return Err(err);
+                }
+            }
+        }
+
+        //Check that the result is set correctly
+        if let Some(edg) = &self.graph.node(algefn.lambda).node_type.unwrap_lambda_ref().result(0).unwrap().edge{
+            if let Some(ty) = self.graph.edge(*edg).ty.get_type(){
+                if ty != &algefn.retty{
+                    let err = OptError::Any { 
+                        text: format!("Result type was \"{ty:?}\", but expected {:?}!", algefn.retty), 
+                    };
+                    report(
+                        error_reporter(err.clone(), algefn.span.clone())
+                            .with_label(Label::new(algefn.span.clone()).with_message(&format!("result producer in this region should be {:?}", algefn.retty)))
+                            .finish(),
+                    );
+                    return Err(err);
+                }
+            }else{
+                let err = OptError::Any { 
+                    text: format!("Result is of type \"{:?}\", but connected edge was untyped. This is a compiler bug!", algefn.retty), 
+                };
+                report(
+                    error_reporter(err.clone(), algefn.span.clone())
+                        .with_label(Label::new(algefn.span.clone()).with_message("result producer in this region"))
+                        .finish(),
+                );
+                return Err(err);
+            }
+        }else{
+            let err = OptError::Any { 
+                text: format!("Result is of type \"{:?}\", but there was no return value set. This is a compiler bug!", algefn.retty), 
+            };
+            report(
+                error_reporter(err.clone(), algefn.span.clone())
+                    .with_label(Label::new(algefn.span.clone()).with_message("no result producer in this region"))
+                    .finish(),
+            );
+            return Err(err);
         }
 
         Ok(())
@@ -407,6 +514,10 @@ impl Optimizer {
         apply: &ApplyNode,
         region_src_span: &Span,
     ) -> Result<Option<Ty>, OptError> {
+
+        #[cfg(feature = "log")]
+        log::info!("Type derive Apply node");
+        
         //for the apply node, we search for the src λ-Node, and call
         if let Some(calldecl_edge) = apply.get_callabel_decl().edge {
             let callable_src = self.graph.edge(calldecl_edge).src().clone();
@@ -430,8 +541,14 @@ impl Optimizer {
                     ) {
                         ty
                     } else {
-                        let err = OptError::AnySpanned { span: span.clone().into(), text: "This call's src function output type was not set!".to_owned(), span_text: "consider checking this function for errors (and create and file an issue on GitLab).".to_owned() };
-                        report(err.clone(), span.get_file());
+                        let err = OptError::Any { 
+                            text: "This call's src function output type was not set!".to_owned(), 
+                        };
+                        report(
+                            error_reporter(err.clone(), span.clone())
+                                .with_label(Label::new(span.clone()).with_message("consider checking this function for errors (and file an issue on GitLab, this is likely a compiler bug)"))
+                                .finish(),
+                        );
                         return Err(err);
                     }
                 };
@@ -446,16 +563,17 @@ impl Optimizer {
                     if let Some(t) = maybe_ty {
                         expected_call_sig.push(t);
                     } else {
-                        let err = OptError::AnySpanned {
-                            span: span.clone().into(),
+                        let err = OptError::Any {
                             text: format!(
                                 "Argument-Type {argidx} was not set. This indicates a bug!"
                             ),
-                            span_text: "Of this λ-Node".to_owned(),
                         };
 
-                        //Shouldn't happen, so return an error in that case
-                        report(err.clone(), region_src_span.get_file());
+                        report(
+                            error_reporter(err.clone(), span.clone())
+                                .with_label(Label::new(span.clone()).with_message("Of this λ-Node"))
+                                .finish(),
+                        );
                         return Err(err);
                     }
                 }
@@ -472,7 +590,11 @@ impl Optimizer {
                             let err = OptError::Any {
                                 text: format!("apply node's {i}-th input has no connected edge."),
                             };
-                            report(err.clone(), region_src_span.get_file());
+                            report(
+                                error_reporter(err.clone(), region_src_span.clone())
+                                    .with_label(Label::new(region_src_span.clone()).with_message("In this region"))
+                                    .finish(),
+                            );
                             return Err(err);
                         }
                     }
@@ -489,7 +611,11 @@ impl Optimizer {
                                 expected_call_sig[i], apply_node_sig[i]
                             ),
                         };
-                        report(err.clone(), region_src_span.get_file());
+                        report(
+                            error_reporter(err.clone(), region_src_span.clone())
+                                .with_label(Label::new(region_src_span.clone()).with_message("In this region"))
+                                .finish(),
+                        );
                         return Err(err);
                     }
                 }
@@ -499,14 +625,22 @@ impl Optimizer {
                 let err = OptError::Any {
                     text: format!("apply node's call-edge hat no callable producer."),
                 };
-                report(err.clone(), region_src_span.get_file());
+                report(
+                    error_reporter(err.clone(), region_src_span.clone())
+                        .with_label(Label::new(region_src_span.clone()).with_message("In this region"))
+                        .finish(),
+                );
                 Err(err)
             }
         } else {
             let err = OptError::Any {
                 text: format!("apply node's calledge was not connected"),
             };
-            report(err.clone(), region_src_span.get_file());
+            report(
+                error_reporter(err.clone(), region_src_span.clone())
+                    .with_label(Label::new(region_src_span.clone()).with_message("In this region"))
+                    .finish(),
+            );
             Err(err)
         }
     }
@@ -534,8 +668,14 @@ impl Optimizer {
             if let Some(ty) = self.find_type(&src.into()) {
                 if let Some(preset) = self.graph.edge(*edg).ty.get_type() {
                     if preset != &ty {
-                        let err = OptError::AnySpanned { span: region_src_span.clone().into(), text: format!("Edge was already set to {:?}, but was about to be overwritten with an incompatible type {:?}", preset, ty), span_text: "Somewhere in this region".to_owned() };
-                        report(err.clone(), region_src_span.get_file());
+                        let err = OptError::Any { 
+                            text: format!("Edge was already set to {:?}, but was about to be overwritten with an incompatible type {:?}", preset, ty), 
+                        };                        
+                        report(
+                            error_reporter(err.clone(), region_src_span.clone())
+                                .with_label(Label::new(region_src_span.clone()).with_message("In this region"))
+                                .finish(),
+                        );
                         return Err(err);
                     }
                 } else {
@@ -553,7 +693,6 @@ impl Optimizer {
 
             let mut local_stack = VecDeque::new();
             std::mem::swap(&mut local_stack, &mut build_stack);
-
             for node in local_stack {
                 //gather all inputs and let the node try to resolve itself
                 let type_resolve_try = match &self.graph.node(node).node_type {
@@ -570,7 +709,11 @@ impl Optimizer {
                                 "Unexpected node type {t:?} in graph while doing type resolution."
                             ),
                         };
-                        report(err.clone(), region_src_span.get_file());
+                        report(
+                            error_reporter(err.clone(), region_src_span.clone())
+                                .with_label(Label::new(region_src_span.clone()).with_message("In this region"))
+                                .finish(),
+                        );
                         return Err(err);
                     }
                 };
@@ -615,17 +758,18 @@ impl Optimizer {
                         build_stack.push_front(node);
                     }
                     Err(e) => {
-                        let e = e.into_spanned(
-                            &self.graph.node(node).node_type.unwrap_simple_ref().span,
-                        );
+                        let span = self
+                            .graph
+                            .node(node)
+                            .node_type
+                            .unwrap_simple_ref()
+                            .span
+                            .clone();
+                        
                         report(
-                            e.clone(),
-                            self.graph
-                                .node(node)
-                                .node_type
-                                .unwrap_simple_ref()
-                                .span
-                                .get_file(),
+                            error_reporter(e.clone(), span.clone())
+                                .with_label(Label::new(span.clone()).with_message("on this operation"))
+                                .finish(),
                         );
                         //Immediately abort, since we have no way of finishing.
                         // TODO: We could also collect all error at this point...
@@ -655,17 +799,20 @@ impl Optimizer {
                     }
                     _ => Span::empty(),
                 };
-                let err = OptError::AnySpanned {
-                    span: span.clone().into(),
+                
+                let err = OptError::Any {
                     text: format!("Failed to derive a type"),
-                    span_text: "for this".to_owned(),
                 };
-                report(err, span.get_file());
+                
+                report(
+                    error_reporter(err.clone(), span.clone())
+                        .with_label(Label::new(span.clone()).with_message("for this"))
+                        .finish(),
+                );
             }
 
             return Err(OptError::TypeDeriveFailed {
                 errorcount: build_stack.len(),
-                span: region_src_span.into(),
             });
         }
 

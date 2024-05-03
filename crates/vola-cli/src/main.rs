@@ -12,6 +12,7 @@
 use std::path::PathBuf;
 
 use clap::{Parser, ValueEnum};
+use vola_common::Span;
 use volac::{Backend, CraneliftTarget};
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug)]
@@ -58,5 +59,10 @@ fn main() {
         target: volac::Target::File(args.output_name),
     };
 
-    pipeline.execute_on_file(&args.src_file).unwrap();
+    match pipeline.execute_on_file(&args.src_file) {
+        Err(e) => {
+            eprintln!("CLI Error: {e:?}");
+        }
+        Ok(_) => {}
+    }
 }

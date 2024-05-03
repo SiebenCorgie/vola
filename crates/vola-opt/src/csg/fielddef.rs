@@ -16,7 +16,7 @@ use vola_ast::{
     common::Ident,
     csg::{CSGBinding, CSGStmt},
 };
-use vola_common::{report, Span};
+use vola_common::{ariadne::Label, error::error_reporter, report, Span};
 
 use crate::{
     ast::{AstLambdaBuilder, LambdaBuilderCtx},
@@ -94,17 +94,21 @@ impl FieldDef {
         if builder.lmd_context.var_exists(&decl_name.0) {
             let existing = builder.lmd_context.defined_vars.get(&decl_name.0).unwrap();
 
-            let err = OptError::AnySpannedWithSource {
-                source_span: existing.span.clone().into(),
-                source_text: "first defined here".to_owned(),
+            let err = OptError::Any {
                 text: format!("
 cannot redefine variable with name \"{}\".
 Note that vola does not support shadowing. If you just want to change the value of that variable, consider doing it like this:
 `{} = ...;`",
                               decl_name.0, decl_name.0),
-                span: span.clone().into(),
-                span_text: "tried to redefine here".to_owned() };
-            report(err.clone(), span.get_file());
+            };
+            report(
+                error_reporter(err.clone(), span.clone())
+                    .with_label(
+                        Label::new(existing.span.clone()).with_message("first defined here"),
+                    )
+                    .with_label(Label::new(span.clone()).with_message("tried to redifine here"))
+                    .finish(),
+            );
             return Err(err);
         }
 
@@ -141,17 +145,22 @@ Note that vola does not support shadowing. If you just want to change the value 
 
         if builder.lmd_context.var_exists(&decl_name.0) {
             let existing = builder.lmd_context.defined_vars.get(&decl_name.0).unwrap();
-            let err = OptError::AnySpannedWithSource {
-                source_span: existing.span.clone().into(),
-                source_text: "first defined here".to_owned(),
+            let err = OptError::Any {
                 text: format!("
 cannot redefine variable with name \"{}\".
 Note that vola does not support shadowing. If you just want to change the value of that variable, consider doing it like this:
 `{} = ...;`",
                               decl_name.0, decl_name.0),
-                span: span.clone().into(),
-                span_text: "tried to redefine here".to_owned() };
-            report(err.clone(), span.get_file());
+            };
+
+            report(
+                error_reporter(err.clone(), span.clone())
+                    .with_label(
+                        Label::new(existing.span.clone()).with_message("first defined here"),
+                    )
+                    .with_label(Label::new(span.clone()).with_message("tried to redifine here"))
+                    .finish(),
+            );
             return Err(err);
         }
 
@@ -182,48 +191,60 @@ impl Optimizer {
         // entirly. But I think that wouldn't be nice usability wise.
 
         if let Some(conceptdef) = self.concepts.get(&fielddef.name.0) {
-            let err = OptError::AnySpannedWithSource {
-                source_span: conceptdef.span.clone().into(),
-                source_text: "first defined here".to_owned(),
+            let err = OptError::Any {
                 text: format!(
                     "Cannot define a field \"{}\" if there is already a concept with that name!",
                     fielddef.name.0
                 ),
-                span: fielddef.span.clone().into(),
-                span_text: "tried to use the same name here".to_owned(),
             };
-            report(err.clone(), conceptdef.span.get_file());
+
+            report(
+                error_reporter(err.clone(), conceptdef.span.clone())
+                    .with_label(
+                        Label::new(conceptdef.span.clone()).with_message("first defined here"),
+                    )
+                    .with_label(
+                        Label::new(fielddef.span.clone()).with_message("tried to redifine here"),
+                    )
+                    .finish(),
+            );
             return Err(err);
         }
 
         if let Some(csgdef) = self.csg_node_defs.get(&fielddef.name.0) {
-            let err = OptError::AnySpannedWithSource {
-                source_span: csgdef.span.clone().into(),
-                source_text: "first defined here".to_owned(),
+            let err = OptError::Any {
                 text: format!(
                     "Cannot define a field \"{}\" if there is already a entity or operation with that name!",
                     fielddef.name.0
                 ),
-                span: fielddef.span.clone().into(),
-                span_text: "tried to use the same name here".to_owned(),
             };
-            report(err.clone(), csgdef.span.get_file());
+            report(
+                error_reporter(err.clone(), csgdef.span.clone())
+                    .with_label(Label::new(csgdef.span.clone()).with_message("first defined here"))
+                    .with_label(
+                        Label::new(fielddef.span.clone()).with_message("tried to redifine here"),
+                    )
+                    .finish(),
+            );
             return Err(err);
         }
 
         //finally make sure there is no such field as well
         if let Some(fdef) = self.field_def.get(&fielddef.name.0) {
-            let err = OptError::AnySpannedWithSource {
-                source_span: fdef.span.clone().into(),
-                source_text: "first defined here".to_owned(),
+            let err = OptError::Any {
                 text: format!(
                     "Cannot define a field \"{}\" if there is already another field with that name!",
                     fielddef.name.0
                 ),
-                span: fielddef.span.clone().into(),
-                span_text: "tried to use the same name here".to_owned(),
             };
-            report(err.clone(), fdef.span.get_file());
+            report(
+                error_reporter(err.clone(), fdef.span.clone())
+                    .with_label(Label::new(fdef.span.clone()).with_message("first defined here"))
+                    .with_label(
+                        Label::new(fielddef.span.clone()).with_message("tried to redifine here"),
+                    )
+                    .finish(),
+            );
             return Err(err);
         }
 
@@ -251,6 +272,7 @@ impl Optimizer {
             lmd_context,
             lambda,
             lambda_region,
+            is_eval_allowed: false,
         };
 
         let new_def = FieldDef {

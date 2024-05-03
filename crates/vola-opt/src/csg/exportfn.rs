@@ -23,7 +23,7 @@ use crate::{
     error::OptError,
     OptNode, Optimizer,
 };
-use vola_common::{report, Span};
+use vola_common::{ariadne::Label, error::error_reporter, report, Span};
 
 use super::TreeAccess;
 
@@ -192,17 +192,21 @@ impl ExportFn {
 
         if builder.lmd_context.var_exists(&decl_name.0) {
             let existing = builder.lmd_context.defined_vars.get(&decl_name.0).unwrap();
-            let err = OptError::AnySpannedWithSource {
-                source_span: existing.span.clone().into(),
-                source_text: "first defined here".to_owned(),
+            let err = OptError::Any {
                 text: format!("
 cannot redefine variable with name \"{}\".
 Note that vola does not support shadowing. If you just want to change the value of that variable, consider doing it like this:
 `{} = ...;`",
                               decl_name.0, decl_name.0),
-                span: span.clone().into(),
-                span_text: "tried to redefine here".to_owned() };
-            report(err.clone(), span.get_file());
+                      };
+            report(
+                error_reporter(err.clone(), span.clone())
+                    .with_label(
+                        Label::new(existing.span.clone()).with_message("first defined here"),
+                    )
+                    .with_label(Label::new(span.clone()).with_message("tried to redefined here"))
+                    .finish(),
+            );
             return Err(err);
         }
 
@@ -236,17 +240,21 @@ Note that vola does not support shadowing. If you just want to change the value 
 
         if builder.lmd_context.var_exists(&decl_name.0) {
             let existing = builder.lmd_context.defined_vars.get(&decl_name.0).unwrap();
-            let err = OptError::AnySpannedWithSource {
-                source_span: existing.span.clone().into(),
-                source_text: "first defined here".to_owned(),
+            let err = OptError::Any {
                 text: format!("
 cannot redefine variable with name \"{}\".
 Note that vola does not support shadowing. If you just want to change the value of that variable, consider doing it like this:
 `{} = ...;`",
                               decl_name.0, decl_name.0),
-                span: span.clone().into(),
-                span_text: "tried to redefine here".to_owned() };
-            report(err.clone(), span.get_file());
+                      };
+            report(
+                error_reporter(err.clone(), span.clone())
+                    .with_label(
+                        Label::new(existing.span.clone()).with_message("first defined here"),
+                    )
+                    .with_label(Label::new(span.clone()).with_message("tried to redefined here"))
+                    .finish(),
+            );
             return Err(err);
         }
 
@@ -301,6 +309,7 @@ impl Optimizer {
             lmd_context,
             lambda,
             lambda_region,
+            is_eval_allowed: false,
         };
 
         let new_exportfn = ExportFn {

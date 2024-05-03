@@ -18,7 +18,7 @@ use vola_ast::{
     csg::CSGNodeTy,
     AstEntry, TopLevelNode,
 };
-use vola_common::report;
+use vola_common::{ariadne::Label, error::error_reporter, report};
 
 use crate::{
     alge::{CallOp, ConstantIndex, Construct, EvalNode, ImmNat, ImmScalar, WkOp},
@@ -35,21 +35,35 @@ impl Optimizer {
             //We ignore those atm
             AstEntry::Comment(_) => Ok(None),
             AstEntry::Module(m) => {
-                let err = OptError::AnySpanned { span: m.span.clone().into(), text: "Encountered \"module\" while transforming AST to RVSDG. Modules should be resolved beforehand.".to_owned(), span_text: "This module was not resolved".to_owned() };
-                report(err.clone(), m.span.get_file());
+                let err = OptError::Any {
+                    text: "Encountered \"module\" while transforming AST to RVSDG. Modules should be resolved beforehand.".to_owned()
+                };
+                report(
+                    error_reporter(err.clone(), m.span.clone())
+                        .with_label(
+                            Label::new(m.span.clone()).with_message("This module was not resolved"),
+                        )
+                        .finish(),
+                );
                 Err(err)
             }
             AstEntry::Concept(csgcon) => {
                 if let Some(existing_concept) = self.concepts.get(&csgcon.name.0) {
-                    let err = OptError::AnySpannedWithSource {
-                        source_span: existing_concept.span.clone().into(),
-                        source_text: format!("First occurrence of {}", existing_concept.name.0),
+                    let err = OptError::Any {
                         text: format!("Concept {} was already defined", existing_concept.name.0),
-                        span: csgcon.span.clone().into(),
-                        span_text: format!("Tried to redefine it here"),
                     };
 
-                    report(err.clone(), existing_concept.span.get_file());
+                    report(
+                        error_reporter(err.clone(), csgcon.span.clone())
+                            .with_label(
+                                Label::new(existing_concept.span.clone())
+                                    .with_message("first defined here"),
+                            )
+                            .with_label(
+                                Label::new(csgcon.span.clone()).with_message("redefined here"),
+                            )
+                            .finish(),
+                    );
 
                     Err(err)
                 } else {
@@ -61,15 +75,21 @@ impl Optimizer {
             AstEntry::CSGNodeDef(csgnd) => {
                 //similar to the concept case, test if there is already one, if not, push
                 if let Some(existing_csg) = self.csg_node_defs.get(&csgnd.name.0) {
-                    let err = OptError::AnySpannedWithSource {
-                        source_span: existing_csg.span.clone().into(),
-                        source_text: format!("First occurrence of {}", existing_csg.name.0),
+                    let err = OptError::Any {
                         text: format!("Operation or Entity {} was already defined. \nNote that operations and entities share one name space.", existing_csg.name.0),
-                        span: csgnd.span.clone().into(),
-                        span_text: format!("Tried to redefine it here"),
                     };
 
-                    report(err.clone(), existing_csg.span.get_file());
+                    report(
+                        error_reporter(err.clone(), csgnd.span.clone())
+                            .with_label(
+                                Label::new(existing_csg.span.clone())
+                                    .with_message("first defined here"),
+                            )
+                            .with_label(
+                                Label::new(csgnd.span.clone()).with_message("redefined here"),
+                            )
+                            .finish(),
+                    );
 
                     Err(err)
                 } else {
@@ -95,6 +115,7 @@ pub struct AstLambdaBuilder<'a> {
     pub lambda: NodeRef,
     pub lambda_region: RegionLocation,
     pub lmd_context: LmdContext,
+    pub is_eval_allowed: bool,
 }
 
 pub trait LambdaBuilderCtx {
@@ -104,8 +125,17 @@ pub trait LambdaBuilderCtx {
         _builder: &mut AstLambdaBuilder,
         eval_expr: &EvalExpr,
     ) -> Result<(OutportLocation, Ty), OptError> {
-        let err = OptError::AnySpanned { span: eval_expr.span.clone().into(), text: format!("Cannot use eval expression in this context.\nEval expressions are only allowed in concept implementations!"), span_text: format!("consider moving this eval into a concept implementation") };
-        report(err.clone(), eval_expr.span.get_file());
+        let err = OptError::Any { 
+            text: format!("Cannot use eval expression in this context.\nEval expressions are only allowed in concept implementations!"), 
+        };
+        report(
+            error_reporter(err.clone(), eval_expr.span.clone())
+                .with_label(
+                    Label::new(eval_expr.span.clone())
+                        .with_message("consider moving this eval into a concept implementation."),
+                )
+                .finish(),
+        );
         Err(err)
     }
 }
@@ -262,18 +292,39 @@ impl<'a> AstLambdaBuilder<'a> {
                             .typemap
                             .set(applynode_output.clone().into(), alge_import.ret.clone());
                         Ok(applynode_output)
-                    } else {
-                        let err = OptError::AnySpanned {
-                            span: expr_span.clone().into(),
+                    } else {                        
+                        let err = OptError::Any {
                             text: format!("\"{}\" does not name a build-in function, or declared algebraic function in this scope!", c.ident.0),
-                            span_text: "here".to_owned(),
                         };
-                        report(err.clone(), c.span.get_file());
+                        report(
+                            error_reporter(err.clone(), expr_span.clone())
+                                .with_label(
+                                    Label::new(expr_span.clone())
+                                        .with_message("here"),
+                                )
+                                .finish(),
+                        );
                         Err(err)
                     }
                 }
             }
             AlgeExprTy::EvalExpr(evalexpr) => {
+                if !self.is_eval_allowed {
+                    let err = OptError::Any {
+                        text: "Eval expressions are only allowed in impl-blocks of operations!"
+                            .to_owned(),
+                    };
+                    report(
+                        error_reporter(err.clone(), evalexpr.span.clone())
+                            .with_label(
+                                Label::new(evalexpr.span.clone())
+                                    .with_message("Consider removing this eval"),
+                            )
+                            .finish(),
+                    );
+                    return Err(err);
+                }
+
                 //For the eval expression, first find / insert the cv_import we need.
                 // then setup all arguments, and finally add the call.
                 let (eval_cv, eval_cv_type) = parent.get_cv_for_eval(self, &evalexpr)?;
@@ -314,12 +365,17 @@ impl<'a> AstLambdaBuilder<'a> {
                 let src = if let Some(access) = self.lmd_context.defined_vars.get(&src.0) {
                     access.port
                 } else {
-                    let err = OptError::AnySpanned {
-                        span: expr_span.clone().into(),
+                    let err = OptError::Any {
                         text: format!("could not find {} in scope", src.0),
-                        span_text: "try to define this before using it".to_owned(),
                     };
-                    report(err.clone(), expr_span.get_file());
+                    report(
+                        error_reporter(err.clone(), expr_span.clone())
+                            .with_label(
+                                Label::new(expr_span.clone())
+                                    .with_message("Try to define this before using it."),
+                            )
+                            .finish(),
+                    );
                     return Err(err);
                 };
 
@@ -330,12 +386,17 @@ impl<'a> AstLambdaBuilder<'a> {
                     let idx = if let Some(idx) = accessor.try_to_index() {
                         idx
                     } else {
-                        let err = OptError::AnySpanned {
-                            span: expr_span.clone().into(),
+                        let err = OptError::Any {
                             text: format!("Could not convert {} to index!", accessor),
-                            span_text: format!("here"),
                         };
-                        report(err.clone(), expr_span.get_file());
+                        report(
+                            error_reporter(err.clone(), expr_span.clone())
+                                .with_label(
+                                    Label::new(expr_span.clone())
+                                        .with_message("here"),
+                                )
+                                .finish(),
+                        );
                         return Err(err);
                     };
 
@@ -361,12 +422,17 @@ impl<'a> AstLambdaBuilder<'a> {
                 let ident_node = if let Some(noderef) = self.lmd_context.defined_vars.get(&i.0) {
                     noderef
                 } else {
-                    let err = OptError::AnySpanned {
-                        span: expr_span.clone().into(),
+                    let err = OptError::Any {
                         text: format!("could not find {} in scope", i.0),
-                        span_text: "try to define this before using it".to_owned(),
                     };
-                    report(err.clone(), expr_span.get_file());
+                    report(
+                        error_reporter(err.clone(), expr_span.clone())
+                            .with_label(
+                                Label::new(expr_span.clone())
+                                    .with_message("Try to define this before using it."),
+                            )
+                            .finish(),
+                    );
                     return Err(err);
                 };
 
@@ -442,22 +508,40 @@ impl<'a> AstLambdaBuilder<'a> {
                 if tree.is_local_reference {
                     if let Some(localcsg) = self.lmd_context.defined_vars.get(&tree.op.0) {
                         //Make sure the local variable is a csg variable
-                        let err = OptError::AnySpannedWithSource {
-                            source_span: localcsg.span.clone().into(),
-                            source_text: "defined here".to_owned(),
+                        let err = OptError::Any {
                             text: format!(
                                 "Using local variable in CSG tree, but was not a csg-tree variable"
                             ),
-                            span: tree.head_span().into(),
-                            span_text: "used here".to_owned(),
                         };
                         if let Some(localcsgty) = self.opt.typemap.get(&localcsg.port.into()) {
                             if localcsgty != &Ty::CSGTree {
-                                report(err.clone(), tree.span.get_file());
+                                report(
+                                    error_reporter(err.clone(), tree.span.clone())
+                                        .with_label(
+                                            Label::new(localcsg.span.clone())
+                                                .with_message("defined here"),
+                                        )
+                                        .with_label(
+                                            Label::new(tree.head_span().clone())
+                                                .with_message("used here"),
+                                        )
+                                        .finish(),
+                                );
                                 return Err(err);
                             }
                         } else {
-                            report(err.clone(), tree.span.get_file());
+                            report(
+                                error_reporter(err.clone(), tree.span.clone())
+                                    .with_label(
+                                        Label::new(localcsg.span.clone())
+                                            .with_message("defined here"),
+                                    )
+                                    .with_label(
+                                        Label::new(tree.head_span().clone())
+                                            .with_message("used here"),
+                                    )
+                                    .finish(),
+                            );
                             return Err(err);
                         }
 
@@ -474,17 +558,24 @@ impl<'a> AstLambdaBuilder<'a> {
                     if let Some(csgdef) = self.opt.csg_node_defs.get(&tree.op.0) {
                         if csgdef.ty != CSGNodeTy::Entity {
                             //Is not an entity definition
-                            let err = OptError::AnySpannedWithSource {
-                                source_span: csgdef.span.clone().into(),
-                                source_text: "Defined as operation here".to_owned(),
+                            let err = OptError::Any {
                                 text: format!("{} is not an entity", tree.op.0),
-                                span: tree.head_span().into(),
-                                span_text: format!(
-                                    "Used in the place of an entity, or local field def here"
-                                ),
                             };
 
-                            report(err.clone(), tree.span.get_file());
+                            report(
+                                error_reporter(err.clone(), tree.span.clone())
+                                    .with_label(
+                                        Label::new(csgdef.span.clone())
+                                            .with_message("Defined as operation here"),
+                                    )
+                                    .with_label(
+                                        Label::new(tree.head_span().clone())
+                                            .with_message(
+                                                "Used in the place of an entity, or local field def here"
+                                            ),
+                                    )
+                                    .finish(),
+                            );
                             return Err(err);
                         }
 
@@ -541,8 +632,19 @@ impl<'a> AstLambdaBuilder<'a> {
                             self.opt.span_tags.set(call_node.into(), tree.span.clone());
                             return Ok(call_node.output(0));
                         } else {
-                            let err = OptError::AnySpanned { span: tree.head_span().into(), text: format!("{} does not name an entity, local csg variable or field def", tree.op.0), span_text: "try defining a local variable, an entity or a field with that name".to_owned() };
-                            report(err.clone(), tree.span.get_file());
+                            let err = OptError::Any { 
+                                text: format!("{} does not name an entity, local csg variable or field def", tree.op.0), 
+                            };
+                            report(
+                                error_reporter(err.clone(), tree.span.clone())
+                                    .with_label(
+                                        Label::new(tree.head_span().clone())
+                                            .with_message(
+                                                "try defining a local variable, an entity or a field with that name"
+                                            ),
+                                    )
+                                    .finish(),
+                            );
                             return Err(err);
                         }
                     }
@@ -567,12 +669,17 @@ impl<'a> AstLambdaBuilder<'a> {
                             tree.span.clone(),
                         )
                     } else {
-                        let err = OptError::AnySpanned {
-                            span: tree.head_span().into(),
+                        let err = OptError::Any {
                             text: format!("Could not find operation named \"{}\"", tree.op.0),
-                            span_text: "Consider adding such an operation".to_owned(),
                         };
-                        report(err.clone(), tree.span.get_file());
+                        report(
+                            error_reporter(err.clone(), tree.span.clone())
+                                .with_label(
+                                    Label::new(tree.head_span().clone())
+                                        .with_message("Consider adding such an operation"),
+                                )
+                                .finish(),
+                        );
                         return Err(err);
                     }
                 } else {

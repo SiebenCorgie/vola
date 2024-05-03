@@ -6,7 +6,7 @@
  * 2024 Tendsin Mende
  */
 use smallvec::SmallVec;
-use vola_common::{report, Span};
+use vola_common::{ariadne::Label, error::error_reporter, report, Span};
 
 use crate::{
     alge::{AlgeExpr, AlgeFunc, AlgeStmt, ImplBlock, LetStmt},
@@ -55,9 +55,8 @@ impl FromTreeSitter for AstEntry {
             _ => {
                 let err = ParserError::UnknownAstNode {
                     kind: node.kind().to_owned(),
-                    span: ctx.span(node).into(),
                 };
-                report(err.clone(), ctx.get_file());
+                report(error_reporter(err.clone(), ctx.span(node)).finish());
                 Err(err)
             }
         }
@@ -91,13 +90,12 @@ impl FromTreeSitter for AlgeFunc {
                 //part of the list, just ignore
                 "," => {}
                 _ => {
-                    let error = ParserError::UnexpectedAstNode {
-                        span: ctx.span(node).into(),
+                    let err = ParserError::UnexpectedAstNode {
                         kind: next_node.kind().to_owned(),
                         expected: "typed_arg".to_owned(),
                     };
-                    report(error.clone(), ctx.get_file());
-                    return Err(error);
+                    report(error_reporter(err.clone(), ctx.span(node)).finish());
+                    return Err(err);
                 }
             }
         }
@@ -138,11 +136,10 @@ impl FromTreeSitter for AlgeFunc {
                         }
                         _ => {
                             let err = ParserError::UnexpectedAstNode {
-                                span: ctx.span(&next_node).into(),
                                 kind: next_node.kind().to_owned(),
                                 expected: "alge_stmt | alge_expr  | comment".to_owned(),
                             };
-                            report(err.clone(), ctx.get_file());
+                            report(error_reporter(err.clone(), ctx.span(&next_node)).finish());
                             return Err(err);
                         }
                     }
@@ -152,11 +149,10 @@ impl FromTreeSitter for AlgeFunc {
             }
             _ => {
                 let err = ParserError::UnexpectedAstNode {
-                    span: ctx.span(&block_node).into(),
                     kind: block_node.kind().to_owned(),
                     expected: "block".to_owned(),
                 };
-                report(err.clone(), ctx.get_file());
+                report(error_reporter(err.clone(), ctx.span(&block_node)).finish());
                 return Err(err);
             }
         }
@@ -164,7 +160,7 @@ impl FromTreeSitter for AlgeFunc {
         let return_expr = match return_expr {
             None => {
                 let err = ParserError::NoAlgeExprAtEnd;
-                report(err.clone(), ctx.get_file());
+                report(error_reporter(err.clone(), Span::empty()).finish());
                 return Err(err);
             }
             Some(r) => r,
@@ -215,13 +211,12 @@ impl FromTreeSitter for FieldDef {
                 //part of the list, just ignore
                 "," => {}
                 _ => {
-                    let error = ParserError::UnexpectedAstNode {
-                        span: ctx.span(node).into(),
+                    let err = ParserError::UnexpectedAstNode {
                         kind: next_node.kind().to_owned(),
                         expected: "typed_arg".to_owned(),
                     };
-                    report(error.clone(), ctx.get_file());
-                    return Err(error);
+                    report(error_reporter(err.clone(), ctx.span(node)).finish());
+                    return Err(err);
                 }
             }
         }
@@ -254,13 +249,18 @@ impl FromTreeSitter for FieldDef {
                 }
 
                 _ => {
-                    let error = ParserError::UnexpectedAstNode {
-                        span: ctx.span(node).into(),
+                    let err = ParserError::UnexpectedAstNode {
                         kind: next_node.kind().to_owned(),
                         expected: "comment | let_stmt | csg_binding | access_decl".to_owned(),
                     };
-                    report(error.clone(), ctx.get_file());
-                    return Err(error);
+                    report(
+                        error_reporter(err.clone(), ctx.span(&next_node))
+                            .with_label(
+                                Label::new(ctx.span(&next_node)).with_message("Unknown syntax"),
+                            )
+                            .finish(),
+                    );
+                    return Err(err);
                 }
             }
         }
@@ -271,7 +271,7 @@ impl FromTreeSitter for FieldDef {
 
         if ret.is_none() {
             let err = ParserError::NoCSGTreeAtDefineEnd;
-            report(err.clone(), ctx.get_file());
+            report(error_reporter(err.clone(), Span::empty()).finish());
             return Err(err);
         }
 
@@ -319,13 +319,12 @@ impl FromTreeSitter for ExportFn {
                     ParserError::consume_expected_node_string(ctx, dta, Some(next_node), ",")?;
                 }
                 _ => {
-                    let error = ParserError::UnexpectedAstNode {
-                        span: ctx.span(node).into(),
+                    let err = ParserError::UnexpectedAstNode {
                         kind: next_node.kind().to_owned(),
                         expected: "typed_arg".to_owned(),
                     };
-                    report(error.clone(), ctx.get_file());
-                    return Err(error);
+                    report(error_reporter(err.clone(), ctx.span(node)).finish());
+                    return Err(err);
                 }
             }
         }
@@ -387,13 +386,12 @@ impl FromTreeSitter for ExportFn {
                                 break;
                             }
                             _ => {
-                                let error = ParserError::UnexpectedAstNode {
-                                    span: ctx.span(node).into(),
+                                let err = ParserError::UnexpectedAstNode {
                                     kind: next_node.kind().to_owned(),
                                     expected: "access_decl | , | (".to_owned(),
                                 };
-                                report(error.clone(), ctx.get_file());
-                                return Err(error);
+                                report(error_reporter(err.clone(), ctx.span(node)).finish());
+                                return Err(err);
                             }
                         }
                     }
@@ -402,13 +400,18 @@ impl FromTreeSitter for ExportFn {
                     break;
                 }
                 _ => {
-                    let error = ParserError::UnexpectedAstNode {
-                        span: ctx.span(node).into(),
+                    let err = ParserError::UnexpectedAstNode {
                         kind: next_node.kind().to_owned(),
                         expected: "comment | let_stmt | csg_binding | access_decl".to_owned(),
                     };
-                    report(error.clone(), ctx.get_file());
-                    return Err(error);
+                    report(
+                        error_reporter(err.clone(), ctx.span(node))
+                            .with_label(
+                                Label::new(ctx.span(&next_node)).with_message("Unknown syntax"),
+                            )
+                            .finish(),
+                    );
+                    return Err(err);
                 }
             }
         }
@@ -418,7 +421,7 @@ impl FromTreeSitter for ExportFn {
 
         if access_descriptors.len() == 0 {
             let err = ParserError::NoAccessDecs;
-            report(err.clone(), ctx.get_file());
+            report(error_reporter(err.clone(), Span::empty()).finish());
             return Err(err);
         }
 

@@ -42,7 +42,7 @@ pub use parser::{parse_file, parse_from_bytes, parse_string};
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
-use vola_common::{report, Span};
+use vola_common::{ariadne::Label, error::error_reporter, report, Span};
 
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Clone, Debug)]
@@ -167,11 +167,15 @@ impl VolaAst {
                     path.set_extension("vola");
 
                     if !path.exists() {
-                        let err = AstError::NoModuleFile {
-                            path,
-                            span: span.clone().into(),
-                        };
-                        report(err.clone(), span.get_file());
+                        let err = AstError::NoModuleFile { path };
+                        report(
+                            error_reporter(err.clone(), span.clone())
+                                .with_label(
+                                    Label::new(span.clone())
+                                        .with_message("Could not find this module's file"),
+                                )
+                                .finish(),
+                        );
                         return Err(err);
                     }
 
