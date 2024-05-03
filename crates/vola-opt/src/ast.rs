@@ -292,7 +292,7 @@ impl<'a> AstLambdaBuilder<'a> {
                             .typemap
                             .set(applynode_output.clone().into(), alge_import.ret.clone());
                         Ok(applynode_output)
-                    } else {
+                    } else {                        
                         let err = OptError::Any {
                             text: format!("\"{}\" does not name a build-in function, or declared algebraic function in this scope!", c.ident.0),
                         };

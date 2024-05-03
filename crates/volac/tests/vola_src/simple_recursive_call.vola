@@ -1,0 +1,14 @@
+module std;
+
+
+fn test(a: s) -> s{
+	test(a)
+}
+
+
+export test(a: s){
+	let t = test(a);
+	csg r = Sphere(t);
+
+	r.SDF3D([a, 1.0, 1.0])
+}
