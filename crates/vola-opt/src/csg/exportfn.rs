@@ -1,3 +1,4 @@
+use ahash::AHashMap;
 /*
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
@@ -9,7 +10,7 @@ use rvsdg::{
     edge::{InportLocation, InputType, OutportLocation, OutputType},
     region::RegionLocation,
     smallvec::SmallVec,
-    NodeRef,
+    NodeRef, SmallColl,
 };
 use vola_ast::{
     alge::LetStmt,
@@ -18,7 +19,10 @@ use vola_ast::{
 };
 
 use crate::{
-    ast::{AstLambdaBuilder, LambdaBuilderCtx},
+    ast::{
+        block_builder::{BlockBuilder, FetchStmt, ReturnExpr},
+        AstLambdaBuilder, LambdaBuilderCtx,
+    },
     common::{LmdContext, Ty, VarDef},
     error::OptError,
     OptNode, Optimizer,
@@ -299,20 +303,32 @@ impl Optimizer {
             })
         });
 
-        let lmd_context =
+        let lmd_ctx =
             LmdContext::new_for_exportfn(&mut self.graph, &mut self.typemap, lambda, &exportfn);
 
-        //Temporary builder that tracks things like the defined variables etc.
-        // Is dropped within the concept_impl.build_block()
-        let lmd_builder = AstLambdaBuilder {
-            opt: self,
-            lmd_context,
-            lambda,
-            lambda_region,
+        let block_builder = BlockBuilder {
+            span: exportfn.span.clone(),
+            csg_operands: AHashMap::with_capacity(0),
             is_eval_allowed: false,
+            return_type: SmallColl::new(),
+            lmd_ctx,
+            region: lambda_region,
+            opt: self,
         };
 
-        let new_exportfn = ExportFn {
+        let stmts = exportfn
+            .stmts
+            .into_iter()
+            .map(|stm| match stm {
+                CSGStmt::LetStmt(l) => FetchStmt::Let(l),
+                CSGStmt::CSGBinding(b) => FetchStmt::CSGBind(b),
+            })
+            .collect();
+        let retexpr =
+            ReturnExpr::AccessDescriptors(exportfn.access_descriptors.into_iter().collect());
+        block_builder.build_block(stmts, retexpr)?;
+
+        let exportfn = ExportFn {
             span: exportfn.span.clone(),
             input_signature,
             output_signature,
@@ -322,22 +338,17 @@ impl Optimizer {
             lambda_region,
         };
 
-        let interned_exportfn = new_exportfn.build_block(lmd_builder, exportfn)?;
-
-        let export_name = interned_exportfn.ident.0.clone();
+        let export_name = exportfn.ident.0.clone();
         //Set the name of this function
-        self.names
-            .set(interned_exportfn.lambda.into(), export_name.clone());
-        self.span_tags.set(
-            interned_exportfn.lambda.into(),
-            interned_exportfn.span.clone(),
-        );
+        self.names.set(exportfn.lambda.into(), export_name.clone());
+        self.span_tags
+            .set(exportfn.lambda.into(), exportfn.span.clone());
 
         //add port type information
-        for (inpidx, (_, inputty)) in interned_exportfn.input_signature.iter().enumerate() {
+        for (inpidx, (_, inputty)) in exportfn.input_signature.iter().enumerate() {
             self.typemap.set(
                 OutportLocation {
-                    node: interned_exportfn.lambda,
+                    node: exportfn.lambda,
                     output: OutputType::Argument(inpidx),
                 }
                 .into(),
@@ -346,7 +357,7 @@ impl Optimizer {
 
             for edg in self
                 .graph
-                .node(interned_exportfn.lambda)
+                .node(exportfn.lambda)
                 .node_type
                 .unwrap_lambda_ref()
                 .argument(inpidx)
@@ -358,10 +369,10 @@ impl Optimizer {
             }
         }
 
-        for (outpidx, ty) in interned_exportfn.output_signature.iter().enumerate() {
+        for (outpidx, ty) in exportfn.output_signature.iter().enumerate() {
             self.typemap.set(
                 InportLocation {
-                    node: interned_exportfn.lambda,
+                    node: exportfn.lambda,
                     input: InputType::Result(outpidx),
                 }
                 .into(),
@@ -370,7 +381,7 @@ impl Optimizer {
 
             if let Some(edg) = self
                 .graph
-                .node(interned_exportfn.lambda)
+                .node(exportfn.lambda)
                 .node_type
                 .unwrap_lambda_ref()
                 .result(outpidx)
@@ -382,7 +393,7 @@ impl Optimizer {
             }
         }
 
-        self.export_fn.insert(export_name, interned_exportfn);
+        self.export_fn.insert(export_name, exportfn);
 
         Ok(lambda)
     }
