@@ -6,27 +6,24 @@
  * 2024 Tendsin Mende
  */
 use crate::{
-    ast::{AstLambdaBuilder, LambdaBuilderCtx},
-    common::{LmdContext, Ty, VarDef},
+    ast::block_builder::{BlockBuilder, FetchStmt, ReturnExpr},
+    common::{LmdContext, Ty},
     error::OptError,
     Optimizer,
 };
 use ahash::AHashMap;
 use rvsdg::{
-    edge::{InputType, OutportLocation, OutputType},
+    edge::{OutportLocation, OutputType},
     region::RegionLocation,
+    smallvec::smallvec,
     NodeRef, SmallColl,
 };
 use vola_ast::{
-    alge::{AlgeStmt, AssignStmt, EvalExpr, ImplBlock, LetStmt},
+    alge::{AlgeStmt, ImplBlock},
     common::Ident,
     csg::CSGNodeTy,
 };
-use vola_common::{
-    ariadne::{Color, Fmt, Label},
-    error::error_reporter,
-    report, Span,
-};
+use vola_common::{ariadne::Label, error::error_reporter, report, Span};
 
 #[derive(Debug, Clone, PartialEq, Hash, Eq)]
 pub struct ConceptImplKey {
@@ -43,216 +40,13 @@ pub struct ConceptImpl {
     pub node_type: CSGNodeTy,
 
     ///All named operands an their index.
+    #[allow(unused)]
     pub operands: AHashMap<String, usize>,
 
     ///The λ-Node of this concept
     pub lambda: NodeRef,
     ///Shortcut to the λ-Node's inner region.
     pub lambda_region: RegionLocation,
-}
-
-impl LambdaBuilderCtx for ConceptImpl {
-    fn get_cv_for_eval(
-        &mut self,
-        builder: &mut AstLambdaBuilder,
-        eval_expr: &EvalExpr,
-    ) -> Result<(OutportLocation, Ty), OptError> {
-        //Before doing anything, check that the concept exists and has the right ammount of
-        // arguments
-        let concept = match builder.opt.concepts.get(&eval_expr.concept.0) {
-            Some(c) => c,
-            None => {
-                return Err(OptError::report_no_concept(
-                    &eval_expr.span,
-                    &eval_expr.concept.0,
-                ));
-            }
-        };
-
-        if concept.src_ty.len() != eval_expr.params.len() {
-            return Err(OptError::report_argument_missmatch(
-                &concept.span,
-                concept.src_ty.len(),
-                &eval_expr.span,
-                eval_expr.params.len(),
-            ));
-        }
-
-        let concept_ret_type = concept
-            .dst_ty
-            .clone()
-            .try_into()
-            .expect("Could not convert ast-type to opt-type");
-
-        //Assumes that the operand exists
-        if !self.operands.contains_key(&eval_expr.evaluator.0) {
-            let err = OptError::Any {
-                text: format!("CSG-Operand {} does not exist", eval_expr.evaluator.0),
-            };
-
-            report(
-                error_reporter(err.clone(), eval_expr.span.clone())
-                    .with_label(
-                        Label::new(eval_expr.span.clone())
-                            .with_color(Color::Red)
-                            .with_message("here"),
-                    )
-                    .with_label(
-                        Label::new(self.span.clone()).with_message(
-                            &format!(
-                        "Consider adding a CSG-Operand named \"{}\" for this implementation.",
-                        eval_expr.evaluator.0
-                    )
-                            .fg(Color::Blue),
-                        ),
-                    )
-                    .finish(),
-            );
-
-            return Err(err);
-        }
-        let cv = *self.operands.get(&eval_expr.evaluator.0).unwrap();
-
-        let port = OutportLocation {
-            node: builder.lambda,
-            output: OutputType::ContextVariableArgument(cv),
-        };
-
-        Ok((port, concept_ret_type))
-    }
-}
-
-impl ConceptImpl {
-    fn build_block(
-        mut self,
-        mut builder: AstLambdaBuilder,
-        block: ImplBlock,
-    ) -> Result<Self, OptError> {
-        let ImplBlock {
-            span: _,
-            dst: _,
-            operands: _,
-            concept: _,
-            concept_arg_naming: _,
-            stmts,
-            return_expr,
-        } = block;
-
-        for stmt in stmts {
-            match stmt {
-                AlgeStmt::Assign(assign) => self.setup_assign(&mut builder, assign)?,
-                AlgeStmt::Let(letstmt) => self.setup_let(&mut builder, letstmt)?,
-            }
-        }
-
-        //after setting up stmts in order, build the port of the final expr and connect that to the output of our
-        // concept impl
-        let return_expr_port = builder.setup_alge_expr(return_expr, &mut self)?;
-        //add the output port and connect
-        let result_port = builder
-            .opt
-            .graph
-            .node_mut(builder.lambda)
-            .node_type
-            .unwrap_lambda_mut()
-            .add_result();
-        assert!(
-            result_port == 0,
-            "Result port index of concept impl should be 0 (only one result possible)"
-        );
-
-        //now connect to it
-        builder.opt.graph.on_region(&builder.lambda_region, |reg| {
-            reg.connect_to_result(return_expr_port, InputType::Result(result_port))
-                .expect("Could not connect to result!")
-        });
-
-        Ok(self)
-    }
-
-    fn setup_assign(
-        &mut self,
-        builder: &mut AstLambdaBuilder,
-        assignstmt: AssignStmt,
-    ) -> Result<(), OptError> {
-        let AssignStmt { span, dst, expr } = assignstmt;
-
-        //Assign stmt, similar to the let stmt works, by setting up the expr on the left hand site, but
-        // then overwriting the last known definition of dst.
-
-        if !builder.lmd_context.var_exists(&dst.0) {
-            let err = OptError::Any {
-                text: format!(
-                    "
-Cannot assign to an undefined variable {}.
-Consider using `let {} = ...;` instead, or using an defined variable.
-",
-                    dst.0, dst.0
-                ),
-            };
-
-            report(
-                error_reporter(err.clone(), span.clone())
-                    .with_label(Label::new(span.clone()).with_message("Unknown variable"))
-                    .finish(),
-            );
-            return Err(err);
-        }
-
-        //build the sub tree and overwrite the last_def output
-
-        let sub_tree_output = builder.setup_alge_expr(expr, self)?;
-        let last_def = builder.lmd_context.defined_vars.get_mut(&dst.0).unwrap();
-        last_def.port = sub_tree_output;
-        Ok(())
-    }
-
-    fn setup_let(
-        &mut self,
-        builder: &mut AstLambdaBuilder,
-        let_stmt: LetStmt,
-    ) -> Result<(), OptError> {
-        //for a let stmt we have to define the new variable _after_ we parsed the rhs expression.
-
-        let LetStmt {
-            span,
-            decl_name,
-            expr,
-        } = let_stmt;
-
-        if builder.lmd_context.var_exists(&decl_name.0) {
-            let existing = builder.lmd_context.defined_vars.get(&decl_name.0).unwrap();
-            let err = OptError::Any {
-                text: format!("
-cannot redefine variable with name \"{}\".
-Note that vola does not support shadowing. If you just want to change the value of that variable, consider doing it like this:
-`{} = ...;`",
-                              decl_name.0, decl_name.0),
-            };
-            report(
-                error_reporter(err.clone(), span.clone())
-                    .with_label(
-                        Label::new(existing.span.clone()).with_message("first defined here"),
-                    )
-                    .with_label(Label::new(span.clone()).with_message("redefined here"))
-                    .finish(),
-            );
-            return Err(err);
-        }
-
-        let def_port = builder.setup_alge_expr(expr, self)?;
-
-        //register in the lmd context
-        builder.lmd_context.add_define(
-            decl_name.0,
-            VarDef {
-                port: def_port,
-                span,
-            },
-        );
-
-        Ok(())
-    }
 }
 
 impl Optimizer {
@@ -379,7 +173,7 @@ impl Optimizer {
             .iter()
             .enumerate()
             .map(|(idx, name)| (name.0.clone(), idx))
-            .collect();
+            .collect::<AHashMap<_, _>>();
 
         //At this point we should have verified the overall signature. We therefore start building the actual λ-Node.
         // We do this by building the function-context helper that contains all concept-args as defined variables, as well as the
@@ -394,6 +188,7 @@ impl Optimizer {
         });
 
         //register the context ports in the same order as the operands map was build
+
         for (idx, _name) in implblock.operands.iter().enumerate() {
             let lmdcvidx = self
                 .graph
@@ -413,7 +208,7 @@ impl Optimizer {
             );
         }
 
-        let lmd_context = LmdContext::new_for_impl_block(
+        let lmd_ctx = LmdContext::new_for_impl_block(
             &mut self.graph,
             &mut self.typemap,
             lmd.clone(),
@@ -439,18 +234,28 @@ impl Optimizer {
             )
             .collect::<SmallColl<_>>();
         let result_sig = src_concept.dst_ty.clone().into();
-        //Temporary builder that tracks things like the defined variables etc.
-        // Is dropped within the concept_impl.build_block()
-        let lmd_builder = AstLambdaBuilder {
-            opt: self,
-            lmd_context,
-            lambda: lmd,
-            lambda_region: lmd_region,
-            //Only allow on Operations
+
+        let block_builder = BlockBuilder {
+            span: implblock.span.clone(),
+            csg_operands: operands.clone(),
             is_eval_allowed: src_csg_def.ty == CSGNodeTy::Operation,
+            return_type: smallvec![src_concept.dst_ty.clone().into()],
+            lmd_ctx,
+            region: lmd_region,
+            opt: self,
         };
 
-        //Now reverse the game by building the initial ConceptImpl and then letting it handle itself.
+        let stmts = implblock
+            .stmts
+            .into_iter()
+            .map(|stm| match stm {
+                AlgeStmt::Let(l) => FetchStmt::Let(l),
+                AlgeStmt::Assign(a) => FetchStmt::Assign(a),
+            })
+            .collect();
+        let retexpr = ReturnExpr::Expr(implblock.return_expr);
+        block_builder.build_block(stmts, retexpr)?;
+
         let concept_impl = ConceptImpl {
             span: implblock.span.clone(),
             concept: implblock.concept.clone(),
@@ -461,23 +266,17 @@ impl Optimizer {
             lambda_region: lmd_region,
         };
 
-        let build_concept_impl = concept_impl.build_block(lmd_builder, implblock)?;
-
         //After finishing (successfully) add the impl description to the Optimizer so we can
         // find that later on if needed and return
         //NOTE: _should be the same, but could also be changed at some point I guess_
-        let lmd = build_concept_impl.lambda.clone();
+        let lmd = concept_impl.lambda;
 
         //now append types to edges based on impl-block signature, as well add some general debug info for later.
         self.names.set(
             lmd.into(),
-            format!(
-                "Impl {} for {}",
-                src_csg_def.name.0, build_concept_impl.concept.0
-            ),
+            format!("Impl {} for {}", src_csg_def.name.0, concept_impl.concept.0),
         );
-        self.span_tags
-            .set(lmd.into(), build_concept_impl.span.clone());
+        self.span_tags.set(lmd.into(), concept_impl.span.clone());
 
         //This iterator maps us the concept's argument types in order
 
@@ -521,7 +320,7 @@ impl Optimizer {
             .ty
             .set_type(result_sig);
 
-        let old = self.concept_impl.insert(concept_key, build_concept_impl);
+        let old = self.concept_impl.insert(concept_key, concept_impl);
         assert!(old.is_none(), "Had an old concept + node combination already, should have been caught before adding it!");
 
         Ok(lmd)

@@ -8,7 +8,7 @@ use vola_ast::{
 #[test]
 fn construct_all_types() {
     //Constructs all types in the file.
-    let mut ast = vola_ast::parse_file("tests/type_constructor.vola").unwrap();
+    let ast = vola_ast::parse_file("tests/type_constructor.vola").unwrap();
 
     assert!(ast.entries.len() == 8);
 
