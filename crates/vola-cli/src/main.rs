@@ -12,7 +12,6 @@
 use std::path::PathBuf;
 
 use clap::{Parser, ValueEnum};
-use vola_common::Span;
 use volac::{Backend, CraneliftTarget};
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug)]

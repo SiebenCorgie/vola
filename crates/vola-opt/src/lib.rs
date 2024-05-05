@@ -39,7 +39,7 @@ use vola_ast::{
     csg::{CSGConcept, CSGNodeDef},
     VolaAst,
 };
-use vola_common::{report, Span};
+use vola_common::Span;
 
 pub mod alge;
 mod ast;

@@ -449,7 +449,11 @@ impl FromTreeSitter for ImplBlock {
                     kind: next_node.kind().to_owned(),
                     expected: "for | < ".to_owned(),
                 };
-                report(error_reporter(err.clone(), ctx.span(&next_node)).finish());
+                report(
+                    error_reporter(err.clone(), ctx.span(&next_node))
+                        .with_label(Label::new(ctx.span(&next_node)).with_message("here"))
+                        .finish(),
+                );
                 return Err(err);
             }
         };

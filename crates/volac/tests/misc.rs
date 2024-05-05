@@ -56,3 +56,18 @@ fn recursive_function_cascading() {
         Ok(_) => panic!("Expected 1 error"),
     }
 }
+#[test]
+fn unknown_subtree_reference() {
+    let pipeline = volac::Pipeline::new_in_memory();
+
+    let expected_error = PipelineError::OptError(vola_opt::OptError::ErrorsOccurred(1));
+    match pipeline.execute_on_file(&"tests/vola_src/unknown_subtree_reference.vola") {
+        Err(e) => {
+            //NOTE: kinda dirty, but working :D
+            if e.to_string() != expected_error.to_string() {
+                panic!("Wrong kind of error, expected ErrorsOccurred(1), got {e:?}")
+            }
+        }
+        Ok(_) => panic!("Expected 1 error"),
+    }
+}

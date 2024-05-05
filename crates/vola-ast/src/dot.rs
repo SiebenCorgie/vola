@@ -93,7 +93,7 @@ impl DotNode for AstEntry {
             AstEntry::ImplBlock(b) => b.content(),
             AstEntry::FieldDefine(fd) => fd.content(),
             AstEntry::ExportFn(ef) => ef.content(),
-            AstEntry::Module(m) => format!("Module"),
+            AstEntry::Module(_m) => format!("Module"),
             AstEntry::AlgeFunc(f) => f.content(),
         }
     }

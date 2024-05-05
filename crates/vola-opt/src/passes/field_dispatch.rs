@@ -656,13 +656,18 @@ impl Optimizer {
                 report(
                     error_reporter(err.clone(), eval_span.clone())
                         .with_label(
-                            Label::new(eval_span.clone()).with_message("This eval failed .."),
+                            Label::new(eval_span.clone())
+                                .with_color(vola_common::ariadne::Color::Red)
+                                .with_message("This eval failed .."),
                         )
                         .with_label(
-                            Label::new(opspan.clone()).with_message(".. while dispatching this .."),
+                            Label::new(opspan.clone())
+                                .with_color(vola_common::ariadne::Color::Green)
+                                .with_message(".. while dispatching this .."),
                         )
                         .with_label(
                             Label::new(ctx.specialization_src.clone())
+                                .with_color(vola_common::ariadne::Color::Green)
                                 .with_message(".. based on this tree-access"),
                         )
                         .finish(),

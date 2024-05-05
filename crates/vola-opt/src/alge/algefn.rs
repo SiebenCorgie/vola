@@ -7,7 +7,6 @@
  */
 
 use rvsdg::{
-    edge::{OutportLocation, OutputType},
     region::RegionLocation,
     smallvec::SmallVec,
     NodeRef,

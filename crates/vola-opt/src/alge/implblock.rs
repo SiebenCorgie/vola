@@ -22,7 +22,11 @@ use vola_ast::{
     common::Ident,
     csg::CSGNodeTy,
 };
-use vola_common::{ariadne::Label, error::error_reporter, report, Span};
+use vola_common::{
+    ariadne::{Color, Fmt, Label},
+    error::error_reporter,
+    report, Span,
+};
 
 #[derive(Debug, Clone, PartialEq, Hash, Eq)]
 pub struct ConceptImplKey {
@@ -82,9 +86,30 @@ impl LambdaBuilderCtx for ConceptImpl {
 
         //Assumes that the operand exists
         if !self.operands.contains_key(&eval_expr.evaluator.0) {
-            return Err(OptError::Any {
-                text: format!("Operand {} does not exist", eval_expr.evaluator.0),
-            });
+            let err = OptError::Any {
+                text: format!("CSG-Operand {} does not exist", eval_expr.evaluator.0),
+            };
+
+            report(
+                error_reporter(err.clone(), eval_expr.span.clone())
+                    .with_label(
+                        Label::new(eval_expr.span.clone())
+                            .with_color(Color::Red)
+                            .with_message("here"),
+                    )
+                    .with_label(
+                        Label::new(self.span.clone()).with_message(
+                            &format!(
+                        "Consider adding a CSG-Operand named \"{}\" for this implementation.",
+                        eval_expr.evaluator.0
+                    )
+                            .fg(Color::Blue),
+                        ),
+                    )
+                    .finish(),
+            );
+
+            return Err(err);
         }
         let cv = *self.operands.get(&eval_expr.evaluator.0).unwrap();
 
