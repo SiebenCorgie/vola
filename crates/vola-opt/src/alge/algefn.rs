@@ -12,17 +12,11 @@ use rvsdg::{
     smallvec::{smallvec, SmallVec},
     NodeRef,
 };
-use vola_ast::{
-    alge::{AlgeStmt, AssignStmt, LetStmt},
-    common::Ident,
-};
+use vola_ast::{alge::AlgeStmt, common::Ident};
 use vola_common::{ariadne::Label, error::error_reporter, report, Span};
 
 use crate::{
-    alge::WkOp,
-    ast::{block_builder::{BlockBuilder, FetchStmt, ReturnExpr}, AstLambdaBuilder, LambdaBuilderCtx},
-    common::{LmdContext, Ty, VarDef},
-    OptError, Optimizer,
+    alge::WkOp, ast::block_builder::{BlockBuilder, FetchStmt, ReturnExpr}, common::{LmdContext, Ty}, OptError, Optimizer
 };
 
 pub struct AlgeFn {
@@ -35,133 +29,6 @@ pub struct AlgeFn {
     pub lambda_region: RegionLocation,
 }
 
-impl LambdaBuilderCtx for AlgeFn {}
-
-impl AlgeFn {
-    fn build_block(
-        mut self,
-        mut lmd_builder: AstLambdaBuilder,
-        alge_fn: vola_ast::alge::AlgeFunc,
-    ) -> Result<Self, OptError> {
-        for stmt in alge_fn.stmts {
-            match stmt {
-                AlgeStmt::Assign(assignstmt) => self.setup_assign(&mut lmd_builder, assignstmt)?,
-                AlgeStmt::Let(letstmt) => self.setup_let(&mut lmd_builder, letstmt)?,
-            }
-        }
-
-        //at the end we simply encue the last expression and hook that up to our result
-        let last_output = lmd_builder.setup_alge_expr(alge_fn.return_expr, &mut self)?;
-        let result_index = lmd_builder
-            .opt
-            .graph
-            .node_mut(self.lambda)
-            .node_type
-            .unwrap_lambda_mut()
-            .add_result();
-        let result_edge = lmd_builder
-            .opt
-            .graph
-            .on_region(&self.lambda_region, |reg| {
-                reg.connect_to_result(last_output, rvsdg::edge::InputType::Result(result_index))
-                    .unwrap()
-            })
-            .unwrap();
-
-        //finally, set the result edge with the known result_type of the alge_fn
-        lmd_builder
-            .opt
-            .graph
-            .edge_mut(result_edge)
-            .ty
-            .set_type(alge_fn.return_type.into());
-        Ok(self)
-    }
-
-    fn setup_assign(
-        &mut self,
-        builder: &mut AstLambdaBuilder,
-        assignstmt: AssignStmt,
-    ) -> Result<(), OptError> {
-        let AssignStmt { span, dst, expr } = assignstmt;
-
-        //Assign stmt, similar to the let stmt works, by setting up the expr on the left hand site, but
-        // then overwriting the last known definition of dst.
-
-        if !builder.lmd_context.var_exists(&dst.0) {
-            let err = OptError::Any {
-                text: format!(
-                    "
-Cannot assign to an undefined variable {}.
-Consider using `let {} = ...;` instead, or using an defined variable.
-",
-                    dst.0, dst.0
-                ),
-            };
-
-            report(
-                error_reporter(err.clone(), span.clone())
-                    .with_label(Label::new(span.clone()).with_message("Unknown variable"))
-                    .finish(),
-            );
-            return Err(err);
-        }
-
-        //build the sub tree and overwrite the last_def output
-
-        let sub_tree_output = builder.setup_alge_expr(expr, self)?;
-        let last_def = builder.lmd_context.defined_vars.get_mut(&dst.0).unwrap();
-        last_def.port = sub_tree_output;
-        Ok(())
-    }
-
-    fn setup_let(
-        &mut self,
-        builder: &mut AstLambdaBuilder,
-        let_stmt: LetStmt,
-    ) -> Result<(), OptError> {
-        //for a let stmt we have to define the new variable _after_ we parsed the rhs expression.
-
-        let LetStmt {
-            span,
-            decl_name,
-            expr,
-        } = let_stmt;
-
-        if builder.lmd_context.var_exists(&decl_name.0) {
-            let existing = builder.lmd_context.defined_vars.get(&decl_name.0).unwrap();
-            let err = OptError::Any {
-                text: format!("
-cannot redefine variable with name \"{}\".
-Note that vola does not support shadowing. If you just want to change the value of that variable, consider doing it like this:
-`{} = ...;`",
-                              decl_name.0, decl_name.0),
-            };
-            report(
-                error_reporter(err.clone(), span.clone())
-                    .with_label(
-                        Label::new(existing.span.clone()).with_message("first defined here"),
-                    )
-                    .with_label(Label::new(span.clone()).with_message("tried to redefine here"))
-                    .finish(),
-            );
-            return Err(err);
-        }
-
-        let def_port = builder.setup_alge_expr(expr, self)?;
-
-        //register in the lmd context
-        builder.lmd_context.add_define(
-            decl_name.0,
-            VarDef {
-                port: def_port,
-                span,
-            },
-        );
-
-        Ok(())
-    }
-}
 
 impl Optimizer {
     pub fn add_alge_fn(&mut self, alge_fn: vola_ast::alge::AlgeFunc) -> Result<NodeRef, OptError> {

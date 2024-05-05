@@ -13,6 +13,7 @@ use vola_common::{ariadne::{Color, Fmt, Label}, error::error_reporter, report, S
 
 use crate::{common::{LmdContext, Ty}, csg::TreeAccess, OptError, OptNode, Optimizer};
 
+
 ///Types of fetched statments for a block
 pub(crate) enum FetchStmt{
     CSGBind(CSGBinding),
@@ -23,6 +24,7 @@ pub(crate) enum FetchStmt{
 pub(crate) enum ReturnExpr{
     AccessDescriptors(SmallColl<AccessDesc>),
     Expr(AlgeExpr),
+    CsgOp(vola_ast::csg::CSGOp)
 }
 
 mod algeexpr;
@@ -171,7 +173,29 @@ impl<'a> BlockBuilder<'a> {
             ReturnExpr::Expr(expr) => {
                 self.wire_return_expr(expr)?;
             }
+            ReturnExpr::CsgOp(op) => {
+                self.wire_csgop(op)?;
+            }
         }
+
+        Ok(())
+    }
+
+    fn wire_csgop(&mut self, op: vola_ast::csg::CSGOp) -> Result<(), OptError>{
+        let last_output = self.setup_csg_tree(op)?;
+        let result_index = self
+            .opt
+            .graph
+            .node_mut(self.parent_node())
+            .node_type
+            .unwrap_lambda_mut()
+            .add_result();
+        //and wire it to the output
+        self.opt.graph.on_region(&self.region, |reg| {
+            let _ = reg
+                .connect_to_result(last_output, InputType::Result(result_index))
+                .unwrap();
+        });
 
         Ok(())
     }
