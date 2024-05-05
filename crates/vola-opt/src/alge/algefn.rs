@@ -6,9 +6,10 @@
  * 2024 Tendsin Mende
  */
 
+use ahash::AHashMap;
 use rvsdg::{
     region::RegionLocation,
-    smallvec::SmallVec,
+    smallvec::{smallvec, SmallVec},
     NodeRef,
 };
 use vola_ast::{
@@ -19,7 +20,7 @@ use vola_common::{ariadne::Label, error::error_reporter, report, Span};
 
 use crate::{
     alge::WkOp,
-    ast::{AstLambdaBuilder, LambdaBuilderCtx},
+    ast::{block_builder::{BlockBuilder, FetchStmt, ReturnExpr}, AstLambdaBuilder, LambdaBuilderCtx},
     common::{LmdContext, Ty, VarDef},
     OptError, Optimizer,
 };
@@ -207,17 +208,29 @@ impl Optimizer {
             .map(|arg| (arg.ident.0.clone(), Ty::from(arg.ty.clone())))
             .collect();
 
-        let lmd_context =
+        let lmd_ctx =
             LmdContext::new_for_alge_fn(&mut self.graph, &mut self.typemap, lambda, &alge_fn);
 
-        let lmd_builder = AstLambdaBuilder {
-            opt: self,
-            lmd_context,
-            lambda,
-            lambda_region,
+        let block_builder = BlockBuilder{
+            span: alge_fn.span.clone(),
+            csg_operands: AHashMap::with_capacity(0),
             is_eval_allowed: false,
+            return_type: smallvec![alge_fn.return_type.clone().into()],
+            lmd_ctx,
+            region: lambda_region,
+            opt: self
         };
 
+        //build the block
+        block_builder.build_block(
+            alge_fn.stmts.into_iter().map(|stm| match stm{
+                AlgeStmt::Let(l) => FetchStmt::Let(l),
+                AlgeStmt::Assign(assign) => FetchStmt::Assign(assign)
+            }).collect(), 
+            ReturnExpr::Expr(alge_fn.return_expr) 
+        )?;
+
+        //After emitting, setup the AlgeFn description and return
         let algedef = AlgeFn {
             span: alge_fn.span.clone(),
             name: alge_fn.name.clone().into(),
@@ -227,7 +240,6 @@ impl Optimizer {
             lambda_region,
         };
 
-        let algedef = algedef.build_block(lmd_builder, alge_fn)?;
         let algename = algedef.name.0.clone();
         self.names.set(algedef.lambda.into(), algename.clone());
         self.span_tags

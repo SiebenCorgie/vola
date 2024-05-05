@@ -8,7 +8,7 @@
 
 use ahash::AHashMap;
 use rvsdg::{edge::{InputType, OutportLocation, OutputType}, nodes::NodeType, region::RegionLocation, smallvec::SmallVec, NodeRef, SmallColl};
-use vola_ast::{alge::{AlgeExpr, EvalExpr, LetStmt}, csg::{AccessDesc, CSGBinding}};
+use vola_ast::{alge::{AlgeExpr, AssignStmt, EvalExpr, LetStmt}, csg::{AccessDesc, CSGBinding}};
 use vola_common::{ariadne::{Color, Fmt, Label}, error::error_reporter, report, Span};
 
 use crate::{common::{LmdContext, Ty}, csg::TreeAccess, OptError, OptNode, Optimizer};
@@ -17,7 +17,7 @@ use crate::{common::{LmdContext, Ty}, csg::TreeAccess, OptError, OptNode, Optimi
 pub(crate) enum FetchStmt{
     CSGBind(CSGBinding),
     Let(LetStmt),
-    
+    Assign(AssignStmt)
 }
 
 pub(crate) enum ReturnExpr{
@@ -146,16 +146,19 @@ impl<'a> BlockBuilder<'a> {
             _ => panic!("Unexpected node type!")
         }
     }
-    
-    pub fn build_block(
+
+
+    ///Builds the block based on `stmts` and `ret`, and emits it into the given `region`.
+    pub(crate) fn build_block(
         mut self,
         stmts: Vec<FetchStmt>,
         ret: ReturnExpr,
-    ) -> Result<Self, OptError>{
+    ) -> Result<(), OptError>{
         for stmt in stmts{
             match stmt{
                 FetchStmt::CSGBind(csgbind) => self.setup_csg_binding(csgbind)?,
                 FetchStmt::Let(letstmt) => self.setup_let(letstmt)?,
+                FetchStmt::Assign(assign) => self.setup_assign(assign)?,
             }
         }
 
@@ -170,7 +173,7 @@ impl<'a> BlockBuilder<'a> {
             }
         }
 
-        Ok(self)
+        Ok(())
     }
 
     fn wire_return_expr(&mut self, expr: AlgeExpr) -> Result<(), OptError>{

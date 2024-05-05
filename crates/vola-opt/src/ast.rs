@@ -28,7 +28,7 @@ use crate::{
     OptNode, Optimizer, TypeState,
 };
 
-mod block_builder;
+pub(crate) mod block_builder;
 
 impl Optimizer {
     ///Adds the top-level node to the optimizer graph. If it applies, it returns a reference to the created node.
