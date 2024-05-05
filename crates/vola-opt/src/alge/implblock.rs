@@ -6,7 +6,10 @@
  * 2024 Tendsin Mende
  */
 use crate::{
-    ast::{AstLambdaBuilder, LambdaBuilderCtx},
+    ast::{
+        block_builder::{BlockBuilder, FetchStmt, ReturnExpr},
+        AstLambdaBuilder, LambdaBuilderCtx,
+    },
     common::{LmdContext, Ty, VarDef},
     error::OptError,
     Optimizer,
@@ -15,6 +18,7 @@ use ahash::AHashMap;
 use rvsdg::{
     edge::{InputType, OutportLocation, OutputType},
     region::RegionLocation,
+    smallvec::smallvec,
     NodeRef, SmallColl,
 };
 use vola_ast::{
@@ -379,7 +383,7 @@ impl Optimizer {
             .iter()
             .enumerate()
             .map(|(idx, name)| (name.0.clone(), idx))
-            .collect();
+            .collect::<AHashMap<_, _>>();
 
         //At this point we should have verified the overall signature. We therefore start building the actual λ-Node.
         // We do this by building the function-context helper that contains all concept-args as defined variables, as well as the
@@ -394,6 +398,7 @@ impl Optimizer {
         });
 
         //register the context ports in the same order as the operands map was build
+
         for (idx, _name) in implblock.operands.iter().enumerate() {
             let lmdcvidx = self
                 .graph
@@ -413,7 +418,7 @@ impl Optimizer {
             );
         }
 
-        let lmd_context = LmdContext::new_for_impl_block(
+        let lmd_ctx = LmdContext::new_for_impl_block(
             &mut self.graph,
             &mut self.typemap,
             lmd.clone(),
@@ -439,18 +444,28 @@ impl Optimizer {
             )
             .collect::<SmallColl<_>>();
         let result_sig = src_concept.dst_ty.clone().into();
-        //Temporary builder that tracks things like the defined variables etc.
-        // Is dropped within the concept_impl.build_block()
-        let lmd_builder = AstLambdaBuilder {
-            opt: self,
-            lmd_context,
-            lambda: lmd,
-            lambda_region: lmd_region,
-            //Only allow on Operations
+
+        let block_builder = BlockBuilder {
+            span: implblock.span.clone(),
+            csg_operands: operands.clone(),
             is_eval_allowed: src_csg_def.ty == CSGNodeTy::Operation,
+            return_type: smallvec![src_concept.dst_ty.clone().into()],
+            lmd_ctx,
+            region: lmd_region,
+            opt: self,
         };
 
-        //Now reverse the game by building the initial ConceptImpl and then letting it handle itself.
+        let stmts = implblock
+            .stmts
+            .into_iter()
+            .map(|stm| match stm {
+                AlgeStmt::Let(l) => FetchStmt::Let(l),
+                AlgeStmt::Assign(a) => FetchStmt::Assign(a),
+            })
+            .collect();
+        let retexpr = ReturnExpr::Expr(implblock.return_expr);
+        block_builder.build_block(stmts, retexpr)?;
+
         let concept_impl = ConceptImpl {
             span: implblock.span.clone(),
             concept: implblock.concept.clone(),
@@ -461,23 +476,17 @@ impl Optimizer {
             lambda_region: lmd_region,
         };
 
-        let build_concept_impl = concept_impl.build_block(lmd_builder, implblock)?;
-
         //After finishing (successfully) add the impl description to the Optimizer so we can
         // find that later on if needed and return
         //NOTE: _should be the same, but could also be changed at some point I guess_
-        let lmd = build_concept_impl.lambda.clone();
+        let lmd = concept_impl.lambda;
 
         //now append types to edges based on impl-block signature, as well add some general debug info for later.
         self.names.set(
             lmd.into(),
-            format!(
-                "Impl {} for {}",
-                src_csg_def.name.0, build_concept_impl.concept.0
-            ),
+            format!("Impl {} for {}", src_csg_def.name.0, concept_impl.concept.0),
         );
-        self.span_tags
-            .set(lmd.into(), build_concept_impl.span.clone());
+        self.span_tags.set(lmd.into(), concept_impl.span.clone());
 
         //This iterator maps us the concept's argument types in order
 
@@ -521,7 +530,7 @@ impl Optimizer {
             .ty
             .set_type(result_sig);
 
-        let old = self.concept_impl.insert(concept_key, build_concept_impl);
+        let old = self.concept_impl.insert(concept_key, concept_impl);
         assert!(old.is_none(), "Had an old concept + node combination already, should have been caught before adding it!");
 
         Ok(lmd)
