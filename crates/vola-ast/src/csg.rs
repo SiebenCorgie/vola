@@ -9,8 +9,8 @@ use smallvec::SmallVec;
 use vola_common::Span;
 
 use crate::{
-    alge::{AlgeExpr, LetStmt},
-    common::{Call, Ident, Ty, TypedIdent},
+    alge::{EvalExpr, Expr},
+    common::{Block, Call, Ident, Ty, TypedIdent},
 };
 
 #[cfg(feature = "serde")]
@@ -18,52 +18,26 @@ use serde::{Deserialize, Serialize};
 
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Clone, Debug)]
-pub struct CSGOp {
+pub struct ScopedCall {
     pub span: Span,
-    pub op: Ident,
-    pub args: SmallVec<[AlgeExpr; 3]>,
-    ///Sub trees this CSGOp evaluates. Mostly this is either 0, 1 or 2.
-    pub sub_trees: Vec<CSGOp>,
-    ///Needed to distinguish a local variable reference from a call to a field def with
-    /// no arguments
-    pub is_local_reference: bool,
+    pub call: Call,
+    pub blocks: Vec<Block>,
 }
 
-impl CSGOp {
+impl ScopedCall {
     ///Returns the span that only identifies the head of this operation
     pub fn head_span(&self) -> Span {
-        let mut span = self.span.clone();
-        if self.args.len() > 0 {
-            span.byte_end = self.args[0].span.byte_start;
-            span.to = self.args[0].span.from;
-            return span;
-        }
-
-        //No args, but at least a subtree
-        if self.sub_trees.len() > 0 {
-            span.byte_end = self.sub_trees[0].span.byte_start;
-            span.to = self.sub_trees[0].span.from;
-            return span;
-        }
-        //no args and subtree, use the whole span
-        span
+        self.call.span.clone()
     }
-}
-
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-#[derive(Clone, Debug)]
-pub enum CSGStmt {
-    LetStmt(LetStmt),
-    CSGBinding(CSGBinding),
 }
 
 ///Binds a CSG-Tree to an identifier
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Clone, Debug)]
-pub struct CSGBinding {
+pub struct CsgStmt {
     pub span: Span,
     pub decl_name: Ident,
-    pub tree: CSGOp,
+    pub tree: Expr,
 }
 
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
@@ -71,9 +45,7 @@ pub struct CSGBinding {
 pub struct FieldDef {
     pub span: Span,
     pub name: Ident,
-    pub inputs: SmallVec<[TypedIdent; 2]>,
-    pub stmts: Vec<CSGStmt>,
-    pub ret: CSGOp,
+    pub block: Block,
 }
 
 ///A export function, which defines a clear signature
@@ -83,8 +55,7 @@ pub struct ExportFn {
     pub span: Span,
     pub name: Ident,
     pub inputs: SmallVec<[TypedIdent; 2]>,
-    pub stmts: Vec<CSGStmt>,
-    pub access_descriptors: SmallVec<[AccessDesc; 2]>,
+    pub block: Block,
 }
 
 ///Last part of an export function. Describes how, and based on what parameters trees are evaluated.
@@ -94,10 +65,7 @@ pub struct ExportFn {
 #[derive(Clone, Debug)]
 pub struct AccessDesc {
     pub span: Span,
-    ///The tree that is being called
-    pub tree_ref: Ident,
-    ///The concept that is evaluated based on some arguments
-    pub call: Call,
+    pub evals: EvalExpr,
 }
 
 ///All types of nodes in a CSGTree

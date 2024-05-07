@@ -4,8 +4,8 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-tree-sitter-vola = {git = "https://gitlab.com/tendsinmende/tree-sitter-vola.git"}
-#tree-sitter-vola = {path = "../../tree-sitter-vola"}
+#tree-sitter-vola = {git = "https://gitlab.com/tendsinmende/tree-sitter-vola.git"}
+tree-sitter-vola = {path = "../../../tree-sitter-vola"}
 vola-ast = {path = "../vola-ast"}
 vola-common = {path = "../vola-common"}
 thiserror.workspace = true

@@ -33,8 +33,8 @@ use smallvec::smallvec;
 
 use std::path::Path;
 
-#[cfg(feature = "dot")]
-pub mod dot;
+//#[cfg(feature = "dot")]
+//pub mod dot;
 
 pub use module::Module;
 

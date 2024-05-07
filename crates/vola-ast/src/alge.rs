@@ -9,7 +9,10 @@
 
 use std::fmt::Display;
 
-use crate::common::{Call, Ident, Literal, Ty, TypedIdent};
+use crate::{
+    common::{Block, Call, Ident, Literal, Ty, TypedIdent},
+    csg::ScopedCall,
+};
 use smallvec::SmallVec;
 use vola_common::Span;
 
@@ -35,12 +38,12 @@ pub enum BinaryOp {
 
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Clone, Debug)]
-pub struct AlgeExpr {
+pub struct Expr {
     pub span: Span,
     pub expr_ty: AlgeExprTy,
 }
 
-impl AlgeExpr {
+impl Expr {
     ///By default the `span` contains the whole space of the sub expressions.
     /// That is technically correct, but hard to read when reporting errors.
     ///
@@ -78,6 +81,9 @@ impl AlgeExpr {
             AlgeExprTy::Ident(_i) => self.span.clone(),
             AlgeExprTy::List(_) => self.span.clone(),
             AlgeExprTy::Literal(_) => self.span.clone(),
+            AlgeExprTy::ScopedCall(c) => c.head_span(),
+            AlgeExprTy::ThetaExpr => self.span.clone(),
+            AlgeExprTy::GammaExpr => self.span.clone(),
         }
     }
 }
@@ -118,11 +124,11 @@ impl FieldAccessor {
 pub enum AlgeExprTy {
     Unary {
         op: UnaryOp,
-        operand: Box<AlgeExpr>,
+        operand: Box<Expr>,
     },
     Binary {
-        left: Box<AlgeExpr>,
-        right: Box<AlgeExpr>,
+        left: Box<Expr>,
+        right: Box<Expr>,
         op: BinaryOp,
     },
     EvalExpr(EvalExpr),
@@ -132,8 +138,11 @@ pub enum AlgeExprTy {
         accessors: SmallVec<[FieldAccessor; 1]>,
     },
     Call(Box<Call>),
-    List(Vec<AlgeExpr>),
+    ScopedCall(Box<ScopedCall>),
+    List(Vec<Expr>),
     Literal(Literal),
+    GammaExpr,
+    ThetaExpr,
 }
 
 ///Binds an algebraic expression to an identifier
@@ -142,7 +151,7 @@ pub enum AlgeExprTy {
 pub struct LetStmt {
     pub span: Span,
     pub decl_name: Ident,
-    pub expr: AlgeExpr,
+    pub expr: Expr,
 }
 
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
@@ -153,7 +162,7 @@ pub struct EvalExpr {
     pub evaluator: Ident,
     ///The concept that is being evaluated.
     pub concept: Ident,
-    pub params: Vec<AlgeExpr>,
+    pub params: Vec<Expr>,
 }
 
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
@@ -161,14 +170,7 @@ pub struct EvalExpr {
 pub struct AssignStmt {
     pub span: Span,
     pub dst: Ident,
-    pub expr: AlgeExpr,
-}
-
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-#[derive(Clone, Debug)]
-pub enum AlgeStmt {
-    Let(LetStmt),
-    Assign(AssignStmt),
+    pub expr: Expr,
 }
 
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
@@ -183,9 +185,7 @@ pub struct ImplBlock {
     pub concept: Ident,
     ///(Re)naming of the concepts input argument.
     pub concept_arg_naming: SmallVec<[Ident; 1]>,
-
-    pub stmts: Vec<AlgeStmt>,
-    pub return_expr: AlgeExpr,
+    pub block: Block,
 }
 
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
@@ -195,6 +195,5 @@ pub struct AlgeFunc {
     pub name: Ident,
     pub args: SmallVec<[TypedIdent; 3]>,
     pub return_type: Ty,
-    pub stmts: Vec<AlgeStmt>,
-    pub return_expr: AlgeExpr,
+    pub block: Block,
 }
