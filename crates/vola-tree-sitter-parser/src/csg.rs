@@ -8,14 +8,14 @@
 use smallvec::{smallvec, SmallVec};
 use vola_common::{ariadne::Label, error::error_reporter, report, Span};
 
-use crate::{
+use vola_ast::{
     alge::AlgeExpr,
-    common::{Call, Ident, Ty, TypedIdent},
+    common::{Call, Ident, TypedIdent},
     csg::{AccessDesc, CSGBinding, CSGConcept, CSGNodeDef, CSGNodeTy, CSGOp},
-    error::ParserError,
 };
 
 use super::{FromTreeSitter, ParserCtx};
+use crate::{common::parse_alge_ty, error::ParserError};
 
 impl FromTreeSitter for AccessDesc {
     fn parse(ctx: &mut ParserCtx, dta: &[u8], node: &tree_sitter::Node) -> Result<Self, ParserError>
@@ -351,7 +351,7 @@ impl FromTreeSitter for CSGConcept {
             }
             //single src ty
             "alge_type" => {
-                let ty = Ty::parse_alge_ty(ctx, dta, &next_node)?;
+                let ty = parse_alge_ty(ctx, dta, &next_node)?;
                 //Consume the expected -> now
                 ParserError::consume_expected_node_string(ctx, dta, children.next(), "->")?;
                 smallvec![ty]
@@ -370,7 +370,7 @@ impl FromTreeSitter for CSGConcept {
                             )?;
                             break;
                         }
-                        "alge_type" => tys.push(Ty::parse_alge_ty(ctx, dta, &next_node)?),
+                        "alge_type" => tys.push(parse_alge_ty(ctx, dta, &next_node)?),
                         _ => {
                             let err = ParserError::UnexpectedAstNode {
                                 kind: next_node.kind().to_owned(),
@@ -441,7 +441,7 @@ impl FromTreeSitter for CSGConcept {
                 return Err(err);
             }
         };
-        let result_ty = Ty::parse_alge_ty(ctx, dta, children.next().as_ref().unwrap())?;
+        let result_ty = parse_alge_ty(ctx, dta, children.next().as_ref().unwrap())?;
 
         ParserError::consume_expected_node_string(ctx, dta, children.next(), ";")?;
         ParserError::assert_ast_level_empty(ctx, children.next())?;

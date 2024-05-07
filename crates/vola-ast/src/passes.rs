@@ -1,21 +1,17 @@
 use std::path::Path;
 
-use crate::{error::AstError, VolaAst};
+use vola_common::FileString;
+
+use crate::{error::AstError, VolaAst, VolaParser};
 
 impl VolaAst {
-    pub(crate) fn resolve_module(file: &dyn AsRef<Path>) -> Result<VolaAst, AstError> {
-        match crate::parse_file(file) {
-            Ok(ast) => Ok(ast),
-            Err(e) => Err(AstError::ParsingError {
-                path: file.as_ref().to_path_buf(),
-                err: e
-                    .1
-                    .get(0)
-                    .cloned()
-                    .unwrap_or(crate::ParserError::UnknownError(
-                        "Unknown module parser error".to_owned(),
-                    )),
-            }),
-        }
+    pub(crate) fn resolve_module(
+        file: &dyn AsRef<Path>,
+        parser: &dyn VolaParser,
+    ) -> Result<VolaAst, AstError> {
+        let file_name: FileString = file.as_ref().to_str().unwrap().into();
+
+        let bytes = std::fs::read(file.as_ref()).map_err(|e| AstError::IoError(e.to_string()))?;
+        parser.parse_from_byte(Some(file_name), &bytes)
     }
 }

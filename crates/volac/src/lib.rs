@@ -247,16 +247,11 @@ impl Pipeline {
     pub fn execute_on_bytes(&self, data: &[u8]) -> Result<Target, PipelineError> {
         //NOTE: Always reset file cache, since the files we are reporting on might have changed.
         reset_file_cache();
-        let mut ast = vola_ast::parse_from_bytes(data).map_err(|(_, mut err)| {
-            println!("there where {} errors while parsing data!", err.len());
-            err.remove(0)
-        })?;
+        let mut parser = vola_tree_sitter_parser::VolaTreeSitterParser;
+        let ast = VolaAst::new_from_bytes(data, &mut parser)?;
         if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("VOLA_DUMP_AST").is_ok() {
             vola_ast::dot::ast_to_svg(&ast, "ast.svg");
         }
-
-        log::warn!("parsing bytes, therefore cannot use any relative modules. Trying anyways...");
-        ast.resolve_modules(&"./")?;
 
         self.execute_on_ast(ast)
     }
@@ -265,21 +260,12 @@ impl Pipeline {
     pub fn execute_on_file(&self, file: &dyn AsRef<Path>) -> Result<Target, PipelineError> {
         //NOTE: Always reset file cache, since the files we are reporting on might have changed.
         reset_file_cache();
-        let mut ast = vola_ast::parse_file(file).map_err(|(_, mut err)| {
-            println!(
-                "There where {} errors while parsing {:?}",
-                err.len(),
-                file.as_ref()
-            );
-            err.remove(0)
-        })?;
+        let mut parser = vola_tree_sitter_parser::VolaTreeSitterParser;
+        let ast = VolaAst::new_from_file(file, &mut parser)?;
 
         if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("VOLA_DUMP_AST").is_ok() {
             vola_ast::dot::ast_to_svg(&ast, "ast.svg");
         }
-
-        //try to resolve module imports
-        ast.resolve_modules(&file)?;
 
         self.execute_on_ast(ast)
     }

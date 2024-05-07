@@ -1,20 +1,15 @@
 [package]
-name = "vola-ast"
+name = "vola-tree-sitter-parser"
 version = "0.1.0"
 edition = "2021"
-license = "MPL-2.0"
-authors = ["Tendsin Mende"]
-readme = "crates/vola-ast/README.md"
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
-[features]
-default = ["dot", "serde"]
-serde = ["dep:serde"]
-dot = ["vola-common/dot"]
 
 [dependencies]
+tree-sitter-vola = {git = "https://gitlab.com/tendsinmende/tree-sitter-vola.git"}
+#tree-sitter-vola = {path = "../../tree-sitter-vola"}
+vola-ast = {path = "../vola-ast"}
 vola-common = {path = "../vola-common"}
 thiserror.workspace = true
+tree-sitter.workspace = true
 ahash.workspace = true
 graphviz-rust = {workspace = true, optional = true}
 backtrace.workspace = true

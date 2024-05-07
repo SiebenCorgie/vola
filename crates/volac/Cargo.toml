@@ -6,6 +6,7 @@ license = "MPL-2.0"
 
 [dependencies]
 vola-ast = {path = "../vola-ast"}
+vola-tree-sitter-parser = {path = "../vola-tree-sitter-parser"}
 vola-opt = {path = "../vola-opt"}
 vola-backend-spirv = {path = "../vola-backend-spirv"}
 vola-common = {path = "../vola-common"}

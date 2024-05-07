@@ -10,16 +10,16 @@
 use smallvec::SmallVec;
 use vola_common::{ariadne::Label, error::error_reporter, report, Span};
 
-use crate::{
+use vola_ast::{
     alge::{
         AlgeExpr, AlgeExprTy, AlgeStmt, AssignStmt, BinaryOp, EvalExpr, FieldAccessor, ImplBlock,
         LetStmt, UnaryOp,
     },
     common::{Call, Digit, Ident, Literal},
-    error::ParserError,
 };
 
 use super::{FromTreeSitter, ParserCtx};
+use crate::error::ParserError;
 
 impl FromTreeSitter for AlgeExpr {
     fn parse(ctx: &mut ParserCtx, dta: &[u8], node: &tree_sitter::Node) -> Result<Self, ParserError>

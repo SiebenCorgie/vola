@@ -8,15 +8,15 @@
 use smallvec::SmallVec;
 use vola_common::{ariadne::Label, error::error_reporter, report, Span};
 
-use crate::{
+use vola_ast::{
     alge::{AlgeExpr, AlgeFunc, AlgeStmt, ImplBlock, LetStmt},
-    common::{Ident, Ty, TypedIdent},
+    common::{CTArg, Call, Ident, Ty, TypedIdent},
     csg::{AccessDesc, CSGBinding, CSGConcept, CSGNodeDef, CSGOp, CSGStmt, ExportFn, FieldDef},
-    error::ParserError,
     AstEntry, Module,
 };
 
-use super::{FromTreeSitter, ParserCtx};
+use crate::error::ParserError;
+use crate::{FromTreeSitter, ParserCtx};
 
 impl FromTreeSitter for AstEntry {
     fn parse(ctx: &mut ParserCtx, dta: &[u8], node: &tree_sitter::Node) -> Result<Self, ParserError>
@@ -433,5 +433,30 @@ impl FromTreeSitter for ExportFn {
             stmts,
             access_descriptors,
         })
+    }
+}
+
+impl FromTreeSitter for CTArg {
+    fn parse(ctx: &mut ParserCtx, dta: &[u8], node: &tree_sitter::Node) -> Result<Self, ParserError>
+    where
+        Self: Sized,
+    {
+        ParserError::assert_node_kind(ctx, node, "ct_attrib")?;
+        let mut walker = node.walk();
+        let mut children = node.children(&mut walker);
+
+        ParserError::consume_expected_node_string(ctx, dta, children.next(), "#")?;
+        ParserError::consume_expected_node_string(ctx, dta, children.next(), "[")?;
+
+        //NOTE: Right now we reuse the call parser.
+        let call = Call::parse(ctx, dta, &children.next().unwrap())?;
+        let Call { span, ident, args } = call;
+
+        ParserError::consume_expected_node_string(ctx, dta, children.next(), "]")?;
+
+        ParserError::assert_ast_level_empty(ctx, children.next())?;
+        ParserError::assert_node_no_error(ctx, node)?;
+
+        Ok(CTArg { span, ident, args })
     }
 }

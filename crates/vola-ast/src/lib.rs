@@ -26,10 +26,9 @@ pub mod common;
 pub mod csg;
 mod error;
 mod module;
-mod parser;
 mod passes;
 
-pub use error::{AstError, ParserError};
+pub use error::AstError;
 use smallvec::smallvec;
 
 use std::path::Path;
@@ -38,11 +37,10 @@ use std::path::Path;
 pub mod dot;
 
 pub use module::Module;
-pub use parser::{parse_file, parse_from_bytes, parse_string};
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
-use vola_common::{ariadne::Label, error::error_reporter, report, Span};
+use vola_common::{ariadne::Label, error::error_reporter, report, FileString, Span};
 
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Clone, Debug)]
@@ -118,7 +116,59 @@ pub struct VolaAst {
     pub entries: Vec<TopLevelNode>,
 }
 
+pub trait VolaParser {
+    fn parse_from_byte(
+        &self,
+        src_file: Option<FileString>,
+        byte: &[u8],
+    ) -> Result<VolaAst, AstError>;
+}
+
 impl VolaAst {
+    pub fn new_from_file(
+        file: &dyn AsRef<Path>,
+        parser: &dyn VolaParser,
+    ) -> Result<Self, AstError> {
+        let root_file = file.as_ref().to_str().unwrap().into();
+        let bytes = std::fs::read(file.as_ref()).map_err(|e| {
+            report(
+                vola_common::ariadne::Report::build(
+                    vola_common::ariadne::ReportKind::Error,
+                    "File not found",
+                    0,
+                )
+                .with_message(format!("Could not find root file {:?}", file.as_ref()))
+                .finish(),
+            );
+            AstError::IoError(e.to_string())
+        })?;
+        let mut root_ast = parser.parse_from_byte(Some(root_file), &bytes)?;
+
+        //now resolve relative to the ast all submodules
+        root_ast.resolve_modules(file, parser)?;
+        Ok(root_ast)
+    }
+    pub fn new_from_bytes(bytes: &[u8], parser: &dyn VolaParser) -> Result<Self, AstError> {
+        let root_ast = parser.parse_from_byte(None, &bytes)?;
+
+        //can't use the file system in this case
+        let contains_module = root_ast.entries.iter().find(|n| n.entry.is_module_import());
+        if let Some(module) = contains_module {
+            let err = AstError::NoRootFile;
+            report(
+                error_reporter(err.clone(), module.span.clone())
+                    .with_label(
+                        Label::new(module.span.clone())
+                            .with_message("consider removing this import"),
+                    )
+                    .finish(),
+            );
+            return Err(AstError::NoRootFile);
+        }
+
+        Ok(root_ast)
+    }
+
     pub fn empty() -> Self {
         VolaAst {
             entries: Vec::with_capacity(0),
@@ -126,7 +176,11 @@ impl VolaAst {
     }
 
     ///Resloves all imported modules in `Self` relative to the given path.
-    pub fn resolve_modules(&mut self, relative_to: &dyn AsRef<Path>) -> Result<(), AstError> {
+    pub fn resolve_modules(
+        &mut self,
+        relative_to: &dyn AsRef<Path>,
+        parser: &dyn VolaParser,
+    ) -> Result<(), AstError> {
         let mut seen_modules = AHashSet::default();
         //add our selfs as a _seen_ module
         let self_path = smallvec![crate::common::Ident(
@@ -179,7 +233,7 @@ impl VolaAst {
                         return Err(err);
                     }
 
-                    let sub_ast = Self::resolve_module(&path)?;
+                    let sub_ast = Self::resolve_module(&path, parser)?;
                     assert!(seen_modules.insert(m.path.clone()));
 
                     //delete the module statement.
