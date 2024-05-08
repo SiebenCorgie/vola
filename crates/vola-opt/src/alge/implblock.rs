@@ -6,7 +6,7 @@
  * 2024 Tendsin Mende
  */
 use crate::{
-    ast::block_builder::{BlockBuilder, BlockBuilderConfig, ReturnExpr},
+    ast::block_builder::{BlockBuilder, BlockBuilderConfig},
     common::{LmdContext, Ty},
     error::OptError,
     Optimizer,

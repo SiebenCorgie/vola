@@ -7,12 +7,11 @@
  */
 
 use ahash::AHashMap;
-use rvsdg::{edge::{InputType, OutportLocation, OutputType}, nodes::NodeType, region::{Outport, RegionLocation}, smallvec::{smallvec, SmallVec}, NodeRef, SmallColl};
-use vola_ast::{alge::{AssignStmt, EvalExpr, Expr, ExprTy, LetStmt}, common::Stmt, csg::{AccessDesc, CSGNodeTy, CsgStmt}};
+use rvsdg::{edge::{OutportLocation, OutputType}, nodes::NodeType, region::RegionLocation, smallvec::{smallvec, SmallVec}, NodeRef, SmallColl};
+use vola_ast::{alge::{EvalExpr, Expr, ExprTy}, common::Stmt, csg::{AccessDesc, CSGNodeTy}};
 use vola_common::{ariadne::{Color, Fmt, Label}, error::error_reporter, report, Span};
 
 use crate::{common::{LmdContext, Ty}, csg::TreeAccess, OptError, OptNode, Optimizer};
-
 
 
 pub(crate) enum ReturnExpr{

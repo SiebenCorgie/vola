@@ -16,7 +16,7 @@ use vola_ast::common::Ident;
 use vola_common::{ariadne::Label, error::error_reporter, report, Span};
 
 use crate::{
-    ast::block_builder::{BlockBuilder, BlockBuilderConfig, ReturnExpr},
+    ast::block_builder::{BlockBuilder, BlockBuilderConfig},
     common::{LmdContext, Ty},
     error::OptError,
     Optimizer,

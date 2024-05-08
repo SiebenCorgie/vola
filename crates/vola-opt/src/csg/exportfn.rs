@@ -15,7 +15,7 @@ use rvsdg::{
 use vola_ast::common::Ident;
 
 use crate::{
-    ast::block_builder::{BlockBuilder, BlockBuilderConfig, ReturnExpr},
+    ast::block_builder::{BlockBuilder, BlockBuilderConfig},
     common::{LmdContext, Ty},
     error::OptError,
     Optimizer,

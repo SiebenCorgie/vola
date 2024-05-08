@@ -12,7 +12,7 @@ use rvsdg::{
     smallvec::{smallvec, SmallVec},
     NodeRef,
 };
-use vola_ast::{common::{Ident, Stmt}};
+use vola_ast::common::Ident;
 use vola_common::{ariadne::Label, error::error_reporter, report, Span};
 
 use crate::{

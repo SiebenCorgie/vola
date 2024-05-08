@@ -9,9 +9,9 @@ use smallvec::SmallVec;
 use vola_common::{ariadne::Label, error::error_reporter, report, Span};
 
 use vola_ast::{
-    alge::{AlgeFunc, Expr, ImplBlock},
+    alge::{AlgeFunc, ImplBlock},
     common::{Block, CTArg, Call, Ident, Ty, TypedIdent},
-    csg::{AccessDesc, CSGConcept, CSGNodeDef, CsgStmt, ExportFn, FieldDef, ScopedCall},
+    csg::{CSGConcept, CSGNodeDef, ExportFn, FieldDef},
     AstEntry, Module,
 };
 
