@@ -10,7 +10,8 @@ members = [
 "crates/vola-backend-spirv", 
 "crates/volac", 
 "crates/vola-cli", 
-"crates/rvsdg-viewer-ui",
+"crates/rvsdg-viewer-ui", 
+"crates/vola-tree-sitter-parser",
 ]
 
 resolver = "2"

@@ -13,13 +13,15 @@ serde = ["dep:serde"]
 dot = ["vola-common/dot"]
 
 [dependencies]
-tree-sitter-vola = {git = "https://gitlab.com/tendsinmende/tree-sitter-vola.git"}
 vola-common = {path = "../vola-common"}
 thiserror.workspace = true
-tree-sitter.workspace = true
 ahash.workspace = true
 graphviz-rust = {workspace = true, optional = true}
 backtrace.workspace = true
 lazy_static.workspace = true
 smallvec = {workspace = true, features = ["serde"]}
 serde = {workspace = true, optional = true}
+
+
+[dev-dependencies]
+vola-tree-sitter-parser = {path = "../vola-tree-sitter-parser"}

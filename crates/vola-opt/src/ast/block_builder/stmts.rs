@@ -6,6 +6,7 @@
  * 2024 Tendsin Mende
  */
 
+use vola_ast::csg::CsgStmt;
 use vola_common::{ariadne::Label, error::error_reporter, report};
 
 use crate::{
@@ -87,22 +88,20 @@ Consider using `let {} = ...;` instead, or using an defined variable.
             return Err(err);
         }
 
-        //build the sub tree and overwrite the last_def output
+        log::warn!("Reassignment does not check for correctly typed reassignment yet!");
 
+        //build the sub tree and overwrite the last_def output
         let sub_tree_output = self.setup_alge_expr(expr)?;
         let last_def = self.lmd_ctx.defined_vars.get_mut(&dst.0).unwrap();
         last_def.port = sub_tree_output;
         Ok(())
     }
 
-    pub(crate) fn setup_csg_binding(
-        &mut self,
-        binding: vola_ast::csg::CSGBinding,
-    ) -> Result<(), OptError> {
-        let vola_ast::csg::CSGBinding {
+    pub(crate) fn setup_csg_binding(&mut self, binding: CsgStmt) -> Result<(), OptError> {
+        let CsgStmt {
             span,
             decl_name,
-            tree,
+            expr,
         } = binding;
 
         //Similar to let statements, make sure that no variable exists with the given name.
@@ -128,7 +127,7 @@ Note that vola does not support shadowing. If you just want to change the value 
             return Err(err);
         }
 
-        let def_port = self.setup_csg_tree(tree)?;
+        let def_port = self.setup_csg_tree(expr)?;
 
         //register in the lmd context
         self.lmd_ctx.add_define(

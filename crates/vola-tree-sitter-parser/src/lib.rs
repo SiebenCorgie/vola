@@ -7,16 +7,17 @@
  */
 use std::path::Path;
 
+use error::ParserError;
 use tree_sitter::{Node, Parser};
 use vola_common::{error::error_reporter, report, FileString, Span};
 
-use crate::{common::CTArg, error::ParserError, AstEntry, TopLevelNode, VolaAst};
-
-mod alge;
-mod common;
-mod csg;
-mod toplevel;
-
+use vola_ast::{common::CTArg, AstEntry, TopLevelNode, VolaAst};
+pub mod alge;
+pub mod block;
+pub mod common;
+pub mod csg;
+pub mod error;
+pub mod toplevel;
 ///Context on the parser, like the current src file, and errors that occured, but are ignored.
 pub struct ParserCtx {
     deep_errors: Vec<ParserError>,
@@ -24,10 +25,10 @@ pub struct ParserCtx {
 }
 
 impl ParserCtx {
-    pub fn new(file: &str) -> ParserCtx {
+    pub fn new(file: FileString) -> ParserCtx {
         ParserCtx {
             deep_errors: Vec::new(),
-            src_file: FileString::from(file),
+            src_file: file,
         }
     }
     pub fn new_fileless() -> ParserCtx {
@@ -78,7 +79,7 @@ pub fn parse_file(file: impl AsRef<Path>) -> Result<VolaAst, (VolaAst, Vec<Parse
         }
     };
     let file_src_str = file.as_ref().to_str().unwrap_or("NonUnicodeFilename");
-    parse_data(&dta, Some(file_src_str))
+    parse_data(&dta, Some(file_src_str.into()))
 }
 
 ///Parses `string`. Returns the [VolaAst](crate::VolaAst) on success, or a partially parsed AST, and the reported errors, if any
@@ -101,8 +102,30 @@ fn parser() -> Parser {
     parser
 }
 
+pub struct VolaTreeSitterParser;
+
+impl vola_ast::VolaParser for VolaTreeSitterParser {
+    fn parse_from_byte(
+        &self,
+        src_file: Option<FileString>,
+        byte: &[u8],
+    ) -> Result<VolaAst, vola_ast::AstError> {
+        parse_data(byte, src_file.clone()).map_err(|(_partial_ast, e)| {
+            vola_ast::AstError::ParsingError {
+                path: src_file
+                    .map(|f| f.to_string())
+                    .unwrap_or("NoFile".to_owned()),
+                err: format!("Parser had {} errors", e.len()),
+            }
+        })
+    }
+}
+
 ///Internal parser implementation
-fn parse_data(data: &[u8], src_file: Option<&str>) -> Result<VolaAst, (VolaAst, Vec<ParserError>)> {
+fn parse_data(
+    data: &[u8],
+    src_file: Option<FileString>,
+) -> Result<VolaAst, (VolaAst, Vec<ParserError>)> {
     let mut ctx = if let Some(src) = src_file {
         ParserCtx::new(src)
     } else {

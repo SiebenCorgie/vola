@@ -1,0 +1,17 @@
+[package]
+name = "vola-tree-sitter-parser"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tree-sitter-vola = {git = "https://gitlab.com/tendsinmende/tree-sitter-vola.git"}
+vola-ast = {path = "../vola-ast"}
+vola-common = {path = "../vola-common"}
+thiserror.workspace = true
+tree-sitter.workspace = true
+ahash.workspace = true
+graphviz-rust = {workspace = true, optional = true}
+backtrace.workspace = true
+lazy_static.workspace = true
+smallvec = {workspace = true, features = ["serde"]}
+serde = {workspace = true, optional = true}

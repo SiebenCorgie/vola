@@ -6,5 +6,5 @@ export myExport(at: vec3){
 
 	csg a = Sphere(1.0);
 
-	a.Sdf3d(at)
+	eval a.Sdf3d(at)
 }

@@ -7,7 +7,10 @@
  */
 use std::fmt::Display;
 
-use crate::alge::AlgeExpr;
+use crate::{
+    alge::{AssignStmt, Expr, LetStmt},
+    csg::CsgStmt,
+};
 use smallvec::SmallVec;
 
 #[cfg(feature = "serde")]
@@ -73,7 +76,7 @@ pub struct TypedIdent {
 pub struct CTArg {
     pub span: Span,
     pub ident: Ident,
-    pub args: SmallVec<[AlgeExpr; 3]>,
+    pub args: SmallVec<[Expr; 3]>,
 }
 
 ///Call to some `ident` with `args`
@@ -82,5 +85,23 @@ pub struct CTArg {
 pub struct Call {
     pub span: Span,
     pub ident: Ident,
-    pub args: SmallVec<[AlgeExpr; 3]>,
+    pub args: SmallVec<[Expr; 3]>,
+}
+
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[derive(Clone, Debug)]
+pub enum Stmt {
+    Let(LetStmt),
+    Assign(AssignStmt),
+    Csg(CsgStmt),
+    GammaExpr,
+    ThetaExpr,
+}
+
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[derive(Clone, Debug)]
+pub struct Block {
+    pub span: Span,
+    pub stmts: SmallVec<[Stmt; 3]>,
+    pub retexpr: Option<Expr>,
 }

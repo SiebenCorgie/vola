@@ -6,16 +6,15 @@
  * 2024 Tendsin Mende
  */
 use smallvec::SmallVec;
-use vola_common::{error::error_reporter, report, Span};
+use vola_common::{ariadne::Label, error::error_reporter, report, Span};
 
-use crate::{
-    alge::AlgeExpr,
-    common::{CTArg, Call, Digit, Ident, Literal, Ty, TypedIdent},
-    error::ParserError,
+use vola_ast::{
+    alge::Expr,
+    common::{Call, Digit, Ident, Literal, Ty, TypedIdent},
     Module,
 };
 
-use super::{FromTreeSitter, ParserCtx};
+use crate::{error::ParserError, FromTreeSitter, ParserCtx};
 
 impl FromTreeSitter for Ident {
     fn parse(
@@ -68,7 +67,11 @@ impl FromTreeSitter for Digit {
             let err = ParserError::EmptyParse {
                 kind: "digit".to_owned(),
             };
-            report(error_reporter(err.clone(), ctx.span(node)).finish());
+            report(
+                error_reporter(err.clone(), ctx.span(node))
+                    .with_label(Label::new(ctx.span(node)).with_message("here"))
+                    .finish(),
+            );
             return Err(err);
         }
 
@@ -112,94 +115,92 @@ impl FromTreeSitter for Ty {
             return Ok(Ty::CSGTree);
         }
         //Otherwise this should be a alge_type
-        Self::parse_alge_ty(ctx, dta, node)
+        parse_alge_ty(ctx, dta, node)
     }
 }
 
-impl Ty {
-    pub fn parse_alge_ty(
-        ctx: &mut ParserCtx,
-        dta: &[u8],
-        node: &tree_sitter::Node,
-    ) -> Result<Self, ParserError> {
-        ParserError::assert_node_kind(ctx, node, "alge_type")?;
+pub fn parse_alge_ty(
+    ctx: &mut ParserCtx,
+    dta: &[u8],
+    node: &tree_sitter::Node,
+) -> Result<Ty, ParserError> {
+    ParserError::assert_node_kind(ctx, node, "alge_type")?;
 
-        match node.child(0).unwrap().kind() {
-            "t_scalar" => {
-                //Scalar is easy
-                Ok(Ty::Scalar)
-            }
-            "t_nat" => Ok(Ty::Nat),
-            "t_vec" => {
-                //try to parse the first digit
-                let width = Digit::parse(ctx, dta, &node.child(0).unwrap().child(1).unwrap())?;
-                Ok(Ty::Vec { width: width.0 })
-            }
-            "t_mat" => {
-                let width = Digit::parse(ctx, dta, &node.child(0).unwrap().child(1).unwrap())?;
-                ParserError::consume_expected_node_kind(
-                    ctx,
-                    node.child(0).unwrap().child(2).clone(),
-                    "x",
-                )?;
-                let height = Digit::parse(ctx, dta, &node.child(0).unwrap().child(3).unwrap())?;
+    match node.child(0).unwrap().kind() {
+        "t_scalar" => {
+            //Scalar is easy
+            Ok(Ty::Scalar)
+        }
+        "t_nat" => Ok(Ty::Nat),
+        "t_vec" => {
+            //try to parse the first digit
+            let width = Digit::parse(ctx, dta, &node.child(0).unwrap().child(1).unwrap())?;
+            Ok(Ty::Vec { width: width.0 })
+        }
+        "t_mat" => {
+            let width = Digit::parse(ctx, dta, &node.child(0).unwrap().child(1).unwrap())?;
+            ParserError::consume_expected_node_kind(
+                ctx,
+                node.child(0).unwrap().child(2).clone(),
+                "x",
+            )?;
+            let height = Digit::parse(ctx, dta, &node.child(0).unwrap().child(3).unwrap())?;
 
-                Ok(Ty::Matrix {
-                    width: width.0,
-                    height: height.0,
-                })
-            }
-            "t_tensor" => {
-                let mut walker = node.child(0).unwrap().walk();
-                let mut children = node.child(0).unwrap().children(&mut walker);
+            Ok(Ty::Matrix {
+                width: width.0,
+                height: height.0,
+            })
+        }
+        "t_tensor" => {
+            let mut walker = node.child(0).unwrap().walk();
+            let mut children = node.child(0).unwrap().children(&mut walker);
 
-                ParserError::consume_expected_node_kind(ctx, children.next(), "tensor")?;
-                ParserError::consume_expected_node_kind(ctx, children.next(), "<")?;
+            ParserError::consume_expected_node_kind(ctx, children.next(), "tensor")?;
+            ParserError::consume_expected_node_kind(ctx, children.next(), "<")?;
 
-                let mut dim = SmallVec::new();
-                while let Some(next_node) = children.next() {
-                    match next_node.kind() {
-                        "digit" => dim.push(Digit::parse(ctx, dta, &next_node)?.0),
+            let mut dim = SmallVec::new();
+            while let Some(next_node) = children.next() {
+                match next_node.kind() {
+                    "digit" => dim.push(Digit::parse(ctx, dta, &next_node)?.0),
+                    x => {
+                        let err = ParserError::UnexpectedAstNode {
+                            kind: x.to_owned(),
+                            expected: "digit or \">\"".to_owned(),
+                        };
+                        report(error_reporter(err.clone(), Span::empty()).finish());
+                        return Err(err);
+                    }
+                };
+
+                if let Some(next) = children.next() {
+                    match next.kind() {
+                        "," => {}
+                        ">" => {
+                            break;
+                        }
                         x => {
                             let err = ParserError::UnexpectedAstNode {
                                 kind: x.to_owned(),
-                                expected: "digit or \">\"".to_owned(),
+                                expected: ", or \">\"".to_owned(),
                             };
-                            report(error_reporter(err.clone(), Span::empty()).finish());
+                            report(error_reporter(err.clone(), ctx.span(node)).finish());
                             return Err(err);
-                        }
-                    };
-
-                    if let Some(next) = children.next() {
-                        match next.kind() {
-                            "," => {}
-                            ">" => {
-                                break;
-                            }
-                            x => {
-                                let err = ParserError::UnexpectedAstNode {
-                                    kind: x.to_owned(),
-                                    expected: ", or \">\"".to_owned(),
-                                };
-                                report(error_reporter(err.clone(), ctx.span(node)).finish());
-                                return Err(err);
-                            }
                         }
                     }
                 }
-
-                ParserError::assert_ast_level_empty(ctx, children.next())?;
-
-                Ok(Ty::Tensor { dim })
             }
-            _ => {
-                let err = ParserError::UnexpectedAstNode {
-                    kind: node.child(0).unwrap().kind().to_string(),
-                    expected: "t_scalar | t_vec | t_mat | t_tensor".to_owned(),
-                };
-                report(error_reporter(err.clone(), ctx.span(node)).finish());
-                Err(err)
-            }
+
+            ParserError::assert_ast_level_empty(ctx, children.next())?;
+
+            Ok(Ty::Tensor { dim })
+        }
+        _ => {
+            let err = ParserError::UnexpectedAstNode {
+                kind: node.child(0).unwrap().kind().to_string(),
+                expected: "t_scalar | t_vec | t_mat | t_tensor".to_owned(),
+            };
+            report(error_reporter(err.clone(), ctx.span(node)).finish());
+            Err(err)
         }
     }
 }
@@ -247,7 +248,11 @@ impl FromTreeSitter for Literal {
             "integer_literal" => {
                 //reuse the digit parser, but unwrap the value
                 let digit = Digit::parse(ctx, dta, &node.child(0).unwrap())?;
-
+                ParserError::assert_node_no_error(ctx, node)?;
+                Ok(Literal::IntegerLiteral(digit.0))
+            }
+            "digit" => {
+                let digit = Digit::parse(ctx, dta, &node)?;
                 ParserError::assert_node_no_error(ctx, node)?;
                 Ok(Literal::IntegerLiteral(digit.0))
             }
@@ -270,7 +275,7 @@ impl FromTreeSitter for TypedIdent {
         ParserError::assert_node_kind(ctx, node, "typed_arg")?;
         let ident = Ident::parse(ctx, dta, node.child(0).as_ref().unwrap())?;
         ParserError::consume_expected_node_string(ctx, dta, node.child(1), ":")?;
-        let ty = Ty::parse_alge_ty(ctx, dta, node.child(2).as_ref().unwrap())?;
+        let ty = parse_alge_ty(ctx, dta, node.child(2).as_ref().unwrap())?;
 
         ParserError::assert_node_no_error(ctx, node)?;
         Ok(TypedIdent {
@@ -304,11 +309,11 @@ impl FromTreeSitter for Call {
                 "," => {
                     ParserError::consume_expected_node_string(ctx, dta, Some(next_node), ",")?;
                 }
-                "alge_expr" => args.push(AlgeExpr::parse(ctx, dta, &next_node)?),
+                "expr" => args.push(Expr::parse(ctx, dta, &next_node)?),
                 _ => {
                     let err = ParserError::UnexpectedAstNode {
                         kind: next_node.kind().to_string(),
-                        expected: "alge_expr".to_owned(),
+                        expected: "expr".to_owned(),
                     };
                     report(error_reporter(err.clone(), ctx.span(&next_node)).finish());
                     return Err(err);
@@ -323,32 +328,6 @@ impl FromTreeSitter for Call {
             ident,
             args,
         })
-    }
-}
-
-impl FromTreeSitter for CTArg {
-    fn parse(ctx: &mut ParserCtx, dta: &[u8], node: &tree_sitter::Node) -> Result<Self, ParserError>
-    where
-        Self: Sized,
-    {
-        ParserError::assert_node_kind(ctx, node, "ct_attrib")?;
-        let mut walker = node.walk();
-        let mut children = node.children(&mut walker);
-
-        ParserError::consume_expected_node_string(ctx, dta, children.next(), "#")?;
-        ParserError::consume_expected_node_string(ctx, dta, children.next(), "[")?;
-
-        //NOTE: Right now we reuse the call parser.
-        let call = Call::parse(ctx, dta, &children.next().unwrap())?;
-
-        let Call { span, ident, args } = call;
-
-        ParserError::consume_expected_node_string(ctx, dta, children.next(), "]")?;
-
-        ParserError::assert_ast_level_empty(ctx, children.next())?;
-        ParserError::assert_node_no_error(ctx, node)?;
-
-        Ok(CTArg { span, ident, args })
     }
 }
 

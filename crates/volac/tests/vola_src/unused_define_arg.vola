@@ -14,5 +14,5 @@ define common(at: vec3, offset: vec3){
 
 export eval_std(at: vec3, offset: vec3){
 	csg myfield = common(at, offset);
-	myfield.SDF3D(at)
+	eval myfield.SDF3D(at)
 }

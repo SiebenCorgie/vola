@@ -4,5 +4,5 @@ module sub_module;
 
 export myField(t: vec3){
 	csg a = some_sub_field();
-	a.Con(t)
+	eval a.Con(t)
 }

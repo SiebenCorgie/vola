@@ -6,14 +6,10 @@
  * 2024 Tendsin Mende
  */
 
-use std::time::Instant;
-
-use vola_opt::Optimizer;
-
 pub fn main() {
     pretty_env_logger::init();
-
-    let ast = match vola_ast::parse_file("crates/vola-ast/examples/csg.vola") {
+    /*NOTE: Using the cli intead
+    let ast = match vola_ast("crates/vola-ast/examples/csg.vola") {
         Ok(ast) => ast,
         Err((partial_ast, _errors_reporter)) => {
             println!("\nGot {} entries in toplevel!", partial_ast.entries.len());
@@ -51,4 +47,5 @@ pub fn main() {
     );
 
     opt.dump_svg("after_dispatch.svg", true);
+    */
 }

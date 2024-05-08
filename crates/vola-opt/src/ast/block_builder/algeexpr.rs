@@ -11,7 +11,7 @@ use rvsdg::{
     smallvec::smallvec,
     SmallColl,
 };
-use vola_ast::alge::{AlgeExpr, AlgeExprTy};
+use vola_ast::alge::{Expr, ExprTy};
 use vola_common::{ariadne::Label, error::error_reporter, report};
 
 use crate::{
@@ -26,10 +26,10 @@ impl<'a> BlockBuilder<'a> {
     //Sets up the alge expression, and if successful, return the output port that defines the final value.
     // TODO: Right now we don't have anything stateful, so a simple Outport location is enough. Hover, this might change whenever we introduce
     // buffer and image reads at a later stage.
-    pub fn setup_alge_expr(&mut self, expr: AlgeExpr) -> Result<OutportLocation, OptError> {
+    pub fn setup_alge_expr(&mut self, expr: Expr) -> Result<OutportLocation, OptError> {
         let expr_span = expr.op_span();
         match expr.expr_ty {
-            AlgeExprTy::Unary { op, operand } => {
+            ExprTy::Unary { op, operand } => {
                 //setup the unary node, than recurse, setup the subexpression and hook it up to our unary expression
                 let sub_output = self.setup_alge_expr(*operand)?;
                 let opnode = self
@@ -49,7 +49,7 @@ impl<'a> BlockBuilder<'a> {
 
                 Ok(opnode)
             }
-            AlgeExprTy::Binary { left, right, op } => {
+            ExprTy::Binary { left, right, op } => {
                 //Similar to the unary op, first parse both sub_trees, then hook them up to the
                 // inputs and return the output.
                 let left_out = self.setup_alge_expr(*left)?;
@@ -70,7 +70,7 @@ impl<'a> BlockBuilder<'a> {
                     .unwrap();
                 Ok(opnode)
             }
-            AlgeExprTy::Call(c) => {
+            ExprTy::Call(c) => {
                 //For the call node we try to parse the well known ops.
                 //
                 //If that doesn't work, we lookup the parsed functions.
@@ -182,8 +182,8 @@ impl<'a> BlockBuilder<'a> {
                     }
                 }
             }
-            AlgeExprTy::EvalExpr(evalexpr) => {
-                if !self.is_eval_allowed {
+            ExprTy::EvalExpr(evalexpr) => {
+                if !self.config.allow_eval {
                     let err = OptError::Any {
                         text: "Eval expressions are only allowed in impl-blocks of operations!"
                             .to_owned(),
@@ -232,7 +232,7 @@ impl<'a> BlockBuilder<'a> {
 
                 Ok(opnode)
             }
-            AlgeExprTy::FieldAccess { src, accessors } => {
+            ExprTy::FieldAccess { src, accessors } => {
                 //Try to find the access source, if successful, hook the source up to this and
                 // return the value
 
@@ -288,7 +288,7 @@ impl<'a> BlockBuilder<'a> {
                 //last src is the opnode with the _final_ value
                 Ok(src)
             }
-            AlgeExprTy::Ident(i) => {
+            ExprTy::Ident(i) => {
                 //try to resolve the ident, or throw an error if not possible
                 let ident_node = if let Some(noderef) = self.lmd_ctx.defined_vars.get(&i.0) {
                     noderef
@@ -309,7 +309,7 @@ impl<'a> BlockBuilder<'a> {
 
                 Ok(ident_node.port)
             }
-            AlgeExprTy::List(lst) => {
+            ExprTy::List(lst) => {
                 //For now we just have a special "list" constructor that connects as many srcs as there are
                 // list elements.
 
@@ -336,7 +336,7 @@ impl<'a> BlockBuilder<'a> {
                     .unwrap();
                 Ok(opnode)
             }
-            AlgeExprTy::Literal(lit) => {
+            ExprTy::Literal(lit) => {
                 let optnode = match lit {
                     vola_ast::common::Literal::IntegerLiteral(i) => {
                         OptNode::new(ImmNat::new(i), expr_span)
@@ -356,6 +356,36 @@ impl<'a> BlockBuilder<'a> {
                     .unwrap();
                 Ok(opnode)
             }
+            ExprTy::AccessExpr(ae) => {
+                let err = OptError::Any {
+                    text: format!("Unexpected access-expression"),
+                };
+                report(
+                    error_reporter(err.clone(), ae.span.clone())
+                        .with_label(
+                            Label::new(ae.span.clone())
+                                .with_message("this patter can only be used as the last statement of an export-function"),
+                        )
+                        .finish(),
+                );
+                return Err(err);
+            }
+            ExprTy::ScopedCall(sc) => {
+                let err = OptError::Any {
+                    text: format!("Unexpected scoped-call in algebraic expression"),
+                };
+                report(
+                    error_reporter(err.clone(), sc.span.clone())
+                        .with_label(
+                            Label::new(sc.span.clone())
+                                .with_message("this patter can only be used in a csg-context"),
+                        )
+                        .finish(),
+                );
+                return Err(err);
+            }
+            ExprTy::GammaExpr => todo!("implement gamma expr"),
+            ExprTy::ThetaExpr => todo!("implement theta expr"),
         }
     }
 }

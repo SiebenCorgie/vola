@@ -1,3 +1,5 @@
+mod simple_parser;
+use simple_parser::parse_file;
 use smallvec::smallvec;
 use vola_ast::{
     common::Ty,
@@ -8,7 +10,7 @@ use vola_ast::{
 #[test]
 fn construct_all_types() {
     //Constructs all types in the file.
-    let ast = vola_ast::parse_file("tests/type_constructor.vola").unwrap();
+    let ast = parse_file(&"tests/type_constructor.vola");
 
     assert!(ast.entries.len() == 8);
 

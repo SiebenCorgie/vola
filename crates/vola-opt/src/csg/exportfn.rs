@@ -12,10 +12,10 @@ use rvsdg::{
     smallvec::SmallVec,
     NodeRef, SmallColl,
 };
-use vola_ast::{common::Ident, csg::CSGStmt};
+use vola_ast::common::Ident;
 
 use crate::{
-    ast::block_builder::{BlockBuilder, FetchStmt, ReturnExpr},
+    ast::block_builder::{BlockBuilder, BlockBuilderConfig},
     common::{LmdContext, Ty},
     error::OptError,
     Optimizer,
@@ -41,6 +41,35 @@ pub struct ExportFn {
 }
 
 impl Optimizer {
+    fn wire_access(
+        &mut self,
+        region: RegionLocation,
+        ports: SmallColl<(Ty, OutportLocation)>,
+    ) -> Result<(), OptError> {
+        for (expected_idx, (ty, port)) in ports.into_iter().enumerate() {
+            //add an result port to the lambda node
+            let resultidx = self
+                .graph
+                .node_mut(region.node)
+                .node_type
+                .unwrap_lambda_mut()
+                .add_result();
+            assert!(resultidx == expected_idx);
+
+            let edg = self
+                .graph
+                .on_region(&region, |reg| {
+                    reg.connect_to_result(port, InputType::Result(resultidx))
+                        .unwrap()
+                })
+                .unwrap();
+
+            self.graph.edge_mut(edg).ty.set_type(ty.clone());
+        }
+
+        Ok(())
+    }
+
     pub fn add_export_fn(
         &mut self,
         exportfn: vola_ast::csg::ExportFn,
@@ -49,7 +78,7 @@ impl Optimizer {
         // defs. So I guess it would be nice if we couldn't ?
 
         let mut input_signature = SmallVec::new();
-        for typed_ident in exportfn.inputs.iter() {
+        for typed_ident in exportfn.args.iter() {
             let ty: Ty = typed_ident.ty.clone().into();
             input_signature.push((typed_ident.ident.clone(), ty));
         }
@@ -67,27 +96,23 @@ impl Optimizer {
         let lmd_ctx =
             LmdContext::new_for_exportfn(&mut self.graph, &mut self.typemap, lambda, &exportfn);
 
-        let block_builder = BlockBuilder {
+        let mut block_builder = BlockBuilder {
+            config: BlockBuilderConfig::export_fn(),
             span: exportfn.span.clone(),
             csg_operands: AHashMap::with_capacity(0),
-            is_eval_allowed: false,
             return_type: SmallColl::new(),
             lmd_ctx,
             region: lambda_region,
             opt: self,
         };
 
-        let stmts = exportfn
-            .stmts
+        let outports: SmallColl<_> = block_builder
+            .build_block(exportfn.block)?
             .into_iter()
-            .map(|stm| match stm {
-                CSGStmt::LetStmt(l) => FetchStmt::Let(l),
-                CSGStmt::CSGBinding(b) => FetchStmt::CSGBind(b),
-            })
+            .map(|(ty, port)| (ty.expect("export must always be typed!"), port))
             .collect();
-        let retexpr =
-            ReturnExpr::AccessDescriptors(exportfn.access_descriptors.into_iter().collect());
-        block_builder.build_block(stmts, retexpr)?;
+
+        self.wire_access(lambda_region, outports)?;
 
         let exportfn = ExportFn {
             span: exportfn.span.clone(),

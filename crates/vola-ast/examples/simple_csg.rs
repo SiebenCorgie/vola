@@ -1,10 +1,12 @@
 use vola_ast::dot::ast_to_svg;
 
 pub fn main() {
-    let ast = match vola_ast::parse_file("crates/vola-ast/examples/csg.vola") {
+    let parser = vola_tree_sitter_parser::VolaTreeSitterParser;
+    let ast = match vola_ast::VolaAst::new_from_file(&"crates/vola-ast/examples/csg.vola", &parser)
+    {
         Ok(ast) => ast,
-        Err((partial_ast, _reporter)) => {
-            println!("\nGot {} entries in toplevel!", partial_ast.entries.len());
+        Err(err) => {
+            eprintln!("{err:?}");
             return;
         }
     };

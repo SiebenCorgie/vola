@@ -7,16 +7,16 @@
  */
 use ahash::AHashMap;
 use rvsdg::{
-    edge::{OutportLocation, OutputType},
+    edge::{InputType, OutportLocation, OutputType},
     region::RegionLocation,
     smallvec::{smallvec, SmallVec},
     NodeRef,
 };
-use vola_ast::{common::Ident, csg::CSGStmt};
+use vola_ast::common::Ident;
 use vola_common::{ariadne::Label, error::error_reporter, report, Span};
 
 use crate::{
-    ast::block_builder::{BlockBuilder, FetchStmt, ReturnExpr},
+    ast::block_builder::{BlockBuilder, BlockBuilderConfig},
     common::{LmdContext, Ty},
     error::OptError,
     Optimizer,
@@ -104,7 +104,7 @@ impl Optimizer {
         }
 
         let mut input_signature = SmallVec::new();
-        for typed_ident in fielddef.inputs.iter() {
+        for typed_ident in fielddef.args.iter() {
             let ty: Ty = typed_ident.ty.clone().into();
             input_signature.push((typed_ident.ident.clone(), ty));
         }
@@ -120,26 +120,39 @@ impl Optimizer {
         let lmd_ctx =
             LmdContext::new_for_fielddef(&mut self.graph, &mut self.typemap, lambda, &fielddef);
 
-        let block_builder = BlockBuilder {
+        let mut block_builder = BlockBuilder {
+            config: BlockBuilderConfig::field_def(),
             span: fielddef.span.clone(),
             csg_operands: AHashMap::with_capacity(0),
-            is_eval_allowed: false,
             return_type: smallvec![Ty::CSGTree],
             lmd_ctx,
             region: lambda_region,
             opt: self,
         };
 
-        let stmts = fielddef
-            .stmts
-            .into_iter()
-            .map(|stm| match stm {
-                CSGStmt::LetStmt(l) => FetchStmt::Let(l),
-                CSGStmt::CSGBinding(b) => FetchStmt::CSGBind(b),
+        let return_expr_port = block_builder.build_block(fielddef.block)?;
+        assert!(return_expr_port.len() == 1);
+        let result_index = self
+            .graph
+            .node_mut(lambda)
+            .node_type
+            .unwrap_lambda_mut()
+            .add_result();
+        //and wire it to the output
+        let edg = self
+            .graph
+            .on_region(&lambda_region, |reg| {
+                reg.connect_to_result(return_expr_port[0].1, InputType::Result(result_index))
+                    .unwrap()
             })
-            .collect();
-        let retexpr = ReturnExpr::CsgOp(fielddef.ret);
-        block_builder.build_block(stmts, retexpr)?;
+            .unwrap();
+
+        if let Some(ty) = &return_expr_port[0].0 {
+            //typedef the edge to a CSGTree
+            self.graph.edge_mut(edg).ty.set_type(ty.clone());
+        } else {
+            log::warn!("field-def outport was not type!");
+        }
 
         let def = FieldDef {
             span: fielddef.span,
@@ -181,28 +194,6 @@ impl Optimizer {
                 inputty.clone(),
             );
         }
-
-        assert!(
-            self.graph
-                .node(def.lambda)
-                .node_type
-                .unwrap_lambda_ref()
-                .result_count()
-                == 1
-        );
-        self.graph
-            .edge_mut(
-                self.graph
-                    .node(def.lambda)
-                    .node_type
-                    .unwrap_lambda_ref()
-                    .result(0)
-                    .unwrap()
-                    .edge
-                    .unwrap(),
-            )
-            .ty
-            .set_type(Ty::CSGTree);
 
         self.field_def.insert(fieldef_name, def);
 
