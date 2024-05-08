@@ -12,11 +12,11 @@ use rvsdg::{
     smallvec::{smallvec, SmallVec},
     NodeRef,
 };
-use vola_ast::{alge::AlgeStmt, common::Ident};
+use vola_ast::{common::{Ident, Stmt}};
 use vola_common::{ariadne::Label, error::error_reporter, report, Span};
 
 use crate::{
-    alge::WkOp, ast::block_builder::{BlockBuilder, FetchStmt, ReturnExpr}, common::{LmdContext, Ty}, OptError, Optimizer
+    alge::WkOp, ast::block_builder::{BlockBuilder, BlockBuilderConfig}, common::{LmdContext, Ty}, OptError, Optimizer
 };
 
 pub struct AlgeFn {
@@ -78,10 +78,10 @@ impl Optimizer {
         let lmd_ctx =
             LmdContext::new_for_alge_fn(&mut self.graph, &mut self.typemap, lambda, &alge_fn);
 
-        let block_builder = BlockBuilder{
+        let mut block_builder = BlockBuilder{
+            config: BlockBuilderConfig::alge_fn(),
             span: alge_fn.span.clone(),
             csg_operands: AHashMap::with_capacity(0),
-            is_eval_allowed: false,
             return_type: smallvec![alge_fn.return_type.clone().into()],
             lmd_ctx,
             region: lambda_region,
@@ -89,14 +89,37 @@ impl Optimizer {
         };
 
         //build the block
-        block_builder.build_block(
-            alge_fn.stmts.into_iter().map(|stm| match stm{
-                AlgeStmt::Let(l) => FetchStmt::Let(l),
-                AlgeStmt::Assign(assign) => FetchStmt::Assign(assign)
-            }).collect(), 
-            ReturnExpr::Expr(alge_fn.return_expr) 
-        )?;
+        let output_port = block_builder.build_block(alge_fn.block)?;
+        assert!(output_port.len() == 1);
+        
+        let result_index = self
+            .graph
+            .node_mut(lambda)
+            .node_type
+            .unwrap_lambda_mut()
+            .add_result();
+        let result_edge = self
+            .graph
+            .on_region(&lambda_region, |reg| {
+                reg.connect_to_result(
+                    output_port[0].1,
+                    rvsdg::edge::InputType::Result(result_index),
+                )
+                .unwrap()
+            })
+            .unwrap();
 
+        if let Some(retty) = &output_port[0].0{
+            let expected_ty: Ty = alge_fn.return_type.clone().into();
+            assert!(&expected_ty == retty);
+        }
+        
+        //set the result edge with the known result_type of the alge_fn
+        self.graph
+            .edge_mut(result_edge)
+            .ty
+            .set_type(alge_fn.return_type.clone().into());
+        
         //After emitting, setup the AlgeFn description and return
         let algedef = AlgeFn {
             span: alge_fn.span.clone(),

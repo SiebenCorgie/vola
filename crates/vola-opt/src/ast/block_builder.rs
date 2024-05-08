@@ -7,29 +7,69 @@
  */
 
 use ahash::AHashMap;
-use rvsdg::{edge::{InputType, OutportLocation, OutputType}, nodes::NodeType, region::RegionLocation, smallvec::SmallVec, NodeRef, SmallColl};
-use vola_ast::{alge::{AlgeExpr, AssignStmt, EvalExpr, LetStmt}, csg::{AccessDesc, CSGBinding}};
+use rvsdg::{edge::{InputType, OutportLocation, OutputType}, nodes::NodeType, region::{Outport, RegionLocation}, smallvec::{smallvec, SmallVec}, NodeRef, SmallColl};
+use vola_ast::{alge::{AssignStmt, EvalExpr, Expr, ExprTy, LetStmt}, common::Stmt, csg::{AccessDesc, CSGNodeTy, CsgStmt}};
 use vola_common::{ariadne::{Color, Fmt, Label}, error::error_reporter, report, Span};
 
 use crate::{common::{LmdContext, Ty}, csg::TreeAccess, OptError, OptNode, Optimizer};
 
 
-///Types of fetched statments for a block
-pub(crate) enum FetchStmt{
-    CSGBind(CSGBinding),
-    Let(LetStmt),
-    Assign(AssignStmt)
-}
 
 pub(crate) enum ReturnExpr{
-    AccessDescriptors(SmallColl<AccessDesc>),
-    Expr(AlgeExpr),
-    CsgOp(vola_ast::csg::CSGOp)
+    AccessDescriptors(AccessDesc),
+    Expr(Expr),
+    CsgOp(Expr)
+}
+
+impl ReturnExpr{
+    fn describe(&self) -> &str{
+        match self{
+            Self::AccessDescriptors(_) => "access-descriptor",
+            Self::Expr(_) => "algebraic-expression",
+            Self::CsgOp(_) => "csg-expression"
+        }
+    }
 }
 
 mod algeexpr;
 mod stmts;
 mod csgtree;
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum RetType{
+    AlgebraicExpr,
+    CsgTree,
+    AccessDesc,
+    None
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct BlockBuilderConfig{
+    //True only for impl-blocks and their 
+    //internal sub-blocks
+    pub allow_eval: bool,
+    pub expect_return: RetType,
+    pub allow_csg_stmt: bool,
+}
+
+impl BlockBuilderConfig{
+    pub fn impl_block(csgnode_ty: CSGNodeTy) -> Self{
+        BlockBuilderConfig { allow_eval: csgnode_ty == CSGNodeTy::Operation, expect_return: RetType::AlgebraicExpr, allow_csg_stmt: false }
+    }
+
+    pub fn alge_fn() -> Self{
+        BlockBuilderConfig { allow_eval: false, expect_return: RetType::AlgebraicExpr, allow_csg_stmt: false }
+    }
+
+    pub fn field_def() -> Self{
+        BlockBuilderConfig { allow_eval: false, expect_return: RetType::CsgTree, allow_csg_stmt: true }
+    }
+
+    pub fn export_fn() -> Self{
+        BlockBuilderConfig { allow_eval: false, expect_return: RetType::AccessDesc, allow_csg_stmt: true }
+    }
+}
+
 ///Handels the _block_ node of the AST.
 ///
 ///Mostly takes care of dispatchning the assignments
@@ -37,9 +77,9 @@ mod csgtree;
 ///semantic errors.
 pub struct BlockBuilder<'a> {
     pub span: Span,
+    pub config: BlockBuilderConfig,
     ///Named CSG operands, if there are any. Those cannot be shadowed.
     pub csg_operands: AHashMap<String, usize>,
-    pub is_eval_allowed: bool,
 
     ///If known, the return type(s) of the block
     pub return_type: SmallColl<Ty>,
@@ -54,6 +94,22 @@ pub struct BlockBuilder<'a> {
 
 impl<'a> BlockBuilder<'a> {
 
+    pub fn inherite_ctx<'b>(&'b mut self, span: Span, config: BlockBuilderConfig, return_type: SmallColl<Ty>) -> BlockBuilder<'b>{
+        BlockBuilder { 
+            span, 
+            config, 
+            csg_operands: self.csg_operands.clone(), 
+            return_type, 
+            lmd_ctx: self.lmd_ctx.clone(), 
+            region: self.region.clone(), 
+            opt: self.opt  
+        }
+    }
+
+    pub fn destroy_inherited(self) -> LmdContext{
+        self.lmd_ctx
+    }
+    
     fn parent_node(&self) -> NodeRef{
         self.region.node
     }
@@ -62,7 +118,7 @@ impl<'a> BlockBuilder<'a> {
         &mut self, 
         eval_expr: &EvalExpr
     ) -> Result<(OutportLocation, Ty), OptError>{
-        if !self.is_eval_allowed{
+        if !self.config.allow_eval{
             let err = OptError::Any { 
                 text: format!("Cannot use eval expression in this context.\nEval expressions are only allowed in concept implementations!"), 
             };
@@ -150,116 +206,201 @@ impl<'a> BlockBuilder<'a> {
     }
 
 
+
     ///Builds the block based on `stmts` and `ret`, and emits it into the given `region`.
+    ///Returns the return_expression's ports, if there is any.
     pub(crate) fn build_block(
-        mut self,
-        stmts: Vec<FetchStmt>,
-        ret: ReturnExpr,
-    ) -> Result<(), OptError>{
-        for stmt in stmts{
+        &mut self,
+        block: vola_ast::common::Block,
+    ) -> Result<SmallColl<(Option<Ty>, OutportLocation)>, OptError>{
+
+        
+        for stmt in block.stmts{
             match stmt{
-                FetchStmt::CSGBind(csgbind) => self.setup_csg_binding(csgbind)?,
-                FetchStmt::Let(letstmt) => self.setup_let(letstmt)?,
-                FetchStmt::Assign(assign) => self.setup_assign(assign)?,
+                Stmt::Csg(csgbind) => {
+                    if !self.config.allow_csg_stmt{
+                        let err = OptError::Any { text: format!("Csg Statement not allowed in this context") };
+                        report(error_reporter(err.clone(), csgbind.span.clone()).with_label(Label::new(csgbind.span.clone()).with_message("csg binding is not allowed in this context!")).finish());
+                        return Err(err);
+                    }
+                    self.setup_csg_binding(csgbind)?
+                },
+                Stmt::Let(letstmt) => self.setup_let(letstmt)?,
+                Stmt::Assign(assign) => self.setup_assign(assign)?,
+                Stmt::GammaExpr => todo!("setup gammaexpr"),
+                Stmt::ThetaExpr => todo!("setup thetaexpr"),
             }
         }
 
-        match ret{
-            ReturnExpr::AccessDescriptors(ad) => {
-                for access in ad{
-                    self.wire_access(access)?
+        let return_expression = if let Some(expr) = block.retexpr{
+            match self.config.expect_return{
+                RetType::AlgebraicExpr => Some(ReturnExpr::Expr(expr)),
+                RetType::CsgTree => Some(ReturnExpr::CsgOp(expr)),
+                RetType::AccessDesc => {
+                    if let ExprTy::AccessExpr(ad) = expr.expr_ty{
+                        Some(ReturnExpr::AccessDescriptors(ad))
+                    }else{                   
+                        let err = OptError::Any { text: format!("Expected a access-description at the end") };
+                        report(
+                            error_reporter(err.clone(), block.span.clone())
+                                .with_label(
+                                    Label::new(block.span.clone())
+                                        .with_message("consider adding it at the end of this block")
+                                )
+                                .finish()
+                        );
+                        return Err(err);
+                    }
+                },
+                RetType::None => {
+                    let err = OptError::Any { text: format!("Expected no return value") };
+                    report(
+                        error_reporter(err.clone(), block.span.clone())
+                            .with_label(
+                                Label::new(block.span.clone())
+                                    .with_message("consider removing the last expression from the end of this block")
+                            )
+                            .finish()
+                    );
+                    return Err(err);
                 }
-            },
-            ReturnExpr::Expr(expr) => {
-                self.wire_return_expr(expr)?;
             }
-            ReturnExpr::CsgOp(op) => {
-                self.wire_csgop(op)?;
+        }else{
+            if self.config.expect_return != RetType::None{
+                let err = OptError::Any { text: format!("Expected no return value") };
+                report(
+                    error_reporter(err.clone(), block.span.clone())
+                        .with_label(
+                            Label::new(block.span.clone())
+                                .with_message("consider removing the last expression from the end of this block")
+                        )
+                        .finish()
+                );
+                return Err(err);
+            }else{
+                None
+            }
+        };
+
+
+        match (self.config.expect_return.clone(), return_expression){
+            (RetType::AlgebraicExpr, Some(ReturnExpr::Expr(e))) => {
+                let expr = self.setup_alge_expr(e)?;
+
+                //Note we don't know the type of the expression yet, so just using _none_
+                Ok(smallvec![(None, expr)])
+            },
+            (RetType::AlgebraicExpr, None) => {
+                let err = OptError::Any { text: format!("Expected a algebraic return statment at the end") };
+                report(
+                    error_reporter(err.clone(), block.span.clone())
+                        .with_label(
+                            Label::new(block.span.clone())
+                                .with_message("consider adding a algebraic return expression at the end of this block")
+                        )
+                        .finish()
+                );
+                Err(err)
+            }
+            (RetType::CsgTree, Some(ReturnExpr::CsgOp(op))) => Ok(smallvec![(Some(Ty::CSGTree), self.setup_csg_tree(op)?)]),
+            (RetType::CsgTree, None) => {
+                let err = OptError::Any { text: format!("Expected a csg return statment at the end") };
+                report(
+                    error_reporter(err.clone(), block.span.clone())
+                        .with_label(
+                            Label::new(block.span.clone())
+                                .with_message("consider adding a csg-expression at the end of this block")
+                        )
+                        .finish()
+                );
+                Err(err)
+            }
+            (RetType::AccessDesc, Some(ReturnExpr::AccessDescriptors(ad))) => {
+                let access = self.build_access(ad)?.into_iter().map(|(ty, port)| (Some(ty), port)).collect();
+                Ok(access)
+            },
+            (RetType::AccessDesc, None) => {
+                let err = OptError::Any { text: format!("Expected a access-description at the end of this block") };
+                report(
+                    error_reporter(err.clone(), block.span.clone())
+                        .with_label(
+                            Label::new(block.span.clone())
+                                .with_message("consider adding a one, or a tuple of multiple eval expressions")
+                        )
+                        .finish()
+                );
+                Err(err)
+            }
+            (RetType::None, None) => Ok(SmallColl::new()),
+            (RetType::None, Some(any)) => {
+                let span = match &any{
+                    ReturnExpr::AccessDescriptors(ad) => ad.span.clone(),
+                    ReturnExpr::CsgOp(op) => op.op_span(),
+                    ReturnExpr::Expr(e) => e.span.clone(),
+                };
+                let err = OptError::Any { text: format!("Expected no return statment, but had a {}", any.describe()) };
+                report(
+                    error_reporter(err.clone(), span.clone())
+                        .with_label(
+                            Label::new(span.clone())
+                                .with_message("consider removing this, or making it a statement")
+                        ).finish()
+                );
+                Err(err)
+            },
+            (expected, any) => {
+                let err = OptError::Any { text: format!("Expected {:?} return statement, but got {}", expected, any.map(|t| t.describe().to_owned()).unwrap_or("none".to_owned())) };
+                report(
+                    error_reporter(err.clone(), block.span.clone())
+                        .with_label(
+                            Label::new(block.span.clone())
+                                .with_message("this block needs to be fixed")
+                        ).finish()
+                );
+                Err(err)
             }
         }
-
-        Ok(())
     }
 
-    fn wire_csgop(&mut self, op: vola_ast::csg::CSGOp) -> Result<(), OptError>{
-        let last_output = self.setup_csg_tree(op)?;
-        let result_index = self
-            .opt
-            .graph
-            .node_mut(self.parent_node())
-            .node_type
-            .unwrap_lambda_mut()
-            .add_result();
-        //and wire it to the output
-        self.opt.graph.on_region(&self.region, |reg| {
-            let _ = reg
-                .connect_to_result(last_output, InputType::Result(result_index))
-                .unwrap();
-        });
 
-        Ok(())
+    //Small subroutine that sets up the tree_access node and return the result output 
+    fn build_access(&mut self, access: AccessDesc) -> Result<SmallColl<(Ty, OutportLocation)>, OptError>{
+        let mut outports = SmallColl::new();
+        for acc in access.evals{
+            outports.push(self.build_sub_access(acc)?);
+        }
+        Ok(outports)
     }
-
-    fn wire_return_expr(&mut self, expr: AlgeExpr) -> Result<(), OptError>{
-        //at the end we simply encue the last expression and hook that up to our result
-        let last_output = self.setup_alge_expr(expr)?;
-        let result_index = self
-            .opt
-            .graph
-            .node_mut(self.parent_node())
-            .node_type
-            .unwrap_lambda_mut()
-            .add_result();
-        let result_edge = self
-            .opt
-            .graph
-            .on_region(&self.region, |reg| {
-                reg.connect_to_result(last_output, rvsdg::edge::InputType::Result(result_index))
-                    .unwrap()
-            })
-            .unwrap();
-
-        //finally, set the result edge with the known result_type of the alge_fn
-        assert!(self.return_type.len() == 1, "Expected single return type to be set already!");
-        self
-            .opt
-            .graph
-            .edge_mut(result_edge)
-            .ty
-            .set_type(self.return_type[0].clone());
-        Ok(())
-    }
-
-    fn wire_access(&mut self, access: AccessDesc) -> Result<(), OptError>{
+    fn build_sub_access(&mut self, access_eval: EvalExpr) -> Result<(Ty, OutportLocation), OptError>{
         
         //check if we can find the tree.
-        let field_src = match self.lmd_ctx.defined_vars.get(&access.tree_ref.0) {
+        let field_src = match self.lmd_ctx.defined_vars.get(&access_eval.evaluator.0) {
             Some(field_src) => field_src,
             None => {
                 return Err(OptError::report_variable_not_found(
-                    &access.span,
-                    &access.tree_ref.0,
+                    &access_eval.span,
+                    &access_eval.evaluator.0,
                 ));
             }
         };
 
-        let concept = match self.opt.concepts.get(&access.call.ident.0) {
+        let concept = match self.opt.concepts.get(&access_eval.concept.0) {
             None => {
                 return Err(OptError::report_no_concept(
-                    &access.span,
-                    &access.call.ident.0,
+                    &access_eval.span,
+                    &access_eval.concept.0,
                 ));
             }
             Some(con) => con,
         };
 
         //While at it, make sure the call-parameter-count matches
-        if concept.src_ty.len() != access.call.args.len() {
+        if concept.src_ty.len() != access_eval.params.len() {
             return Err(OptError::report_argument_missmatch(
                 &concept.span,
                 concept.src_ty.len(),
-                &access.span,
-                access.call.args.len(),
+                &access_eval.span,
+                access_eval.params.len(),
             ));
         }
 
@@ -269,7 +410,6 @@ impl<'a> BlockBuilder<'a> {
         let return_type: Ty = concept.dst_ty.clone().into();
 
         //register in output signature
-        let expected_output_idx = self.return_type.len();
         self.return_type.push(return_type.clone());
         
         //At this point we can be sure that the concept exists, and is at least called with the right amount
@@ -293,42 +433,30 @@ impl<'a> BlockBuilder<'a> {
                     .expect("Could not convert tree call arg to opttype"),
             );
         }
-        for arg in access.call.args {
+        for arg in access_eval.params {
             let arg_port = self.setup_alge_expr(arg)?;
             wires.push(arg_port);
         }
 
-        //add an result port to the lambda node
-        let resultidx = self
-            .opt
-            .graph
-            .node_mut(self.parent_node())
-            .node_type
-            .unwrap_lambda_mut()
-            .add_result();
-        assert!(resultidx == expected_output_idx);
-        let _access_output = self
+        
+        let access_output = self
             .opt
             .graph
             .on_region(&self.region, |reg| {
                 let (node, _) = reg
                     .connect_node(
                         OptNode::new(
-                            TreeAccess::new(concept_name, signature, return_type),
-                            access.span.clone(),
+                            TreeAccess::new(concept_name, signature, return_type.clone()),
+                            access_eval.span.clone(),
                         ),
                         &wires,
                     )
-                    .unwrap();
-
-                let _ = reg
-                    .connect_to_result(node.output(0), InputType::Result(resultidx))
                     .unwrap();
                 node.output(0)
             })
             .unwrap();
 
-        Ok(())
+        Ok((return_type, access_output))
     }
     
 }

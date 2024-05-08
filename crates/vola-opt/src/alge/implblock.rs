@@ -6,7 +6,7 @@
  * 2024 Tendsin Mende
  */
 use crate::{
-    ast::block_builder::{BlockBuilder, FetchStmt, ReturnExpr},
+    ast::block_builder::{BlockBuilder, BlockBuilderConfig, ReturnExpr},
     common::{LmdContext, Ty},
     error::OptError,
     Optimizer,
@@ -18,11 +18,7 @@ use rvsdg::{
     smallvec::smallvec,
     NodeRef, SmallColl,
 };
-use vola_ast::{
-    alge::{AlgeStmt, ImplBlock},
-    common::Ident,
-    csg::CSGNodeTy,
-};
+use vola_ast::{alge::ImplBlock, common::Ident, csg::CSGNodeTy};
 use vola_common::{ariadne::Label, error::error_reporter, report, Span};
 
 #[derive(Debug, Clone, PartialEq, Hash, Eq)]
@@ -233,29 +229,50 @@ impl Optimizer {
                     .map(|(idx, _)| src_concept.src_ty[idx].clone()),
             )
             .collect::<SmallColl<_>>();
-        let result_sig = src_concept.dst_ty.clone().into();
+        let result_sig: Ty = src_concept.dst_ty.clone().into();
 
-        let block_builder = BlockBuilder {
+        let mut block_builder = BlockBuilder {
+            config: BlockBuilderConfig::impl_block(src_csg_def.ty.clone()),
             span: implblock.span.clone(),
             csg_operands: operands.clone(),
-            is_eval_allowed: src_csg_def.ty == CSGNodeTy::Operation,
             return_type: smallvec![src_concept.dst_ty.clone().into()],
             lmd_ctx,
             region: lmd_region,
             opt: self,
         };
 
-        let stmts = implblock
-            .stmts
-            .into_iter()
-            .map(|stm| match stm {
-                AlgeStmt::Let(l) => FetchStmt::Let(l),
-                AlgeStmt::Assign(a) => FetchStmt::Assign(a),
+        let return_expr_port = block_builder.build_block(implblock.block)?;
+        assert!(return_expr_port.len() == 1);
+        //hookup the return port and type it
+        let result_index = self
+            .graph
+            .node_mut(lmd)
+            .node_type
+            .unwrap_lambda_mut()
+            .add_result();
+        let result_edge = self
+            .graph
+            .on_region(&lmd_region, |reg| {
+                reg.connect_to_result(
+                    return_expr_port[0].1,
+                    rvsdg::edge::InputType::Result(result_index),
+                )
+                .unwrap()
             })
-            .collect();
-        let retexpr = ReturnExpr::Expr(implblock.return_expr);
-        block_builder.build_block(stmts, retexpr)?;
+            .unwrap();
 
+        if let Some(retty) = &return_expr_port[0].0 {
+            let expected_ty: Ty = result_sig.clone().into();
+            assert!(&expected_ty == retty);
+        }
+
+        //set the result edge with the known result_type of the alge_fn
+        self.graph
+            .edge_mut(result_edge)
+            .ty
+            .set_type(result_sig.clone());
+
+        //Now build the final impl struct
         let concept_impl = ConceptImpl {
             span: implblock.span.clone(),
             concept: implblock.concept.clone(),
@@ -296,29 +313,6 @@ impl Optimizer {
                 self.graph.edge_mut(edg).ty.set_type(inputty.clone().into());
             }
         }
-
-        //now do the output. Thats a little easier, since we have, by definition just one output
-        assert!(
-            self.graph
-                .node(lmd)
-                .node_type
-                .unwrap_lambda_ref()
-                .result_count()
-                == 1
-        );
-        self.graph
-            .edge_mut(
-                self.graph
-                    .node(lmd)
-                    .node_type
-                    .unwrap_lambda_ref()
-                    .result(0)
-                    .unwrap()
-                    .edge
-                    .unwrap(),
-            )
-            .ty
-            .set_type(result_sig);
 
         let old = self.concept_impl.insert(concept_key, concept_impl);
         assert!(old.is_none(), "Had an old concept + node combination already, should have been caught before adding it!");

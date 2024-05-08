@@ -162,13 +162,13 @@ impl Ty {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct VarDef {
     pub port: OutportLocation,
     pub span: vola_common::Span,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct FnImport {
     pub port: OutportLocation,
     pub span: vola_common::Span,
@@ -177,7 +177,7 @@ pub struct FnImport {
 }
 
 ///Helper utility that keeps track of defined variables.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct LmdContext {
     ///Maps a variable name to an Value outport.
     pub defined_vars: AHashMap<String, VarDef>,
@@ -185,6 +185,14 @@ pub struct LmdContext {
 }
 
 impl LmdContext {
+    pub(crate) fn merge_inner_ctx(&mut self, ctx: Self) {
+        for (key, fn_import) in ctx.imported_functions {
+            if !self.imported_functions.contains_key(&key) {
+                self.imported_functions.insert(key, fn_import);
+            }
+        }
+    }
+
     pub fn new_for_impl_block(
         graph: &mut OptGraph,
         type_map: &mut FlagStore<Ty>,
@@ -263,7 +271,7 @@ impl LmdContext {
 
         let mut defined_vars = AHashMap::new();
 
-        for arg in exportfn.inputs.iter() {
+        for arg in exportfn.args.iter() {
             let arg_idx = graph
                 .node_mut(lmd)
                 .node_type
@@ -303,7 +311,7 @@ impl LmdContext {
 
         let mut defined_vars = AHashMap::new();
 
-        for arg in fielddef.inputs.iter() {
+        for arg in fielddef.args.iter() {
             let arg_idx = graph
                 .node_mut(lmd)
                 .node_type
