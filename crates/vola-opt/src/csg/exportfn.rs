@@ -106,12 +106,13 @@ impl Optimizer {
             opt: self,
         };
 
-        let outports = block_builder
+        let outports: SmallColl<_> = block_builder
             .build_block(exportfn.block)?
             .into_iter()
             .map(|(ty, port)| (ty.expect("export must always be typed!"), port))
             .collect();
-        self.wire_access(lambda_region, outports);
+
+        self.wire_access(lambda_region, outports)?;
 
         let exportfn = ExportFn {
             span: exportfn.span.clone(),

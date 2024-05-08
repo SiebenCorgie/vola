@@ -12,6 +12,6 @@ export myFn(at: vec3){
 		Sphere(1.0)
 	};
 
-	f.SDF3D(at)
+	eval f.SDF3D(at)
 }
 

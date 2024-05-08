@@ -14,5 +14,5 @@ export test(a: s){
 	let t = test(a);
 	csg r = Sphere(t);
 
-	r.SDF3D([a, 1.0, 1.0])
+	eval r.SDF3D([a, 1.0, 1.0])
 }

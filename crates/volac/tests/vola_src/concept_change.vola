@@ -26,5 +26,5 @@ export myField(at: vec3){
 		}
 	};
 
-	f.SDF3D(at)
+	eval f.SDF3D(at)
 }

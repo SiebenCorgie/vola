@@ -237,19 +237,21 @@ impl<'a> BlockBuilder<'a> {
                 RetType::AlgebraicExpr => Some(ReturnExpr::Expr(expr)),
                 RetType::CsgTree => Some(ReturnExpr::CsgOp(expr)),
                 RetType::AccessDesc => {
-                    if let ExprTy::AccessExpr(ad) = expr.expr_ty{
-                        Some(ReturnExpr::AccessDescriptors(ad))
-                    }else{                   
-                        let err = OptError::Any { text: format!("Expected a access-description at the end") };
-                        report(
-                            error_reporter(err.clone(), block.span.clone())
-                                .with_label(
-                                    Label::new(block.span.clone())
-                                        .with_message("consider adding it at the end of this block")
-                                )
-                                .finish()
-                        );
-                        return Err(err);
+                    match expr.expr_ty{
+                        ExprTy::AccessExpr(expr) => Some(ReturnExpr::AccessDescriptors(expr)),
+                        ExprTy::EvalExpr(expr) => Some(ReturnExpr::AccessDescriptors(AccessDesc { span: expr.span.clone(), evals: smallvec![expr] })),
+                        _ => {
+                            let err = OptError::Any { text: format!("Expected a access-description at the end") };
+                            report(
+                                error_reporter(err.clone(), block.span.clone())
+                                    .with_label(
+                                        Label::new(block.span.clone())
+                                            .with_message("consider adding it at the end of this block")
+                                    )
+                                    .finish()
+                            );
+                            return Err(err);
+                        }
                     }
                 },
                 RetType::None => {

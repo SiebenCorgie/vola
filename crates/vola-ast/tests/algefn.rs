@@ -1,8 +1,11 @@
 use vola_ast::{common::Ty, AstEntry, TopLevelNode};
 
+mod simple_parser;
+use simple_parser::parse_file;
+
 #[test]
 fn test_parse_fn() {
-    let ast = vola_ast::parse_file("tests/testfn.vola").unwrap();
+    let ast = parse_file(&"tests/testfn.vola");
 
     assert!(ast.entries.len() == 1);
     if let TopLevelNode {
@@ -21,7 +24,7 @@ fn test_parse_fn() {
         );
 
         assert!(f.return_type == Ty::Scalar);
-        assert!(f.stmts.len() == 1);
+        assert!(f.block.stmts.len() == 1);
     } else {
         panic!("Expected algefn");
     }

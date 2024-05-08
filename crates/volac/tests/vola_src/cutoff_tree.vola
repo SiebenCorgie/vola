@@ -34,5 +34,5 @@ export myField(at: vec3){
 		Box([1.0, 1.0, 1.0])
 	};
 
-	(t.SDF3D(at), t.Color(at))
+	(eval t.SDF3D(at), eval t.Color(at))
 }
