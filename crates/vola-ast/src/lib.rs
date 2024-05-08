@@ -25,7 +25,7 @@ pub mod alge;
 pub mod common;
 pub mod csg;
 mod error;
-mod module;
+pub mod module;
 mod passes;
 
 pub use error::AstError;
@@ -33,11 +33,10 @@ use smallvec::smallvec;
 
 use std::path::Path;
 
-//#[cfg(feature = "dot")]
-//pub mod dot;
+#[cfg(feature = "dot")]
+pub mod dot;
 
 pub use module::Module;
-
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 use vola_common::{ariadne::Label, error::error_reporter, report, FileString, Span};

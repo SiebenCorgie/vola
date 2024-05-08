@@ -9,9 +9,9 @@ use smallvec::{smallvec, SmallVec};
 use vola_common::{ariadne::Label, error::error_reporter, report, Span};
 
 use vola_ast::{
-    alge::AlgeExpr,
-    common::{Call, Ident, TypedIdent},
-    csg::{AccessDesc, CSGBinding, CSGConcept, CSGNodeDef, CSGNodeTy, CSGOp},
+    alge::{EvalExpr, Expr},
+    common::{Block, Call, Ident, TypedIdent},
+    csg::{AccessDesc, CSGConcept, CSGNodeDef, CSGNodeTy, CsgStmt, ScopedCall},
 };
 
 use super::{FromTreeSitter, ParserCtx};
@@ -22,27 +22,114 @@ impl FromTreeSitter for AccessDesc {
     where
         Self: Sized,
     {
-        ParserError::assert_node_kind(ctx, node, "access_decl")?;
+        ParserError::assert_node_kind(ctx, node, "access_desc")?;
 
-        let src_tree = Ident::parse(ctx, dta, &node.child(0).unwrap())?;
-        ParserError::consume_expected_node_string(ctx, dta, node.child(1), ".")?;
-        let concept_call = Call::parse(ctx, dta, &node.child(2).unwrap())?;
+        //There are two types of access_decs
+        //1: (eval, eval, eval)
+        //2. eval
+        //find that by checking for (
 
+        let mut walker = node.walk();
+        let mut children = node.children(&mut walker);
+
+        let first_node = children.next().unwrap();
+
+        let ad = match first_node.kind() {
+            "(" => {
+                //case 1.
+                let mut evals = SmallVec::new();
+                loop {
+                    let next_node = children.next().unwrap();
+                    match next_node.kind() {
+                        "eval_expr" => evals.push(EvalExpr::parse(ctx, dta, &next_node)?),
+                        ")" => break,
+                        _ => {
+                            let err = ParserError::UnexpectedAstNode {
+                                kind: next_node.kind().to_owned(),
+                                expected: "eval_expr | \",\"".to_owned(),
+                            };
+
+                            report(
+                                error_reporter(err.clone(), ctx.span(&next_node))
+                                    .with_label(
+                                        Label::new(ctx.span(&next_node)).with_message("here"),
+                                    )
+                                    .finish(),
+                            );
+                            return Err(err);
+                        }
+                    }
+                    //parse either the end, or the ,
+                    let next_node = children.next().unwrap();
+                    match next_node.kind() {
+                        "," => {}
+                        ")" => break,
+                        _ => {
+                            let err = ParserError::UnexpectedAstNode {
+                                kind: next_node.kind().to_owned(),
+                                expected: "eval_expr | \",\"".to_owned(),
+                            };
+
+                            report(
+                                error_reporter(err.clone(), ctx.span(&next_node))
+                                    .with_label(
+                                        Label::new(ctx.span(&next_node)).with_message("here"),
+                                    )
+                                    .finish(),
+                            );
+                            return Err(err);
+                        }
+                    }
+                }
+
+                if evals.len() == 0 {
+                    let err = ParserError::NoChildAvailable;
+
+                    report(
+                        error_reporter(err.clone(), ctx.span(&node))
+                            .with_label(Label::new(ctx.span(&node)).with_message(
+                                "expected this tuple to have at least one eval expression",
+                            ))
+                            .finish(),
+                    );
+                    return Err(err);
+                }
+                AccessDesc {
+                    span: ctx.span(node),
+                    evals,
+                }
+            }
+            "eval_expr" => AccessDesc {
+                span: ctx.span(node),
+                evals: smallvec![EvalExpr::parse(ctx, dta, &first_node)?],
+            },
+            _ => {
+                let err = ParserError::UnexpectedAstNode {
+                    kind: node.kind().to_owned(),
+                    expected: "eval_expr | \"(\"".to_owned(),
+                };
+
+                report(
+                    error_reporter(err.clone(), ctx.span(&node))
+                        .with_label(Label::new(ctx.span(&node)).with_message("The access description is either a single eval statement, or a tupel of eval statements"))
+                        .finish(),
+                );
+                return Err(err);
+            }
+        };
+
+        ParserError::assert_ast_level_empty(ctx, children.next())?;
         ParserError::assert_node_no_error(ctx, node)?;
-        Ok(AccessDesc {
-            span: Span::from(node).with_file_maybe(ctx.get_file()),
-            tree_ref: src_tree,
-            call: concept_call,
-        })
+        Ok(ad)
     }
 }
 
-impl FromTreeSitter for CSGBinding {
+impl FromTreeSitter for CsgStmt {
     fn parse(ctx: &mut ParserCtx, dta: &[u8], node: &tree_sitter::Node) -> Result<Self, ParserError>
     where
         Self: Sized,
     {
-        ParserError::assert_node_kind(ctx, node, "csg_binding")?;
+        ParserError::assert_node_kind(ctx, node, "csg")?;
 
         let mut walker = node.walk();
         let mut children = node.children(&mut walker);
@@ -52,163 +139,53 @@ impl FromTreeSitter for CSGBinding {
 
         ParserError::consume_expected_node_string(ctx, dta, children.next(), "=")?;
 
-        let tree = CSGOp::parse(ctx, dta, &children.next().unwrap())?;
-
+        let expr = Expr::parse(ctx, dta, &children.next().unwrap())?;
         ParserError::assert_ast_level_empty(ctx, children.next())?;
         ParserError::assert_node_no_error(ctx, node)?;
-        Ok(CSGBinding {
+        Ok(CsgStmt {
             span: Span::from(node).with_file_maybe(ctx.get_file()),
             decl_name: csg_ident,
-            tree,
+            expr,
         })
     }
 }
 
-impl FromTreeSitter for CSGOp {
+impl FromTreeSitter for ScopedCall {
     fn parse(ctx: &mut ParserCtx, dta: &[u8], node: &tree_sitter::Node) -> Result<Self, ParserError>
     where
         Self: Sized,
     {
-        if node.kind() != "csg_unary"
-            && node.kind() != "csg_binary"
-            && node.kind() != "fn_call"
-            && node.kind() != "identifier"
-        {
-            let err = ParserError::UnexpectedAstNode {
-                kind: node.kind().to_owned(),
-                expected: "csg_unary | csg_binary | fn_call | identifier".to_owned(),
-            };
+        ParserError::assert_node_kind(ctx, node, "scope_call")?;
 
+        let mut walker = node.walk();
+        let mut children = node.children(&mut walker);
+
+        let call = Call::parse(ctx, dta, &children.next().unwrap())?;
+
+        let mut blocks = Vec::with_capacity(2);
+        while let Some(next_node) = children.next() {
+            blocks.push(Block::parse(ctx, dta, &next_node)?);
+        }
+
+        if blocks.len() == 0 {
+            let err = ParserError::NoChildAvailable;
             report(
                 error_reporter(err.clone(), ctx.span(&node))
-                    .with_label(Label::new(ctx.span(&node)).with_message("On this string"))
+                    .with_label(
+                        Label::new(ctx.span(&node))
+                            .with_message("expected at least one block after this scoped call"),
+                    )
                     .finish(),
             );
             return Err(err);
         }
 
-        //Right now there are three kinds of CSGOPs
-        // 1. csg_unary / single sub tree,
-        // 2. csg_binary / two sub trees,
-        // 3. fn_call / primitive call,
-        //
-        // NOTE: This might change at some point, if we want to allow an arbitrary amount of sub-trees.
-        //       But for now we mirror miniSDF's language in this point.
-        //
-        //
-        // Parsing wise, we always first parse a fn_call structure, then, depending on the kind
-        // either 0, 1 or 2 sub trees.
-
-        let mut walker = node.walk();
-        let mut children = node.children(&mut walker);
-
-        //If this is a identifier only call, early return with just that.
-        // This is the case when referencing a local variable.
-        if node.kind() == "identifier" {
-            let ident = Ident::parse(ctx, dta, node)?;
-            ParserError::assert_ast_level_empty(ctx, children.next())?;
-            ParserError::assert_node_no_error(ctx, node)?;
-            return Ok(CSGOp {
-                span: Span::from(node).with_file_maybe(ctx.get_file()),
-                op: ident,
-                args: SmallVec::new(),
-                sub_trees: Vec::with_capacity(0),
-                is_local_reference: true,
-            });
-        }
-
-        let ident = Ident::parse(ctx, dta, &children.next().unwrap())?;
-
-        ParserError::consume_expected_node_string(ctx, dta, children.next(), "(")?;
-
-        let mut params = SmallVec::new();
-        while let Some(next_node) = children.next() {
-            match next_node.kind() {
-                ")" => {
-                    ParserError::consume_expected_node_string(ctx, dta, Some(next_node), ")")?;
-                    break;
-                }
-                "alge_expr" => params.push(AlgeExpr::parse(ctx, dta, &next_node)?),
-                _ => {
-                    let err = ParserError::UnexpectedAstNode {
-                        kind: next_node.kind().to_owned(),
-                        expected: "alge_expr".to_owned(),
-                    };
-                    report(
-                        error_reporter(err.clone(), ctx.span(&next_node))
-                            .with_label(
-                                Label::new(ctx.span(&next_node)).with_message("in this region"),
-                            )
-                            .finish(),
-                    );
-                    return Err(err);
-                }
-            }
-
-            let next_node = children.next().unwrap();
-            match next_node.kind() {
-                ")" => {
-                    ParserError::consume_expected_node_string(ctx, dta, Some(next_node), ")")?;
-                    break;
-                }
-                "," => {
-                    ParserError::consume_expected_node_string(ctx, dta, Some(next_node), ",")?;
-                }
-                _ => {
-                    let err = ParserError::UnexpectedAstNode {
-                        kind: next_node.kind().to_owned(),
-                        expected: " \",\" or )".to_owned(),
-                    };
-
-                    report(
-                        error_reporter(err.clone(), ctx.span(&next_node))
-                            .with_label(
-                                Label::new(ctx.span(&next_node)).with_message("in this region"),
-                            )
-                            .finish(),
-                    );
-                    return Err(err);
-                }
-            }
-        }
-
-        //now, depending on the actual node kind, parse one, two or zero sub trees
-        let sub_trees = match node.kind() {
-            "csg_unary" => {
-                let mut subtrees = Vec::with_capacity(1);
-                ParserError::consume_expected_node_string(ctx, dta, children.next(), "{")?;
-                subtrees.push(CSGOp::parse(ctx, dta, &children.next().unwrap())?);
-                ParserError::consume_expected_node_string(ctx, dta, children.next(), "}")?;
-                subtrees
-            }
-            "csg_binary" => {
-                let mut subtrees = Vec::with_capacity(2);
-                //left tree
-                ParserError::consume_expected_node_string(ctx, dta, children.next(), "{")?;
-                subtrees.push(CSGOp::parse(ctx, dta, &children.next().unwrap())?);
-                ParserError::consume_expected_node_string(ctx, dta, children.next(), "}")?;
-                //right tree
-                ParserError::consume_expected_node_string(ctx, dta, children.next(), "{")?;
-                subtrees.push(CSGOp::parse(ctx, dta, &children.next().unwrap())?);
-                ParserError::consume_expected_node_string(ctx, dta, children.next(), "}")?;
-
-                subtrees
-            }
-            "fn_call" => Vec::with_capacity(0),
-            _ => {
-                //NOTE this should error at fn entry already.
-                panic!("Failed at subtree parsing, should error earlier");
-            }
-        };
-
         ParserError::assert_ast_level_empty(ctx, children.next())?;
         ParserError::assert_node_no_error(ctx, node)?;
-        Ok(CSGOp {
+        Ok(ScopedCall {
             span: Span::from(node).with_file_maybe(ctx.get_file()),
-            op: ident,
-            args: params,
-            sub_trees,
-            is_local_reference: false,
+            call,
+            blocks,
         })
     }
 }

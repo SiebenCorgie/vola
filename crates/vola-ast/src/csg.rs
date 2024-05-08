@@ -21,6 +21,7 @@ use serde::{Deserialize, Serialize};
 pub struct ScopedCall {
     pub span: Span,
     pub call: Call,
+    //NOTE: using Vec, since _block_ can become pretty big
     pub blocks: Vec<Block>,
 }
 
@@ -37,7 +38,7 @@ impl ScopedCall {
 pub struct CsgStmt {
     pub span: Span,
     pub decl_name: Ident,
-    pub tree: Expr,
+    pub expr: Expr,
 }
 
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
@@ -45,6 +46,7 @@ pub struct CsgStmt {
 pub struct FieldDef {
     pub span: Span,
     pub name: Ident,
+    pub args: SmallVec<[TypedIdent; 2]>,
     pub block: Block,
 }
 
@@ -54,7 +56,7 @@ pub struct FieldDef {
 pub struct ExportFn {
     pub span: Span,
     pub name: Ident,
-    pub inputs: SmallVec<[TypedIdent; 2]>,
+    pub args: SmallVec<[TypedIdent; 2]>,
     pub block: Block,
 }
 
@@ -65,7 +67,7 @@ pub struct ExportFn {
 #[derive(Clone, Debug)]
 pub struct AccessDesc {
     pub span: Span,
-    pub evals: EvalExpr,
+    pub evals: SmallVec<[EvalExpr; 3]>,
 }
 
 ///All types of nodes in a CSGTree

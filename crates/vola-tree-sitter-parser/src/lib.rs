@@ -13,11 +13,11 @@ use vola_common::{error::error_reporter, report, FileString, Span};
 
 use vola_ast::{common::CTArg, AstEntry, TopLevelNode, VolaAst};
 pub mod alge;
+pub mod block;
 pub mod common;
 pub mod csg;
 pub mod error;
 pub mod toplevel;
-
 ///Context on the parser, like the current src file, and errors that occured, but are ignored.
 pub struct ParserCtx {
     deep_errors: Vec<ParserError>,

@@ -91,7 +91,7 @@ pub struct Call {
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Clone, Debug)]
 pub enum Stmt {
-    LetS(LetStmt),
+    Let(LetStmt),
     Assign(AssignStmt),
     Csg(CsgStmt),
     GammaExpr,

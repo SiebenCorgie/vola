@@ -6,10 +6,10 @@
  * 2024 Tendsin Mende
  */
 use smallvec::SmallVec;
-use vola_common::{error::error_reporter, report, Span};
+use vola_common::{ariadne::Label, error::error_reporter, report, Span};
 
 use vola_ast::{
-    alge::AlgeExpr,
+    alge::Expr,
     common::{Call, Digit, Ident, Literal, Ty, TypedIdent},
     Module,
 };
@@ -67,7 +67,11 @@ impl FromTreeSitter for Digit {
             let err = ParserError::EmptyParse {
                 kind: "digit".to_owned(),
             };
-            report(error_reporter(err.clone(), ctx.span(node)).finish());
+            report(
+                error_reporter(err.clone(), ctx.span(node))
+                    .with_label(Label::new(ctx.span(node)).with_message("here"))
+                    .finish(),
+            );
             return Err(err);
         }
 
@@ -244,7 +248,11 @@ impl FromTreeSitter for Literal {
             "integer_literal" => {
                 //reuse the digit parser, but unwrap the value
                 let digit = Digit::parse(ctx, dta, &node.child(0).unwrap())?;
-
+                ParserError::assert_node_no_error(ctx, node)?;
+                Ok(Literal::IntegerLiteral(digit.0))
+            }
+            "digit" => {
+                let digit = Digit::parse(ctx, dta, &node)?;
                 ParserError::assert_node_no_error(ctx, node)?;
                 Ok(Literal::IntegerLiteral(digit.0))
             }
@@ -301,11 +309,11 @@ impl FromTreeSitter for Call {
                 "," => {
                     ParserError::consume_expected_node_string(ctx, dta, Some(next_node), ",")?;
                 }
-                "alge_expr" => args.push(AlgeExpr::parse(ctx, dta, &next_node)?),
+                "expr" => args.push(Expr::parse(ctx, dta, &next_node)?),
                 _ => {
                     let err = ParserError::UnexpectedAstNode {
                         kind: next_node.kind().to_string(),
-                        expected: "alge_expr".to_owned(),
+                        expected: "expr".to_owned(),
                     };
                     report(error_reporter(err.clone(), ctx.span(&next_node)).finish());
                     return Err(err);

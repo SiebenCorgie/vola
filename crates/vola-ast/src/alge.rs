@@ -11,7 +11,7 @@ use std::fmt::Display;
 
 use crate::{
     common::{Block, Call, Ident, Literal, Ty, TypedIdent},
-    csg::ScopedCall,
+    csg::{AccessDesc, ScopedCall},
 };
 use smallvec::SmallVec;
 use vola_common::Span;
@@ -40,7 +40,7 @@ pub enum BinaryOp {
 #[derive(Clone, Debug)]
 pub struct Expr {
     pub span: Span,
-    pub expr_ty: AlgeExprTy,
+    pub expr_ty: ExprTy,
 }
 
 impl Expr {
@@ -52,13 +52,13 @@ impl Expr {
     /// Thats what this function is for.
     pub fn op_span(&self) -> Span {
         match &self.expr_ty {
-            AlgeExprTy::Unary { op: _, operand } => {
+            ExprTy::Unary { op: _, operand } => {
                 let mut subspan = self.span.clone();
                 subspan.byte_end = operand.span.byte_start;
                 subspan.to = operand.span.from;
                 subspan
             }
-            AlgeExprTy::Binary { left, right, op: _ } => {
+            ExprTy::Binary { left, right, op: _ } => {
                 let mut span = self.span.clone();
                 span.byte_start = left.span.byte_end;
                 span.from = left.span.to;
@@ -66,7 +66,7 @@ impl Expr {
                 span.to = right.span.from;
                 span
             }
-            AlgeExprTy::Call(c) => {
+            ExprTy::Call(c) => {
                 if c.args.len() > 0 {
                     let mut span = c.span.clone();
                     span.byte_end = c.args[0].span.byte_start;
@@ -76,14 +76,15 @@ impl Expr {
                     c.span.clone()
                 }
             }
-            AlgeExprTy::EvalExpr(eexpr) => eexpr.span.clone(),
-            AlgeExprTy::FieldAccess { .. } => self.span.clone(),
-            AlgeExprTy::Ident(_i) => self.span.clone(),
-            AlgeExprTy::List(_) => self.span.clone(),
-            AlgeExprTy::Literal(_) => self.span.clone(),
-            AlgeExprTy::ScopedCall(c) => c.head_span(),
-            AlgeExprTy::ThetaExpr => self.span.clone(),
-            AlgeExprTy::GammaExpr => self.span.clone(),
+            ExprTy::EvalExpr(eexpr) => eexpr.span.clone(),
+            ExprTy::FieldAccess { .. } => self.span.clone(),
+            ExprTy::Ident(_i) => self.span.clone(),
+            ExprTy::List(_) => self.span.clone(),
+            ExprTy::Literal(_) => self.span.clone(),
+            ExprTy::ScopedCall(c) => c.head_span(),
+            ExprTy::ThetaExpr => self.span.clone(),
+            ExprTy::GammaExpr => self.span.clone(),
+            ExprTy::AccessExpr(e) => e.span.clone(),
         }
     }
 }
@@ -121,7 +122,7 @@ impl FieldAccessor {
 
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Clone, Debug)]
-pub enum AlgeExprTy {
+pub enum ExprTy {
     Unary {
         op: UnaryOp,
         operand: Box<Expr>,
@@ -141,6 +142,7 @@ pub enum AlgeExprTy {
     ScopedCall(Box<ScopedCall>),
     List(Vec<Expr>),
     Literal(Literal),
+    AccessExpr(AccessDesc),
     GammaExpr,
     ThetaExpr,
 }

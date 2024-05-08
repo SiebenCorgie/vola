@@ -124,7 +124,13 @@ impl ParserError {
     ) -> Result<(), Self> {
         match node {
             None => {
-                report(error_reporter(Self::NoChildAvailable, Span::empty()).finish());
+                report(
+                    error_reporter(Self::NoChildAvailable, Span::empty())
+                        .with_message(&format!(
+                            "tried to consume node of kind {kind}, but there was no child!"
+                        ))
+                        .finish(),
+                );
                 return Err(Self::NoChildAvailable);
             }
             Some(node) => Self::assert_node_kind(ctx, &node, kind),
@@ -139,7 +145,7 @@ impl ParserError {
     ) -> Result<(), Self> {
         match node {
             None => {
-                report(error_reporter(Self::NoChildAvailable, Span::empty()).finish());
+                report(error_reporter(Self::NoChildAvailable, Span::empty()).with_message(&format!("tried to consume node with string {string}, but there was no node at all")).finish());
                 return Err(Self::NoChildAvailable);
             }
             Some(node) => Self::assert_node_string(ctx, dta, &node, string),
