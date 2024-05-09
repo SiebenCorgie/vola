@@ -6,7 +6,7 @@
  * 2024 Tendsin Mende
  */
 
-use vola_ast::csg::CsgStmt;
+use vola_ast::{common::GammaExpr, csg::CsgStmt};
 use vola_common::{ariadne::Label, error::error_reporter, report};
 
 use crate::{
@@ -142,5 +142,9 @@ Note that vola does not support shadowing. If you just want to change the value 
         self.opt.typemap.set(def_port.into(), Ty::CSGTree);
 
         Ok(())
+    }
+
+    pub(crate) fn setup_gamma_stmt(&mut self, gamma: GammaExpr) -> Result<(), OptError> {
+        todo!()
     }
 }

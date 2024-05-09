@@ -110,7 +110,11 @@ impl vola_ast::VolaParser for VolaTreeSitterParser {
         src_file: Option<FileString>,
         byte: &[u8],
     ) -> Result<VolaAst, vola_ast::AstError> {
-        parse_data(byte, src_file.clone()).map_err(|(_partial_ast, e)| {
+        parse_data(byte, src_file.clone()).map_err(|(partial_ast, e)| {
+            if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("VOLA_DUMP_AST").is_ok() {
+                vola_ast::dot::ast_to_svg(&partial_ast, "partial_ast.svg");
+            }
+
             vola_ast::AstError::ParsingError {
                 path: src_file
                     .map(|f| f.to_string())

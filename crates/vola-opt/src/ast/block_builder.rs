@@ -226,7 +226,7 @@ impl<'a> BlockBuilder<'a> {
                 },
                 Stmt::Let(letstmt) => self.setup_let(letstmt)?,
                 Stmt::Assign(assign) => self.setup_assign(assign)?,
-                Stmt::GammaExpr => todo!("setup gammaexpr"),
+                Stmt::GammaExpr(g) => self.setup_gamma_stmt(*g)?,
                 Stmt::ThetaExpr => todo!("setup thetaexpr"),
             }
         }

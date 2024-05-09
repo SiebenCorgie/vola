@@ -215,9 +215,8 @@ impl Optimizer {
             ast_add_start.elapsed().as_nanos()
         );
 
-        if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("DUMP_AST_ADD").is_ok() {
-            //self.dump_svg("ast_add.svg", false);
-            self.push_debug_state("AST add");
+        if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("VOLA_DUMP_AST").is_ok() {
+            self.push_debug_state("AST to Opt");
         }
 
         if errors.len() > 0 {

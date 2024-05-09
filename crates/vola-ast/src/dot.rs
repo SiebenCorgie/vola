@@ -16,7 +16,7 @@ use vola_common::dot::{
 
 use crate::{
     alge::{AlgeFunc, AssignStmt, EvalExpr, Expr, ExprTy, FieldAccessor, ImplBlock, LetStmt},
-    common::{Block, CTArg, Call, Stmt, TypedIdent},
+    common::{Block, CTArg, Call, GammaExpr, Stmt, TypedIdent},
     csg::{AccessDesc, CSGConcept, CSGNodeDef, CSGNodeTy, CsgStmt, ExportFn, FieldDef, ScopedCall},
     AstEntry, TopLevelNode, VolaAst,
 };
@@ -267,7 +267,7 @@ impl DotNode for Stmt {
             Self::Assign(a) => a.id(),
             Self::Let(l) => l.id(),
             Self::Csg(c) => c.id(),
-            Self::GammaExpr => todo!(),
+            Self::GammaExpr(g) => g.id(),
             Self::ThetaExpr => todo!(),
         }
     }
@@ -276,7 +276,7 @@ impl DotNode for Stmt {
             Self::Assign(a) => a.content(),
             Self::Let(a) => a.content(),
             Self::Csg(c) => c.content(),
-            Self::GammaExpr => todo!(),
+            Self::GammaExpr(g) => g.content(),
             Self::ThetaExpr => todo!(),
         }
     }
@@ -285,7 +285,7 @@ impl DotNode for Stmt {
             Self::Assign(a) => a.build_children(builder),
             Self::Let(l) => l.build_children(builder),
             Self::Csg(c) => c.build_children(builder),
-            Self::GammaExpr => todo!(),
+            Self::GammaExpr(g) => g.build_children(builder),
             Self::ThetaExpr => todo!(),
         }
     }
@@ -360,6 +360,43 @@ impl DotNode for EvalExpr {
     }
 }
 
+impl DotNode for GammaExpr {
+    fn id(&self) -> String {
+        format!("GammaExpr {:?}..{:?}", self.span.from, self.span.to)
+    }
+
+    fn content(&self) -> String {
+        format!(
+            "if-then<{}>-else<{}>",
+            self.conditionals.len() - 1,
+            self.unconditional.is_some()
+        )
+    }
+
+    fn color(&self) -> vola_common::dot::graphviz_rust::attributes::color_name {
+        vola_common::dot::graphviz_rust::attributes::color_name::orange
+    }
+
+    fn build_children(&self, mut builder: GraphvizBuilder) -> GraphvizBuilder {
+        for (expr, block) in &self.conditionals {
+            builder.add_node(expr);
+            builder.add_node(block);
+            builder.connect(self, expr);
+            builder.connect(self, block);
+            builder = expr.build_children(builder);
+            builder = block.build_children(builder);
+        }
+
+        if let Some(uncond) = &self.unconditional {
+            builder.add_node(uncond);
+            builder.connect(self, uncond);
+            builder = uncond.build_children(builder);
+        }
+
+        builder
+    }
+}
+
 impl DotNode for ScopedCall {
     fn id(&self) -> String {
         format!("ScopedCall {:?}..{:?}", self.span.from, self.span.to)
@@ -376,7 +413,6 @@ impl DotNode for ScopedCall {
         builder.add_node(&self.call);
         builder.connect(self, &self.call);
         builder = self.call.build_children(builder);
-        println!("Scoped had {} blocks", self.blocks.len());
         for blk in &self.blocks {
             builder.add_node(blk);
             builder.connect(self, blk);

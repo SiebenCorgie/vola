@@ -718,8 +718,15 @@ impl SpvNode {
             WkOp::Sub => SpvOp::CoreOp(CoreOp::FSub),
             WkOp::Mul => SpvOp::CoreOp(CoreOp::FMul),
             WkOp::Div => SpvOp::CoreOp(CoreOp::FDiv),
-
             WkOp::Mod => SpvOp::CoreOp(CoreOp::FMod),
+
+            WkOp::Lt => SpvOp::CoreOp(CoreOp::FOrdLessThan),
+            WkOp::Gt => SpvOp::CoreOp(CoreOp::FOrdGreaterThan),
+            WkOp::Lte => SpvOp::CoreOp(CoreOp::FOrdLessThanEqual),
+            WkOp::Gte => SpvOp::CoreOp(CoreOp::FOrdGreaterThanEqual),
+
+            WkOp::And => SpvOp::CoreOp(CoreOp::LogicalAnd),
+            WkOp::Or => SpvOp::CoreOp(CoreOp::LogicalOr),
 
             WkOp::Dot => SpvOp::CoreOp(CoreOp::Dot),
             WkOp::Cross => SpvOp::GlslOp(GlOp::Cross),

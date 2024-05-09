@@ -1,0 +1,19 @@
+
+concept Color: vec3 -> vec3;
+operation ColorFlip();
+
+impl ColorFlip<sub> for Color(at){
+	if (at.x % 2.0) < 1.0{
+		vec3(1.0, 0.0, 0.0)
+	}else{
+		vec3(0.0, 1.0, 0.0)
+	}
+}
+
+export myField(at: vec3){
+	csg t = ColorFlip(){
+		Box([10.0, 10.0, 10.0])
+	};
+
+	eval t.Color(at)
+}

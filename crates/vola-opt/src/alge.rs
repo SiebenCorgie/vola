@@ -41,6 +41,16 @@ pub enum WkOp {
     Div,
     Mod,
 
+    //relation
+    Lt,
+    Gt,
+    Lte,
+    Gte,
+
+    //logical
+    And,
+    Or,
+
     //Call like ops we _know_
     Dot,
     Cross,
@@ -79,6 +89,14 @@ impl WkOp {
             WkOp::Mul => 2,
             WkOp::Div => 2,
             WkOp::Mod => 2,
+
+            WkOp::Lt => 2,
+            WkOp::Gt => 2,
+            WkOp::Lte => 2,
+            WkOp::Gte => 2,
+
+            WkOp::And => 2,
+            WkOp::Or => 2,
 
             WkOp::Dot => 2,
             WkOp::Cross => 2,
@@ -463,11 +481,10 @@ impl WkOp {
 
                 //seems to be alright, return scalar
                 Ok(Some(sig[0].clone()))
-            } /*
-              wk => Err(OptError::Any {
-                  text: format!("derive not implemented for {:?}", wk),
-              }),
-              */
+            }
+            wk => Err(OptError::Any {
+                text: format!("derive not implemented for {:?}", wk),
+            }),
         }
     }
 }
@@ -489,6 +506,14 @@ impl From<vola_ast::alge::BinaryOp> for WkOp {
             vola_ast::alge::BinaryOp::Mul => Self::Mul,
             vola_ast::alge::BinaryOp::Div => Self::Div,
             vola_ast::alge::BinaryOp::Mod => Self::Mod,
+
+            vola_ast::alge::BinaryOp::Lt => Self::Lt,
+            vola_ast::alge::BinaryOp::Gt => Self::Gt,
+            vola_ast::alge::BinaryOp::Gte => Self::Gte,
+            vola_ast::alge::BinaryOp::Lte => Self::Lte,
+
+            vola_ast::alge::BinaryOp::Or => Self::Or,
+            vola_ast::alge::BinaryOp::And => Self::And,
         }
     }
 }

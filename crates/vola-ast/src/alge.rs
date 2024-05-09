@@ -34,6 +34,14 @@ pub enum BinaryOp {
     Mul,
     Div,
     Mod,
+
+    Lt,
+    Gt,
+    Lte,
+    Gte,
+
+    Or,
+    And,
 }
 
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
