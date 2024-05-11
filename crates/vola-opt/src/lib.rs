@@ -247,8 +247,13 @@ impl Optimizer {
             }
         }
 
+        let layout_config = LayoutConfig {
+            ignore_dead_node: false,
+            ..Default::default()
+        };
+
         self.viewer_state
-            .new_state_builder(name, &self.graph)
+            .new_state_builder(name, &self.graph, &layout_config)
             .with_flags("Type", &typemap)
             .with_flags("Span", &self.span_tags)
             .with_flags("Name", &self.names)

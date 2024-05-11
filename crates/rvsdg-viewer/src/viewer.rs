@@ -93,9 +93,10 @@ impl ViewerState {
         &'a mut self,
         name: &str,
         graph: &Rvsdg<N, E>,
+        layout_config: &LayoutConfig,
     ) -> GraphStateBuilder<'a> {
         //layout the current graph
-        let tree = into_primitive_tree(graph, &LayoutConfig::default());
+        let tree = into_primitive_tree(graph, layout_config);
 
         GraphStateBuilder {
             viewer_state: self,

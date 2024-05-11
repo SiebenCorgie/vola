@@ -94,7 +94,6 @@ pub enum Stmt {
     Let(LetStmt),
     Assign(AssignStmt),
     Csg(CsgStmt),
-    GammaExpr(Box<GammaExpr>),
     ThetaExpr,
 }
 

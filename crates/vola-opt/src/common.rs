@@ -186,10 +186,18 @@ pub struct LmdContext {
 
 impl LmdContext {
     pub(crate) fn merge_inner_ctx(&mut self, ctx: Self) {
+        //merge imported functions
         for (key, fn_import) in ctx.imported_functions {
             if !self.imported_functions.contains_key(&key) {
                 self.imported_functions.insert(key, fn_import);
             }
+        }
+    }
+
+    pub fn empty() -> Self {
+        LmdContext {
+            defined_vars: AHashMap::new(),
+            imported_functions: AHashMap::new(),
         }
     }
 

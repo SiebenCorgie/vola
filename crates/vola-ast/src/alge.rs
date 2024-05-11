@@ -10,7 +10,7 @@
 use std::fmt::Display;
 
 use crate::{
-    common::{Block, Call, Ident, Literal, Ty, TypedIdent},
+    common::{Block, Call, GammaExpr, Ident, Literal, Ty, TypedIdent},
     csg::{AccessDesc, ScopedCall},
 };
 use smallvec::SmallVec;
@@ -91,7 +91,7 @@ impl Expr {
             ExprTy::Literal(_) => self.span.clone(),
             ExprTy::ScopedCall(c) => c.head_span(),
             ExprTy::ThetaExpr => self.span.clone(),
-            ExprTy::GammaExpr => self.span.clone(),
+            ExprTy::GammaExpr(e) => e.span.clone(),
             ExprTy::AccessExpr(e) => e.span.clone(),
         }
     }
@@ -151,7 +151,7 @@ pub enum ExprTy {
     List(Vec<Expr>),
     Literal(Literal),
     AccessExpr(AccessDesc),
-    GammaExpr,
+    GammaExpr(Box<GammaExpr>),
     ThetaExpr,
 }
 

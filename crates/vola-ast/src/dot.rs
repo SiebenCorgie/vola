@@ -267,7 +267,6 @@ impl DotNode for Stmt {
             Self::Assign(a) => a.id(),
             Self::Let(l) => l.id(),
             Self::Csg(c) => c.id(),
-            Self::GammaExpr(g) => g.id(),
             Self::ThetaExpr => todo!(),
         }
     }
@@ -276,7 +275,6 @@ impl DotNode for Stmt {
             Self::Assign(a) => a.content(),
             Self::Let(a) => a.content(),
             Self::Csg(c) => c.content(),
-            Self::GammaExpr(g) => g.content(),
             Self::ThetaExpr => todo!(),
         }
     }
@@ -285,7 +283,6 @@ impl DotNode for Stmt {
             Self::Assign(a) => a.build_children(builder),
             Self::Let(l) => l.build_children(builder),
             Self::Csg(c) => c.build_children(builder),
-            Self::GammaExpr(g) => g.build_children(builder),
             Self::ThetaExpr => todo!(),
         }
     }
@@ -431,6 +428,7 @@ impl DotNode for Expr {
             ExprTy::EvalExpr(e) => e.id(),
             ExprTy::Call(c) => c.id(),
             ExprTy::ScopedCall(s) => s.id(),
+            ExprTy::GammaExpr(e) => e.id(),
             _ => format!("AlgeExpr {:?}..{:?}", self.span.from, self.span.to),
         }
     }
@@ -457,7 +455,7 @@ impl DotNode for Expr {
             ExprTy::Literal(lit) => format!("Lit: {:?}", lit),
             ExprTy::ScopedCall(s) => s.content(),
             ExprTy::AccessExpr(_e) => format!("AccessDesc"),
-            ExprTy::GammaExpr => format!("Gamma"),
+            ExprTy::GammaExpr(e) => e.content(),
             ExprTy::ThetaExpr => format!("Theta"),
         }
     }
@@ -506,9 +504,8 @@ impl DotNode for Expr {
                 }
                 builder
             }
-            ExprTy::Ident(_) | ExprTy::Literal(_) | ExprTy::ThetaExpr | ExprTy::GammaExpr => {
-                builder
-            }
+            ExprTy::GammaExpr(e) => e.build_children(builder),
+            ExprTy::Ident(_) | ExprTy::Literal(_) | ExprTy::ThetaExpr => builder,
         }
     }
 }

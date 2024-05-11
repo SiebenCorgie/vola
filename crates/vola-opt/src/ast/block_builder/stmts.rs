@@ -143,8 +143,4 @@ Note that vola does not support shadowing. If you just want to change the value 
 
         Ok(())
     }
-
-    pub(crate) fn setup_gamma_stmt(&mut self, gamma: GammaExpr) -> Result<(), OptError> {
-        todo!()
-    }
 }

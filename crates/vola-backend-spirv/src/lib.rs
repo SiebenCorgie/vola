@@ -126,6 +126,8 @@ impl SpirvBackend {
 
     #[cfg(feature = "viewer")]
     pub fn push_debug_state(&mut self, name: &str) {
+        use rvsdg_viewer::layout::LayoutConfig;
+
         let mut local_typemap = self.typemap.clone();
         for edg in self.graph.edges() {
             if let Some(ty) = self.graph.edge(edg).ty.get_type() {
@@ -133,8 +135,13 @@ impl SpirvBackend {
             }
         }
 
+        let layout_config = LayoutConfig {
+            ignore_dead_node: false,
+            ..Default::default()
+        };
+
         self.viewer
-            .new_state_builder(name, &self.graph)
+            .new_state_builder(name, &self.graph, &layout_config)
             .with_flags("Name", &self.idents)
             .with_flags("Span", &self.spans)
             .with_flags("Type", &local_typemap)

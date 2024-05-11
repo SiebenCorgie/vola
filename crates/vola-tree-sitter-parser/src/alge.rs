@@ -237,6 +237,7 @@ impl FromTreeSitter for Expr {
                 ParserError::assert_ast_level_empty(ctx, children.next())?;
                 ExprTy::List(list)
             }
+            "gamma_expr" => ExprTy::GammaExpr(Box::new(GammaExpr::parse(ctx, dta, &child_node)?)),
             _ => {
                 let err = ParserError::UnexpectedAstNode {
                     kind: child_node.kind().to_owned(),
@@ -553,11 +554,6 @@ impl FromTreeSitter for Stmt {
             "csg" => {
                 let stmt = Self::Csg(CsgStmt::parse(ctx, dta, &stmtnode)?);
                 ParserError::consume_expected_node_string(ctx, dta, node.child(1), ";")?;
-                stmt
-            }
-            "gamma_expr" => {
-                let stmt = Self::GammaExpr(Box::new(GammaExpr::parse(ctx, dta, &stmtnode)?));
-                //NOTE: we don't consume a ";" since this is cf
                 stmt
             }
             "theta_expr" => todo!("implement theta expr parsing"),
