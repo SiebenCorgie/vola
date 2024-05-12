@@ -213,6 +213,7 @@ impl<'a> BlockBuilder<'a> {
         block: vola_ast::common::Block,
     ) -> Result<SmallColl<(Option<Ty>, OutportLocation)>, OptError>{
 
+        self.opt.span_tags.set(self.region.into(), self.span.clone());
         
         for stmt in block.stmts{
             match stmt{

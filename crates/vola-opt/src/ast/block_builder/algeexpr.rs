@@ -408,6 +408,7 @@ impl<'a> BlockBuilder<'a> {
             })
             .unwrap();
 
+        let condition_span = condition.span.clone();
         //allrighty, lets build the condition and hook that up.
         let condition = self.setup_alge_expr(condition)?;
         self.opt
@@ -422,18 +423,33 @@ impl<'a> BlockBuilder<'a> {
             )
             .unwrap();
 
+        //Tag the condition port and the node with a nice span
+        self.opt
+            .span_tags
+            .set(condition.into(), condition_span.clone());
+        self.opt
+            .span_tags
+            .set(condition.node.into(), condition_span.clone());
+
         //for the if-branch, always build a new block-builder which is based on the new var-mapping
         let if_lmd_ctx = LmdContext {
             defined_vars: inport_mapping
                 .iter()
                 .map(|(varname, gamma_inport)| {
+                    let old_var = self.lmd_ctx.defined_vars.get(varname).unwrap().clone();
                     let def = VarDef {
                         port: OutportLocation {
                             node: gamma_inport.node,
                             output: gamma_inport.input.map_to_in_region(0).unwrap(),
                         },
-                        span: self.lmd_ctx.defined_vars.get(varname).unwrap().span.clone(),
+                        span: old_var.span,
                     };
+
+                    //if we already know a type for the variable, for instance if the source is a
+                    // typed argument, pass that through.
+                    if let Some(ty) = self.opt.find_type(&old_var.port.into()) {
+                        self.opt.typemap.set(def.port.clone().into(), ty);
+                    }
 
                     (varname.clone(), def)
                 })
@@ -498,13 +514,20 @@ impl<'a> BlockBuilder<'a> {
             defined_vars: inport_mapping
                 .iter()
                 .map(|(varname, gamma_inport)| {
+                    let old_var = self.lmd_ctx.defined_vars.get(varname).unwrap().clone();
                     let def = VarDef {
                         port: OutportLocation {
                             node: gamma_inport.node,
                             output: gamma_inport.input.map_to_in_region(1).unwrap(),
                         },
-                        span: self.lmd_ctx.defined_vars.get(varname).unwrap().span.clone(),
+                        span: old_var.span,
                     };
+
+                    //if we already know a type for the variable, for instance if the source is a
+                    // typed argument, pass that through.
+                    if let Some(ty) = self.opt.find_type(&old_var.port.into()) {
+                        self.opt.typemap.set(def.port.clone().into(), ty);
+                    }
 
                     (varname.clone(), def)
                 })
@@ -539,13 +562,13 @@ impl<'a> BlockBuilder<'a> {
             },
             opt: &mut self.opt,
         };
+
         if rest_gamma.conditionals.len() > 0 {
             //recurse with the else block
             let (conditional, new_if_block) = rest_gamma.conditionals.remove(0);
 
             let result_port =
                 else_block_builder.gamma_splitoff(conditional, new_if_block, rest_gamma)?;
-
             //connect result to outport
             self.opt
                 .graph
@@ -582,7 +605,8 @@ impl<'a> BlockBuilder<'a> {
                 .unwrap();
         }
 
-        self.opt.dump_svg("dingdong.svg", false);
+        //tag the gamma with a span
+        self.opt.span_tags.set(gamma_node.into(), self.span.clone());
 
         //finally return the
         Ok(OutportLocation {

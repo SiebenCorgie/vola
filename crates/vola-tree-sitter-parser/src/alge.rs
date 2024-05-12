@@ -73,6 +73,8 @@ impl FromTreeSitter for Expr {
                     ">" => BinaryOp::Gt,
                     "<=" => BinaryOp::Lte,
                     ">=" => BinaryOp::Gte,
+                    "==" => BinaryOp::Eq,
+                    "!=" => BinaryOp::NotEq,
 
                     "||" => BinaryOp::Or,
                     "&&" => BinaryOp::And,

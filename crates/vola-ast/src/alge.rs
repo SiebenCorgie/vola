@@ -39,6 +39,8 @@ pub enum BinaryOp {
     Gt,
     Lte,
     Gte,
+    Eq,
+    NotEq,
 
     Or,
     And,

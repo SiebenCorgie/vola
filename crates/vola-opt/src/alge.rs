@@ -26,7 +26,7 @@ pub(crate) mod implblock;
 
 ///Well known ops for the optimizer. Includes all _BinaryOp_ of the Ast, as well as
 /// some well known _function_like_ ops in the SPIRV spec. For instance
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WkOp {
     //WK unary ops
     //TODO: do we really want to include NOT? I mean flipping floats is fun I guess,
@@ -46,6 +46,8 @@ pub enum WkOp {
     Gt,
     Lte,
     Gte,
+    Eq,
+    NotEq,
 
     //logical
     And,
@@ -94,6 +96,8 @@ impl WkOp {
             WkOp::Gt => 2,
             WkOp::Lte => 2,
             WkOp::Gte => 2,
+            WkOp::Eq => 2,
+            WkOp::NotEq => 2,
 
             WkOp::And => 2,
             WkOp::Or => 2,
@@ -482,6 +486,31 @@ impl WkOp {
                 //seems to be alright, return scalar
                 Ok(Some(sig[0].clone()))
             }
+            WkOp::Lt | WkOp::Gt | WkOp::Lte | WkOp::Gte | WkOp::Eq | WkOp::NotEq => {
+                //Right now we only allow those on scalars / nats, othewise we'd need a way to represent vecs
+                //of bools etc. Which we don't (yet, ever?).
+                if sig.len() != 2 {
+                    return Err(OptError::Any {
+                        text: format!("{:?} expects two operands, got {}", self, sig.len()),
+                    });
+                }
+
+                if sig[0] != sig[1] {
+                    return Err(OptError::Any {
+                        text: format!(
+                            "{:?} expectes the same type for both operands, got {} & {}",
+                            self, sig[0], sig[1]
+                        ),
+                    });
+                }
+
+                match &sig[0]{
+                    Ty::Nat | Ty::Scalar  =>  Ok(Some(Ty::Bool)),
+                    any => {
+                        Err(OptError::Any { text: format!("Cannot use comperator {:?} on {}. Consider breaking it down to either a simple scalar or natural value", self, any) })
+                    }
+                }
+            }
             wk => Err(OptError::Any {
                 text: format!("derive not implemented for {:?}", wk),
             }),
@@ -511,6 +540,8 @@ impl From<vola_ast::alge::BinaryOp> for WkOp {
             vola_ast::alge::BinaryOp::Gt => Self::Gt,
             vola_ast::alge::BinaryOp::Gte => Self::Gte,
             vola_ast::alge::BinaryOp::Lte => Self::Lte,
+            vola_ast::alge::BinaryOp::Eq => Self::Eq,
+            vola_ast::alge::BinaryOp::NotEq => Self::NotEq,
 
             vola_ast::alge::BinaryOp::Or => Self::Or,
             vola_ast::alge::BinaryOp::And => Self::And,

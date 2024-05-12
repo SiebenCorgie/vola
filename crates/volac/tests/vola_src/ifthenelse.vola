@@ -6,8 +6,10 @@ operation ColorFlip();
 impl ColorFlip<sub> for Color(at){
 	if (at.x % 2.0) < 1.0{
 		[at.x + 1.0, at.y, 0.0]
-	}else{
+	}else if at.y > 10.0{
 		[0.0, 1.0, 0.0]
+	}else{
+		[32.0, 64.0, 128.0]
 	}
 }
 

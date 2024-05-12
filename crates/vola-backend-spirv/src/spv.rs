@@ -724,6 +724,8 @@ impl SpvNode {
             WkOp::Gt => SpvOp::CoreOp(CoreOp::FOrdGreaterThan),
             WkOp::Lte => SpvOp::CoreOp(CoreOp::FOrdLessThanEqual),
             WkOp::Gte => SpvOp::CoreOp(CoreOp::FOrdGreaterThanEqual),
+            WkOp::Eq => SpvOp::CoreOp(CoreOp::FOrdEqual),
+            WkOp::NotEq => SpvOp::CoreOp(CoreOp::FOrdNotEqual),
 
             WkOp::And => SpvOp::CoreOp(CoreOp::LogicalAnd),
             WkOp::Or => SpvOp::CoreOp(CoreOp::LogicalOr),
