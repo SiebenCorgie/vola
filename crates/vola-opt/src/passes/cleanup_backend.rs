@@ -9,7 +9,15 @@ impl Optimizer {
         #[cfg(feature = "log")]
         log::info!("cleanup export λ-Nodes");
 
+        if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("DUMP_PRE_DNE").is_ok() {
+            self.push_debug_state("pre dead node elemination");
+        }
+
         let dnecount = self.graph.dead_node_elimination().unwrap().len();
+
+        if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("DUMP_DNE").is_ok() {
+            self.push_debug_state("post dead node elemination");
+        }
 
         #[cfg(feature = "log")]
         log::info!("Deleted {dnecount} nodes in DNE ");
@@ -28,6 +36,9 @@ impl Optimizer {
                 #[cfg(feature = "log")]
                 log::warn!("export port {} was not connected!", residx);
             }
+        }
+        if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("DUMP_CV_CLEANUP").is_ok() {
+            self.push_debug_state("post cv cleanup");
         }
     }
 }

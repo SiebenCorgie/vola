@@ -259,7 +259,6 @@ impl Optimizer {
             .with_flags("Name", &self.names)
             .build();
 
-        println!("Dumping {name}");
         if std::env::var("VOLA_ALWAYS_WRITE_DUMP").is_ok() {
             self.dump_debug_state(&format!("{name}.bin"));
         }

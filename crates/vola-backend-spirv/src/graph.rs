@@ -150,7 +150,7 @@ impl SpirvBackend {
     pub fn get_single_node_result_type(&self, node: NodeRef) -> Option<SpvType> {
         {
             let node = &self.graph.node(node).node_type;
-            if !node.is_simple() && !node.is_apply() {
+            if node.is_lambda() || node.is_delta() || node.is_phi() {
                 return None;
             }
         }

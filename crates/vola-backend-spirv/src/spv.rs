@@ -360,7 +360,7 @@ fn test_rule<'a>(
                     }else{
                          Err(BackendSpirvError::SpvLegalizationRuleFailed { inst: String::with_capacity(0), rule: rule.clone() })
                     },
-                    ArithBaseTy::Float => Err(BackendSpirvError::SpvLegalizationRuleFailed { inst: String::with_capacity(0), rule: rule.clone() }),
+                    ArithBaseTy::Float | ArithBaseTy::Bool => Err(BackendSpirvError::SpvLegalizationRuleFailed { inst: String::with_capacity(0), rule: rule.clone() }),
                 },
                 _ => Err(BackendSpirvError::SpvLegalizationMalformed { inst: String::with_capacity(0), text: format!("Rule checks component signedness, but operand {} of type {:?} has no arithmetic type!", operand, ty) }),
             }
@@ -419,6 +419,7 @@ fn test_rule<'a>(
 pub enum ArithBaseTy {
     Integer { signed: bool },
     Float,
+    Bool,
 }
 
 impl Display for ArithBaseTy {
@@ -432,6 +433,7 @@ impl Display for ArithBaseTy {
                 }
             }
             Self::Float => write!(f, "Float"),
+            Self::Bool => write!(f, "Bool"),
         }
     }
 }
@@ -442,6 +444,7 @@ impl ArithBaseTy {
         match (self, string) {
             (Self::Integer { .. }, "Integer") => true,
             (Self::Float, "FloatingPoint") => true,
+            (Self::Bool, "Bool") => true,
             _ => false,
         }
     }
@@ -570,6 +573,7 @@ impl SpvType {
             Self::Arith(a) => match a.base {
                 ArithBaseTy::Integer { .. } => Some(spirv_grammar_rules::Type::Integer),
                 ArithBaseTy::Float => Some(spirv_grammar_rules::Type::FloatingPoint),
+                ArithBaseTy::Bool => Some(spirv_grammar_rules::Type::Boolean),
             },
             _ => None,
         }
@@ -615,6 +619,11 @@ impl TryFrom<vola_opt::common::Ty> for SpvType {
                     dim: dim.into_iter().map(|d| d as u32).collect(),
                 },
                 resolution: 32,
+            }),
+            vola_opt::common::Ty::Bool => Self::Arith(ArithTy {
+                base: ArithBaseTy::Bool,
+                shape: TyShape::Scalar,
+                resolution: 1,
             }),
             any => return Err(BackendSpirvError::TypeConversionError(any)),
         };

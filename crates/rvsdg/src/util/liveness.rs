@@ -105,8 +105,10 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
                 // 2. always mark the theta-internal theta-predicate.
                 // 3. when tagging a λ-decleration, tag all results as live. (TODO: thats not compleatly correct, we should tag based on the unified _uses_ of all apply nodes, and only tag _all_ if the λ is exported).
                 //
-                // we take care of the gamma-predicate whenever bridigin _out_ of a region,
-                // and we take care of the theta predicate whenever bridign _into_ a region.
+
+                //If we are on a node with sub-regions, and the port we are currently considering is
+                //a argument. Then we need to map this argument _out-port_ to the argument
+                // in_port of that node. For instance entry-variables of a Gamma node
                 if src_port.output.is_argument() {
                     //so first step, the carry-over process
                     for _subregidx in 0..subreg_count {
@@ -121,83 +123,80 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
                             waiting_ports.push_back(new_inport);
                         }
                     }
+                }
 
-                    //now handle the edge_cases.
-                    //NOTE: this in facts marks the Gamma predicate multiple times. But that does not matter,
-                    //      since the next simple-like note will break that trace anyways. And I'm pretty sure
-                    //      that's cheaper than tracking _which predicate was marked already_.
-                    match &self.node(src_port.node).node_type {
-                        NodeType::Gamma(_) => {
-                            let gamma_pred = InportLocation {
-                                node: src_port.node,
-                                input: InputType::GammaPredicate,
-                            };
-                            flags.set(gamma_pred.clone().into(), true);
-                            waiting_ports.push_back(gamma_pred);
-                        }
-                        NodeType::Phi(_) => {
-                            //if src_port is an RV-Argument, make sure that the RV-Result (which defines the
-                            // argument's caller) is live.
-                            //WARN: Right now, the Phi node could potentually create a dead lock, by hooking up
-                            //      an RV-Argument to an RV-result.
-                            if let OutputType::RecursionVariableArgument(i) = src_port.output {
-                                let new_inport = InportLocation {
-                                    node: src_port.node,
-                                    input: InputType::RecursionVariableResult(i),
-                                };
-                                flags.set(new_inport.clone().into(), true);
-                                waiting_ports.push_back(new_inport);
-                            }
-                        }
-                        //all others are handeled by the mapping above.
-                        _ => {}
-                    }
-                } else {
-                    //so first step, the carry-over process
-                    for subregidx in 0..subreg_count {
-                        //check if we can carry over, to dat
-                        if let Some(carried_over_port) = src_port.output.map_to_in_region(subregidx)
-                        {
+                //Now, regardless of the port type,
+                //mark the gamma-theta predicate live or mark all results of a
+                // Lmd / Phi node live
+
+                //now handle the edge_cases.
+                //NOTE: this in facts marks the Theta predicate multiple times. But that does not matter,
+                //      since the next simple-like note will break that trace anyways. And I'm pretty sure
+                //      that's cheaper than tracking _which predicate was marked already_.
+                match &self.node(src_port.node).node_type {
+                    NodeType::Lambda(_) | NodeType::Delta(_) => {
+                        //activate _all_ results for the λ/ϕ/δ nodes.
+                        //TODO: Not entirely correct, we should analyse if those results are in fact used
+                        //      by the caller (in case of the delta and lambda nodes).
+
+                        for resport in self.node(src_port.node).result_types(0) {
+                            //flag as live and push back
                             let new_inport = InportLocation {
                                 node: src_port.node,
-                                input: carried_over_port,
+                                input: resport,
                             };
-                            //mark and push back.
                             flags.set(new_inport.clone().into(), true);
                             waiting_ports.push_back(new_inport);
                         }
                     }
-
-                    //now handle the edge_cases.
-                    //NOTE: this in facts marks the Theta predicate multiple times. But that does not matter,
-                    //      since the next simple-like note will break that trace anyways. And I'm pretty sure
-                    //      that's cheaper than tracking _which predicate was marked already_.
-                    match &self.node(src_port.node).node_type {
-                        NodeType::Lambda(_) | NodeType::Delta(_) => {
-                            //activate _all_ results for the λ/ϕ/δ nodes.
-                            //TODO: Not entirely correct, we should analyse if those results are in fact used
-                            //      by the caller (in case of the delta and lambda nodes).
-
-                            for resport in self.node(src_port.node).result_types(0) {
-                                //flag as live and push back
-                                let new_inport = InportLocation {
-                                    node: src_port.node,
-                                    input: resport,
-                                };
-                                flags.set(new_inport.clone().into(), true);
-                                waiting_ports.push_back(new_inport);
-                            }
-                        }
-                        NodeType::Theta(_t) => {
-                            let theta_pred = InportLocation {
+                    NodeType::Gamma(_g) => {
+                        let gamma_pred = InportLocation {
+                            node: src_port.node,
+                            input: InputType::GammaPredicate,
+                        };
+                        flags.set(gamma_pred.clone().into(), true);
+                        waiting_ports.push_back(gamma_pred);
+                    }
+                    NodeType::Theta(_t) => {
+                        let theta_pred = InportLocation {
+                            node: src_port.node,
+                            input: InputType::ThetaPredicate,
+                        };
+                        flags.set(theta_pred.clone().into(), true);
+                        waiting_ports.push_back(theta_pred);
+                    }
+                    NodeType::Phi(_) => {
+                        //if src_port is an RV-Argument, make sure that the RV-Result (which defines the
+                        // argument's caller) is live.
+                        //WARN: Right now, the Phi node could potentually create a dead lock, by hooking up
+                        //      an RV-Argument to an RV-result.
+                        if let OutputType::RecursionVariableArgument(i) = src_port.output {
+                            let new_inport = InportLocation {
                                 node: src_port.node,
-                                input: InputType::ThetaPredicate,
+                                input: InputType::RecursionVariableResult(i),
                             };
-                            flags.set(theta_pred.clone().into(), true);
-                            waiting_ports.push_back(theta_pred);
+                            flags.set(new_inport.clone().into(), true);
+                            waiting_ports.push_back(new_inport);
                         }
-                        //all others are handeled by the mapping above.
-                        _ => {}
+                    }
+                    //all others are handeled by the mapping above.
+                    _ => {}
+                }
+
+                //Finally, since we have >0 sub regions, mark the
+                //equivalent _in-region_ port live, if there is one
+
+                //so first step, the carry-over process
+                for subregidx in 0..subreg_count {
+                    //check if we can carry over, to dat
+                    if let Some(carried_over_port) = src_port.output.map_to_in_region(subregidx) {
+                        let new_inport = InportLocation {
+                            node: src_port.node,
+                            input: carried_over_port,
+                        };
+                        //mark and push back.
+                        flags.set(new_inport.clone().into(), true);
+                        waiting_ports.push_back(new_inport);
                     }
                 }
             } else {

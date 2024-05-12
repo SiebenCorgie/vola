@@ -105,8 +105,16 @@ impl SpirvBackend {
     ///
     /// Assumes that all nodes that are live/reachable (from any ω-result) are in the "alge" dialect.
     pub fn intern_module(&mut self, opt: &Optimizer) -> Result<(), BackendSpirvError> {
-        self.intern_opt_graph(opt)
-            .map_err(|e| BackendSpirvError::InterningError(e))
+        let res = self
+            .intern_opt_graph(opt)
+            .map_err(|e| BackendSpirvError::InterningError(e));
+
+        if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("VOLA_DUMP_SPV_INTERNED").is_ok()
+        {
+            self.push_debug_state("Opt interned into SPIR-V");
+        }
+
+        res
     }
 
     ///Builds the module based on the current configuration and graph.
@@ -146,9 +154,14 @@ impl SpirvBackend {
             .with_flags("Span", &self.spans)
             .with_flags("Type", &local_typemap)
             .build();
+
+        if std::env::var("VOLA_ALWAYS_WRITE_DUMP").is_ok() {
+            self.dump_debug_state(&format!("{name}.bin"));
+        }
     }
     #[cfg(feature = "viewer")]
-    pub fn dump_depug_state(&self, path: &dyn AsRef<std::path::Path>) {
+    pub fn dump_debug_state(&self, path: &dyn AsRef<std::path::Path>) {
+        println!("Dumping {:?}", path.as_ref());
         self.viewer.write_to_file(path)
     }
 }

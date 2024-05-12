@@ -3,7 +3,7 @@ use core::panic;
 use ahash::{AHashMap, AHashSet};
 use rspirv::{
     dr::{Builder, Operand},
-    spirv::{FunctionControl, Word},
+    spirv::{FunctionControl, SelectionControl, Word},
 };
 use rvsdg::{
     edge::{InportLocation, InputType, OutportLocation, OutputType},
@@ -501,6 +501,58 @@ impl SpirvBackend {
                     .unwrap();
                 Ok(result_id)
             }
+            NodeType::Gamma(g) => {
+                //Build the gamma-region scope for each branch, and then recurse the branch.
+                //After all of them returning,
+                //append the (SPIR-V)-phi node and return the result id.
+
+                assert!(g.regions().len() == 2);
+                //NOTE: all branches have the same result type, always.
+                let result_type_id = *ctx.type_mapping.get(result_type).unwrap();
+                let merge_label_id = builder.id();
+                let selection_merge_id = builder
+                    .selection_merge(merge_label_id, SelectionControl::NONE)
+                    .unwrap();
+                let if_label = builder.id();
+                let else_label = builder.id();
+                //TODO: implement some kind of static gamma-analysis to have nice branch weights.
+                let cond_branch = builder
+                    .branch_conditional(src_ids[0], if_label, else_label, [])
+                    .unwrap();
+
+                //This is the Vec<(branch_result_id, branch_block_id)> used by op phi, but already flattened
+                //the way _it isi needed_.
+                let mut result_parent_pairs: SmallColl<(u32, u32)> = SmallVec::new();
+                //now, for both gamma-blocks: Setup the jump-label,
+                //then emit the block, finally, emit the unconditional branch to the merge_label
+                for (blockid, index) in [(if_label, 0), (else_label, 1)] {
+                    let _ = builder.begin_block(Some(blockid)).unwrap();
+                    println!("Region: {index}");
+                    let result_id = self
+                        .emit_region(
+                            ctx,
+                            builder,
+                            RegionLocation {
+                                node,
+                                region_index: index,
+                            },
+                            result_type_id,
+                        )?
+                        .expect("Expected return value from gamma-region");
+
+                    result_parent_pairs.push((result_id, blockid));
+                    //branch to the merge label
+                    builder.branch(merge_label_id).unwrap();
+                }
+
+                //finally, append the merge label, and the phi, that'll emit our actual _created_ value.
+                let _ = builder.begin_block(Some(merge_label_id)).unwrap();
+
+                let resid = builder
+                    .phi(result_type_id, None, result_parent_pairs)
+                    .unwrap();
+                Ok(resid)
+            }
             //TODO: implement ifs / matches and loops so we could _in principle_ emit those.
             any => panic!("Unsupported node type {any:?}"),
         }
@@ -663,6 +715,7 @@ fn register_or_get_type(builder: &mut Builder, ctx: &mut EmitCtx, ty: &SpvType) 
                     builder.type_int(a.resolution, if signed { 1 } else { 0 })
                 }
                 ArithBaseTy::Float => builder.type_float(a.resolution),
+                ArithBaseTy::Bool => builder.type_bool(),
             };
 
             match &a.shape {
