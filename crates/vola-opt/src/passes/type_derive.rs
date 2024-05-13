@@ -22,7 +22,7 @@ use std::collections::VecDeque;
 use ahash::{AHashMap, AHashSet};
 use rvsdg::{
     edge::{InportLocation, InputType, OutportLocation, OutputType},
-    nodes::{ApplyNode, GammaNode, NodeType},
+    nodes::{ApplyNode, NodeType},
     region::RegionLocation,
     smallvec::SmallVec,
     NodeRef,
@@ -645,7 +645,7 @@ impl Optimizer {
         }
     }
 
-    fn try_gamma_derive(&self, node: NodeRef, gamma_node: &GammaNode, region_src_span: &Span) -> Result<Option<Ty>, OptError>{
+    fn try_gamma_derive(&self, node: NodeRef) -> Result<Option<Ty>, OptError>{
         //We just need to check two things:
         // 1. that the conditional is a Boolean output, 
         // 2. That all branches emit the same type
@@ -777,7 +777,7 @@ impl Optimizer {
                         &self.csg_node_defs,
                     ),
                     NodeType::Apply(a) => self.try_apply_derive(a, &region_src_span),
-                    NodeType::Gamma(g) => self.try_gamma_derive(node, g, &region_src_span),
+                    NodeType::Gamma(_g) => self.try_gamma_derive(node),
                     t => {
                         let err = OptError::Any {
                             text: format!(

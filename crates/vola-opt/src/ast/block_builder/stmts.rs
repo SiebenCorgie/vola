@@ -6,7 +6,7 @@
  * 2024 Tendsin Mende
  */
 
-use vola_ast::{common::GammaExpr, csg::CsgStmt};
+use vola_ast::csg::CsgStmt;
 use vola_common::{ariadne::Label, error::error_reporter, report};
 
 use crate::{

@@ -17,14 +17,10 @@ use rspirv::{
     grammar::{LogicalOperand, OperandKind},
     spirv::Word,
 };
-use rvsdg::smallvec::{smallvec, SmallVec};
+use rvsdg::smallvec::SmallVec;
 use spirv_grammar_rules::{GrammarRules, Rule};
-use vola_opt::{
-    alge::{CallOp, ConstantIndex, Construct, ImmNat, ImmScalar, WkOp},
-    OptNode,
-};
 
-use crate::{graph::BackendOp, hl::HlOp, passes::EmitCtx, BackendSpirvError};
+use crate::{passes::EmitCtx, BackendSpirvError};
 
 pub type CoreOp = rspirv::spirv::Op;
 

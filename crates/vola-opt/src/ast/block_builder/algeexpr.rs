@@ -285,7 +285,7 @@ impl<'a> BlockBuilder<'a> {
     fn setup_gamma_expr(
         &mut self,
         mut gamma: GammaExpr,
-        expr_span: Span,
+        #[allow(unused)] expr_span: Span,
     ) -> Result<OutportLocation, OptError> {
         //there are two things to take care of
         //1. If we are assigning to a already existing value, we have to
@@ -360,37 +360,36 @@ impl<'a> BlockBuilder<'a> {
         //build the gamma node, then enter both branches. For the if-block just emit the block into that region,
         //for the else block, recurse the gamma_splitoff if needed, or
         //emit the else branch, if only that is left.
-        let (gamma_node, inport_mapping, fn_mapping, result_port) = self
+        let (gamma_node, inport_mapping, fn_mapping) = self
             .opt
             .graph
             .on_region(&self.region, |reg| {
-                let (gamma_node, (inport_mapping, fn_mapping, result_port)) =
-                    reg.new_decission(|gb| {
-                        //create a entry-variable for each defined var.
-                        //and add the inport to the gamma_node
-                        let mut inport_mapping = AHashMap::default();
-                        for (var_name, _def_port) in self.lmd_ctx.defined_vars.iter() {
-                            let (port, _idx) = gb.add_entry_variable();
-                            inport_mapping.insert(var_name.clone(), port);
-                        }
-                        let mut fn_mapping = AHashMap::default();
-                        for (fn_name, _def_port) in self.lmd_ctx.imported_functions.iter() {
-                            let (port, _idx) = gb.add_entry_variable();
-                            fn_mapping.insert(fn_name.clone(), port);
-                        }
+                let (gamma_node, (inport_mapping, fn_mapping)) = reg.new_decission(|gb| {
+                    //create a entry-variable for each defined var.
+                    //and add the inport to the gamma_node
+                    let mut inport_mapping = AHashMap::default();
+                    for (var_name, _def_port) in self.lmd_ctx.defined_vars.iter() {
+                        let (port, _idx) = gb.add_entry_variable();
+                        inport_mapping.insert(var_name.clone(), port);
+                    }
+                    let mut fn_mapping = AHashMap::default();
+                    for (fn_name, _def_port) in self.lmd_ctx.imported_functions.iter() {
+                        let (port, _idx) = gb.add_entry_variable();
+                        fn_mapping.insert(fn_name.clone(), port);
+                    }
 
-                        //always add 1 output to the gamma
-                        let (_, outport) = gb.add_exit_variable();
+                    //always add 1 output to the gamma
+                    let (_, _outport) = gb.add_exit_variable();
 
-                        //now add both branches
-                        let (idx0, _) = gb.new_branch(|_, _| {});
-                        let (idx1, _) = gb.new_branch(|_, _| {});
+                    //now add both branches
+                    let (idx0, _) = gb.new_branch(|_, _| {});
+                    let (idx1, _) = gb.new_branch(|_, _| {});
 
-                        assert!(idx0 == 0);
-                        assert!(idx1 == 1);
+                    assert!(idx0 == 0);
+                    assert!(idx1 == 1);
 
-                        (inport_mapping, fn_mapping, outport)
-                    });
+                    (inport_mapping, fn_mapping)
+                });
 
                 //hook up all the variables to the entry-node ports
                 for (var_name, var_entry_port) in &inport_mapping {
@@ -404,7 +403,7 @@ impl<'a> BlockBuilder<'a> {
                         .expect("Expected to be connected without problems!");
                 }
 
-                (gamma_node, inport_mapping, fn_mapping, result_port)
+                (gamma_node, inport_mapping, fn_mapping)
             })
             .unwrap();
 

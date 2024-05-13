@@ -64,7 +64,7 @@ impl BackendOp {
     pub fn dispatch(
         &mut self,
         input_types: SmallColl<Option<SpvType>>,
-        return_type: SpvType,
+        #[allow(unused_variables)] return_type: SpvType,
     ) -> Result<(), BackendSpirvError> {
         let hlop = if let Self::HlOp(hl) = self {
             hl.clone()

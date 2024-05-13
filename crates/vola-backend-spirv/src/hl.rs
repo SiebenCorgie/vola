@@ -19,12 +19,14 @@ pub enum HlOp {
     Mul,
     Div,
     Mod,
+
     Lt,
     Gt,
     Lte,
     Gte,
     Eq,
     Neq,
+
     Min,
     Max,
     Mix,

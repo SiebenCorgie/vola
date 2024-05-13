@@ -305,7 +305,7 @@ impl SpirvBackend {
         //      3: Multiple values: In that case, inject a OpCompositeConstuct for the `retty` that takes care of
         //         Assembling the return struct as declared.
 
-        self.emit_region(ctx, builder, lmdregion, retty)?;
+        self.emit_region(ctx, builder, lmdregion)?;
 
         //build the result based on the amount of outputs.
         //for single output we can just return the id of the output-connected node.
@@ -368,7 +368,6 @@ impl SpirvBackend {
         ctx: &mut EmitCtx,
         builder: &mut Builder,
         reg: RegionLocation,
-        result_type_id: Word,
     ) -> Result<(), BackendSpirvError> {
         //explore from the results upwards and build the
         //node -> word mapping bottom up. So similar to the λ-dependency scheduler,
@@ -564,7 +563,7 @@ impl SpirvBackend {
                         );
                     }
 
-                    self.emit_region(ctx, builder, gamma_region, result_type_id)
+                    self.emit_region(ctx, builder, gamma_region)
                         .expect("Expected return value from gamma-region");
 
                     //Retrive the result_id, by looking it up in the just used ctx
