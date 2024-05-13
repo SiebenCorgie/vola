@@ -218,26 +218,28 @@ impl BackendOp {
                 [ArithBaseTy::Integer { signed: false }, ArithBaseTy::Integer { signed: false }],
             ) => SpvOp::GlslOp(GlOp::UMax),
 
-            (HlOp::Mix, [ArithBaseTy::Float, ArithBaseTy::Float]) => SpvOp::GlslOp(GlOp::FMix),
-            (HlOp::Mix, [ArithBaseTy::Integer { .. }, ArithBaseTy::Integer { .. }]) => {
-                SpvOp::GlslOp(GlOp::IMix)
+            (HlOp::Mix, [ArithBaseTy::Float, ArithBaseTy::Float, ArithBaseTy::Float]) => {
+                SpvOp::GlslOp(GlOp::FMix)
             }
+            (
+                HlOp::Mix,
+                [ArithBaseTy::Integer { .. }, ArithBaseTy::Integer { .. }, ArithBaseTy::Integer { .. }],
+            ) => SpvOp::GlslOp(GlOp::IMix),
 
-            (HlOp::Clamp, [ArithBaseTy::Float, ArithBaseTy::Float]) => SpvOp::GlslOp(GlOp::FClamp),
+            (HlOp::Clamp, [ArithBaseTy::Float, ArithBaseTy::Float, ArithBaseTy::Float]) => {
+                SpvOp::GlslOp(GlOp::FClamp)
+            }
             (
                 HlOp::Clamp,
-                [ArithBaseTy::Integer { signed: true }, ArithBaseTy::Integer { signed: true }],
+                [ArithBaseTy::Integer { signed: true }, ArithBaseTy::Integer { signed: true }, ArithBaseTy::Integer { signed: true }],
             ) => SpvOp::GlslOp(GlOp::SClamp),
             (
                 HlOp::Clamp,
-                [ArithBaseTy::Integer { signed: false }, ArithBaseTy::Integer { signed: false }],
+                [ArithBaseTy::Integer { signed: false }, ArithBaseTy::Integer { signed: false }, ArithBaseTy::Integer { signed: false }],
             ) => SpvOp::GlslOp(GlOp::UClamp),
 
-            (HlOp::Abs, [ArithBaseTy::Float, ArithBaseTy::Float]) => SpvOp::GlslOp(GlOp::FAbs),
-            (
-                HlOp::Abs,
-                [ArithBaseTy::Integer { signed: true }, ArithBaseTy::Integer { signed: true }],
-            ) => SpvOp::GlslOp(GlOp::SAbs),
+            (HlOp::Abs, [ArithBaseTy::Float]) => SpvOp::GlslOp(GlOp::FAbs),
+            (HlOp::Abs, [ArithBaseTy::Integer { signed: true }]) => SpvOp::GlslOp(GlOp::SAbs),
             _ => {
                 let err = BackendSpirvError::Any {
                     text: format!(
