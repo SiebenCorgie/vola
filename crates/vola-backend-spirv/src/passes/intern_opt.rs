@@ -14,11 +14,15 @@ use rvsdg::{
     smallvec::smallvec,
     util::graph_type_transform::{GraphMapping, GraphTypeTransformer, GraphTypeTransformerError},
 };
-use vola_opt::{OptEdge, OptNode, Optimizer};
+use vola_opt::{
+    alge::{CallOp, ConstantIndex, Construct, ImmNat, ImmScalar, WkOp},
+    OptEdge, OptNode, Optimizer,
+};
 
 use crate::{
     graph::{BackendEdge, BackendNode, BackendOp},
-    spv::{SpvNode, SpvType},
+    hl::HlOp,
+    spv::{CoreOp, GlOp, SpvOp, SpvType},
     SpirvBackend,
 };
 
@@ -46,9 +50,14 @@ impl GraphTypeTransformer for InterningTransformer {
         }
     }
     fn transform_simple_node(&mut self, src_node: &Self::SrcNode) -> Self::DstNode {
-        let op = if let Some(sop) = SpvNode::try_from_opt_node(src_node) {
-            BackendOp::SpirvOp(sop)
+        let op = if let Some(sop) = BackendOp::try_from_opt_node(src_node) {
+            sop
         } else {
+            #[cfg(feature = "log")]
+            log::error!(
+                "Failed to transform opt node {} into SPIR-V",
+                src_node.node.name()
+            );
             BackendOp::Dummy
         };
 
@@ -218,5 +227,104 @@ impl SpirvBackend {
                 self.spans.set(dst_node.into(), span.clone());
             }
         }
+    }
+}
+
+impl BackendOp {
+    ///Tries to build a SpvNode from some optimizer node.
+    ///Returns None, if no SPIR-V equivalent exists
+    pub fn try_from_opt_node(optnode: &OptNode) -> Option<Self> {
+        //in practice we try to cast to the different alge-dialect nodes for now.
+
+        if let Some(imm) = optnode.try_downcast_ref::<ImmScalar>() {
+            return Some(Self::from_imm_scalar(imm));
+        }
+
+        if let Some(imm) = optnode.try_downcast_ref::<ImmNat>() {
+            return Some(Self::from_imm_nat(imm));
+        }
+
+        if let Some(callop) = optnode.try_downcast_ref::<CallOp>() {
+            return Some(Self::from_wk(&callop.op));
+        }
+
+        if let Some(facc) = optnode.try_downcast_ref::<ConstantIndex>() {
+            return Some(Self::from_const_index(facc));
+        }
+
+        if let Some(lconst) = optnode.try_downcast_ref::<Construct>() {
+            return Some(Self::from_construct(lconst));
+        }
+
+        None
+    }
+
+    fn from_imm_scalar(imm: &ImmScalar) -> Self {
+        //FIXME: kinda dirty atm. At some point we might want to
+        //       track resolutions and stuff. Right now we just cast :D
+        BackendOp::SpirvOp(SpvOp::ConstantFloat {
+            resolution: 32,
+            bits: (imm.lit as f32).to_bits(),
+        })
+    }
+
+    fn from_imm_nat(imm: &ImmNat) -> Self {
+        BackendOp::SpirvOp(SpvOp::ConstantInt {
+            resolution: 32,
+            bits: (imm.lit as u32).to_be(),
+        })
+    }
+
+    fn from_wk(wk: &WkOp) -> Self {
+        match wk {
+            WkOp::Not => BackendOp::SpirvOp(SpvOp::CoreOp(CoreOp::Not)),
+            //NOTE: Since we just have floats, we can just use FNegate
+            WkOp::Neg => BackendOp::HlOp(HlOp::Negate),
+            WkOp::Add => BackendOp::HlOp(HlOp::Add),
+            WkOp::Sub => BackendOp::HlOp(HlOp::Sub),
+            WkOp::Mul => BackendOp::HlOp(HlOp::Mul),
+            WkOp::Div => BackendOp::HlOp(HlOp::Div),
+            WkOp::Mod => BackendOp::HlOp(HlOp::Mod),
+
+            WkOp::Lt => BackendOp::HlOp(HlOp::Lt),
+            WkOp::Gt => BackendOp::HlOp(HlOp::Gt),
+            WkOp::Lte => BackendOp::HlOp(HlOp::Lte),
+            WkOp::Gte => BackendOp::HlOp(HlOp::Gte),
+            WkOp::Eq => BackendOp::HlOp(HlOp::Eq),
+            WkOp::NotEq => BackendOp::HlOp(HlOp::Neq),
+
+            WkOp::And => BackendOp::SpirvOp(SpvOp::CoreOp(CoreOp::LogicalAnd)),
+            WkOp::Or => BackendOp::SpirvOp(SpvOp::CoreOp(CoreOp::LogicalOr)),
+
+            WkOp::Dot => BackendOp::SpirvOp(SpvOp::CoreOp(CoreOp::Dot)),
+            WkOp::Cross => BackendOp::SpirvOp(SpvOp::GlslOp(GlOp::Cross)),
+            WkOp::Length => BackendOp::SpirvOp(SpvOp::GlslOp(GlOp::Length)),
+            WkOp::SquareRoot => BackendOp::SpirvOp(SpvOp::GlslOp(GlOp::Sqrt)),
+            WkOp::Exp => BackendOp::SpirvOp(SpvOp::GlslOp(GlOp::Exp)),
+            WkOp::Min => BackendOp::HlOp(HlOp::Min),
+            WkOp::Max => BackendOp::HlOp(HlOp::Max),
+            WkOp::Mix => BackendOp::HlOp(HlOp::Mix),
+            WkOp::Clamp => BackendOp::HlOp(HlOp::Clamp),
+            WkOp::Abs => BackendOp::HlOp(HlOp::Abs),
+            WkOp::Fract => BackendOp::SpirvOp(SpvOp::GlslOp(GlOp::Fract)),
+            WkOp::Round => BackendOp::SpirvOp(SpvOp::GlslOp(GlOp::Round)),
+            WkOp::Ceil => BackendOp::SpirvOp(SpvOp::GlslOp(GlOp::Ceil)),
+            WkOp::Floor => BackendOp::SpirvOp(SpvOp::GlslOp(GlOp::Floor)),
+            WkOp::Sin => BackendOp::SpirvOp(SpvOp::GlslOp(GlOp::Sin)),
+            WkOp::Cos => BackendOp::SpirvOp(SpvOp::GlslOp(GlOp::Cos)),
+            WkOp::Tan => BackendOp::SpirvOp(SpvOp::GlslOp(GlOp::Tan)),
+            WkOp::ASin => BackendOp::SpirvOp(SpvOp::GlslOp(GlOp::Asin)),
+            WkOp::ACos => BackendOp::SpirvOp(SpvOp::GlslOp(GlOp::Acos)),
+            WkOp::ATan => BackendOp::SpirvOp(SpvOp::GlslOp(GlOp::Atan)),
+            WkOp::Inverse => BackendOp::SpirvOp(SpvOp::GlslOp(GlOp::MatrixInverse)),
+        }
+    }
+
+    fn from_const_index(fac: &ConstantIndex) -> Self {
+        Self::SpirvOp(SpvOp::Extract(smallvec![fac.access as u32]))
+    }
+
+    fn from_construct(_lc: &Construct) -> Self {
+        Self::SpirvOp(SpvOp::Construct)
     }
 }

@@ -38,6 +38,7 @@ mod passes;
 
 //Defines the SPIR-V dialect used in the backend's RVSDG.
 mod graph;
+pub(crate) mod hl;
 mod spv;
 
 pub type SpirvModule = rspirv::dr::Module;

@@ -489,6 +489,7 @@ impl SpirvBackend {
 
                     Ok(result_id)
                 }
+                BackendOp::HlOp(o) => panic!("Unexpected HlOp in SPIR-V serialization: {o:?}"),
                 BackendOp::Dummy => panic!("Unexpected Dummy node in SPIR-V serialization"),
             },
             NodeType::Apply(_a) => {

@@ -21,17 +21,19 @@ use rvsdg::{
 use rvsdg_viewer::View;
 
 use crate::{
-    spv::{CoreOp, SpvNode, SpvOp, SpvType},
+    hl::HlOp,
+    spv::{CoreOp, SpvOp, SpvType},
     SpirvBackend,
 };
 
 pub enum BackendOp {
-    SpirvOp(SpvNode),
+    SpirvOp(SpvOp),
+    HlOp(HlOp),
     Dummy,
 }
 
 impl BackendOp {
-    pub fn unwrap_spv_ref(&self) -> &SpvNode {
+    pub fn unwrap_spv_ref(&self) -> &SpvOp {
         if let BackendOp::SpirvOp(spv) = self {
             spv
         } else {
@@ -55,6 +57,7 @@ impl Debug for BackendNode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self.op {
             BackendOp::SpirvOp(o) => write!(f, "SpirvOp({})", o.name()),
+            BackendOp::HlOp(hl) => write!(f, "HlOp({:?})", hl),
             BackendOp::Dummy => write!(f, "Dummy"),
         }
     }
@@ -64,11 +67,16 @@ impl View for BackendNode {
     fn name(&self) -> String {
         match &self.op {
             BackendOp::SpirvOp(o) => o.name(),
+            BackendOp::HlOp(o) => format!("{o:?}"),
             BackendOp::Dummy => "Dummy".to_owned(),
         }
     }
     fn color(&self) -> rvsdg_viewer::Color {
-        rvsdg_viewer::Color::from_rgba(200, 180, 150, 255)
+        match self.op {
+            BackendOp::SpirvOp(_) => rvsdg_viewer::Color::from_rgba(200, 180, 150, 255),
+            BackendOp::HlOp(_) => rvsdg_viewer::Color::from_rgba(150, 150, 200, 255),
+            BackendOp::Dummy => rvsdg_viewer::Color::from_rgba(250, 150, 150, 255),
+        }
     }
 }
 
@@ -192,10 +200,7 @@ impl SpirvBackend {
 
     pub fn is_core_op(&self, node: NodeRef, op: CoreOp) -> bool {
         if let NodeType::Simple(s) = &self.graph.node(node).node_type {
-            if let BackendOp::SpirvOp(SpvNode {
-                op: SpvOp::CoreOp(c),
-            }) = s.op
-            {
+            if let BackendOp::SpirvOp(SpvOp::CoreOp(c)) = s.op {
                 if c == op {
                     true
                 } else {

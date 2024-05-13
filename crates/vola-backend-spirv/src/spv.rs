@@ -24,7 +24,7 @@ use vola_opt::{
     OptNode,
 };
 
-use crate::{passes::EmitCtx, BackendSpirvError};
+use crate::{graph::BackendOp, hl::HlOp, passes::EmitCtx, BackendSpirvError};
 
 pub type CoreOp = rspirv::spirv::Op;
 
@@ -90,7 +90,7 @@ fn type_pattern_check_core_op(
     }
 }
 
-type GlOp = rspirv::spirv::GLOp;
+pub type GlOp = rspirv::spirv::GLOp;
 fn type_pattern_check_gl_op(
     grules: &mut GrammarRules,
     glop: &GlOp,
@@ -663,122 +663,9 @@ pub enum SpvOp {
     Construct,
 }
 
-///A single SPIR-V dialect node.
-pub struct SpvNode {
-    ///The Op represented by this node.
-    pub op: SpvOp,
-}
-
-impl SpvNode {
-    ///Tries to build a SpvNode from some optimizer node.
-    ///Returns None, if no SPIR-V equivalent exists
-    pub fn try_from_opt_node(optnode: &OptNode) -> Option<Self> {
-        //in practice we try to cast to the different alge-dialect nodes for now.
-
-        if let Some(imm) = optnode.try_downcast_ref::<ImmScalar>() {
-            return Some(Self::from_imm_scalar(imm));
-        }
-
-        if let Some(imm) = optnode.try_downcast_ref::<ImmNat>() {
-            return Some(Self::from_imm_nat(imm));
-        }
-
-        if let Some(callop) = optnode.try_downcast_ref::<CallOp>() {
-            return Some(Self::from_wk(&callop.op));
-        }
-
-        if let Some(facc) = optnode.try_downcast_ref::<ConstantIndex>() {
-            return Some(Self::from_const_index(facc));
-        }
-
-        if let Some(lconst) = optnode.try_downcast_ref::<Construct>() {
-            return Some(Self::from_construct(lconst));
-        }
-
-        None
-    }
-
-    fn from_imm_scalar(imm: &ImmScalar) -> Self {
-        //FIXME: kinda dirty atm. At some point we might want to
-        //       track resolutions and stuff. Right now we just cast :D
-        Self {
-            op: SpvOp::ConstantFloat {
-                resolution: 32,
-                bits: (imm.lit as f32).to_bits(),
-            },
-        }
-    }
-
-    fn from_imm_nat(imm: &ImmNat) -> Self {
-        Self {
-            op: SpvOp::ConstantInt {
-                resolution: 32,
-                bits: (imm.lit as u32).to_be(),
-            },
-        }
-    }
-
-    fn from_wk(wk: &WkOp) -> Self {
-        let spvop = match wk {
-            WkOp::Not => SpvOp::CoreOp(CoreOp::Not),
-            //NOTE: Since we just have floats, we can just use FNegate
-            WkOp::Neg => SpvOp::CoreOp(CoreOp::FNegate),
-            WkOp::Add => SpvOp::CoreOp(CoreOp::FAdd),
-            WkOp::Sub => SpvOp::CoreOp(CoreOp::FSub),
-            WkOp::Mul => SpvOp::CoreOp(CoreOp::FMul),
-            WkOp::Div => SpvOp::CoreOp(CoreOp::FDiv),
-            WkOp::Mod => SpvOp::CoreOp(CoreOp::FMod),
-
-            WkOp::Lt => SpvOp::CoreOp(CoreOp::FOrdLessThan),
-            WkOp::Gt => SpvOp::CoreOp(CoreOp::FOrdGreaterThan),
-            WkOp::Lte => SpvOp::CoreOp(CoreOp::FOrdLessThanEqual),
-            WkOp::Gte => SpvOp::CoreOp(CoreOp::FOrdGreaterThanEqual),
-            WkOp::Eq => SpvOp::CoreOp(CoreOp::FOrdEqual),
-            WkOp::NotEq => SpvOp::CoreOp(CoreOp::FOrdNotEqual),
-
-            WkOp::And => SpvOp::CoreOp(CoreOp::LogicalAnd),
-            WkOp::Or => SpvOp::CoreOp(CoreOp::LogicalOr),
-
-            WkOp::Dot => SpvOp::CoreOp(CoreOp::Dot),
-            WkOp::Cross => SpvOp::GlslOp(GlOp::Cross),
-            WkOp::Length => SpvOp::GlslOp(GlOp::Length),
-            WkOp::SquareRoot => SpvOp::GlslOp(GlOp::Sqrt),
-            WkOp::Exp => SpvOp::GlslOp(GlOp::Exp),
-            WkOp::Min => SpvOp::GlslOp(GlOp::FMin),
-            WkOp::Max => SpvOp::GlslOp(GlOp::FMax),
-            WkOp::Mix => SpvOp::GlslOp(GlOp::FMix),
-            WkOp::Clamp => SpvOp::GlslOp(GlOp::FClamp),
-            WkOp::Abs => SpvOp::GlslOp(GlOp::FAbs),
-            WkOp::Fract => SpvOp::GlslOp(GlOp::Fract),
-            WkOp::Round => SpvOp::GlslOp(GlOp::Round),
-            WkOp::Ceil => SpvOp::GlslOp(GlOp::Ceil),
-            WkOp::Floor => SpvOp::GlslOp(GlOp::Floor),
-            WkOp::Sin => SpvOp::GlslOp(GlOp::Sin),
-            WkOp::Cos => SpvOp::GlslOp(GlOp::Cos),
-            WkOp::Tan => SpvOp::GlslOp(GlOp::Tan),
-            WkOp::ASin => SpvOp::GlslOp(GlOp::Asin),
-            WkOp::ACos => SpvOp::GlslOp(GlOp::Acos),
-            WkOp::ATan => SpvOp::GlslOp(GlOp::Atan),
-            WkOp::Inverse => SpvOp::GlslOp(GlOp::MatrixInverse),
-        };
-
-        Self { op: spvop }
-    }
-
-    fn from_const_index(fac: &ConstantIndex) -> Self {
-        Self {
-            op: SpvOp::Extract(smallvec![fac.access as u32]),
-        }
-    }
-
-    fn from_construct(_lc: &Construct) -> Self {
-        Self {
-            op: SpvOp::Construct,
-        }
-    }
-
+impl SpvOp {
     pub fn name(&self) -> String {
-        match &self.op {
+        match &self {
             SpvOp::CoreOp(op) => rspirv::grammar::CoreInstructionTable::get(op.clone())
                 .opname
                 .to_owned(),
@@ -803,7 +690,7 @@ impl SpvNode {
     ) -> Result<(), BackendSpirvError> {
         //right now we mostly check that the input and output type are the same as
         //found in the grammar.
-        match &self.op {
+        match &self {
             SpvOp::CoreOp(coreop) => {
                 let core_instruction = rspirv::grammar::CoreInstructionTable::get(*coreop);
                 //NOTE: result operand is _usally_ the first followed by its type-id.
@@ -888,7 +775,7 @@ impl SpvNode {
     }
 
     pub fn instruction_is_type_or_constant(&self) -> bool {
-        match self.op {
+        match self {
             SpvOp::ConstantFloat { .. } | SpvOp::ConstantInt { .. } => true,
             _ => false,
         }
@@ -901,7 +788,7 @@ impl SpvNode {
         result_type_id: Word,
         result_id: Word,
     ) -> Instruction {
-        match &self.op {
+        match &self {
             SpvOp::CoreOp(coreop) => Instruction::new(
                 *coreop,
                 Some(result_type_id),
