@@ -16,7 +16,7 @@ use rvsdg::{
     region::{Input, Output},
     rvsdg_derive_lang::LangNode,
     smallvec::SmallVec,
-    NodeRef,
+    NodeRef, SmallColl,
 };
 use rvsdg_viewer::View;
 
@@ -33,6 +33,14 @@ pub enum BackendOp {
 }
 
 impl BackendOp {
+    pub fn is_hlop(&self) -> bool {
+        if let Self::HlOp(_) = self {
+            true
+        } else {
+            false
+        }
+    }
+
     pub fn unwrap_spv_ref(&self) -> &SpvOp {
         if let BackendOp::SpirvOp(spv) = self {
             spv
@@ -184,6 +192,23 @@ impl SpirvBackend {
         }
 
         unified_type
+    }
+
+    pub fn get_node_input_types(&self, node: NodeRef) -> SmallColl<Option<SpvType>> {
+        let mut inputs = SmallColl::new();
+
+        let noderef = self.graph.node(node);
+        for inty in noderef.inport_types() {
+            let port = noderef.inport(&inty).unwrap();
+            if let Some(edg) = port.edge {
+                let ty = self.graph.edge(edg).ty.get_type().cloned();
+                inputs.push(ty);
+            } else {
+                inputs.push(None);
+            }
+        }
+
+        inputs
     }
 
     ///Overrides the output-type on the edges connected to `node`

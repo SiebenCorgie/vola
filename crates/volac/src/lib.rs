@@ -210,7 +210,7 @@ impl Pipeline {
                 let mut backend = vola_backend_spirv::SpirvBackend::new(spvconfig);
 
                 backend.intern_module(&opt)?;
-
+                backend.hl_to_spv_nodes()?;
                 backend.legalize().unwrap();
 
                 if std::env::var("VOLA_DUMP_ALL").is_ok()
