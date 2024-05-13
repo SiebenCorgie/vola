@@ -14,7 +14,7 @@ use vola_ast::{
     alge::{
         AssignStmt, BinaryOp, EvalExpr, Expr, ExprTy, FieldAccessor, ImplBlock, LetStmt, UnaryOp,
     },
-    common::{Block, Call, Digit, Ident, Literal, Stmt},
+    common::{Block, Call, Digit, GammaExpr, Ident, Literal, Stmt},
     csg::{AccessDesc, CsgStmt, ScopedCall},
 };
 
@@ -68,6 +68,16 @@ impl FromTreeSitter for Expr {
                     "*" => BinaryOp::Mul,
                     "/" => BinaryOp::Div,
                     "%" => BinaryOp::Mod,
+
+                    "<" => BinaryOp::Lt,
+                    ">" => BinaryOp::Gt,
+                    "<=" => BinaryOp::Lte,
+                    ">=" => BinaryOp::Gte,
+                    "==" => BinaryOp::Eq,
+                    "!=" => BinaryOp::NotEq,
+
+                    "||" => BinaryOp::Or,
+                    "&&" => BinaryOp::And,
                     _ => {
                         let err = ParserError::UnknownError(format!(
                             "Unknown Binary operation {}",
@@ -105,47 +115,52 @@ impl FromTreeSitter for Expr {
                 let src_ident = Ident::parse(ctx, dta, &children.next().unwrap())?;
                 let mut accessors = SmallVec::new();
 
-                if let Some(next_node) = children.next() {
-                    if next_node.kind() == "field_access_list" {
-                        let mut fields_walker = next_node.walk();
-                        let mut fields = next_node.children(&mut fields_walker);
-                        while let Some(next_field) = fields.next() {
-                            match next_field.kind() {
-                                //ignore dots
-                                "." => {}
-                                "digit" | "identifier" => {
-                                    accessors.push(FieldAccessor::parse(ctx, dta, &next_field)?);
-                                }
-                                _ => {
-                                    let err = ParserError::UnexpectedAstNode {
-                                        kind: next_field.kind().to_owned(),
-                                        expected: "digit | identifier | .".to_owned(),
-                                    };
-                                    report(
-                                        error_reporter(err.clone(), ctx.span(&next_field))
-                                            .with_label(
-                                                Label::new(ctx.span(&next_field))
-                                                    .with_message("Expected this to be either a digit, or an identifier, or a \".\""))
-                                            .finish()
-                                    );
-                                    return Err(err);
-                                }
-                            }
+                //itterate over all following nodes interpreting them either as ident or digit
+                while let Some(next_node) = children.next() {
+                    //next should always be a "."
+                    match next_node.kind() {
+                        "." => {}
+                        _ => {
+                            let err = ParserError::UnexpectedAstNode {
+                                kind: next_node.kind().to_owned(),
+                                expected: "\".\"".to_owned(),
+                            };
+
+                            report(
+                                error_reporter(err.clone(), ctx.span(&next_node))
+                                    .with_label(
+                                        Label::new(ctx.span(&next_node))
+                                            .with_message("Expected this to be a \".\""),
+                                    )
+                                    .finish(),
+                            );
+                            return Err(err);
                         }
-                    } else {
-                        let err = ParserError::UnexpectedAstNode {
-                            kind: next_node.kind().to_owned(),
-                            expected: "field_access_list".to_owned(),
-                        };
-                        report(
-                            error_reporter(err.clone(), ctx.span(&next_node))
-                                .with_label(
-                                    Label::new(ctx.span(&next_node))
-                                        .with_message("This should be one ore more field accesses"),
-                                )
-                                .finish(),
-                        );
-                        return Err(err);
+                    }
+                    //if there was a dot, a digit or identfier has to follow.
+                    //if there wasn't a node, the out loop would have aborted already.
+                    let next_node = children.next().unwrap();
+                    match next_node.kind() {
+                        "digit" | "identifier" => {
+                            accessors.push(FieldAccessor::parse(ctx, dta, &next_node)?);
+                        }
+                        _ => {
+                            let err = ParserError::UnexpectedAstNode {
+                                kind: next_node.kind().to_owned(),
+                                expected: "digit | identifier | .".to_owned(),
+                            };
+
+                            println!("SExpr:\n{}", next_node.to_sexp());
+
+                            report(
+                                error_reporter(err.clone(), ctx.span(&next_node))
+                                    .with_label(Label::new(ctx.span(&next_node)).with_message(
+                                        "Expected this to be either a digit, or an identifier",
+                                    ))
+                                    .finish(),
+                            );
+                            return Err(err);
+                        }
                     }
                 }
 
@@ -224,6 +239,7 @@ impl FromTreeSitter for Expr {
                 ParserError::assert_ast_level_empty(ctx, children.next())?;
                 ExprTy::List(list)
             }
+            "gamma_expr" => ExprTy::GammaExpr(Box::new(GammaExpr::parse(ctx, dta, &child_node)?)),
             _ => {
                 let err = ParserError::UnexpectedAstNode {
                     kind: child_node.kind().to_owned(),
@@ -542,7 +558,6 @@ impl FromTreeSitter for Stmt {
                 ParserError::consume_expected_node_string(ctx, dta, node.child(1), ";")?;
                 stmt
             }
-            "gamma_expr" => todo!("implement gamma expr parsing"),
             "theta_expr" => todo!("implement theta expr parsing"),
             _ => {
                 let err = ParserError::UnexpectedAstNode {

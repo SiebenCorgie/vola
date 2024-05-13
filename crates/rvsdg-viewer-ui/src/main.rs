@@ -104,6 +104,11 @@ impl Sandbox for Ui {
                 .get(selected)
             {
                 let mut items = Column::new();
+                //always prepend the attrib name
+                items = items
+                    .push(container(text(&format!("{}", selected)).size(20.0)).padding(10.0))
+                    .push(Rule::horizontal(1.0));
+
                 for (pname, props) in properties {
                     items = items.push(
                         container(
@@ -124,7 +129,7 @@ impl Sandbox for Ui {
 
                 Scrollable::new(items).into()
             } else {
-                text("No auxilary data").into()
+                text(&format!("{}", selected)).size(20.0).into()
             }
         } else {
             text("Nothing selected!").into()

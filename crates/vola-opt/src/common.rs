@@ -28,6 +28,8 @@ pub enum Ty {
     //Shouldn't be used by the frontend and optimizer. However sometimes we can't (yet?) get around
     //it in the Spirv backend
     Void,
+    //Can only be produced by the optimizer atm.
+    Bool,
     //A _Natural_ number. Basically a uint, but with unknown resolution.
     Nat,
     //A _Real_ number. Basically a float, but with unknown resolution.
@@ -71,6 +73,7 @@ impl Display for Ty {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Ty::Void => write!(f, "Void"),
+            Ty::Bool => write!(f, "Bool"),
             Ty::Nat => write!(f, "Nat"),
             Ty::Scalar => write!(f, "Scalar"),
             Ty::Vector { width } => write!(f, "Vec{width}"),
@@ -83,6 +86,13 @@ impl Display for Ty {
 }
 
 impl Ty {
+    pub fn is_bool(&self) -> bool {
+        if let Self::Bool = self {
+            true
+        } else {
+            false
+        }
+    }
     ///Returns true for scalar, vector, matrix and tensor_type
     pub fn is_algebraic(&self) -> bool {
         match self {
@@ -91,7 +101,7 @@ impl Ty {
             | Self::Matrix { .. }
             | Self::Tensor { .. }
             | Self::Nat => true,
-            Self::CSGTree | Self::Callable { .. } | Self::Void => false,
+            Self::CSGTree | Self::Callable { .. } | Self::Void | Self::Bool => false,
         }
     }
 
@@ -186,10 +196,18 @@ pub struct LmdContext {
 
 impl LmdContext {
     pub(crate) fn merge_inner_ctx(&mut self, ctx: Self) {
+        //merge imported functions
         for (key, fn_import) in ctx.imported_functions {
             if !self.imported_functions.contains_key(&key) {
                 self.imported_functions.insert(key, fn_import);
             }
+        }
+    }
+
+    pub fn empty() -> Self {
+        LmdContext {
+            defined_vars: AHashMap::new(),
+            imported_functions: AHashMap::new(),
         }
     }
 

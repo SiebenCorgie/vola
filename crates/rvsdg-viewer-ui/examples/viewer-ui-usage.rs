@@ -2,6 +2,7 @@
 mod nodes;
 pub use nodes::{LNode, MyNodes};
 use rvsdg::attrib::{AttribStore, FlagStore};
+use rvsdg_viewer::layout::LayoutConfig;
 
 #[path = "../../../examples/rvsdg-simple/src/ex_3a.rs"]
 mod ex_3a;
@@ -28,7 +29,7 @@ fn main() {
     let mut viewer_state = rvsdg_viewer::ViewerState::new();
 
     viewer_state
-        .new_state_builder("My Graph State :3", &graph)
+        .new_state_builder("My Graph State :3", &graph, &LayoutConfig::default())
         .with_store("MyStringStore", &tagging_data)
         .with_flags("SomeFlags", &flags)
         .build();

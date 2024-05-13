@@ -1,0 +1,22 @@
+module std;
+
+concept Color: vec3 -> vec3;
+operation ColorFlip();
+
+impl ColorFlip<sub> for Color(at){
+	if (at.x % 2.0) < 1.0{
+		[at.x + 1.0, at.y, 0.0]
+	}else if at.y > 10.0{
+		[0.0, 1.0, 0.0]
+	}else{
+		[32.0, 64.0, 128.0]
+	}
+}
+
+export myField(at: vec3){
+	csg t = ColorFlip(){
+		Box([10.0, 10.0, 10.0])
+	};
+
+	eval t.Color(at)
+}

@@ -16,22 +16,32 @@ use rvsdg::{
     region::{Input, Output},
     rvsdg_derive_lang::LangNode,
     smallvec::SmallVec,
-    NodeRef,
+    NodeRef, SmallColl,
 };
 use rvsdg_viewer::View;
 
 use crate::{
-    spv::{CoreOp, SpvNode, SpvOp, SpvType},
+    hl::HlOp,
+    spv::{CoreOp, SpvOp, SpvType},
     SpirvBackend,
 };
 
 pub enum BackendOp {
-    SpirvOp(SpvNode),
+    SpirvOp(SpvOp),
+    HlOp(HlOp),
     Dummy,
 }
 
 impl BackendOp {
-    pub fn unwrap_spv_ref(&self) -> &SpvNode {
+    pub fn is_hlop(&self) -> bool {
+        if let Self::HlOp(_) = self {
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn unwrap_spv_ref(&self) -> &SpvOp {
         if let BackendOp::SpirvOp(spv) = self {
             spv
         } else {
@@ -55,6 +65,7 @@ impl Debug for BackendNode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self.op {
             BackendOp::SpirvOp(o) => write!(f, "SpirvOp({})", o.name()),
+            BackendOp::HlOp(hl) => write!(f, "HlOp({:?})", hl),
             BackendOp::Dummy => write!(f, "Dummy"),
         }
     }
@@ -64,11 +75,16 @@ impl View for BackendNode {
     fn name(&self) -> String {
         match &self.op {
             BackendOp::SpirvOp(o) => o.name(),
+            BackendOp::HlOp(o) => format!("{o:?}"),
             BackendOp::Dummy => "Dummy".to_owned(),
         }
     }
     fn color(&self) -> rvsdg_viewer::Color {
-        rvsdg_viewer::Color::from_rgba(200, 180, 150, 255)
+        match self.op {
+            BackendOp::SpirvOp(_) => rvsdg_viewer::Color::from_rgba(200, 180, 150, 255),
+            BackendOp::HlOp(_) => rvsdg_viewer::Color::from_rgba(150, 150, 200, 255),
+            BackendOp::Dummy => rvsdg_viewer::Color::from_rgba(250, 150, 150, 255),
+        }
     }
 }
 
@@ -150,7 +166,7 @@ impl SpirvBackend {
     pub fn get_single_node_result_type(&self, node: NodeRef) -> Option<SpvType> {
         {
             let node = &self.graph.node(node).node_type;
-            if !node.is_simple() && !node.is_apply() {
+            if node.is_lambda() || node.is_delta() || node.is_phi() {
                 return None;
             }
         }
@@ -178,6 +194,23 @@ impl SpirvBackend {
         unified_type
     }
 
+    pub fn get_node_input_types(&self, node: NodeRef) -> SmallColl<Option<SpvType>> {
+        let mut inputs = SmallColl::new();
+
+        let noderef = self.graph.node(node);
+        for inty in noderef.inport_types() {
+            let port = noderef.inport(&inty).unwrap();
+            if let Some(edg) = port.edge {
+                let ty = self.graph.edge(edg).ty.get_type().cloned();
+                inputs.push(ty);
+            } else {
+                inputs.push(None);
+            }
+        }
+
+        inputs
+    }
+
     ///Overrides the output-type on the edges connected to `node`
     pub fn set_simple_note_output_type(&mut self, node: NodeRef, ty: SpvType) {
         if let NodeType::Simple(s) = &self.graph.node(node).node_type {
@@ -192,10 +225,7 @@ impl SpirvBackend {
 
     pub fn is_core_op(&self, node: NodeRef, op: CoreOp) -> bool {
         if let NodeType::Simple(s) = &self.graph.node(node).node_type {
-            if let BackendOp::SpirvOp(SpvNode {
-                op: SpvOp::CoreOp(c),
-            }) = s.op
-            {
+            if let BackendOp::SpirvOp(SpvOp::CoreOp(c)) = s.op {
                 if c == op {
                     true
                 } else {

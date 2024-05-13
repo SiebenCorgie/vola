@@ -2,6 +2,8 @@
 //!
 //! Helper that lets you associate any item within the graph with a custom attribute.
 
+use std::fmt::Display;
+
 use ahash::AHashMap;
 
 use crate::{
@@ -18,6 +20,18 @@ pub enum AttribLocation {
     Region(RegionLocation),
     Node(NodeRef),
     Edge(EdgeRef),
+}
+
+impl Display for AttribLocation {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::InPort(p) => write!(f, "Inport - {p:?}"),
+            Self::OutPort(p) => write!(f, "Outport - {p:?}"),
+            Self::Region(r) => write!(f, "{r:?}"),
+            Self::Node(n) => write!(f, "{n}"),
+            Self::Edge(e) => write!(f, "{e}"),
+        }
+    }
 }
 
 impl From<RegionLocation> for AttribLocation {

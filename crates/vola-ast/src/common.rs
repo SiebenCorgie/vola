@@ -94,7 +94,6 @@ pub enum Stmt {
     Let(LetStmt),
     Assign(AssignStmt),
     Csg(CsgStmt),
-    GammaExpr,
     ThetaExpr,
 }
 
@@ -104,4 +103,15 @@ pub struct Block {
     pub span: Span,
     pub stmts: SmallVec<[Stmt; 3]>,
     pub retexpr: Option<Expr>,
+}
+
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[derive(Clone, Debug)]
+pub struct GammaExpr {
+    pub span: Span,
+    //_if_ / _else if_ branches. The Expr is the condition, that _should_ be a
+    //boolean output, the block... is the block :D
+    pub conditionals: SmallVec<[(Expr, Block); 3]>,
+    // _else_ branch, if there is any
+    pub unconditional: Option<Block>,
 }

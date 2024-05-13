@@ -210,7 +210,7 @@ impl Pipeline {
                 let mut backend = vola_backend_spirv::SpirvBackend::new(spvconfig);
 
                 backend.intern_module(&opt)?;
-
+                backend.hl_to_spv_nodes()?;
                 backend.legalize().unwrap();
 
                 if std::env::var("VOLA_DUMP_ALL").is_ok()
@@ -224,7 +224,7 @@ impl Pipeline {
                     .expect("Failed to build SPIR-V module from backend graph.");
 
                 if std::env::var("VOLA_DUMP_VIEWER").is_ok() {
-                    backend.dump_depug_state(&"SpirvState.bin");
+                    backend.dump_debug_state(&"SpirvState.bin");
                 }
                 let words = spvmodule.assemble();
                 let bytes = bytemuck::cast_slice(&words);

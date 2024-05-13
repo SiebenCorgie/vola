@@ -645,6 +645,67 @@ impl Optimizer {
         }
     }
 
+    fn try_gamma_derive(&self, node: NodeRef) -> Result<Option<Ty>, OptError>{
+        //We just need to check two things:
+        // 1. that the conditional is a Boolean output, 
+        // 2. That all branches emit the same type
+
+        let conditional_type = {
+            if let Some(condty) = self.get_type_for_inport(InportLocation { node, input: InputType::GammaPredicate }){
+                condty
+            }else{
+                //Was not yet resolved, return.
+                return Ok(None);
+            }
+        };
+
+        if !conditional_type.is_bool(){
+            let span = {
+                let condition_src = self.graph.node(node).input_src(&self.graph, 0).unwrap();
+                self.span_tags.get(&condition_src.into()).cloned().unwrap_or(Span::empty())
+            };
+            
+            let err = OptError::Any {
+                text: format!("Condition must be an expression of type Bool, was {conditional_type}"),
+            };
+            report(
+                error_reporter(err.clone(), span.clone())
+                    .with_label(Label::new(span.clone()).with_message("Consider changing this expression!"))
+                    .finish(),
+            );
+            return Err(err);
+        }
+
+        //now find the output type of both regions, and make sure they are the same. If so, we are good to go
+        let reg_if_ty = if let Some(t) = self.find_type(&InportLocation{node, input: InputType::ExitVariableResult { branch: 0, exit_variable: 0 }}.into()){
+            t
+        }else{
+            panic!("Gamma-internal if-branch region should have been resolved!");
+        };
+        let reg_else_ty = if let Some(t) = self.find_type(&InportLocation{node, input: InputType::ExitVariableResult { branch: 1, exit_variable: 0 }}.into()){
+            t
+        }else{
+            panic!("Gamma-internal else-branch should have been resolved!");
+        };
+
+        if reg_if_ty != reg_else_ty{
+            let if_branch_span = self.span_tags.get(&RegionLocation{node, region_index: 0}.into()).cloned().unwrap_or(Span::empty());     
+            let else_branch_span = self.span_tags.get(&RegionLocation{node, region_index: 1}.into()).cloned().unwrap_or(Span::empty());
+
+            let err = OptError::Any { text: format!("Return type conflict. If branch returns {}, but else branch returns {}", reg_if_ty, reg_else_ty) };
+            report(
+                error_reporter(err.clone(), if_branch_span.clone())
+                    .with_label(Label::new(if_branch_span.clone()).with_message(format!("This returns {reg_if_ty}")))
+                    .with_label(Label::new(else_branch_span.clone()).with_message(format!("This returns {reg_else_ty}")))
+                    .finish(),
+            );
+
+            Err(err)
+        }else{
+            Ok(Some(reg_if_ty))
+        }
+    } 
+
     fn derive_region(
         &mut self,
         reg: RegionLocation,
@@ -686,6 +747,19 @@ impl Optimizer {
             }
         }
 
+        //Now, before starting the loop over all nodes, derive any _inner_ region.
+        // So γ/τ-Nodes.
+        for node in &build_stack{
+            let region_count = self.graph.node(*node).regions().len();
+            //Try to find a nicer span, otherwise use the one we already know.
+            let span = self.span_tags.get(&node.into()).cloned().unwrap_or(region_src_span.clone());
+            if region_count > 0{
+                for regidx in 0..region_count{
+                    self.derive_region(RegionLocation { node: *node, region_index: regidx }, span.clone())?;
+                }
+            }
+        }
+
         'resolution_loop: loop {
             //Flag that tells us _after_ touching all nodes,
             // if we made any advances. If not we are stuck and return with an error.
@@ -703,6 +777,7 @@ impl Optimizer {
                         &self.csg_node_defs,
                     ),
                     NodeType::Apply(a) => self.try_apply_derive(a, &region_src_span),
+                    NodeType::Gamma(_g) => self.try_gamma_derive(node),
                     t => {
                         let err = OptError::Any {
                             text: format!(

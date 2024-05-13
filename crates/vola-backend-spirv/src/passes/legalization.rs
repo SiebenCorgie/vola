@@ -16,7 +16,7 @@ use spirv_grammar_rules::GrammarRules;
 
 use crate::{
     graph::{BackendEdge, BackendOp},
-    spv::{ArithTy, CoreOp, SpvNode, SpvOp, SpvType, TyShape},
+    spv::{ArithTy, CoreOp, SpvOp, SpvType, TyShape},
     BackendSpirvError, SpirvBackend,
 };
 
@@ -51,8 +51,7 @@ impl SpirvBackend {
                 .unwrap_simple_ref()
                 .op
                 .unwrap_spv_ref()
-                .op
-                == SpvOp::CoreOp(CoreOp::FMul)
+                == &SpvOp::CoreOp(CoreOp::FMul)
         );
 
         //Now inspect the inputs, and possibly mutate self, and the output type to match
@@ -120,7 +119,7 @@ impl SpirvBackend {
                                 text: format!("input/output vector width doesn't match: {width} != {res_width}") 
                             });
                         }
-                        self.graph.node_mut(node).node_type.unwrap_simple_mut().op = BackendOp::SpirvOp(SpvNode { op: SpvOp::CoreOp(CoreOp::VectorTimesScalar) });
+                        self.graph.node_mut(node).node_type.unwrap_simple_mut().op = BackendOp::SpirvOp(SpvOp::CoreOp(CoreOp::VectorTimesScalar));
                         Ok(())
                     },
                     (TyShape::Matrix { width, height }, TyShape::Scalar, TyShape::Matrix { width: res_width, height: res_height }) => {
@@ -136,7 +135,7 @@ impl SpirvBackend {
                                 text: format!("input/output matrix width doesn't match: {height} != {res_height}")
                             });
                         }
-                        self.graph.node_mut(node).node_type.unwrap_simple_mut().op = BackendOp::SpirvOp(SpvNode { op: SpvOp::CoreOp(CoreOp::MatrixTimesScalar) });
+                        self.graph.node_mut(node).node_type.unwrap_simple_mut().op = BackendOp::SpirvOp(SpvOp::CoreOp(CoreOp::MatrixTimesScalar));
                         Ok(())
                     },
                     (TyShape::Vector { width }, TyShape::Matrix { width: _, height }, TyShape::Vector { width: res_width }) =>{
@@ -152,7 +151,7 @@ impl SpirvBackend {
                                 text: format!("input/output vector width doesn't match: {width} != {res_width}")
                             });
                         }
-                        self.graph.node_mut(node).node_type.unwrap_simple_mut().op = BackendOp::SpirvOp(SpvNode { op: SpvOp::CoreOp(CoreOp::VectorTimesMatrix) });
+                        self.graph.node_mut(node).node_type.unwrap_simple_mut().op = BackendOp::SpirvOp(SpvOp::CoreOp(CoreOp::VectorTimesMatrix));
                         Ok(())
                     },
                     (TyShape::Matrix { width: _, height }, TyShape::Vector { width }, TyShape::Vector { width: res_width }) =>{
@@ -168,7 +167,7 @@ impl SpirvBackend {
                                 text: format!("input/output vector width doesn't match: {width} != {res_width}")
                             });
                         }
-                        self.graph.node_mut(node).node_type.unwrap_simple_mut().op = BackendOp::SpirvOp(SpvNode { op: SpvOp::CoreOp(CoreOp::MatrixTimesVector) });
+                        self.graph.node_mut(node).node_type.unwrap_simple_mut().op = BackendOp::SpirvOp(SpvOp::CoreOp(CoreOp::MatrixTimesVector));
                         Ok(())
                     }
                     (TyShape::Matrix { width, height }, TyShape::Matrix { width: wb, height: hb }, TyShape::Matrix { width: res_width, height: res_height }) => {
@@ -197,7 +196,7 @@ impl SpirvBackend {
                                 text: format!("matrix height doesn't match: {height} != {hb}")
                             });
                         }
-                        self.graph.node_mut(node).node_type.unwrap_simple_mut().op = BackendOp::SpirvOp(SpvNode { op: SpvOp::CoreOp(CoreOp::MatrixTimesMatrix) });
+                        self.graph.node_mut(node).node_type.unwrap_simple_mut().op = BackendOp::SpirvOp(SpvOp::CoreOp(CoreOp::MatrixTimesMatrix));
                         Ok(())
                     },
                     _ => Err(BackendSpirvError::SpvLegalizationMalformed { inst: "FMul".to_owned(), text: format!("Encountered multiplication of two arithmetic operands, but could not derive the instruction because of unknown pattern:\na = {:#?}\nb = {:#?}", inputs[0], inputs[1]) })

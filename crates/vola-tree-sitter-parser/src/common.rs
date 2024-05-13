@@ -10,7 +10,7 @@ use vola_common::{ariadne::Label, error::error_reporter, report, Span};
 
 use vola_ast::{
     alge::Expr,
-    common::{Call, Digit, Ident, Literal, Ty, TypedIdent},
+    common::{Block, Call, Digit, GammaExpr, Ident, Literal, Ty, TypedIdent},
     Module,
 };
 
@@ -385,6 +385,66 @@ impl FromTreeSitter for Module {
         Ok(Module {
             path,
             span: Span::from(node).with_file_maybe(ctx.get_file()),
+        })
+    }
+}
+
+impl FromTreeSitter for GammaExpr {
+    fn parse(ctx: &mut ParserCtx, dta: &[u8], node: &tree_sitter::Node) -> Result<Self, ParserError>
+    where
+        Self: Sized,
+    {
+        ParserError::assert_node_kind(ctx, node, "gamma_expr")?;
+
+        let mut walker = node.walk();
+        let mut children = node.children(&mut walker);
+        //consume the first if, which must always be there. Then iterate over all
+        //_optional_ else_if branches, finally
+        // check if there is a unconditional within the loop, which always must be the last
+        //part.
+
+        let mut conditionals = SmallVec::new();
+        let mut unconditional = None;
+
+        ParserError::consume_expected_node_string(ctx, dta, children.next(), "if")?;
+        conditionals.push((
+            Expr::parse(ctx, dta, &children.next().unwrap())?,
+            Block::parse(ctx, dta, &children.next().unwrap())?,
+        ));
+
+        while let Some(next_node) = children.next() {
+            match next_node.kind() {
+                "else if" => {
+                    conditionals.push((
+                        Expr::parse(ctx, dta, &children.next().unwrap())?,
+                        Block::parse(ctx, dta, &children.next().unwrap())?,
+                    ));
+                }
+                "else" => {
+                    unconditional = Some(Block::parse(ctx, dta, &children.next().unwrap())?);
+                    break;
+                }
+                _ => {
+                    let err = ParserError::UnexpectedAstNode {
+                        kind: next_node.kind().to_string(),
+                        expected: "else or else-if".to_owned(),
+                    };
+                    report(
+                        error_reporter(err.clone(), ctx.span(&next_node))
+                            .with_label(Label::new(ctx.span(&next_node)).with_message("here"))
+                            .finish(),
+                    );
+                    return Err(err);
+                }
+            }
+        }
+
+        ParserError::assert_ast_level_empty(ctx, children.next())?;
+        ParserError::assert_node_no_error(ctx, node)?;
+        Ok(GammaExpr {
+            span: ctx.span(node),
+            conditionals,
+            unconditional,
         })
     }
 }

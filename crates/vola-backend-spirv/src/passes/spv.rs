@@ -3,7 +3,7 @@ use core::panic;
 use ahash::{AHashMap, AHashSet};
 use rspirv::{
     dr::{Builder, Operand},
-    spirv::{FunctionControl, Word},
+    spirv::{FunctionControl, SelectionControl, Word},
 };
 use rvsdg::{
     edge::{InportLocation, InputType, OutportLocation, OutputType},
@@ -28,6 +28,20 @@ pub struct EmitCtx {
     //       So a function-def is defined by its def-port, and a _simple-node_ is defined by its single
     //       output port
     node_mapping: AHashMap<OutportLocation, Word>,
+    ///Collects the sequence of basic blocks within a region.
+    ///
+    ///Allows us to find the _last_ block id of a region.
+    region_blocks: AHashMap<RegionLocation, SmallVec<[Word; 1]>>,
+}
+
+impl EmitCtx {
+    pub fn push_block_id(&mut self, region: RegionLocation, id: Word) {
+        if let Some(known) = self.region_blocks.get_mut(&region) {
+            known.push(id);
+        } else {
+            self.region_blocks.insert(region, smallvec![id]);
+        }
+    }
 }
 
 impl SpirvBackend {
@@ -38,6 +52,7 @@ impl SpirvBackend {
             extinst_ids: AHashMap::default(),
             type_mapping: AHashMap::default(),
             node_mapping: AHashMap::default(),
+            region_blocks: AHashMap::default(),
         };
         b.set_version(config.version_major, config.version_minor);
         b.memory_model(
@@ -276,7 +291,12 @@ impl SpirvBackend {
         //now build the region ctx.
 
         //Now begin the block
-        builder.begin_block(None).unwrap();
+        let lmdregion = RegionLocation {
+            node: lmd,
+            region_index: 0,
+        };
+        let lmd_entry_label = builder.begin_block(None).unwrap();
+        ctx.push_block_id(lmdregion, lmd_entry_label);
         //TODO fill function and provide all the ids.
 
         //NOTE: There are three cases for a return.
@@ -284,15 +304,50 @@ impl SpirvBackend {
         //      2: Single value, is easy call return as intended
         //      3: Multiple values: In that case, inject a OpCompositeConstuct for the `retty` that takes care of
         //         Assembling the return struct as declared.
-        let return_id = self.emit_region(
-            ctx,
-            builder,
-            RegionLocation {
-                node: lmd,
-                region_index: 0,
-            },
-            retty,
-        )?;
+
+        self.emit_region(ctx, builder, lmdregion)?;
+
+        //build the result based on the amount of outputs.
+        //for single output we can just return the id of the output-connected node.
+        // of all others we
+        let return_id = match self
+            .graph
+            .node(lmd)
+            .node_type
+            .unwrap_lambda_ref()
+            .result_count()
+        {
+            0 => None,
+            1 => {
+                let result_connected = self
+                    .graph
+                    .region(&lmdregion)
+                    .unwrap()
+                    .result_src(&self.graph, 0)
+                    .unwrap();
+                let result_id = ctx.node_mapping.get(&result_connected).unwrap();
+                Some(*result_id)
+            }
+            rescount => {
+                //in this case, build a composite out of all results and return that.
+                let constituents: Vec<Word> = (0..rescount)
+                    .map(|idx| {
+                        let src_port = self
+                            .graph
+                            .region(&lmdregion)
+                            .unwrap()
+                            .result_src(&self.graph, idx)
+                            .unwrap();
+                        *ctx.node_mapping.get(&src_port).unwrap()
+                    })
+                    .collect();
+
+                let result_id = builder
+                    .composite_construct(retty, None, constituents)
+                    .unwrap();
+                Some(result_id)
+            }
+        };
 
         //return value if needed
         if let Some(id) = return_id {
@@ -313,8 +368,7 @@ impl SpirvBackend {
         ctx: &mut EmitCtx,
         builder: &mut Builder,
         reg: RegionLocation,
-        result_type_id: Word,
-    ) -> Result<Option<Word>, BackendSpirvError> {
+    ) -> Result<(), BackendSpirvError> {
         //explore from the results upwards and build the
         //node -> word mapping bottom up. So similar to the λ-dependency scheduler,
         // but region local.
@@ -382,7 +436,7 @@ impl SpirvBackend {
                     .get_single_node_result_type(node.node)
                     .expect("Expected simple node to have retun type!");
                 let node_id =
-                    self.serialize_node(ctx, builder, &input_srcs, &result_type, node.node)?;
+                    self.serialize_node(ctx, builder, &input_srcs, &result_type, reg, node.node)?;
                 ctx.node_mapping.insert(node, node_id);
                 changed_any = true;
             }
@@ -397,48 +451,7 @@ impl SpirvBackend {
             }
         }
 
-        //build the result based on the amount of outputs.
-        //for single output we can just return the id of the output-connected node.
-        // of all others we
-
-        match self
-            .graph
-            .node(reg.node)
-            .node_type
-            .unwrap_lambda_ref()
-            .result_count()
-        {
-            0 => Ok(None),
-            1 => {
-                let result_connected = self
-                    .graph
-                    .region(&reg)
-                    .unwrap()
-                    .result_src(&self.graph, 0)
-                    .unwrap();
-                let result_id = ctx.node_mapping.get(&result_connected).unwrap();
-                Ok(Some(*result_id))
-            }
-            rescount => {
-                //in this case, build a composite out of all results and return that.
-                let constituents: Vec<Word> = (0..rescount)
-                    .map(|idx| {
-                        let src_port = self
-                            .graph
-                            .region(&reg)
-                            .unwrap()
-                            .result_src(&self.graph, idx)
-                            .unwrap();
-                        *ctx.node_mapping.get(&src_port).unwrap()
-                    })
-                    .collect();
-
-                let result_id = builder
-                    .composite_construct(result_type_id, None, constituents)
-                    .unwrap();
-                Ok(Some(result_id))
-            }
-        }
+        Ok(())
     }
 
     fn serialize_node(
@@ -447,6 +460,7 @@ impl SpirvBackend {
         builder: &mut Builder,
         input_srcs: &SmallColl<OutportLocation>,
         result_type: &SpvType,
+        parent_region: RegionLocation,
         node: NodeRef,
     ) -> Result<Word, BackendSpirvError> {
         let mut src_ids = input_srcs
@@ -474,6 +488,7 @@ impl SpirvBackend {
 
                     Ok(result_id)
                 }
+                BackendOp::HlOp(o) => panic!("Unexpected HlOp in SPIR-V serialization: {o:?}"),
                 BackendOp::Dummy => panic!("Unexpected Dummy node in SPIR-V serialization"),
             },
             NodeType::Apply(_a) => {
@@ -500,6 +515,105 @@ impl SpirvBackend {
                     .function_call(result_type_id, None, call_id, src_ids)
                     .unwrap();
                 Ok(result_id)
+            }
+            NodeType::Gamma(g) => {
+                //Build the gamma-region scope for each branch, and then recurse the branch.
+                //After all of them returning,
+                //append the (SPIR-V)-phi node and return the result id.
+
+                assert!(g.regions().len() == 2);
+                //NOTE: all branches have the same result type, always.
+                let result_type_id = *ctx.type_mapping.get(result_type).unwrap();
+                let merge_label_id = builder.id();
+                let _selection_merge_id = builder
+                    .selection_merge(merge_label_id, SelectionControl::NONE)
+                    .unwrap();
+                let if_label = builder.id();
+                let else_label = builder.id();
+                //TODO: implement some kind of static gamma-analysis to have nice branch weights.
+                let _cond_branch = builder
+                    .branch_conditional(src_ids[0], if_label, else_label, [])
+                    .unwrap();
+
+                //This is the Vec<(branch_result_id, branch_block_id)> used by op phi, but already flattened
+                //the way _it isi needed_.
+                let mut result_parent_pairs: SmallColl<(u32, u32)> = SmallVec::new();
+                //now, for both gamma-blocks: Setup the jump-label,
+                //then emit the block, finally, emit the unconditional branch to the merge_label
+                for (blockid, index) in [(if_label, 0), (else_label, 1)] {
+                    let gamma_region = RegionLocation {
+                        node,
+                        region_index: index,
+                    };
+                    let block_entry_label = builder.begin_block(Some(blockid)).unwrap();
+                    ctx.push_block_id(gamma_region, block_entry_label);
+                    //make it possible for the emit_region to resolve,
+                    //by seeding all entry_variabels
+                    for idx in 1..src_ids.len() {
+                        //map the entry_var_input idx-1 to entry_var_argument
+                        ctx.node_mapping.insert(
+                            OutportLocation {
+                                node,
+                                output: OutputType::EntryVariableArgument {
+                                    branch: index,
+                                    entry_variable: idx - 1,
+                                },
+                            },
+                            src_ids[idx],
+                        );
+                    }
+
+                    self.emit_region(ctx, builder, gamma_region)
+                        .expect("Expected return value from gamma-region");
+
+                    //Retrive the result_id, by looking it up in the just used ctx
+                    let result_connected_port = self
+                        .graph
+                        .region(&gamma_region)
+                        .unwrap()
+                        .result_src(&self.graph, 0)
+                        .unwrap();
+
+                    let result_id = *ctx.node_mapping.get(&result_connected_port).unwrap();
+                    //read out the last block id of our own region, and use that as src-label
+                    //for the following _out-of-branch_ phi-instruction.
+                    let exit_block_id = ctx
+                        .region_blocks
+                        .get(&gamma_region)
+                        .unwrap()
+                        .last()
+                        .cloned()
+                        .unwrap();
+
+                    //NOTE: We need to reconstruct the basic-block id of result_id, since we _don't know_
+                    //      what emit_region above might have done basic-block wise.
+                    //      so the idea is, to go to result_id's definition, and then reverse
+                    //      until we find the def.
+                    //
+                    //      A nice thing is, that we can use the blockid pre-given as a _lower-bound_.
+                    //      so... thats nice I guess.
+                    result_parent_pairs.push((result_id, exit_block_id));
+                    //branch to the merge label
+                    builder.branch(merge_label_id).unwrap();
+                }
+
+                //finally, append the merge label, and the phi, that'll emit our actual _created_ value.
+                let _ = builder.begin_block(Some(merge_label_id)).unwrap();
+                ctx.push_block_id(parent_region, merge_label_id);
+                let resid = builder
+                    .phi(result_type_id, None, result_parent_pairs)
+                    .unwrap();
+
+                //also register the associated _out_of_gamma_port_
+                //with the id
+                ctx.node_mapping.insert(
+                    OutportLocation {
+                        node,
+                        output: OutputType::ExitVariableOutput(0),
+                    },
+                    resid,
+                );
+                Ok(resid)
             }
             //TODO: implement ifs / matches and loops so we could _in principle_ emit those.
             any => panic!("Unsupported node type {any:?}"),
@@ -663,6 +777,7 @@ fn register_or_get_type(builder: &mut Builder, ctx: &mut EmitCtx, ty: &SpvType) 
                     builder.type_int(a.resolution, if signed { 1 } else { 0 })
                 }
                 ArithBaseTy::Float => builder.type_float(a.resolution),
+                ArithBaseTy::Bool => builder.type_bool(),
             };
 
             match &a.shape {

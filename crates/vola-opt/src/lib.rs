@@ -215,9 +215,8 @@ impl Optimizer {
             ast_add_start.elapsed().as_nanos()
         );
 
-        if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("DUMP_AST_ADD").is_ok() {
-            //self.dump_svg("ast_add.svg", false);
-            self.push_debug_state("AST add");
+        if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("VOLA_DUMP_AST").is_ok() {
+            self.push_debug_state("AST to Opt");
         }
 
         if errors.len() > 0 {
@@ -248,14 +247,18 @@ impl Optimizer {
             }
         }
 
+        let layout_config = LayoutConfig {
+            ignore_dead_node: false,
+            ..Default::default()
+        };
+
         self.viewer_state
-            .new_state_builder(name, &self.graph)
+            .new_state_builder(name, &self.graph, &layout_config)
             .with_flags("Type", &typemap)
             .with_flags("Span", &self.span_tags)
             .with_flags("Name", &self.names)
             .build();
 
-        println!("Dumping {name}");
         if std::env::var("VOLA_ALWAYS_WRITE_DUMP").is_ok() {
             self.dump_debug_state(&format!("{name}.bin"));
         }
