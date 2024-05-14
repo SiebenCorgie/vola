@@ -563,12 +563,12 @@ impl<'a> BlockBuilder<'a> {
                 .graph
                 .on_region(&self.region, |reg| {
                     let (gamma_node, (loop_node, port_package)) = reg.new_decission(|gb| {
-                        let (g_inp_bound_lower, _) = gb.add_entry_variable();
+                        let (g_inp_bound_lower, lower_bound_idx) = gb.add_entry_variable();
                         let g_arg_bound_lower = OutportLocation {
                             node: g_inp_bound_lower.node,
                             output: g_inp_bound_lower.input.map_to_in_region(0).unwrap(),
                         };
-                        let (g_inp_bound_higher, _) = gb.add_entry_variable();
+                        let (g_inp_bound_higher, upper_bound_idx) = gb.add_entry_variable();
                         let g_arg_bound_higher = OutportLocation {
                             node: g_inp_bound_higher.node,
                             output: g_inp_bound_higher.input.map_to_in_region(0).unwrap(),
@@ -584,13 +584,17 @@ impl<'a> BlockBuilder<'a> {
                             input: g_result_value_out_port.output.map_to_in_region(0).unwrap(),
                         };
 
+                        //This i an assumption the type-derive pass uses later on
+                        assert!(lower_bound_idx == 0);
+                        assert!(upper_bound_idx == 1);
+
                         //now add both branches, add the theta
                         //node immediatly, and use the same mapping methode, to map all variables, and the
                         let (idx0, (loop_node, (lv_arg_value, lv_res_value))) =
                             gb.new_branch(|rg, _| {
                                 let (loop_node, ports) = rg.new_loop(|lb| {
-                                    let (lv_inp_value, lv_arg_value, lv_res_value, lv_out_value) =
-                                        lb.add_loop_variable();
+                                    //NOTE: we have an informal convention, that the first
+                                    //      three arguments are (lower_bound, higher_bound, loop-value)
                                     let (
                                         lv_inp_bound_lower,
                                         lv_arg_bound_lower,
@@ -603,6 +607,9 @@ impl<'a> BlockBuilder<'a> {
                                         lv_res_bound_higher,
                                         _,
                                     ) = lb.add_loop_variable();
+
+                                    let (lv_inp_value, lv_arg_value, lv_res_value, lv_out_value) =
+                                        lb.add_loop_variable();
 
                                     let _ = lb.on_loop(|rg| {
                                         //setup the control structure within the loop. This are two parts
@@ -796,7 +803,6 @@ impl<'a> BlockBuilder<'a> {
             .get(&theta.initial_assignment.dst.0)
             .unwrap()
             .port;
-        println!("Loopresult from: {:?}", current_theta_res_port);
         self.opt
             .graph
             .connect(
@@ -805,6 +811,46 @@ impl<'a> BlockBuilder<'a> {
                 OptEdge::value_edge(),
             )
             .unwrap();
+        //sprinkel some debug info all over the place
+        self.opt.span_tags.set(gamma_node.into(), expr_span.clone());
+        self.opt.span_tags.set(loop_node.into(), expr_span.clone());
+        self.opt.span_tags.set(
+            RegionLocation {
+                node: gamma_node,
+                region_index: 0,
+            }
+            .into(),
+            expr_span.clone(),
+        );
+        self.opt.span_tags.set(
+            RegionLocation {
+                node: gamma_node,
+                region_index: 1,
+            }
+            .into(),
+            expr_span.clone(),
+        );
+        self.opt.span_tags.set(loop_node.into(), expr_span.clone());
+        self.opt.span_tags.set(
+            RegionLocation {
+                node: loop_node,
+                region_index: 0,
+            }
+            .into(),
+            expr_span.clone(),
+        );
+        self.opt.names.set(
+            gamma_node.into(),
+            format!(
+                "loop<{}> (first iteration head-ctrl)",
+                theta.initial_assignment.dst.0
+            ),
+        );
+        self.opt.names.set(
+            loop_node.into(),
+            format!("loop<{}> (tail-ctrl)", theta.initial_assignment.dst.0),
+        );
+
         //use the gamma-nodes's exit variable as loop_exit_src
         Ok(ports.g_result_value_out_port)
     }
