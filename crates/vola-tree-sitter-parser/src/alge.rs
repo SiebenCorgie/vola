@@ -14,7 +14,7 @@ use vola_ast::{
     alge::{
         AssignStmt, BinaryOp, EvalExpr, Expr, ExprTy, FieldAccessor, ImplBlock, LetStmt, UnaryOp,
     },
-    common::{Block, Call, Digit, GammaExpr, Ident, Literal, Stmt},
+    common::{Block, Call, Digit, GammaExpr, Ident, Literal, Stmt, ThetaExpr},
     csg::{AccessDesc, CsgStmt, ScopedCall},
 };
 
@@ -150,8 +150,6 @@ impl FromTreeSitter for Expr {
                                 expected: "digit | identifier | .".to_owned(),
                             };
 
-                            println!("SExpr:\n{}", next_node.to_sexp());
-
                             report(
                                 error_reporter(err.clone(), ctx.span(&next_node))
                                     .with_label(Label::new(ctx.span(&next_node)).with_message(
@@ -240,10 +238,11 @@ impl FromTreeSitter for Expr {
                 ExprTy::List(list)
             }
             "gamma_expr" => ExprTy::GammaExpr(Box::new(GammaExpr::parse(ctx, dta, &child_node)?)),
+            "theta_expr" => ExprTy::ThetaExpr(Box::new(ThetaExpr::parse(ctx, dta, &child_node)?)),
             _ => {
                 let err = ParserError::UnexpectedAstNode {
                     kind: child_node.kind().to_owned(),
-                    expected: " unary expression| binary expression | eval expression | (alge expression) | literal | field access | identifier | call | list ".to_owned(),
+                    expected: " unary expression| binary expression | eval expression | (alge expression) | literal | field access | identifier | call | list | gamma_expr | theta_expr ".to_owned(),
                 };
                 report(error_reporter(err.clone(), ctx.span(&child_node)).finish());
                 return Err(err);
@@ -558,7 +557,6 @@ impl FromTreeSitter for Stmt {
                 ParserError::consume_expected_node_string(ctx, dta, node.child(1), ";")?;
                 stmt
             }
-            "theta_expr" => todo!("implement theta expr parsing"),
             _ => {
                 let err = ParserError::UnexpectedAstNode {
                     kind: stmtnode.kind().to_owned(),

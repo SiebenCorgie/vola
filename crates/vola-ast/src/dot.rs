@@ -16,7 +16,7 @@ use vola_common::dot::{
 
 use crate::{
     alge::{AlgeFunc, AssignStmt, EvalExpr, Expr, ExprTy, FieldAccessor, ImplBlock, LetStmt},
-    common::{Block, CTArg, Call, GammaExpr, Stmt, TypedIdent},
+    common::{Block, CTArg, Call, GammaExpr, Stmt, ThetaExpr, TypedIdent},
     csg::{AccessDesc, CSGConcept, CSGNodeDef, CSGNodeTy, CsgStmt, ExportFn, FieldDef, ScopedCall},
     AstEntry, TopLevelNode, VolaAst,
 };
@@ -394,6 +394,39 @@ impl DotNode for GammaExpr {
     }
 }
 
+impl DotNode for ThetaExpr {
+    fn id(&self) -> String {
+        format!("ThetaExpr {:?}..{:?}", self.span.from, self.span.to)
+    }
+
+    fn content(&self) -> String {
+        format!("theta-over-{}", self.initial_assignment.dst.0)
+    }
+
+    fn color(&self) -> vola_common::dot::graphviz_rust::attributes::color_name {
+        vola_common::dot::graphviz_rust::attributes::color_name::orange
+    }
+
+    fn build_children(&self, mut builder: GraphvizBuilder) -> GraphvizBuilder {
+        builder.add_node(&self.initial_assignment);
+        builder.connect(self, &self.initial_assignment);
+        builder = self.initial_assignment.build_children(builder);
+
+        builder.add_node(&self.bound_lower);
+        builder.connect(self, &self.bound_lower);
+        builder = self.bound_lower.build_children(builder);
+
+        builder.add_node(&self.bound_upper);
+        builder.connect(self, &self.bound_upper);
+        builder = self.bound_upper.build_children(builder);
+
+        builder.add_node(&self.body);
+        builder.connect(self, &self.body);
+        builder = self.body.build_children(builder);
+        builder
+    }
+}
+
 impl DotNode for ScopedCall {
     fn id(&self) -> String {
         format!("ScopedCall {:?}..{:?}", self.span.from, self.span.to)
@@ -456,7 +489,7 @@ impl DotNode for Expr {
             ExprTy::ScopedCall(s) => s.content(),
             ExprTy::AccessExpr(_e) => format!("AccessDesc"),
             ExprTy::GammaExpr(e) => e.content(),
-            ExprTy::ThetaExpr => format!("Theta"),
+            ExprTy::ThetaExpr(t) => t.content(),
         }
     }
 
@@ -505,7 +538,8 @@ impl DotNode for Expr {
                 builder
             }
             ExprTy::GammaExpr(e) => e.build_children(builder),
-            ExprTy::Ident(_) | ExprTy::Literal(_) | ExprTy::ThetaExpr => builder,
+            ExprTy::ThetaExpr(t) => t.build_children(builder),
+            ExprTy::Ident(_) | ExprTy::Literal(_) => builder,
         }
     }
 }

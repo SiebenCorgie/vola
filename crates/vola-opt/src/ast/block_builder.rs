@@ -11,7 +11,7 @@ use rvsdg::{edge::{OutportLocation, OutputType}, nodes::NodeType, region::Region
 use vola_ast::{alge::{EvalExpr, Expr, ExprTy}, common::Stmt, csg::{AccessDesc, CSGNodeTy}};
 use vola_common::{ariadne::{Color, Fmt, Label}, error::error_reporter, report, Span};
 
-use crate::{common::{LmdContext, Ty}, csg::TreeAccess, OptError, OptNode, Optimizer};
+use crate::{common::{LmdContext, Ty, VarDef}, csg::TreeAccess, OptError, OptNode, Optimizer};
 
 
 pub(crate) enum ReturnExpr{
@@ -85,7 +85,7 @@ pub struct BlockBuilder<'a> {
     ///Current _variable_ context for this block.
     ///FIX: name differently. Since this is more of a _region_context_ at this point.
     pub lmd_ctx: LmdContext,
-
+    
     ///The region we are building the block in.
     pub region: RegionLocation,
     pub opt: &'a mut Optimizer
@@ -459,5 +459,34 @@ impl<'a> BlockBuilder<'a> {
 
         Ok((return_type, access_output))
     }
+
+    ///Tries to find `var`, which must be defined in the context already in some parent region, and imports 
+    ///it into `self.region`. If successful, retruns the newly exposed port.
+    fn lazy_import(&mut self, current_port: OutportLocation) -> Option<OutportLocation>{
+        self.opt.graph.import_context(current_port, self.region).ok()
+    }
+
     
+
+    pub fn ref_var(&mut self, var_name: &str) -> Option<VarDef>{
+        if let Some(var) = self.lmd_ctx.defined_vars.get(var_name).cloned(){
+            if self.opt.outport_in_region(self.region, var.port){
+                Some(var)
+            }else{
+                //Is not in region, but defined, try to lazy import
+                if let Some(new_known_port) = self.lazy_import(var.port){
+                    //overwrite def 
+                    let new_var_def = VarDef{port: new_known_port, span: var.span};
+                    assert!(self.lmd_ctx.defined_vars.insert(var_name.to_owned(), new_var_def.clone()).is_some());
+                    Some(new_var_def)
+                }else{
+                    //failed to lazy import
+                    None
+                }
+            }
+        }else{
+            //var undefined
+            None
+        }
+    }
 }

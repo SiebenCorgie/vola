@@ -748,7 +748,7 @@ impl Optimizer {
         }
 
         //Now, before starting the loop over all nodes, derive any _inner_ region.
-        // So γ/τ-Nodes.
+        // So γ/θ-Nodes.
         for node in &build_stack{
             let region_count = self.graph.node(*node).regions().len();
             //Try to find a nicer span, otherwise use the one we already know.

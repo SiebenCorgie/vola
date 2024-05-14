@@ -71,3 +71,21 @@ fn unknown_subtree_reference() {
         Ok(_) => panic!("Expected 1 error"),
     }
 }
+
+#[test]
+fn simple_gamma() {
+    let pipeline = volac::Pipeline::new_in_memory();
+
+    pipeline
+        .execute_on_file(&"tests/vola_src/ifthenelse.vola")
+        .unwrap();
+}
+
+#[test]
+fn simple_theta() {
+    let pipeline = volac::Pipeline::new_in_memory();
+
+    pipeline
+        .execute_on_file(&"tests/vola_src/theta_assignment.vola")
+        .unwrap();
+}

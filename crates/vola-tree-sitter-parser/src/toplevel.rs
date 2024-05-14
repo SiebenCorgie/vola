@@ -56,7 +56,11 @@ impl FromTreeSitter for AstEntry {
                 let err = ParserError::UnknownAstNode {
                     kind: node.kind().to_owned(),
                 };
-                report(error_reporter(err.clone(), ctx.span(node)).finish());
+                report(
+                    error_reporter(err.clone(), ctx.span(node))
+                        .with_label(Label::new(ctx.span(node)).with_message("here"))
+                        .finish(),
+                );
                 Err(err)
             }
         }

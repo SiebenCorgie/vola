@@ -14,6 +14,8 @@ use crate::error::OptError;
 use crate::{common::Ty, Optimizer};
 use ahash::AHashMap;
 use rvsdg::attrib::AttribLocation;
+use rvsdg::edge::OutportLocation;
+use rvsdg::region::RegionLocation;
 use rvsdg::NodeRef;
 use rvsdg::{
     attrib::FlagStore, edge::LangEdge, nodes::LangNode, rvsdg_derive_lang::LangNode,
@@ -307,5 +309,20 @@ impl Optimizer {
             rvsdg::nodes::NodeType::Simple(s) => s.name(),
             other => format!("{other:?}"),
         }
+    }
+
+    pub fn outport_in_region(&self, region: RegionLocation, port: OutportLocation) -> bool {
+        //If the port is argument-like, and part of the region's node, this is true
+        if region.node == port.node && port.output.is_argument() {
+            return true;
+        }
+
+        //Otherwise the node needs to be in the region, and be result like
+        self.graph
+            .region(&region)
+            .unwrap()
+            .nodes
+            .contains(&port.node)
+            && !port.output.is_argument()
     }
 }

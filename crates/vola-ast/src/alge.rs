@@ -10,7 +10,7 @@
 use std::fmt::Display;
 
 use crate::{
-    common::{Block, Call, GammaExpr, Ident, Literal, Ty, TypedIdent},
+    common::{Block, Call, GammaExpr, Ident, Literal, ThetaExpr, Ty, TypedIdent},
     csg::{AccessDesc, ScopedCall},
 };
 use smallvec::SmallVec;
@@ -92,7 +92,7 @@ impl Expr {
             ExprTy::List(_) => self.span.clone(),
             ExprTy::Literal(_) => self.span.clone(),
             ExprTy::ScopedCall(c) => c.head_span(),
-            ExprTy::ThetaExpr => self.span.clone(),
+            ExprTy::ThetaExpr(t) => t.span.clone(),
             ExprTy::GammaExpr(e) => e.span.clone(),
             ExprTy::AccessExpr(e) => e.span.clone(),
         }
@@ -154,7 +154,7 @@ pub enum ExprTy {
     Literal(Literal),
     AccessExpr(AccessDesc),
     GammaExpr(Box<GammaExpr>),
-    ThetaExpr,
+    ThetaExpr(Box<ThetaExpr>),
 }
 
 ///Binds an algebraic expression to an identifier

@@ -1,0 +1,24 @@
+module std;
+
+//Copy from gaziya5 aka gaz in https://jbaker.graphics/writings/DEC.html
+
+entity Gaz();
+impl Gaz for SDF3D(at){
+	let p_se = for p_se = [at.x, at.y, at.z, 3.0, 0.0] in 0..10{
+		let newp = (([p_se.x, p_se.y, p_se.z] - [1.0, 1.0, 1.0]) % 2.0) - [1.0, 1.0, 1.0];
+		let e = 1.4 / dot(newp, newp);
+		let s = p_se.3 * p_se.4;
+		let p = newp * p_se.4;
+
+		p_se = [p.x, p.y, p.z, s, e];
+	};
+
+	length([p_se.y, p_se.z]) / p_se.3
+}
+
+
+export myFn(at: vec3){
+	csg t = Gaz();
+	eval t.SDF3D(at)
+}
+

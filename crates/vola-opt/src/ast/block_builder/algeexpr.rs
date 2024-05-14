@@ -14,12 +14,13 @@ use rvsdg::{
 };
 use vola_ast::{
     alge::{Expr, ExprTy},
-    common::{Block, Call, GammaExpr},
+    common::{Block, Call, GammaExpr, ThetaExpr},
 };
 use vola_common::{ariadne::Label, error::error_reporter, report, Span};
 
 use crate::{
     alge::{CallOp, ConstantIndex, Construct, EvalNode, ImmNat, ImmScalar, WkOp},
+    ast::block_builder::BlockBuilderConfig,
     common::{FnImport, LmdContext, VarDef},
     OptEdge, OptError, OptNode, TypeState,
 };
@@ -129,7 +130,7 @@ impl<'a> BlockBuilder<'a> {
                 //Try to find the access source, if successful, hook the source up to this and
                 // return the value
 
-                let src = if let Some(access) = self.lmd_ctx.defined_vars.get(&src.0) {
+                let src = if let Some(access) = self.ref_var(&src.0) {
                     access.port
                 } else {
                     let err = OptError::Any {
@@ -183,7 +184,7 @@ impl<'a> BlockBuilder<'a> {
             }
             ExprTy::Ident(i) => {
                 //try to resolve the ident, or throw an error if not possible
-                let ident_node = if let Some(noderef) = self.lmd_ctx.defined_vars.get(&i.0) {
+                let ident_node = if let Some(noderef) = self.ref_var(&i.0) {
                     noderef
                 } else {
                     let err = OptError::Any {
@@ -278,7 +279,7 @@ impl<'a> BlockBuilder<'a> {
                 return Err(err);
             }
             ExprTy::GammaExpr(e) => self.setup_gamma_expr(*e, expr_span),
-            ExprTy::ThetaExpr => todo!("implement theta expr"),
+            ExprTy::ThetaExpr(t) => self.setup_theta_expr(*t, expr_span),
         }
     }
 
@@ -400,6 +401,17 @@ impl<'a> BlockBuilder<'a> {
                         .expect("Var should be defined!");
                     reg.ctx_mut()
                         .connect(def_port.port, var_entry_port.clone(), OptEdge::value_edge())
+                        .expect("Expected to be connected without problems!");
+                }
+                //do the same for the already defined functions.
+                for (fn_name, fn_entry_port) in &fn_mapping {
+                    let def_port = self
+                        .lmd_ctx
+                        .imported_functions
+                        .get(fn_name)
+                        .expect("Fn should be defined!");
+                    reg.ctx_mut()
+                        .connect(def_port.port, fn_entry_port.clone(), OptEdge::value_edge())
                         .expect("Expected to be connected without problems!");
                 }
 
@@ -612,6 +624,306 @@ impl<'a> BlockBuilder<'a> {
             node: gamma_node,
             output: OutputType::ExitVariableOutput(0),
         })
+    }
+
+    fn setup_theta_expr(
+        &mut self,
+        theta: ThetaExpr,
+        expr_span: Span,
+    ) -> Result<OutportLocation, OptError> {
+        //Conceptually we build a gamma node, that wraps the theta node and checks the
+        //head exprssion. This is needed, since the RVSDG defines theta nodes as tail controlled.
+        //makes sense, since it always needs to produces _at least something_, so needs to run once.
+        //
+        //So the _ran 0-time_ case is done via the gamma-node.
+
+        //first things first, setup the initial value of the loop, as well as the two bounds.
+
+        struct PortPackage {
+            //The arugmentport in the theta node, that routes the _last_ value of
+            //the loop-value
+            lv_arg_value: OutportLocation,
+            //the loop_-value result port _after executing the loop_
+            lv_res_value: InportLocation,
+
+            g_initial_input_port: InportLocation,
+            g_inp_bound_lower: InportLocation,
+            g_inp_bound_higher: InportLocation,
+            g_result_value_out_port: OutportLocation,
+        }
+
+        let initial_assignment_src = self.setup_alge_expr(theta.initial_assignment.expr)?;
+
+        let bound_lower = self.setup_alge_expr(theta.bound_lower)?;
+        let bound_upper = self.setup_alge_expr(theta.bound_upper)?;
+
+        //we use the implicit LessThan for checks... always :D
+        let initial_lt = self
+            .opt
+            .graph
+            .on_region(&self.region, |reg| {
+                let (node, _edges) = reg
+                    .connect_node(
+                        OptNode {
+                            span: Span::empty(),
+                            node: Box::new(CallOp::new(WkOp::Lt)),
+                        },
+                        &[bound_lower, bound_upper],
+                    )
+                    .unwrap();
+                node
+            })
+            .unwrap();
+
+        let (gamma_node, (loop_node, ports)) =
+            self.opt
+                .graph
+                .on_region(&self.region, |reg| {
+                    let (gamma_node, (loop_node, port_package)) = reg.new_decission(|gb| {
+                        let (g_inp_bound_lower, _) = gb.add_entry_variable();
+                        let g_arg_bound_lower = OutportLocation {
+                            node: g_inp_bound_lower.node,
+                            output: g_inp_bound_lower.input.map_to_in_region(0).unwrap(),
+                        };
+                        let (g_inp_bound_higher, _) = gb.add_entry_variable();
+                        let g_arg_bound_higher = OutportLocation {
+                            node: g_inp_bound_higher.node,
+                            output: g_inp_bound_higher.input.map_to_in_region(0).unwrap(),
+                        };
+                        let (g_initial_input_port, _) = gb.add_entry_variable();
+                        let g_initial_arg_port = OutportLocation {
+                            node: g_initial_input_port.node,
+                            output: g_initial_input_port.input.map_to_in_region(0).unwrap(),
+                        };
+                        let (_, g_result_value_out_port) = gb.add_exit_variable();
+                        let g_result_value_res_port = InportLocation {
+                            node: g_result_value_out_port.node,
+                            input: g_result_value_out_port.output.map_to_in_region(0).unwrap(),
+                        };
+
+                        //now add both branches, add the theta
+                        //node immediatly, and use the same mapping methode, to map all variables, and the
+                        let (idx0, (loop_node, (lv_arg_value, lv_res_value))) =
+                            gb.new_branch(|rg, _| {
+                                let (loop_node, ports) = rg.new_loop(|lb| {
+                                    let (lv_inp_value, lv_arg_value, lv_res_value, lv_out_value) =
+                                        lb.add_loop_variable();
+                                    let (
+                                        lv_inp_bound_lower,
+                                        lv_arg_bound_lower,
+                                        lv_res_bound_lower,
+                                        _,
+                                    ) = lb.add_loop_variable();
+                                    let (
+                                        lv_inp_bound_higher,
+                                        lv_arg_bound_higher,
+                                        lv_res_bound_higher,
+                                        _,
+                                    ) = lb.add_loop_variable();
+
+                                    let _ = lb.on_loop(|rg| {
+                                        //setup the control structure within the loop. This are two parts
+                                        //1. the Lt controll part that is routed to the theta-predicate
+                                        //2. the idx+1 part that is routed to lv_res_bound_lower
+                                        //3. routing of the upper bound
+                                        let (ltcheck, _) = rg
+                                            .connect_node(
+                                                OptNode::new(CallOp::new(WkOp::Lt), Span::empty()),
+                                                &[lv_arg_bound_lower, lv_arg_bound_higher],
+                                            )
+                                            .unwrap();
+                                        //connect the check to the predicate
+                                        rg.ctx_mut()
+                                            .connect(
+                                                ltcheck.output(0),
+                                                InportLocation {
+                                                    node: lv_inp_bound_higher.node,
+                                                    input: InputType::ThetaPredicate,
+                                                },
+                                                OptEdge::value_edge(),
+                                            )
+                                            .unwrap();
+
+                                        //now build the idx + 1 and route that to the lv_res_bound_lower
+                                        let litone = rg.insert_node(OptNode::new(
+                                            ImmNat::new(1),
+                                            Span::empty(),
+                                        ));
+                                        let (subone, _) = rg
+                                            .connect_node(
+                                                OptNode::new(CallOp::new(WkOp::Sub), Span::empty()),
+                                                &[lv_arg_bound_lower, litone.output(0)],
+                                            )
+                                            .unwrap();
+
+                                        rg.ctx_mut()
+                                            .connect(
+                                                subone.output(0),
+                                                lv_res_bound_lower,
+                                                OptEdge::value_edge(),
+                                            )
+                                            .unwrap();
+
+                                        //now route the upper bound directly
+                                        rg.ctx_mut()
+                                            .connect(
+                                                lv_arg_bound_higher,
+                                                lv_res_bound_higher,
+                                                OptEdge::value_edge(),
+                                            )
+                                            .unwrap();
+
+                                        //finally rout the initial value, lower and upper bound from the
+                                        //gamma-node args to the lv_inputs
+                                        rg.ctx_mut()
+                                            .connect(
+                                                g_arg_bound_lower,
+                                                lv_inp_bound_lower,
+                                                OptEdge::value_edge(),
+                                            )
+                                            .unwrap();
+                                        rg.ctx_mut()
+                                            .connect(
+                                                g_arg_bound_higher,
+                                                lv_inp_bound_higher,
+                                                OptEdge::value_edge(),
+                                            )
+                                            .unwrap();
+                                        rg.ctx_mut()
+                                            .connect(
+                                                g_initial_arg_port,
+                                                lv_inp_value,
+                                                OptEdge::value_edge(),
+                                            )
+                                            .unwrap();
+                                        rg.ctx_mut()
+                                            .connect(
+                                                lv_out_value,
+                                                g_result_value_res_port,
+                                                OptEdge::value_edge(),
+                                            )
+                                            .unwrap();
+                                    });
+                                    (lv_arg_value, lv_res_value)
+                                });
+                                (loop_node, ports)
+                            });
+                        let (idx1, _) = gb.new_branch(|bb, _| {
+                            //for the else branch, just connect the initial value to the result
+                            let initial_argport = OutportLocation {
+                                node: g_initial_arg_port.node,
+                                output: g_initial_input_port.input.map_to_in_region(1).unwrap(),
+                            };
+                            let initial_res_port = InportLocation {
+                                node: g_initial_arg_port.node,
+                                input: g_result_value_out_port.output.map_to_in_region(1).unwrap(),
+                            };
+                            bb.ctx_mut()
+                                .connect(initial_argport, initial_res_port, OptEdge::value_edge())
+                                .unwrap();
+                        });
+
+                        assert!(idx0 == 0);
+                        assert!(idx1 == 1);
+
+                        (
+                            loop_node,
+                            PortPackage {
+                                lv_arg_value,
+                                lv_res_value,
+                                g_initial_input_port,
+                                g_inp_bound_lower,
+                                g_inp_bound_higher,
+                                g_result_value_out_port,
+                            },
+                        )
+                    });
+
+                    (gamma_node, (loop_node, port_package))
+                })
+                .unwrap();
+
+        //do the static rounting which is
+        //1. initila check to gamma-predicate
+        //2. lower_bound to pass-through
+        //3. upper_bound to pass-through,
+        //4. initial_value to pass-through
+        self.opt
+            .graph
+            .connect(
+                initial_lt.output(0),
+                InportLocation {
+                    node: gamma_node,
+                    input: InputType::GammaPredicate,
+                },
+                OptEdge::value_edge(),
+            )
+            .unwrap();
+
+        self.opt
+            .graph
+            .connect(bound_lower, ports.g_inp_bound_lower, OptEdge::value_edge())
+            .unwrap();
+
+        self.opt
+            .graph
+            .connect(bound_upper, ports.g_inp_bound_higher, OptEdge::value_edge())
+            .unwrap();
+        self.opt
+            .graph
+            .connect(
+                initial_assignment_src,
+                ports.g_initial_input_port,
+                OptEdge::value_edge(),
+            )
+            .unwrap();
+
+        //now build the theta_node in the gamma-node's _if_ branch
+        //we rely on the auto-import of used variables in the _setup_alge_expr_
+        //routine to import any needed variables
+        //add the predicate port
+        let mut block = self.inherite_ctx(
+            theta.span.clone(),
+            BlockBuilderConfig {
+                expect_return: crate::ast::block_builder::RetType::None,
+                allow_eval: false,
+                allow_csg_stmt: false,
+            },
+            self.return_type.clone(),
+        );
+        //move to the theta node
+        block.region = RegionLocation {
+            node: loop_node,
+            region_index: 0,
+        };
+        block.lmd_ctx.defined_vars.insert(
+            theta.initial_assignment.dst.0.clone(),
+            VarDef {
+                port: ports.lv_arg_value,
+                span: theta.initial_assignment.span.clone(),
+            },
+        );
+
+        let _ret = block.build_block(theta.body)?;
+
+        //finally, after stopping, connect the initial_assignment var to the theta_node's result port
+        let current_theta_res_port = block
+            .lmd_ctx
+            .defined_vars
+            .get(&theta.initial_assignment.dst.0)
+            .unwrap()
+            .port;
+        println!("Loopresult from: {:?}", current_theta_res_port);
+        self.opt
+            .graph
+            .connect(
+                current_theta_res_port,
+                ports.lv_res_value,
+                OptEdge::value_edge(),
+            )
+            .unwrap();
+        //use the gamma-nodes's exit variable as loop_exit_src
+        Ok(ports.g_result_value_out_port)
     }
 
     fn setup_call_expr(
