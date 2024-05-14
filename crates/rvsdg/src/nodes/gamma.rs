@@ -272,6 +272,13 @@ impl GammaNode {
     pub fn predicate_mut(&mut self) -> &mut Input {
         &mut self.inputs[0]
     }
+
+    pub fn entry_var_count(&self) -> usize {
+        self.entry_var_count
+    }
+    pub fn exit_var_count(&self) -> usize {
+        self.exit_var_count
+    }
 }
 
 pub type DecisionNode = GammaNode;

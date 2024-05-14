@@ -6,11 +6,11 @@
 use std::collections::VecDeque;
 
 use crate::{
-    edge::{InputType, LangEdge, OutportLocation, OutputType},
+    edge::{InportLocation, InputType, LangEdge, OutportLocation, OutputType},
     err::GraphError,
     nodes::{LangNode, NodeType},
     region::RegionLocation,
-    Rvsdg,
+    EdgeRef, Rvsdg, SmallColl,
 };
 
 pub mod copy;
@@ -120,13 +120,141 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
     }
 
     ///Similarly to [Self::build_import_path_cv], but imports values via normal arguments to inner regions.
-    pub fn build_import_path_arg(
+    fn build_import_path_arg(
         &mut self,
-        _src: OutportLocation,
-        _path: &[RegionLocation],
-    ) -> OutportLocation {
-        //TODO implement similar to the CV version. Find out how we could merge the code though
-        todo!("Implement")
+        src_region: RegionLocation,
+        src: OutportLocation,
+        path: &[RegionLocation],
+    ) -> (OutportLocation, SmallColl<EdgeRef>) {
+        //Again, pretty similar to the cv version. BUT:
+        // We check for each _next_out_port_ if its already connected to
+        // current_region.node.
+        // if so, instead of setting up a new connection, we use the already existing one.
+        let mut created_edges = SmallColl::new();
+
+        let mut current_region = src_region;
+        let mut next_out_port = src;
+        for reg in path {
+            assert!(
+                self.region(&current_region)
+                    .unwrap()
+                    .nodes
+                    .contains(&reg.node),
+                "Expected next reg in path to be a child to its successor, successor: {}",
+                self.node(reg.node).node_type
+            );
+
+            //checkout, if the next_out_port is already connected to reg.node,
+            //if so use the already existing connection, and just map that port _into_
+            //the region.
+            let mut existing_connection = None;
+            for input_ty in self.node(reg.node).inport_types() {
+                let port = self.node(reg.node).inport(&input_ty).unwrap();
+                if let Some(src) = port.edge {
+                    if self.edge(src).src() == &next_out_port {
+                        //use the existing outport and inport
+                        let out_port = OutportLocation {
+                            node: reg.node,
+                            output: input_ty.map_to_in_region(reg.region_index).unwrap(),
+                        };
+                        let in_port = InportLocation {
+                            node: reg.node,
+                            input: input_ty,
+                        };
+
+                        existing_connection = Some((in_port, out_port));
+                        break;
+                    }
+                }
+            }
+
+            //child property holds, advance with new connection into child
+            let (_new_in_port, new_out_port) = if let Some((existing_in, existing_out)) =
+                existing_connection
+            {
+                (existing_in, existing_out)
+            } else {
+                let (new_in_port, new_out_port) = match &mut self.node_mut(reg.node).node_type {
+                    NodeType::Gamma(g) => {
+                        let ev_idx = g.add_entry_var();
+                        (
+                            reg.node
+                                .as_inport_location(InputType::EntryVariableInput(ev_idx)),
+                            reg.node
+                                .as_outport_location(OutputType::EntryVariableArgument {
+                                    branch: reg.region_index,
+                                    entry_variable: ev_idx,
+                                }),
+                        )
+                    }
+                    NodeType::Theta(t) => {
+                        //TODO: Is that correct, or do we want _normal_ arguments to a loop as well?
+                        let lv_idx = t.add_loop_variable();
+                        (
+                            reg.node.as_inport_location(InputType::Input(lv_idx)),
+                            reg.node.as_outport_location(OutputType::Argument(lv_idx)),
+                        )
+                    }
+                    any => panic!("Unexpected node type {any} in argument-path! Note that argument paths cannot import over λ & ϕ boundarie. So only θ & γ nodes can be bridged"),
+                };
+
+                //connect ports from next_out to new_port
+                let edg = self
+                    .connect(next_out_port, new_in_port, E::value_edge())
+                    .unwrap();
+                created_edges.push(edg);
+                (new_in_port, new_out_port)
+            };
+            //advance region and port
+            next_out_port = new_out_port;
+            current_region = reg.clone();
+        }
+
+        (next_out_port, created_edges)
+    }
+
+    ///Lets you import `src` as an argument into `dst`. Contrary to [import_context] it'll use arguments, loop variables etc.
+    ///to create the path.
+    ///
+    /// Is able to resolve import collissions. For instance if a GammaNode branch imports a
+    /// value that is already registered (by another branch) on a entry-variable.
+    ///
+    /// Fails if `src` is not within a dominating region of `dst`.
+    ///
+    ///
+    /// Returns the (possibly) new `OutportLocation` where `src` is exposed, as well as all created edges throughout the process.
+    pub fn import_argument(
+        &mut self,
+        src: OutportLocation,
+        dst: RegionLocation,
+    ) -> Result<(OutportLocation, SmallColl<EdgeRef>), GraphError> {
+        //similar to the cv version, first map out of dst_region
+        //an check for _src_ in that region till we either found the node,
+        //or we find the omega-node, in which case we failed to find the node.
+
+        // there is one edgecase, which is when src is within dst's region. So src.parent == dst.parent. In that case we
+        // can immediately return the src.
+        if self.node(src.node).parent == Some(dst.clone()) {
+            return Ok((src, SmallColl::with_capacity(0)));
+        }
+
+        //Find out what our dst region should be. Similarly to Rvsdg::connect we need to figure
+        // out if `src` is a argument-like port, or a output. If its an output, we search for the node's parent,
+        // otherwise we search for the argumet-port's region
+        let searched_for_region = if let Some(reg_idx) = src.output.argument_region_index() {
+            RegionLocation {
+                node: src.node,
+                region_index: reg_idx,
+            }
+        } else {
+            self.node(src.node).parent.as_ref().unwrap().clone()
+        };
+
+        let parent_stack = self.build_region_path(src, dst, searched_for_region)?;
+
+        //otherwise, iterate the parent stack from dst's region, down to src's region, always adding a new
+        // input-arg pair to the next, inner region.
+        Ok(self.build_import_path_arg(searched_for_region, src, &parent_stack))
     }
 
     /// Lets you import the output of `src` as context into `dst` region.
@@ -148,9 +276,11 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
         src: OutportLocation,
         dst: RegionLocation,
     ) -> Result<OutportLocation, GraphError> {
-        //The stack will keep track of region boundaries we crossed. We'll use that
-        // to get _free_ routing to dst, once we've found src.
-        let mut parent_stack: VecDeque<RegionLocation> = VecDeque::new();
+        // there is one edgecase, which is when src is within dst's region. So src.parent == dst.parent. In that case we
+        // can immediately return the src.
+        if self.node(src.node).parent == Some(dst.clone()) {
+            return Ok(src);
+        }
 
         //Find out what our dst region should be. Similarly to Rvsdg::connect we need to figure
         // out if `src` is a argument-like port, or a output. If its an output, we search for the node's parent,
@@ -163,6 +293,23 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
         } else {
             self.node(src.node).parent.as_ref().unwrap().clone()
         };
+
+        let parent_stack = self.build_region_path(src, dst, searched_for_region)?;
+
+        //otherwise, iterate the parent stack from dst's region, down to src's region, always adding a new
+        // input-arg pair to the next, inner region.
+        Ok(self.build_import_path_cv(searched_for_region, src, &parent_stack))
+    }
+
+    fn build_region_path(
+        &self,
+        src: OutportLocation,
+        dst: RegionLocation,
+        searched_for_region: RegionLocation,
+    ) -> Result<Vec<RegionLocation>, GraphError> {
+        //The stack will keep track of region boundaries we crossed. We'll use that
+        // to get _free_ routing to dst, once we've found src.
+        let mut parent_stack: VecDeque<RegionLocation> = VecDeque::new();
 
         let mut parent = Some(dst.clone());
         let mut found_region = false;
@@ -179,19 +326,10 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
         }
 
         //Check if we've found the parent region.
-        //
-        // there is one edgecase, which is when src is within dst's region. So src.parent == dst.parent. In that case we
-        // can immediately return the src.
-        if self.node(src.node).parent == Some(dst.clone()) {
-            return Ok(src);
-        }
-
         if !found_region {
             return Err(GraphError::NodeNotInParentRegion(src.node, dst));
-        };
-
-        //otherwise, iterate the parent stack from dst's region, down to src's region, always adding a new
-        // input-arg pair to the next, inner region.
-        Ok(self.build_import_path_cv(searched_for_region, src, parent_stack.make_contiguous()))
+        } else {
+            Ok(parent_stack.into_iter().collect())
+        }
     }
 }

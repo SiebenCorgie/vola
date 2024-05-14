@@ -458,15 +458,7 @@ impl<'a> BlockBuilder<'a> {
             .unwrap();
 
         Ok((return_type, access_output))
-    }
-
-    ///Tries to find `var`, which must be defined in the context already in some parent region, and imports 
-    ///it into `self.region`. If successful, retruns the newly exposed port.
-    fn lazy_import(&mut self, current_port: OutportLocation) -> Option<OutportLocation>{
-        self.opt.graph.import_context(current_port, self.region).ok()
-    }
-
-    
+    }   
 
     pub fn ref_var(&mut self, var_name: &str) -> Option<VarDef>{
         if let Some(var) = self.lmd_ctx.defined_vars.get(var_name).cloned(){
@@ -474,7 +466,16 @@ impl<'a> BlockBuilder<'a> {
                 Some(var)
             }else{
                 //Is not in region, but defined, try to lazy import
-                if let Some(new_known_port) = self.lazy_import(var.port){
+                if let Ok((new_known_port, created_edges)) = self.opt.graph.import_argument(var.port, self.region){
+                    //if we have type information for the old port, tag all created edges with that.
+                    if let Some(ty) = self.opt.find_type(&var.port.into()){
+                        for edg in created_edges{
+                            self.opt.graph.edge_mut(edg).ty.set_type(ty.clone());
+                        }
+                        //also tag the newly created port
+                        self.opt.typemap.set(new_known_port.into(), ty);
+                    }
+                    
                     //overwrite def 
                     let new_var_def = VarDef{port: new_known_port, span: var.span};
                     assert!(self.lmd_ctx.defined_vars.insert(var_name.to_owned(), new_var_def.clone()).is_some());

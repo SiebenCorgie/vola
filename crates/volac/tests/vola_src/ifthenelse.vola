@@ -4,12 +4,15 @@ concept Color: vec3 -> vec3;
 operation ColorFlip();
 
 impl ColorFlip<sub> for Color(at){
+
+	let mylocal_y = at.y + 1.0;
+	
 	if (at.x % 2.0) < 1.0{
-		[at.x + 1.0, at.y, 0.0]
+		[at.x + 1.0, mylocal_y, 0.0]
 	}else if at.y > 10.0{
 		[0.0, 1.0, 0.0]
 	}else{
-		[32.0, 64.0, 128.0]
+		[32.0, 64.0, clamp(mylocal_y, 0.0, 1.0)]
 	}
 }
 

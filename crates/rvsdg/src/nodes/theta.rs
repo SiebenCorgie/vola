@@ -198,6 +198,10 @@ impl ThetaNode {
     pub fn lv_output_mut(&mut self, n: usize) -> Option<&mut Output> {
         self.outputs.get_mut(n)
     }
+
+    pub fn loop_variable_count(&self) -> usize {
+        self.lv_count
+    }
 }
 
 #[cfg(test)]

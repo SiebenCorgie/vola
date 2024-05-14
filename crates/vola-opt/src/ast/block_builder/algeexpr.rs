@@ -361,24 +361,11 @@ impl<'a> BlockBuilder<'a> {
         //build the gamma node, then enter both branches. For the if-block just emit the block into that region,
         //for the else block, recurse the gamma_splitoff if needed, or
         //emit the else branch, if only that is left.
-        let (gamma_node, inport_mapping, fn_mapping) = self
+        let gamma_node = self
             .opt
             .graph
             .on_region(&self.region, |reg| {
-                let (gamma_node, (inport_mapping, fn_mapping)) = reg.new_decission(|gb| {
-                    //create a entry-variable for each defined var.
-                    //and add the inport to the gamma_node
-                    let mut inport_mapping = AHashMap::default();
-                    for (var_name, _def_port) in self.lmd_ctx.defined_vars.iter() {
-                        let (port, _idx) = gb.add_entry_variable();
-                        inport_mapping.insert(var_name.clone(), port);
-                    }
-                    let mut fn_mapping = AHashMap::default();
-                    for (fn_name, _def_port) in self.lmd_ctx.imported_functions.iter() {
-                        let (port, _idx) = gb.add_entry_variable();
-                        fn_mapping.insert(fn_name.clone(), port);
-                    }
-
+                let (gamma_node, _) = reg.new_decission(|gb| {
                     //always add 1 output to the gamma
                     let (_, _outport) = gb.add_exit_variable();
 
@@ -388,34 +375,9 @@ impl<'a> BlockBuilder<'a> {
 
                     assert!(idx0 == 0);
                     assert!(idx1 == 1);
-
-                    (inport_mapping, fn_mapping)
                 });
 
-                //hook up all the variables to the entry-node ports
-                for (var_name, var_entry_port) in &inport_mapping {
-                    let def_port = self
-                        .lmd_ctx
-                        .defined_vars
-                        .get(var_name)
-                        .expect("Var should be defined!");
-                    reg.ctx_mut()
-                        .connect(def_port.port, var_entry_port.clone(), OptEdge::value_edge())
-                        .expect("Expected to be connected without problems!");
-                }
-                //do the same for the already defined functions.
-                for (fn_name, fn_entry_port) in &fn_mapping {
-                    let def_port = self
-                        .lmd_ctx
-                        .imported_functions
-                        .get(fn_name)
-                        .expect("Fn should be defined!");
-                    reg.ctx_mut()
-                        .connect(def_port.port, fn_entry_port.clone(), OptEdge::value_edge())
-                        .expect("Expected to be connected without problems!");
-                }
-
-                (gamma_node, inport_mapping, fn_mapping)
+                gamma_node
             })
             .unwrap();
 
@@ -442,47 +404,7 @@ impl<'a> BlockBuilder<'a> {
             .span_tags
             .set(condition.node.into(), condition_span.clone());
 
-        //for the if-branch, always build a new block-builder which is based on the new var-mapping
-        let if_lmd_ctx = LmdContext {
-            defined_vars: inport_mapping
-                .iter()
-                .map(|(varname, gamma_inport)| {
-                    let old_var = self.lmd_ctx.defined_vars.get(varname).unwrap().clone();
-                    let def = VarDef {
-                        port: OutportLocation {
-                            node: gamma_inport.node,
-                            output: gamma_inport.input.map_to_in_region(0).unwrap(),
-                        },
-                        span: old_var.span,
-                    };
-
-                    //if we already know a type for the variable, for instance if the source is a
-                    // typed argument, pass that through.
-                    if let Some(ty) = self.opt.find_type(&old_var.port.into()) {
-                        self.opt.typemap.set(def.port.clone().into(), ty);
-                    }
-
-                    (varname.clone(), def)
-                })
-                .collect(),
-            imported_functions: fn_mapping
-                .iter()
-                .map(|(fnname, inport)| {
-                    let old_def = self.lmd_ctx.imported_functions.get(fnname).unwrap();
-                    let def = FnImport {
-                        port: OutportLocation {
-                            node: inport.node,
-                            output: inport.input.map_to_in_region(0).unwrap(),
-                        },
-                        span: old_def.span.clone(),
-                        args: old_def.args.clone(),
-                        ret: old_def.ret.clone(),
-                    };
-                    (fnname.clone(), def)
-                })
-                .collect(),
-        };
-
+        let if_lmd_ctx = self.lmd_ctx.clone();
         let mut if_block_builder = BlockBuilder {
             span: if_block.span.clone(),
             config: self.config.clone(),
@@ -521,46 +443,7 @@ impl<'a> BlockBuilder<'a> {
         //
         // either way, setup the new block builder the same way we did for the if-block
 
-        let else_lmd_ctx = LmdContext {
-            defined_vars: inport_mapping
-                .iter()
-                .map(|(varname, gamma_inport)| {
-                    let old_var = self.lmd_ctx.defined_vars.get(varname).unwrap().clone();
-                    let def = VarDef {
-                        port: OutportLocation {
-                            node: gamma_inport.node,
-                            output: gamma_inport.input.map_to_in_region(1).unwrap(),
-                        },
-                        span: old_var.span,
-                    };
-
-                    //if we already know a type for the variable, for instance if the source is a
-                    // typed argument, pass that through.
-                    if let Some(ty) = self.opt.find_type(&old_var.port.into()) {
-                        self.opt.typemap.set(def.port.clone().into(), ty);
-                    }
-
-                    (varname.clone(), def)
-                })
-                .collect(),
-            imported_functions: fn_mapping
-                .iter()
-                .map(|(fnname, inport)| {
-                    let old_def = self.lmd_ctx.imported_functions.get(fnname).unwrap();
-                    let def = FnImport {
-                        port: OutportLocation {
-                            node: inport.node,
-                            output: inport.input.map_to_in_region(1).unwrap(),
-                        },
-                        span: old_def.span.clone(),
-                        args: old_def.args.clone(),
-                        ret: old_def.ret.clone(),
-                    };
-                    (fnname.clone(), def)
-                })
-                .collect(),
-        };
-
+        let else_lmd_ctx = self.lmd_ctx.clone();
         let mut else_block_builder = BlockBuilder {
             span: self.span.clone(), //FIXME: not really the correct span, but have no better one atm :/
             config: self.config.clone(),

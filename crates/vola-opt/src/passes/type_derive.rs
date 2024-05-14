@@ -645,7 +645,7 @@ impl Optimizer {
         }
     }
 
-    fn try_gamma_derive(&self, node: NodeRef) -> Result<Option<Ty>, OptError>{
+    fn try_gamma_derive(&mut self, node: NodeRef) -> Result<Option<Ty>, OptError>{
         //We just need to check two things:
         // 1. that the conditional is a Boolean output, 
         // 2. That all branches emit the same type
@@ -676,6 +676,33 @@ impl Optimizer {
             return Err(err);
         }
 
+        //find all input types. If we have them, propagate them _into_ 
+        //the regions. 
+        //Then recurse the region derive
+        //if we not have all of them, return Ok(None), since we need to restart later
+        let subregion_count = self.graph.node(node).regions().len();
+        assert!(subregion_count > 0);
+        for input_type in self.graph.node(node).inport_types(){
+            if let Some(ty) = self.find_type(&InportLocation{node, input: input_type}.into()).clone(){
+                for ridx in 0..subregion_count{
+                    if let Some(mapped_internally) = input_type.map_to_in_region(ridx){
+                        self.typemap.set(OutportLocation{node, output: mapped_internally}.into(), ty.clone());
+                    }
+                }
+            }else{
+                //this one wasn't set, so return
+                return Ok(None);
+            }
+        }
+
+        //if we reached this, recurse!
+        for ridx in 0..subregion_count{
+            let regloc = RegionLocation{node, region_index: ridx};
+            let span = self.span_tags.get(&regloc.into()).cloned().unwrap_or(Span::empty());
+            self.derive_region(regloc, span)?;
+        }
+
+        //make sure that both regions return the same type.
         //now find the output type of both regions, and make sure they are the same. If so, we are good to go
         let reg_if_ty = if let Some(t) = self.find_type(&InportLocation{node, input: InputType::ExitVariableResult { branch: 0, exit_variable: 0 }}.into()){
             t
@@ -723,7 +750,8 @@ impl Optimizer {
             })
             .expect("Failed to gather nodes in λ-Region");
 
-        //Preset all edges where we know the type already
+        //Preset all edges where we know the type already. For instance if the type map 
+        //contains type info for any of the ports of an edge
         for edg in &edges {
             let src = self.graph.edge(*edg).src().clone();
             if let Some(ty) = self.find_type(&src.into()) {
@@ -747,6 +775,7 @@ impl Optimizer {
             }
         }
 
+        /*
         //Now, before starting the loop over all nodes, derive any _inner_ region.
         // So γ/θ-Nodes.
         for node in &build_stack{
@@ -759,6 +788,7 @@ impl Optimizer {
                 }
             }
         }
+        */
 
         'resolution_loop: loop {
             //Flag that tells us _after_ touching all nodes,
