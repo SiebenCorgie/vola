@@ -2,23 +2,30 @@ module std;
 
 //Copy from gaziya5 aka gaz in https://jbaker.graphics/writings/DEC.html
 
-entity Gaz();
-impl Gaz for SDF3D(at){
-	let p_se = for p_se = [at.x, at.y, at.z, 3.0, 0.0] in 0..10{
-		let newp = (([p_se.x, p_se.y, p_se.z] - [1.0, 1.0, 1.0]) % [2.0, 2.0, 2.0]) - [1.0, 1.0, 1.0];
-		let e = 1.4 / dot(newp, newp);
-		let s = p_se.3 * p_se.4;
-		let p = newp * p_se.4;
+entity Fractal();
+impl Fractal for SDF3D(at){
+    let p = for p = [at.x, at.y, at.z, 1.0] in 0..10{
+        let modded = mod([p.x, p.y, p.z] - [1.0, 1.0, 1.0], [2.0, 2.0, 2.0]) - [1.0, 1.0, 1.0];
+        p = [modded.x, modded.y, modded.z, p.w];
+        p = p * (1.4 / dot(modded, modded));
+    };
 
-		p_se = [p.x, p.y, p.z, s, e];
-	};
+    length([p.x, p.z] / [p.w, p.w]) * 0.25
+}
 
-	length([p_se.y, p_se.z]) / p_se.3
+entity nSpheres(n: i);
+impl nSpheres for SDF3D(at){
+    let d = for d_off = [10000.0, 0.0] in 0..n{
+        let local_d = min(d_off.x, length(at - [d_off.y, 0.0, 0.0]) - 3.0);
+        d_off = [local_d, d_off.y - 1.0];
+    };
+
+    d.x
 }
 
 
 export myFn(at: vec3){
-	csg t = Gaz();
+	csg t = nSpheres(3);
 	eval t.SDF3D(at)
 }
 

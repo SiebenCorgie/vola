@@ -271,7 +271,7 @@ impl BackendOp {
     fn from_imm_nat(imm: &ImmNat) -> Self {
         BackendOp::SpirvOp(SpvOp::ConstantInt {
             resolution: 32,
-            bits: (imm.lit as u32).to_be(),
+            bits: (imm.lit as u32).to_le(),
         })
     }
 

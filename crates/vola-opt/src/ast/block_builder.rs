@@ -479,6 +479,8 @@ impl<'a> BlockBuilder<'a> {
                     //overwrite def 
                     let new_var_def = VarDef{port: new_known_port, span: var.span};
                     assert!(self.lmd_ctx.defined_vars.insert(var_name.to_owned(), new_var_def.clone()).is_some());
+                    //and overwrite producer tag
+                    self.opt.var_producer.set(new_var_def.port.into(), var_name.to_owned());
                     Some(new_var_def)
                 }else{
                     //failed to lazy import

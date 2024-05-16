@@ -10,7 +10,7 @@ use rvsdg::{
     edge::{InportLocation, InputType, LangEdge, OutportLocation, OutputType},
     region::{Input, RegionLocation},
     smallvec::smallvec,
-    SmallColl,
+    NodeRef, SmallColl,
 };
 use vola_ast::{
     alge::{Expr, ExprTy},
@@ -641,7 +641,7 @@ impl<'a> BlockBuilder<'a> {
                                         ));
                                         let (subone, _) = rg
                                             .connect_node(
-                                                OptNode::new(CallOp::new(WkOp::Sub), Span::empty()),
+                                                OptNode::new(CallOp::new(WkOp::Add), Span::empty()),
                                                 &[lv_arg_bound_lower, litone.output(0)],
                                             )
                                             .unwrap();
@@ -782,10 +782,11 @@ impl<'a> BlockBuilder<'a> {
             self.return_type.clone(),
         );
         //move to the theta node
-        block.region = RegionLocation {
+        let theta_region = RegionLocation {
             node: loop_node,
             region_index: 0,
         };
+        block.region = theta_region;
         block.lmd_ctx.defined_vars.insert(
             theta.initial_assignment.dst.0.clone(),
             VarDef {
@@ -795,10 +796,9 @@ impl<'a> BlockBuilder<'a> {
         );
 
         let _ret = block.build_block(theta.body)?;
-
+        let post_block_ctx = block.destroy_inherited();
         //finally, after stopping, connect the initial_assignment var to the theta_node's result port
-        let current_theta_res_port = block
-            .lmd_ctx
+        let current_theta_res_port = post_block_ctx
             .defined_vars
             .get(&theta.initial_assignment.dst.0)
             .unwrap()
@@ -811,6 +811,9 @@ impl<'a> BlockBuilder<'a> {
                 OptEdge::value_edge(),
             )
             .unwrap();
+
+        self.route_theta_var_use(loop_node, post_block_ctx);
+
         //sprinkel some debug info all over the place
         self.opt.span_tags.set(gamma_node.into(), expr_span.clone());
         self.opt.span_tags.set(loop_node.into(), expr_span.clone());
@@ -853,6 +856,44 @@ impl<'a> BlockBuilder<'a> {
 
         //use the gamma-nodes's exit variable as loop_exit_src
         Ok(ports.g_result_value_out_port)
+    }
+
+    fn route_theta_var_use(&mut self, theta: NodeRef, post_block_building_ctx: LmdContext) {
+        //for each used variable, check if it was redefined in the context of the just build block.
+        //if so, route that new definition to the loop-variable-result,
+        //if not, just route the loop-variable argument to its own result.
+        for lvidx in 0..self
+            .opt
+            .graph
+            .node(theta)
+            .node_type
+            .unwrap_theta_ref()
+            .loop_variable_count()
+        {
+            let src_port = OutportLocation {
+                node: theta,
+                output: OutputType::Argument(lvidx),
+            };
+            if let Some(prodname) = self.opt.var_producer.get(&src_port.into()) {
+                let dst_port = InportLocation {
+                    node: theta,
+                    input: InputType::Result(lvidx),
+                };
+                if let Some(current_port) = post_block_building_ctx.defined_vars.get(prodname) {
+                    //was redefined, so route to the new port
+                    self.opt
+                        .graph
+                        .connect(current_port.port, dst_port, OptEdge::value_edge())
+                        .unwrap();
+                } else {
+                    //was imported, but not reused, so route to the same outport
+                    self.opt
+                        .graph
+                        .connect(src_port, dst_port, OptEdge::value_edge())
+                        .unwrap();
+                }
+            }
+        }
     }
 
     fn setup_call_expr(

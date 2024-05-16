@@ -90,6 +90,13 @@ pub struct Optimizer {
     /// readable names.
     pub names: FlagStore<String>,
 
+    /// Flags nodes or outputs as producing a named variable. Is used when rerouting
+    /// variables into controll-flow notes.
+    ///
+    /// Automatically setup by let and assign bindings as well as when importing
+    /// into intra-procedural nodes.
+    pub var_producer: FlagStore<String>,
+
     #[cfg(feature = "viewer")]
     pub viewer_state: rvsdg_viewer::ViewerState,
 }
@@ -107,6 +114,7 @@ impl Optimizer {
             typemap: FlagStore::new(),
             span_tags: FlagStore::new(),
             names: FlagStore::new(),
+            var_producer: FlagStore::new(),
             #[cfg(feature = "viewer")]
             viewer_state: rvsdg_viewer::ViewerState::new(),
         }
@@ -257,6 +265,7 @@ impl Optimizer {
             .with_flags("Type", &typemap)
             .with_flags("Span", &self.span_tags)
             .with_flags("Name", &self.names)
+            .with_flags("Variable Producer", &self.var_producer)
             .build();
 
         if std::env::var("VOLA_ALWAYS_WRITE_DUMP").is_ok() {

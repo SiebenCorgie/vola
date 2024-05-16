@@ -48,6 +48,10 @@ Note that vola does not support shadowing. If you just want to change the value 
 
         let def_port = self.setup_alge_expr(expr)?;
 
+        //mark as var-producer
+        self.opt
+            .var_producer
+            .set(def_port.into(), decl_name.0.clone());
         //register in the lmd context
         self.lmd_ctx.add_define(
             decl_name.0,
@@ -92,6 +96,9 @@ Consider using `let {} = ...;` instead, or using an defined variable.
 
         //build the sub tree and overwrite the last_def output
         let sub_tree_output = self.setup_alge_expr(expr)?;
+        self.opt
+            .var_producer
+            .set(sub_tree_output.into(), dst.0.clone());
         let last_def = self.lmd_ctx.defined_vars.get_mut(&dst.0).unwrap();
         last_def.port = sub_tree_output;
         Ok(())

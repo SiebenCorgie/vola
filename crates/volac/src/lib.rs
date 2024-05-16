@@ -195,7 +195,7 @@ impl Pipeline {
         //do some _post_everyting_ cleanup
         opt.cleanup_export_lmd();
 
-        if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("DUMP_FINAL_OPT").is_ok() {
+        if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("VOLA_OPT_FINAL").is_ok() {
             opt.push_debug_state("Final Optimizer state");
         }
 
