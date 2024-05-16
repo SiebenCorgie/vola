@@ -1,4 +1,3 @@
-use ahash::AHashMap;
 /*
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
@@ -862,7 +861,10 @@ impl<'a> BlockBuilder<'a> {
         //for each used variable, check if it was redefined in the context of the just build block.
         //if so, route that new definition to the loop-variable-result,
         //if not, just route the loop-variable argument to its own result.
-        for lvidx in 0..self
+        //
+        //NOTE: we only start at 3, because routing of the first 3 lv-vars (lower_bound, upper_bound, value)
+        //      is already taken care of by the logic in the main theta-builder
+        for lvidx in 3..self
             .opt
             .graph
             .node(theta)

@@ -13,19 +13,9 @@ impl Fractal for SDF3D(at){
     length([p.x, p.z] / [p.w, p.w]) * 0.25
 }
 
-entity nSpheres(n: i);
-impl nSpheres for SDF3D(at){
-    let d = for d_off = [10000.0, 0.0] in 0..n{
-        let local_d = min(d_off.x, length(at - [d_off.y, 0.0, 0.0]) - 3.0);
-        d_off = [local_d, d_off.y - 1.0];
-    };
-
-    d.x
-}
-
 
 export myFn(at: vec3){
-	csg t = nSpheres(3);
+	csg t = Fractal();
 	eval t.SDF3D(at)
 }
 
