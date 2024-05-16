@@ -52,7 +52,7 @@ impl InputType {
     }
 
     //If possible, tries to map this input to its equivalent port within a region.
-    //This only works for ContextVariableInput, EntryVariableInput
+    //This only works for ContextVariableInput, EntryVariableInput and Input
     pub fn map_to_in_region(&self, region_index: usize) -> Option<OutputType> {
         match self {
             Self::ContextVariableInput(i) => {
@@ -63,6 +63,7 @@ impl InputType {
                 branch: region_index,
                 entry_variable: *i,
             }),
+            Self::Input(i) => Some(OutputType::Argument(*i)),
             _ => None,
         }
     }

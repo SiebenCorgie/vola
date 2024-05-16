@@ -71,3 +71,59 @@ fn unknown_subtree_reference() {
         Ok(_) => panic!("Expected 1 error"),
     }
 }
+
+#[test]
+fn simple_gamma() {
+    let pipeline = volac::Pipeline::new_in_memory();
+
+    let target = pipeline
+        .execute_on_file(&"tests/vola_src/ifthenelse.vola")
+        .unwrap();
+    target.try_verify().unwrap()
+}
+#[test]
+fn gamma_local_variable() {
+    let pipeline = volac::Pipeline::new_in_memory();
+
+    let target = pipeline
+        .execute_on_file(&"tests/vola_src/gamma_local_variable.vola")
+        .unwrap();
+    target.try_verify().unwrap()
+}
+
+#[test]
+fn simple_theta() {
+    let pipeline = volac::Pipeline::new_in_memory();
+
+    let target = pipeline
+        .execute_on_file(&"tests/vola_src/theta_assignment.vola")
+        .unwrap();
+    target.try_verify().unwrap();
+}
+#[test]
+fn theta_nested() {
+    let pipeline = volac::Pipeline::new_in_memory();
+
+    let target = pipeline
+        .execute_on_file(&"tests/vola_src/theta_nested.vola")
+        .unwrap();
+    target.try_verify().unwrap();
+}
+#[test]
+fn theta_nested_simple() {
+    let pipeline = volac::Pipeline::new_in_memory();
+
+    let target = pipeline
+        .execute_on_file(&"tests/vola_src/theta_nested_simple.vola")
+        .unwrap();
+    target.try_verify().unwrap();
+}
+#[test]
+fn theta_simple_local_variable() {
+    let pipeline = volac::Pipeline::new_in_memory();
+
+    let target = pipeline
+        .execute_on_file(&"tests/vola_src/theta_local_variable.vola")
+        .unwrap();
+    target.try_verify().unwrap();
+}

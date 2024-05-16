@@ -23,6 +23,7 @@ impl LNode {
         }
     }
 
+    #[allow(dead_code)]
     pub fn with_inputs(mut self, n: usize) -> Self {
         self.inputs = vec![Input::default(); n];
         self

@@ -11,7 +11,7 @@ use rvsdg::{edge::{OutportLocation, OutputType}, nodes::NodeType, region::Region
 use vola_ast::{alge::{EvalExpr, Expr, ExprTy}, common::Stmt, csg::{AccessDesc, CSGNodeTy}};
 use vola_common::{ariadne::{Color, Fmt, Label}, error::error_reporter, report, Span};
 
-use crate::{common::{LmdContext, Ty}, csg::TreeAccess, OptError, OptNode, Optimizer};
+use crate::{common::{LmdContext, Ty, VarDef}, csg::TreeAccess, OptError, OptNode, Optimizer};
 
 
 pub(crate) enum ReturnExpr{
@@ -85,7 +85,7 @@ pub struct BlockBuilder<'a> {
     ///Current _variable_ context for this block.
     ///FIX: name differently. Since this is more of a _region_context_ at this point.
     pub lmd_ctx: LmdContext,
-
+    
     ///The region we are building the block in.
     pub region: RegionLocation,
     pub opt: &'a mut Optimizer
@@ -458,6 +458,38 @@ impl<'a> BlockBuilder<'a> {
             .unwrap();
 
         Ok((return_type, access_output))
+    }   
+
+    pub fn ref_var(&mut self, var_name: &str) -> Option<VarDef>{
+        if let Some(var) = self.lmd_ctx.defined_vars.get(var_name).cloned(){
+            if self.opt.outport_in_region(self.region, var.port){
+                Some(var)
+            }else{
+                //Is not in region, but defined, try to lazy import
+                if let Ok((new_known_port, created_edges)) = self.opt.graph.import_argument(var.port, self.region){
+                    //if we have type information for the old port, tag all created edges with that.
+                    if let Some(ty) = self.opt.find_type(&var.port.into()){
+                        for edg in created_edges{
+                            self.opt.graph.edge_mut(edg).ty.set_type(ty.clone());
+                        }
+                        //also tag the newly created port
+                        self.opt.typemap.set(new_known_port.into(), ty);
+                    }
+                    
+                    //overwrite def 
+                    let new_var_def = VarDef{port: new_known_port, span: var.span};
+                    assert!(self.lmd_ctx.defined_vars.insert(var_name.to_owned(), new_var_def.clone()).is_some());
+                    //and overwrite producer tag
+                    self.opt.var_producer.set(new_var_def.port.into(), var_name.to_owned());
+                    Some(new_var_def)
+                }else{
+                    //failed to lazy import
+                    None
+                }
+            }
+        }else{
+            //var undefined
+            None
+        }
     }
-    
 }

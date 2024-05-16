@@ -8,7 +8,8 @@ impl ColorFlip<sub> for Color(at){
 	let mylocal_y = at.y + 1.0;
 	
 	if (at.x % 2.0) < 1.0{
-		[at.x + 1.0, mylocal_y, 0.0]
+		let the_thing = mylocal_y + at.x / 32.0;
+		[at.x + 1.0, mylocal_y, the_thing]
 	}else if at.y > 10.0{
 		[0.0, 1.0, 0.0]
 	}else{

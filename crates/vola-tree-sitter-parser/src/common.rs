@@ -9,8 +9,8 @@ use smallvec::SmallVec;
 use vola_common::{ariadne::Label, error::error_reporter, report, Span};
 
 use vola_ast::{
-    alge::Expr,
-    common::{Block, Call, Digit, GammaExpr, Ident, Literal, Ty, TypedIdent},
+    alge::{AssignStmt, Expr},
+    common::{Block, Call, Digit, GammaExpr, Ident, Literal, ThetaExpr, Ty, TypedIdent},
     Module,
 };
 
@@ -445,6 +445,35 @@ impl FromTreeSitter for GammaExpr {
             span: ctx.span(node),
             conditionals,
             unconditional,
+        })
+    }
+}
+
+impl FromTreeSitter for ThetaExpr {
+    fn parse(ctx: &mut ParserCtx, dta: &[u8], node: &tree_sitter::Node) -> Result<Self, ParserError>
+    where
+        Self: Sized,
+    {
+        ParserError::assert_node_kind(ctx, node, "theta_expr")?;
+        let mut walker = node.walk();
+        let mut children = node.children(&mut walker);
+        ParserError::consume_expected_node_string(ctx, dta, children.next(), "for")?;
+
+        let initial_assignment = AssignStmt::parse(ctx, dta, &children.next().unwrap())?;
+        ParserError::consume_expected_node_string(ctx, dta, children.next(), "in")?;
+        let bound_lower = Expr::parse(ctx, dta, &children.next().unwrap())?;
+        ParserError::consume_expected_node_string(ctx, dta, children.next(), "..")?;
+        let bound_upper = Expr::parse(ctx, dta, &children.next().unwrap())?;
+        let body = Block::parse(ctx, dta, &children.next().unwrap())?;
+
+        ParserError::assert_ast_level_empty(ctx, children.next())?;
+        ParserError::assert_node_no_error(ctx, node)?;
+        Ok(ThetaExpr {
+            span: ctx.span(node),
+            initial_assignment,
+            bound_lower,
+            bound_upper,
+            body,
         })
     }
 }

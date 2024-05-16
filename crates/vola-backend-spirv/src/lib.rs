@@ -145,7 +145,7 @@ impl SpirvBackend {
         }
 
         let layout_config = LayoutConfig {
-            ignore_dead_node: false,
+            ignore_dead_node: true,
             ..Default::default()
         };
 

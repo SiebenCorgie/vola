@@ -157,13 +157,38 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
                         flags.set(gamma_pred.clone().into(), true);
                         waiting_ports.push_back(gamma_pred);
                     }
-                    NodeType::Theta(_t) => {
-                        let theta_pred = InportLocation {
-                            node: src_port.node,
-                            input: InputType::ThetaPredicate,
-                        };
-                        flags.set(theta_pred.clone().into(), true);
-                        waiting_ports.push_back(theta_pred);
+                    NodeType::Theta(t) => {
+                        let theta_seen = seen_nodes.contains(&src_port.node);
+                        if !theta_seen {
+                            let theta_pred = InportLocation {
+                                node: src_port.node,
+                                input: InputType::ThetaPredicate,
+                            };
+                            flags.set(theta_pred.clone().into(), true);
+                            waiting_ports.push_back(theta_pred);
+                            //mark all somehow connected lv-results and lv-outputs
+                            //Since Theta loops, a output might not be connected, but the
+                            //result still be in use.
+                            for lvidx in 0..t.loop_variable_count() {
+                                let is_result_in_use = t
+                                    .lv_result(lvidx)
+                                    .map(|port| port.edge.is_some())
+                                    .unwrap_or(false);
+                                let is_output_in_use = t
+                                    .lv_output(lvidx)
+                                    .map(|port| port.edges.len() > 0)
+                                    .unwrap_or(false);
+                                //if either is in use, mark output as live
+                                if is_result_in_use || is_output_in_use {
+                                    let lvport = InportLocation {
+                                        node: src_port.node,
+                                        input: InputType::Result(lvidx),
+                                    };
+                                    flags.set(lvport.into(), true);
+                                    waiting_ports.push_back(lvport);
+                                }
+                            }
+                        }
                     }
                     NodeType::Phi(_) => {
                         //if src_port is an RV-Argument, make sure that the RV-Result (which defines the
@@ -199,6 +224,9 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
                         waiting_ports.push_back(new_inport);
                     }
                 }
+
+                //add it to seen nodes regardless
+                seen_nodes.insert(src_port.node);
             } else {
                 if !seen_nodes.contains(&src_port.node) {
                     seen_nodes.insert(src_port.node);

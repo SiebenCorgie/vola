@@ -11,7 +11,7 @@
 use std::fmt::Debug;
 
 use rvsdg::{
-    edge::LangEdge,
+    edge::{LangEdge, OutputType},
     nodes::{LangNode, NodeType},
     region::{Input, Output},
     rvsdg_derive_lang::LangNode,
@@ -164,16 +164,18 @@ impl SpirvBackend {
     ///Returns the _single_ return type of `node`, assuming its a _simple-node_ or a apply node.
     ///Returns None, if `node` is not a _simple-node_.
     pub fn get_single_node_result_type(&self, node: NodeRef) -> Option<SpvType> {
-        {
-            let node = &self.graph.node(node).node_type;
-            if node.is_lambda() || node.is_delta() || node.is_phi() {
-                return None;
-            }
-        }
+        let return_port = match self.graph.node(node).node_type {
+            NodeType::Simple(_) | NodeType::Gamma(_) | NodeType::Apply(_) => OutputType::Output(0),
+            NodeType::Theta(_) => OutputType::Output(2),
+            _ => return None,
+        };
 
-        assert!(self.graph.node(node).outputs().len() == 1);
+        assert!(
+            self.graph.node(node).outputs().len() == 1
+                || self.graph.node(node).node_type.is_theta()
+        );
         let mut unified_type = None;
-        for edg in &self.graph.node(node).outputs()[0].edges {
+        for edg in &self.graph.node(node).outport(&return_port).unwrap().edges {
             let edgty = self
                 .graph
                 .edge(*edg)

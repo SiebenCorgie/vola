@@ -645,7 +645,7 @@ impl Optimizer {
         }
     }
 
-    fn try_gamma_derive(&self, node: NodeRef) -> Result<Option<Ty>, OptError>{
+    fn try_gamma_derive(&mut self, node: NodeRef) -> Result<Option<Ty>, OptError>{
         //We just need to check two things:
         // 1. that the conditional is a Boolean output, 
         // 2. That all branches emit the same type
@@ -676,6 +676,33 @@ impl Optimizer {
             return Err(err);
         }
 
+        //find all input types. If we have them, propagate them _into_ 
+        //the regions. 
+        //Then recurse the region derive
+        //if we not have all of them, return Ok(None), since we need to restart later
+        let subregion_count = self.graph.node(node).regions().len();
+        assert!(subregion_count > 0);
+        for input_type in self.graph.node(node).inport_types(){
+            if let Some(ty) = self.find_type(&InportLocation{node, input: input_type}.into()).clone(){
+                for ridx in 0..subregion_count{
+                    if let Some(mapped_internally) = input_type.map_to_in_region(ridx){
+                        self.typemap.set(OutportLocation{node, output: mapped_internally}.into(), ty.clone());
+                    }
+                }
+            }else{
+                //this one wasn't set, so return
+                return Ok(None);
+            }
+        }
+
+        //if we reached this, recurse!
+        for ridx in 0..subregion_count{
+            let regloc = RegionLocation{node, region_index: ridx};
+            let span = self.span_tags.get(&regloc.into()).cloned().unwrap_or(Span::empty());
+            self.derive_region(regloc, span)?;
+        }
+
+        //make sure that both regions return the same type.
         //now find the output type of both regions, and make sure they are the same. If so, we are good to go
         let reg_if_ty = if let Some(t) = self.find_type(&InportLocation{node, input: InputType::ExitVariableResult { branch: 0, exit_variable: 0 }}.into()){
             t
@@ -706,6 +733,109 @@ impl Optimizer {
         }
     } 
 
+    fn try_theta_derive(&mut self, node: NodeRef) -> Result<Option<Ty>, OptError>{
+
+        let loop_node_span = self.span_tags.get(&node.into()).cloned().unwrap_or(Span::empty());
+        //check lower bound value
+        if let Some(ty) = self.find_type(&InportLocation{node, input: InputType::Input(0)}.into()){
+            if ty != Ty::Nat{
+                let err = OptError::Any { text: format!("Loop bound conflict: Lower loop bound needs to be a natural number, but is {ty}") };
+                report(
+                    error_reporter(err.clone(), loop_node_span.clone())
+                        .with_label(Label::new(loop_node_span.clone()).with_message(format!("in this loop")))
+                        .finish()
+                );
+                return Err(err);
+            }
+        }else{
+            //not yet resolved
+            return Ok(None);
+        }
+        //check higher bound value
+        if let Some(ty) = self.find_type(&InportLocation{node, input: InputType::Input(1)}.into()){
+            if ty != Ty::Nat{
+                let err = OptError::Any { text: format!("Loop bound conflict: Upper loop bound needs to be a natural number, but is {ty}") };
+                report(
+                    error_reporter(err.clone(), loop_node_span.clone())
+                        .with_label(Label::new(loop_node_span.clone()).with_message(format!("in this loop")))
+                        .finish()
+                );
+                return Err(err);
+            }
+        }else{
+            //not yet resolved
+            return Ok(None);
+        }
+
+        //now checkout the type of the assigned result. This basically makes sure, that we can later on 
+        //identify type missmatches between the first assigned value, and the later-on assigned 
+        //value in the loop.
+        let initial_result_type = if let Some(ty) = self.find_type(&InportLocation{node, input: InputType::Input(2)}.into()){
+            ty
+        }else{
+            //not yet set
+            return Ok(None);
+        };
+        
+        //the idea here is similar, we only start deriving the theta node, once we
+        //could tag all lv-variables with a type.
+        //however, in here, we can do all testing only _after_ finishing
+        for input_type in self.graph.node(node).inport_types(){
+            if let Some(ty) = self.find_type(&InportLocation{node, input: input_type}.into()).clone(){
+                if let Some(mapped_internally) = input_type.map_to_in_region(0){
+                    self.typemap.set(OutportLocation{node, output: mapped_internally}.into(), ty.clone());
+                }else{
+                    if input_type != InputType::ThetaPredicate{
+                        panic!("any non-theta-predicate type should be mapable, but {input_type:?} wasnt!");
+                    }
+                }
+            }else{
+                //this one wasn't set, so return
+                return Ok(None);
+            }
+        }
+
+        //now dispatch the loop-region
+        let regloc = RegionLocation{node, region_index: 0};
+        let span = self.span_tags.get(&regloc.into()).cloned().unwrap_or(Span::empty());
+        self.derive_region(regloc, span)?;
+
+        //now do our semantic tests. which is:
+        // - theta_predicate needs to be bool,
+        // - there needs to be only one return value ..
+        // - ...and that needs to be typed the same way as initial_result_type
+        if let Some(ty) = self.find_type(&InportLocation{node, input: InputType::ThetaPredicate}.into()){
+            if ty != Ty::Bool{
+                let err = OptError::Any { text: format!("Loop condition must be Bool, but was {ty}. This is a bug!") };
+                report(error_reporter(err.clone(), loop_node_span.clone()).with_label(Label::new(loop_node_span).with_message("here")).finish());
+                return Err(err);
+            }
+        }else{
+            //this is an error at this point, since the region derive has already returned 
+            let err = OptError::Any { text: format!("Could not derive a type for the loop's break condition. This is a bug!") };
+            report(error_reporter(err.clone(), loop_node_span.clone()).with_label(Label::new(loop_node_span).with_message("here")).finish());
+            return Err(err);
+        }
+
+        //now do the lv of the loop-value
+        if let Some(ty) = self.find_type(&InportLocation{node, input: InputType::Result(2)}.into()){
+            if ty != initial_result_type{
+                let err = OptError::Any { text: format!("Loop value must be {initial_result_type}, but was {ty}.") };
+                //TODO: find the right span?
+                let value_result_span = Span::empty();
+                report(error_reporter(err.clone(), loop_node_span.clone()).with_label(Label::new(loop_node_span.clone()).with_message("first defined here as {initial_result_type}")).with_label(Label::new(value_result_span).with_message("But than defined here as {ty}")).finish());
+                return Err(err);
+            }
+        }else{
+            //this is an error at this point, since the region derive has already returned 
+            let err = OptError::Any { text: format!("Could not derive a type for the loop-value. This is a bug!") };
+            report(error_reporter(err.clone(), loop_node_span.clone()).with_label(Label::new(loop_node_span).with_message("here")).finish());
+            return Err(err);
+        }
+
+        Ok(Some(initial_result_type))
+    }
+    
     fn derive_region(
         &mut self,
         reg: RegionLocation,
@@ -723,7 +853,8 @@ impl Optimizer {
             })
             .expect("Failed to gather nodes in λ-Region");
 
-        //Preset all edges where we know the type already
+        //Preset all edges where we know the type already. For instance if the type map 
+        //contains type info for any of the ports of an edge
         for edg in &edges {
             let src = self.graph.edge(*edg).src().clone();
             if let Some(ty) = self.find_type(&src.into()) {
@@ -747,19 +878,6 @@ impl Optimizer {
             }
         }
 
-        //Now, before starting the loop over all nodes, derive any _inner_ region.
-        // So γ/τ-Nodes.
-        for node in &build_stack{
-            let region_count = self.graph.node(*node).regions().len();
-            //Try to find a nicer span, otherwise use the one we already know.
-            let span = self.span_tags.get(&node.into()).cloned().unwrap_or(region_src_span.clone());
-            if region_count > 0{
-                for regidx in 0..region_count{
-                    self.derive_region(RegionLocation { node: *node, region_index: regidx }, span.clone())?;
-                }
-            }
-        }
-
         'resolution_loop: loop {
             //Flag that tells us _after_ touching all nodes,
             // if we made any advances. If not we are stuck and return with an error.
@@ -769,19 +887,23 @@ impl Optimizer {
             std::mem::swap(&mut local_stack, &mut build_stack);
             for node in local_stack {
                 //gather all inputs and let the node try to resolve itself
-                let type_resolve_try = match &self.graph.node(node).node_type {
-                    NodeType::Simple(s) => s.node.try_derive_type(
+                let (type_resolve_try, resolved_port) = match &self.graph.node(node).node_type {
+                    NodeType::Simple(s) => {let ty = s.node.try_derive_type(
                         &self.typemap,
                         &self.graph,
                         &self.concepts,
                         &self.csg_node_defs,
-                    ),
-                    NodeType::Apply(a) => self.try_apply_derive(a, &region_src_span),
-                    NodeType::Gamma(_g) => self.try_gamma_derive(node),
+                    );
+                    
+                    (ty, node.output(0))},
+                    NodeType::Apply(a) => {let ty = self.try_apply_derive(a, &region_src_span); (ty, node.output(0))},
+                    NodeType::Gamma(_g) => {let ty = self.try_gamma_derive(node); (ty, node.output(0))},
+                    //NOTE: by convention the θ-Node resolves to output 2
+                    NodeType::Theta(_t) => {let ty = self.try_theta_derive(node); (ty, node.output(2))},
                     t => {
                         let err = OptError::Any {
                             text: format!(
-                                "Unexpected node type {t:?} in graph while doing type resolution."
+                                "Unexpected node type {t} in graph while doing type resolution."
                             ),
                         };
                         report(
@@ -798,18 +920,9 @@ impl Optimizer {
                         //flag change.
                         resolved_any_node = true;
 
-                        //now assign that type to the nodes's output. For sanity reasons, make sure there
-                        // is actually just one output.
-                        assert!(
-                            self.graph.node_mut(node).outputs().len() == 1,
-                            "encountered node with != 1 outport"
-                        );
+                        //now assign that type to the nodes's output.
                         self.typemap.set(
-                            OutportLocation {
-                                node,
-                                output: OutputType::Output(0),
-                            }
-                            .into(),
+                            resolved_port.into(),
                             ty.clone(),
                         );
 
@@ -817,7 +930,7 @@ impl Optimizer {
                         for edg in self
                             .graph
                             .node(node)
-                            .outport(&OutputType::Output(0))
+                            .outport(&resolved_port.output)
                             .unwrap()
                             .edges
                             .clone()

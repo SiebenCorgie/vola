@@ -115,3 +115,13 @@ pub struct GammaExpr {
     // _else_ branch, if there is any
     pub unconditional: Option<Block>,
 }
+
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[derive(Clone, Debug)]
+pub struct ThetaExpr {
+    pub span: Span,
+    pub initial_assignment: AssignStmt,
+    pub bound_lower: Expr,
+    pub bound_upper: Expr,
+    pub body: Block,
+}

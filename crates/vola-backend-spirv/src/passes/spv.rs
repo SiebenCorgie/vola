@@ -2,8 +2,8 @@ use core::panic;
 
 use ahash::{AHashMap, AHashSet};
 use rspirv::{
-    dr::{Builder, Operand},
-    spirv::{FunctionControl, SelectionControl, Word},
+    dr::{Builder, Instruction, Operand},
+    spirv::{FunctionControl, LoopControl, SelectionControl, Word},
 };
 use rvsdg::{
     edge::{InportLocation, InputType, OutportLocation, OutputType},
@@ -229,12 +229,7 @@ impl SpirvBackend {
         let function_type = builder.type_function(retty, argument_tys.clone());
 
         let fid = builder
-            .begin_function(
-                retty,
-                None,
-                FunctionControl::CONST | FunctionControl::PURE,
-                function_type,
-            )
+            .begin_function(retty, None, FunctionControl::empty(), function_type)
             .unwrap();
 
         if let Some(export_name) = exported {
@@ -614,6 +609,156 @@ impl SpirvBackend {
                     resid,
                 );
                 Ok(resid)
+            }
+            NodeType::Theta(t) => {
+                //We basically build a do-while thingy here.
+                //which works by branching into the loop block, then selecting the
+                //loop index and loop-variable based on
+                //weather we come from the last iteration, or not.
+                //we then just append the whole block,
+                //and finally branch of, based on the condition
+                //that was emitted.
+
+                let loop_body_label = builder.id();
+                let loop_merge_label = builder.id();
+                //The id given to the loop index after it changed
+                let loop_index_id = builder.id();
+                let loop_index_src = src_ids[0];
+
+                //The loop dominating block id
+                let pre_loop_block_id = *ctx
+                    .region_blocks
+                    .get(&parent_region)
+                    .unwrap()
+                    .last()
+                    .unwrap();
+                let theta_region = RegionLocation {
+                    node,
+                    region_index: 0,
+                };
+                let _ = builder.branch(loop_body_label).unwrap();
+                let _into_body_label = builder.begin_block(Some(loop_body_label)).unwrap();
+                ctx.push_block_id(theta_region, loop_body_label);
+
+                //NOTE: for each used LV, use a phi-instruction to select the correct value _within_ the body
+                //      however, at this point we don't know (yet) the _in-loop_ id for those. So what we do is
+                //      pre-allocate an id for each loop-variable which gets associated with the lv-port
+                //      then we build the block, and afterwards prepend the phi instructions with the newly allocated
+                //      IDs to the start of loop_body_label.
+                //      The out-of-loop id will be the src_id[lv_idx], the _in_loop_ id wil be the _last_use_id_ that is connected to the
+                //      respective lv_result
+                let loop_body_label_block_index = builder.selected_block().unwrap();
+
+                for i in 0..t.loop_variable_count() {
+                    let loop_variable_id = builder.id();
+                    ctx.node_mapping.insert(
+                        OutportLocation {
+                            node,
+                            output: OutputType::Argument(i),
+                        },
+                        loop_variable_id,
+                    );
+                }
+
+                //now emit the body
+                self.emit_region(ctx, builder, theta_region)?;
+
+                //now collect all result_connected lvs and prepend the phi-node to the start of the
+                //loop_body
+
+                let post_loop_block = builder.selected_block().unwrap();
+                builder
+                    .select_block(Some(loop_body_label_block_index))
+                    .unwrap();
+                for i in 0..t.loop_variable_count() {
+                    let pre_loop_id = src_ids[i];
+                    //early out if the result is not connected
+                    if t.lv_result(i).unwrap().edge.is_none() {
+                        continue;
+                    }
+                    let in_loop_src = self
+                        .graph
+                        .edge(t.lv_result(i).unwrap().edge.unwrap())
+                        .src()
+                        .clone();
+                    let in_loop_id = *ctx.node_mapping.get(&in_loop_src).unwrap();
+                    //get the pre-allocated id back.
+                    let phi_id = *ctx
+                        .node_mapping
+                        .get(&OutportLocation {
+                            node,
+                            output: OutputType::Argument(i),
+                        })
+                        .unwrap();
+                    let typeid = {
+                        //recover the type by checking the result-connected edge type
+                        //FIXME: we might want to unify that with the lv-input connected edge type.
+                        //       but in theory this should be already done by the type pass.
+                        let edgety = self
+                            .graph
+                            .edge(t.lv_result(i).unwrap().edge.unwrap())
+                            .ty
+                            .get_type()
+                            .unwrap();
+                        register_or_get_type(builder, ctx, &edgety)
+                    };
+                    builder
+                        .insert_into_block(
+                            rspirv::dr::InsertPoint::Begin,
+                            Instruction::new(
+                                rspirv::spirv::Op::Phi,
+                                Some(typeid),
+                                Some(phi_id),
+                                vec![
+                                    //Use the pre-loop-id, if we come from pre-loop-block-id
+                                    Operand::IdRef(pre_loop_id),
+                                    Operand::IdRef(pre_loop_block_id),
+                                    //Use the in_loop_id, if we come from the loop body
+                                    Operand::IdRef(in_loop_id),
+                                    Operand::IdRef(loop_body_label),
+                                ],
+                            ),
+                        )
+                        .unwrap();
+                }
+                //return to the end of the theta-region related blocks
+                builder.select_block(Some(post_loop_block)).unwrap();
+
+                //finally, merge the loop and _out_of_loop_ flow and branch based on the predicate
+                let predicate_port = self.graph.edge(t.loop_predicate().edge.unwrap()).src();
+                let predicate_id = *ctx.node_mapping.get(predicate_port).unwrap();
+
+                builder
+                    .loop_merge(loop_merge_label, loop_body_label, LoopControl::empty(), [])
+                    .unwrap();
+                builder
+                    .branch_conditional(predicate_id, loop_body_label, loop_merge_label, [])
+                    .unwrap();
+
+                //finally start post-theta block
+                builder.begin_block(Some(loop_merge_label)).unwrap();
+                ctx.push_block_id(parent_region, loop_merge_label);
+                //And return the loop-value. Note that, by convention this is always the
+                // 3rd output of the loop
+                //so we just use the 3rd-result-connected-node.
+                //Also, we select the right loop value after branching _into_ the loop, since this is a do-while loop, not a while-do. So
+                //basically at this point the result connected node is _already_ the right one.
+                let loop_value_src = self
+                    .graph
+                    .edge(t.lv_result(2).unwrap().edge.unwrap())
+                    .src()
+                    .clone();
+                let loop_value_id = *ctx.node_mapping.get(&loop_value_src).unwrap();
+                //NOTE: Also write that to the result id, if someone else want's to use / query
+                //      the result port
+                ctx.node_mapping.insert(
+                    OutportLocation {
+                        node,
+                        output: OutputType::Output(2),
+                    },
+                    loop_value_id,
+                );
+                Ok(loop_value_id)
             }
             //TODO: implement ifs / matches and loops so we could _in principle_ emit those.
             any => panic!("Unsupported node type {any:?}"),
