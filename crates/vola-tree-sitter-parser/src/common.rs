@@ -57,7 +57,13 @@ impl FromTreeSitter for Digit {
         let node_text = match node.utf8_text(dta) {
             Err(e) => {
                 let err = ParserError::Utf8ParseError(e);
-                report(error_reporter(err.clone(), Span::empty()).finish());
+                report(
+                    error_reporter(err.clone(), Span::empty())
+                        .with_label(
+                            Label::new(ctx.span(node)).with_message("UTF-8 Parser error here"),
+                        )
+                        .finish(),
+                );
                 return Err(err);
             }
             Ok(s) => s.to_owned(),

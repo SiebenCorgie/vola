@@ -1,0 +1,18 @@
+//Based on this report: https://gitlab.com/tendsinmende/vola/-/issues/14
+module std;
+
+define test(at: vec3, offset: vec3) {
+     // this comment is fine
+     Translate([20.0,0.0,0.0]) {
+         // works
+         Box([1.0, 1.0, 1.0])
+         // fails
+     }
+     // this comment fails
+}
+
+
+export myField(at: vec3, offset: vec3){
+	csg t = test(at, offset);
+	eval t.SDF3D(at)
+}
