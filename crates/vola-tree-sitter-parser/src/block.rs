@@ -40,10 +40,38 @@ impl FromTreeSitter for Block {
                 "expr" => {
                     //must be the last, and there fore return expression.
                     let expr = Expr::parse(ctx, dta, &next_node)?;
-                    //try to consume the closing }, otherwise error out
-                    let was_closing =
-                        ParserError::consume_expected_node_string(ctx, dta, children.next(), "}")
-                            .is_ok();
+                    //There might be some trailing comments left
+
+                    let mut was_closing = false;
+                    while let Some(trailing_node) = children.next() {
+                        match trailing_node.kind() {
+                            "comment" => {}
+                            "}" => {
+                                was_closing = children.next().is_none();
+                                break;
+                            }
+                            any => {
+                                let err = ParserError::UnexpectedAstNode {
+                                    kind: any.to_owned(),
+                                    expected: "\"}\" or comment".to_owned(),
+                                };
+                                report(
+                                    error_reporter(err.clone(), ctx.span(&trailing_node))
+                                        .with_label(Label::new(expr.span.clone()))
+                                        .with_message(
+                                            "This was identified as the return expression so ...",
+                                        )
+                                        .with_label(
+                                            Label::new(ctx.span(&trailing_node)).with_message(
+                                                "... this should be either a \"}\" or a comment",
+                                            ),
+                                        )
+                                        .finish(),
+                                );
+                                return Err(err);
+                            }
+                        }
+                    }
 
                     if !was_closing {
                         let err = ParserError::LevelNotEmpty;
