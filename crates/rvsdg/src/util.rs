@@ -13,6 +13,7 @@ use crate::{
     EdgeRef, Rvsdg, SmallColl,
 };
 
+pub mod cfg;
 pub mod copy;
 pub mod dead_node_elimination;
 pub mod graph_type_transform;
