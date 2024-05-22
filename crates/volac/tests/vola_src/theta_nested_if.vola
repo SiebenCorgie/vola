@@ -1,0 +1,23 @@
+module std;
+
+entity nSpheres(n: i);
+impl nSpheres for SDF3D(at){
+    let d = for d_off = [10000.0, 0.0] in 0..n{
+		let t = if d_off.y > 0.0 {
+			2.0
+		}else{
+			1.0
+		};
+        let local_d = min(min(t, d_off.x), length(at - [d_off.y, t, t]) - 3.0);
+        d_off = [local_d, d_off.y - 1.0];
+    };
+
+    d.x
+}
+
+
+export myFn(at: vec3){
+	csg t = nSpheres(3);
+	eval t.SDF3D(at)
+}
+

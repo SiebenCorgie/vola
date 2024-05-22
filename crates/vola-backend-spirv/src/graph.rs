@@ -11,6 +11,7 @@
 use std::fmt::Debug;
 
 use rvsdg::{
+    attrib::AttribLocation,
     edge::{LangEdge, OutputType},
     nodes::{LangNode, NodeType},
     region::{Input, Output},
@@ -238,6 +239,41 @@ impl SpirvBackend {
             }
         } else {
             false
+        }
+    }
+
+    pub fn find_type(&self, attrib: AttribLocation) -> Option<SpvType> {
+        match attrib {
+            AttribLocation::Edge(e) => self.graph.edge(e).ty.get_type().cloned(),
+            AttribLocation::InPort(ip) => {
+                if let Some(connection) = self.graph.node(ip.node).inport(&ip.input) {
+                    if let Some(edg) = connection.edge {
+                        self.graph.edge(edg).ty.get_type().cloned()
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            }
+            AttribLocation::OutPort(op) => {
+                if let Some(connection) = self.graph.node(op.node).outport(&op.output) {
+                    let mut found_ty = None;
+                    for e in &connection.edges {
+                        if let Some(t) = self.graph.edge(*e).ty.get_type() {
+                            if let Some(ft) = &found_ty {
+                                assert!(ft == t, "All edges that go into the same port should be of the same type");
+                            } else {
+                                found_ty = Some(t.clone());
+                            }
+                        }
+                    }
+                    found_ty
+                } else {
+                    None
+                }
+            }
+            AttribLocation::Region(_) | AttribLocation::Node(_) => None,
         }
     }
 }

@@ -119,34 +119,37 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
                             //
                             // afterwards we continue by setting up the merge block as the new
                             // _normal_ block
-                            let mut merge_block = BasicBlock::new(cfg);
-                            //NOTE: if the region ends on a loop, this is the
-                            //      Null merge node
-                            let merge_block_id = cfg.nodes.insert(CfgNode::Null);
 
                             let loop_entry_id = cfg.nodes.insert(CfgNode::Null);
-                            let condition_id = cfg.nodes.insert(CfgNode::Branch {
+                            let tail_ctrl_id = cfg.nodes.insert(CfgNode::Null);
+                            let merge_block_id = cfg.nodes.insert(CfgNode::Null);
+                            let loop_header = cfg.nodes.insert(CfgNode::LoopHeader {
+                                pre_loop_bb: bb_id,
                                 src_node: node,
-                                dst: loop_entry_id,
+                                loop_entry_bb: loop_entry_id,
+                                ctrl_tail: tail_ctrl_id,
                             });
+                            let mut post_merge_block = BasicBlock::new(cfg);
+
                             //set this condition-id to the exit reference of the current bb
-                            working_bb.exit_node = condition_id;
+                            working_bb.exit_node = loop_header;
 
                             //the condition node is already set to branch into the loop
-                            let exit_src = self.scfr_handle_theta(
+                            self.scfr_handle_theta(
                                 cfg,
                                 t,
                                 node,
                                 loop_entry_id,
+                                loop_header,
                                 merge_block_id,
+                                tail_ctrl_id,
                             )?;
 
                             //switch the current context to the new (merge)-bb.
-                            std::mem::swap(&mut merge_block, &mut working_bb);
-                            *cfg.nodes.get_mut(bb_id).unwrap() = CfgNode::BasicBlock(merge_block);
+                            std::mem::swap(&mut post_merge_block, &mut working_bb);
+                            *cfg.nodes.get_mut(bb_id).unwrap() =
+                                CfgNode::BasicBlock(post_merge_block);
                             bb_id = merge_block_id;
-                            //finally push the theta-exit to the incoming nodes of the merge block
-                            working_bb.incoming_nodes.push(exit_src);
                         }
                         NodeType::Gamma(g) => {
                             if g.regions().len() != 2 {
@@ -161,37 +164,41 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
                                 .clone();
                             //setup the conditional branch for both pre allocated branch
                             //entry points
-                            let merge_id = cfg.nodes.insert(CfgNode::Null);
+                            let merge_node_id = cfg.nodes.insert(CfgNode::Null);
+                            let post_merge_id = cfg.nodes.insert(CfgNode::Null);
                             let entry_true_id = cfg.nodes.insert(CfgNode::Null);
                             let entry_false_id = cfg.nodes.insert(CfgNode::Null);
-                            let branch_condition_id = cfg.nodes.insert(CfgNode::CondBranch {
+
+                            let branch_header = cfg.nodes.insert(CfgNode::BranchHeader {
                                 src_node: node,
-                                condition: condition_srcport,
+                                last_bb: bb_id,
+                                condition_src: condition_srcport,
                                 true_branch: entry_true_id,
                                 false_branch: entry_false_id,
+                                merge: merge_node_id,
+                                post_merge_block: post_merge_id,
                             });
 
                             //Overwrite the current working_bb's exit node to that
-                            working_bb.exit_node = branch_condition_id;
+                            working_bb.exit_node = branch_header;
 
-                            let [src_true_id, src_false_id] = self.scfr_handle_gamma(
+                            let _branch_merge_id = self.scfr_handle_gamma(
                                 cfg,
                                 node,
                                 entry_true_id,
                                 entry_false_id,
-                                merge_id,
+                                post_merge_id,
+                                merge_node_id,
                             )?;
 
                             //finaly swap out the working bb with the merge id
                             //and push both in_gamma_exit_node_ids to the new bb
                             let mut merge_block = BasicBlock::new(cfg);
-                            merge_block.incoming_nodes.push(src_true_id);
-                            merge_block.incoming_nodes.push(src_false_id);
                             std::mem::swap(&mut working_bb, &mut merge_block);
                             //swap in the current bb
                             *cfg.nodes.get_mut(bb_id).unwrap() = CfgNode::BasicBlock(merge_block);
                             //now overwrite to the correct id
-                            bb_id = merge_id;
+                            bb_id = post_merge_id;
                         }
                         any => {
                             return Err(ScfrError::ContainedInterProceduralNode(format!("{any}")))
@@ -218,8 +225,10 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
         theta: &ThetaNode,
         theta_node: NodeRef,
         entry_id: CfgRef,
+        header_id: CfgRef,
         merge_id: CfgRef,
-    ) -> Result<CfgRef, ScfrError> {
+        ctrl_tail_id: CfgRef,
+    ) -> Result<(), ScfrError> {
         //We just build the theta-region the same way we build all regions.
         //but then we exit into a conditional branch, that
         // uses the theta-predicate source to either jump to `entry_id` or to `merge_id`
@@ -244,21 +253,23 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
             .src()
             .clone();
         //the conditional_branch
-        let condbranch_id = cfg.nodes.insert(CfgNode::CondBranch {
+        *cfg.nodes.get_mut(ctrl_tail_id).unwrap() = CfgNode::LoopCtrlTail {
             src_node: theta_node,
-            condition: condition_srcport,
-            true_branch: entry_id,
-            false_branch: merge_id,
-        });
+            condition_src: condition_srcport,
+            loop_entry_bb: entry_id,
+            post_loop_bb: merge_id,
+            last_bb: loop_last,
+            header: header_id,
+        };
 
         //set the conditional branch as the exit of the last loop_body_block
         if let CfgNode::BasicBlock(bb) = cfg.nodes.get_mut(loop_last).unwrap() {
-            bb.exit_node = condbranch_id;
+            bb.exit_node = ctrl_tail_id;
         } else {
             panic!("Loops last cfg node was not a basic-block!");
         }
 
-        Ok(condbranch_id)
+        Ok(())
     }
 
     ///Handles the setup of both branch regions. Returns the id of both
@@ -269,8 +280,9 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
         gamma_node: NodeRef,
         entry_branch_true: CfgRef,
         entry_branch_false: CfgRef,
+        post_merge_block: CfgRef,
         merge_id: CfgRef,
-    ) -> Result<[CfgRef; 2], ScfrError> {
+    ) -> Result<(), ScfrError> {
         //for the gamma nodes, we
         //setup both branches within the given entry ids,
         //then setup the uncond branches
@@ -296,28 +308,26 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
         )?;
         assert!(entry_branch_false == false_entry_id);
 
-        //setup the branch node to the merge id
-        let uncond_branch_from_true = cfg.nodes.insert(CfgNode::Branch {
+        //setup the branch merge
+        *cfg.nodes.get_mut(merge_id).unwrap() = CfgNode::BranchMerge {
             src_node: gamma_node,
-            dst: merge_id,
-        });
-        let uncond_branch_from_false = cfg.nodes.insert(CfgNode::Branch {
-            src_node: gamma_node,
-            dst: merge_id,
-        });
+            src_true: true_exit_id,
+            src_false: false_exit_id,
+            next: post_merge_block,
+        };
 
         //push both as exit nodes to the last basic blocks of both branches
         if let CfgNode::BasicBlock(bb) = cfg.nodes.get_mut(true_exit_id).unwrap() {
-            bb.exit_node = uncond_branch_from_true;
+            bb.exit_node = merge_id;
         } else {
             panic!("Gamma's last cfg node was not a basic-block!");
         }
         if let CfgNode::BasicBlock(bb) = cfg.nodes.get_mut(false_exit_id).unwrap() {
-            bb.exit_node = uncond_branch_from_false;
+            bb.exit_node = merge_id;
         } else {
             panic!("Gamma's last cfg node was not a basic-block!");
         }
 
-        Ok([uncond_branch_from_true, uncond_branch_from_false])
+        Ok(())
     }
 }

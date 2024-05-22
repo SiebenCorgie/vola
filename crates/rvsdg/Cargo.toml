@@ -10,8 +10,7 @@ categories = ["compilers"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-default = ["dot", "derive", "log", "serde"]
-dot = ["graphviz-rust"]
+default = ["derive", "log", "serde"]
 derive = ["rvsdg-derive-lang"]
 log = ["dep:log"]
 serde = ["dep:serde", "slotmap/serde"]

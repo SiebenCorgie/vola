@@ -5,9 +5,10 @@ edition = "2021"
 license = "MPL-2.0"
 
 [features]
-default = ["log", "viewer"]
+default = ["log", "viewer", "dot"]
 log = ["dep:log"]
 viewer = ["rvsdg-viewer"]
+dot = ["graphviz-rust"]
 
 [dependencies]
 vola-opt = {path = "../vola-opt"}
@@ -19,3 +20,4 @@ ahash.workspace = true
 log = {workspace = true, optional = true}
 spirv-grammar-rules = {git = "https://gitlab.com/tendsinmende/spirv-grammar-rules.git"}
 #spirv-grammar-rules = {path = "../../../spirv-grammar-rules/crates/spirv-grammar-rules"}
+graphviz-rust = {workspace = true, optional = true}
