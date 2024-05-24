@@ -130,7 +130,7 @@ impl<
         let cvcount = match &self.node(call_lmd).node_type {
             NodeType::Phi(phi) => {
                 assert!(
-                    phi.rv_argument(0).is_none(),
+                    phi.rv_count == 0,
                     "Inliner does not support recursion variables!"
                 );
                 phi.context_variable_count()
@@ -152,7 +152,6 @@ impl<
         //Add context variable remapping
         //This is a little more involved. We add a new CV to the dst_lmd for each
         //context variable that is connected in the src_region.
-
         for cvidx in 0..cvcount {
             //Try to find a producer for the orginal cvidx. If there is none, we can ignore that
             let src_cv_port = OutportLocation {

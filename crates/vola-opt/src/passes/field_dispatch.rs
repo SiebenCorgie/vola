@@ -371,6 +371,7 @@ impl Optimizer {
     //Small recursive helper that explores all Apply nodes, and inlines their call-defs, before
     //inlining itself.
     fn fully_inline_region(&mut self, region: RegionLocation) -> Result<(), OptError> {
+        //This first inlines all sub-regions whitin this region.
         for node in self.graph.region(&region).unwrap().nodes.clone() {
             let regcount = self.graph.node(node).regions().len();
             for regidx in 0..regcount {
@@ -405,7 +406,6 @@ impl Optimizer {
                     //ninline += 1;
                     //now inline ourselfs
                     self.graph.inline_apply_node(node).unwrap();
-                    self.push_debug_state(&format!("Inlined {node}"));
                 } else {
                     #[cfg(feature = "log")]
                     log::error!("ApplyNode {node} had no def in {region:?}");
@@ -574,7 +574,7 @@ impl Optimizer {
                                 self.graph.edge_mut(edg).ty.set_type(ty.clone());
                             }
                         } else {
-                            log::warn!(
+                            log::error!(
                                 "Could not find type for CSG-Arg's edges while dispatching field"
                             );
                         }
@@ -619,7 +619,7 @@ impl Optimizer {
                                 self.graph.edge_mut(edg).ty.set_type(ty.clone());
                             }
                         } else {
-                            log::warn!(
+                            log::error!(
                                 "Could not find type for CSG-Arg's edges while dispatching field"
                             );
                         }
@@ -726,7 +726,7 @@ impl Optimizer {
                         self.graph.edge_mut(edg).ty.set_type(ty.clone());
                     }
                 } else {
-                    log::warn!("Couldn't find imported tree's type while importing into dispatched region!");
+                    log::error!("Couldn't find imported tree's type while importing into dispatched region!");
                 }
                 port
             } else {
@@ -764,21 +764,36 @@ impl Optimizer {
                 *argport
             };
         }
-        let lmd_call = self
+        let (lmd_call, arg_edges) = self
             .graph
             .on_region(&region, |reg| {
                 //This is one of those rare cases, where we construct the apply node, since we currently do not known the actuall correct
                 //pattern
-                let (callnode, _) = reg
-                    .call(
-                        local_lmd_node.as_outport_location(OutputType::LambdaDeclaration),
-                        &alge_args,
-                    )
-                    .unwrap();
-                callnode
+                reg.call(
+                    local_lmd_node.as_outport_location(OutputType::LambdaDeclaration),
+                    &alge_args,
+                )
+                .unwrap()
             })
             .unwrap();
 
+        //NOTE skipping the callee-edge
+        for (edgidx, edg) in arg_edges.into_iter().skip(1).enumerate() {
+            //if we have a src_type, set this to the call-connected edge as well
+            //FIXME: currently find the producer first, which is kinda slow
+            let producer = self
+                .graph
+                .find_producer_inp(InportLocation {
+                    node: lmd_call,
+                    input: InputType::Input(edgidx + 1),
+                })
+                .expect("Expected argument to be connected to producer node");
+            if let Some(ty) = self.find_type(&producer.into()) {
+                self.graph.edge_mut(edg).ty.set_type(ty.clone());
+            } else {
+                log::error!("Could not set the caller-argument[{edgidx}] edge type of apply-node {lmd_call}");
+            }
+        }
         //reconnect output to the resulting node. This will effectively render all CSG-Nodes _dead_.
         let result_edges = self.graph.node(dispatch_node).output_edges()[0].clone();
         for edg in result_edges {
