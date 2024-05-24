@@ -254,6 +254,10 @@ impl Optimizer {
                 region_index: 0,
             };
             self.specialize_region(lambda_region)?;
+            //after specializing the λ-region, call the inliner once more to inline everything we just specialized.
+            //To make things faster, dne all nodes that are not used anymore.
+            self.fully_inline_region(lambda_region)?;
+            //self.graph.dne_region(lambda_region)?;
         }
         Ok(())
     }
@@ -367,19 +371,25 @@ impl Optimizer {
     //Small recursive helper that explores all Apply nodes, and inlines their call-defs, before
     //inlining itself.
     fn fully_inline_region(&mut self, region: RegionLocation) -> Result<(), OptError> {
+        for node in self.graph.region(&region).unwrap().nodes.clone() {
+            let regcount = self.graph.node(node).regions().len();
+            for regidx in 0..regcount {
+                self.fully_inline_region(RegionLocation {
+                    node,
+                    region_index: regidx,
+                })?;
+            }
+        }
+
         //NOTE: We only inline connected apply nodes, since we'd outherwise might touch _undefined_
         //      parts of the region.
+        //
+        // Also note, that we first explore all nodes with sub regions
+        // so that any inlined-apply node in this region is already
+        // inlined as far as-possible.
 
-        let applynodes = self
-            .graph
-            .live_nodes(region)
-            .iter()
-            .filter(|n| self.graph.node(**n).node_type.is_apply())
-            .cloned()
-            .collect::<Vec<_>>();
-
-        //        let mut ninline = 0;
-        for node in applynodes {
+        for node in self.graph.live_nodes(region) {
+            //If node is an apply node, inline its producer to this location
             if self.graph.node(node).node_type.is_apply() {
                 let apply_node_call_port = InportLocation {
                     node,
@@ -387,7 +397,7 @@ impl Optimizer {
                 };
                 if let Some(prod) = self.graph.find_producer_inp(apply_node_call_port) {
                     assert!(self.graph.node(prod.node).node_type.is_lambda());
-                    //recursively inline this
+                    //recursively inline anything in this producer λ
                     self.fully_inline_region(RegionLocation {
                         node: prod.node,
                         region_index: 0,
@@ -395,6 +405,7 @@ impl Optimizer {
                     //ninline += 1;
                     //now inline ourselfs
                     self.graph.inline_apply_node(node).unwrap();
+                    self.push_debug_state(&format!("Inlined {node}"));
                 } else {
                     #[cfg(feature = "log")]
                     log::error!("ApplyNode {node} had no def in {region:?}");
@@ -402,7 +413,6 @@ impl Optimizer {
                 }
             }
         }
-
         //for good measures, remove all unused CVs after importing _everything_
         self.graph.remove_unused_context_variables(region.node);
         Ok(())
@@ -471,8 +481,6 @@ impl Optimizer {
 
         //NOTE we seed the specialization with the entry_csg node, and the TreeAccess node we start at.
         let _specialized_entry_node = self.specialize_eval_node(&spec_ctx, seeding_eval_node)?;
-        //After specializing, use recursive inliner again, to bring all ops into the same region
-        self.fully_inline_region(region).unwrap();
 
         Ok(())
     }
@@ -523,7 +531,10 @@ impl Optimizer {
                     srcport
                 }
             } else {
-                panic!("Was not a simple node");
+                panic!(
+                    "Was not a simple node, was {}",
+                    self.graph.node(srcport.node).node_type
+                );
             }
         };
 
@@ -554,10 +565,24 @@ impl Optimizer {
                 //if needed, and hook that up instead.
                 _ => {
                     let imported = if self.graph.node(srcport.node).parent.unwrap() != region {
-                        self.graph.import_context(srcport, region).unwrap()
+                        let (imported, edges) = self.graph.import_context(srcport, region).unwrap();
+                        //tag all new edges with the argument's type
+                        //NOTE: We know that the typ is _correct_ from the concept-check above + the fact,
+                        //      that the type-derive pass also respects's the concepts's argument types
+                        if let Some(ty) = self.find_type(&srcport.into()) {
+                            for edg in edges {
+                                self.graph.edge_mut(edg).ty.set_type(ty.clone());
+                            }
+                        } else {
+                            log::warn!(
+                                "Could not find type for CSG-Arg's edges while dispatching field"
+                            );
+                        }
+                        imported
                     } else {
                         srcport
                     };
+
                     //now push it regardless
                     alge_args.push(imported);
                 }
@@ -585,7 +610,20 @@ impl Optimizer {
                 // hooked up as a CV-Arg to some parent region.
                 _ => {
                     let imported = if self.graph.node(srcport.node).parent.unwrap() != region {
-                        self.graph.import_context(srcport, region).unwrap()
+                        let (imported, edges) = self.graph.import_context(srcport, region).unwrap();
+                        //tag all new edges with the argument's type
+                        //NOTE: We know that the typ is _correct_ from the concept-check above + the fact,
+                        //      that the type-derive pass also respects's the concepts's argument types
+                        if let Some(ty) = self.find_type(&srcport.into()) {
+                            for edg in edges {
+                                self.graph.edge_mut(edg).ty.set_type(ty.clone());
+                            }
+                        } else {
+                            log::warn!(
+                                "Could not find type for CSG-Arg's edges while dispatching field"
+                            );
+                        }
+                        imported
                     } else {
                         srcport
                     };
@@ -682,7 +720,15 @@ impl Optimizer {
         for (subidx, subtree_output) in csg_subtrees.iter().enumerate() {
             //If needed, import the subtree_output to our region.
             let subtree_output = if self.graph.node(subtree_output.node).parent.unwrap() != region {
-                self.graph.import_context(*subtree_output, region).unwrap()
+                let (port, edges) = self.graph.import_context(*subtree_output, region).unwrap();
+                if let Some(ty) = self.find_type(&subtree_output.into()) {
+                    for edg in edges {
+                        self.graph.edge_mut(edg).ty.set_type(ty.clone());
+                    }
+                } else {
+                    log::warn!("Couldn't find imported tree's type while importing into dispatched region!");
+                }
+                port
             } else {
                 *subtree_output
             };
@@ -705,7 +751,15 @@ impl Optimizer {
         //before we can actually do that, we have to make sure, that the argument is actually in our context thought.
         for argport in &mut alge_args {
             *argport = if self.graph.node(argport.node).parent.unwrap() != region {
-                self.graph.import_context(*argport, region).unwrap()
+                let (port, edges) = self.graph.import_context(*argport, region).unwrap();
+                if let Some(ty) = self.find_type(&argport.clone().into()) {
+                    for edg in edges {
+                        self.graph.edge_mut(edg).ty.set_type(ty.clone());
+                    }
+                } else {
+                    log::warn!("Couldn't find imported tree's type while importing into dispatched region!");
+                }
+                port
             } else {
                 *argport
             };
@@ -748,29 +802,58 @@ impl Optimizer {
         self.graph.is_legal_structural().unwrap();
         assert!(!self.graph.region_has_cycles(region));
 
-        //finally, recurse into the just created region.
-        let allnodes = self
-            .graph
-            .region(&RegionLocation {
-                node: local_lmd_node,
-                region_index: 0,
-            })
-            .unwrap()
-            .nodes
-            .clone();
+        if env::var("VOLA_DUMP_ALL").is_ok() || env::var("DUMP_DISPATCH").is_ok() {
+            self.push_debug_state(&format!(
+                "after dispatch region {}[{}] on {}",
+                ctx.spec_region.node, ctx.spec_region.region_index, dispatch_node
+            ));
+        }
+
+        //After inlining, recurse by exploring all potential evals of the
+        //lambda region we just inlined.
+        let mut local_ctx = ctx.clone();
+        local_ctx.spec_region = RegionLocation {
+            node: local_lmd_node,
+            region_index: 0,
+        };
+        self.find_and_specialize_all_evals(&local_ctx)?;
+        Ok(lmd_call)
+    }
+
+    //Explores all sub regions of the ctx and calls the specializer for any
+    //eval node it encounters
+    fn find_and_specialize_all_evals(
+        &mut self,
+        ctx: &SpecializationContext,
+    ) -> Result<(), OptError> {
+        //iterate all nodes of this context.
+        let allnodes = self.graph.region(&ctx.spec_region).unwrap().nodes.clone();
         for node in allnodes {
             let is_eval_node = match &self.graph.node(node).node_type {
                 NodeType::Simple(s) => s.try_downcast_ref::<EvalNode>().is_some(),
                 _ => false,
             };
+            //if this node is a eval node, recurse the specializer
             if is_eval_node {
                 self.specialize_eval_node(ctx, node)?;
+            } else {
+                let subreg_count = self.graph.node(node).regions().len();
+                //if there are subregions for that node,
+                //launche the exploration in that region as well
+                for regidx in 0..subreg_count {
+                    let mut new_ctx = ctx.clone();
+                    new_ctx.spec_region = RegionLocation {
+                        node,
+                        region_index: regidx,
+                    };
+                    self.find_and_specialize_all_evals(&new_ctx)?;
+                }
             }
         }
 
-        self.graph.remove_unused_context_variables(local_lmd_node);
-
-        Ok(lmd_call)
+        self.graph
+            .remove_unused_context_variables(ctx.spec_region.node);
+        Ok(())
     }
 
     fn query_concept(&self, node: NodeRef) -> Result<String, OptError> {

@@ -162,7 +162,8 @@ impl<
             if let Some(connected_callable) = self.find_producer_out(src_cv_port) {
                 //was connected, import the callable into the dst region and add the remapping
                 match self.import_context(connected_callable, dst_region) {
-                    Ok(dst_cv) => {
+                    Ok((dst_cv, _edges)) => {
+                        //TODO/FIXME: Do we need to use the newly created edges?
                         //add to remapping
                         let is_new = cv_remapping.insert(src_cv_port, dst_cv);
                         assert!(is_new.is_none());

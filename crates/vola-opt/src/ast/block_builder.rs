@@ -7,7 +7,7 @@
  */
 
 use ahash::AHashMap;
-use rvsdg::{edge::{OutportLocation, OutputType}, nodes::NodeType, region::RegionLocation, smallvec::{smallvec, SmallVec}, NodeRef, SmallColl};
+use rvsdg::{edge::{OutportLocation, OutputType}, nodes::NodeType, region::RegionLocation, smallvec::{smallvec, SmallVec}, EdgeRef, NodeRef, SmallColl};
 use vola_ast::{alge::{EvalExpr, Expr, ExprTy}, common::Stmt, csg::{AccessDesc, CSGNodeTy}};
 use vola_common::{ariadne::{Color, Fmt, Label}, error::error_reporter, report, Span};
 
@@ -189,17 +189,43 @@ impl<'a> BlockBuilder<'a> {
         }
         let cv = *self.csg_operands.get(&eval_expr.evaluator.0).unwrap();
 
-        let port = self.get_cv_argument_port(cv);
+        let (port, _edges) = self.get_cv_argument_port(cv);
 
         Ok((port, concept_ret_type))
     }
 
-    fn get_cv_argument_port(&self, cv: usize) -> OutportLocation{
+    fn get_cv_argument_port(&mut self, cv: usize) -> (OutportLocation, SmallColl<EdgeRef>){
         match &self.opt.graph.node(self.parent_node()).node_type{
-            NodeType::Gamma(_) => todo!(),
-            NodeType::Theta(_) => todo!(),
-            NodeType::Phi(_) => todo!(),
-            NodeType::Lambda(_) => OutportLocation { node: self.parent_node(), output: OutputType::ContextVariableArgument(cv) },
+            NodeType::Gamma(_) => {
+                //import the cv into the gamma node.
+                //to be able to do that, we need to _find_ the parent lambda
+                let lmd = self.opt.graph.find_parent_lambda_or_phi(self.parent_node()).expect("expected gamma node to exist withing lambda region");
+                let src_port = OutportLocation { node: lmd, output: OutputType::ContextVariableArgument(cv) };
+                let (gamma_port, edges) = self.opt.graph.import_argument(
+                    src_port,
+                    self.region 
+                )
+                .expect("failed to import cv-argument for eval into gamma node");
+                println!("Import with {} gamma", edges.len());
+                (gamma_port, edges)
+            },
+            NodeType::Theta(_) => {
+                //import the cv into the theta node.
+                //to be able to do that, we need to _find_ the parent lambda
+                let lmd = self.opt.graph.find_parent_lambda_or_phi(self.parent_node()).expect("expected theta node to exist withing lambda region");
+                let src_port = 
+                    OutportLocation { node: lmd, output: OutputType::ContextVariableArgument(cv) };
+                let (theta_port, edges) = self.opt.graph.import_argument(
+                    src_port,
+                    self.region 
+                )
+                .expect("failed to import cv-argument for eval into theta node");
+                println!("Import with {} theta", edges.len());
+                (theta_port, edges)
+            },
+            NodeType::Phi(_) => todo!("Phi nodes not yet supported"),
+            //For the lambda, this is easy, just use the cv-port
+            NodeType::Lambda(_) => (OutportLocation { node: self.parent_node(), output: OutputType::ContextVariableArgument(cv) }, SmallVec::new()),
             _ => panic!("Unexpected node type!")
         }
     }

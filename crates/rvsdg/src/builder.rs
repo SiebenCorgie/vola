@@ -302,7 +302,10 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> RegionBuilder<'a, N, E> {
     /// Uses context variables whenever appropriate.
     ///
     /// Might return None if `src` is not part of any parent.
-    pub fn import_context(&mut self, src: OutportLocation) -> Result<OutportLocation, GraphError> {
+    pub fn import_context(
+        &mut self,
+        src: OutportLocation,
+    ) -> Result<(OutportLocation, SmallColl<EdgeRef>), GraphError> {
         let region = self.parent_location();
         self.ctx_mut().import_context(src, region)
     }

@@ -158,15 +158,15 @@ pub fn emit() -> Rvsdg<LNode, VSEdge> {
             func.on_region(|reg| {
                 //Instead of declaring all cv_imports _by hand_, we use the import helper to import
                 // max(), puts() the global "max" string.
-                let cv_f_max = reg
+                let (cv_f_max, _) = reg
                     .import_context(function_max.as_outport_location(OutputType::LambdaDeclaration))
                     .expect("Failed to import fmax");
 
-                let cv_f_puts = reg
+                let (cv_f_puts, _) = reg
                     .import_context(puts_import)
                     .expect("Failed to import f_puts as context");
 
-                let cv_string_max = reg
+                let (cv_string_max, _) = reg
                     .import_context(global_string_max.as_outport_location(OutputType::Output(0)))
                     .expect("Failed to import string");
 

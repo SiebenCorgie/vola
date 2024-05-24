@@ -37,7 +37,7 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
         let mut remapping_table: AHashMap<usize, usize> = AHashMap::default();
         let mut next_unused_cv_idx = 0;
         //for each cv, check if it is connected internally, if not,
-        //call the remover 🧹, otherwise, add to the mappin
+        //call the remover 🧹, otherwise, add to the mapping
         for cvidx in 0..cvcount {
             let is_connected = if let Some(cv) = self
                 .node(node)

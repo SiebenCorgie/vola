@@ -166,6 +166,7 @@ impl OutputType {
                 branch: _,
                 entry_variable,
             } => Some(InputType::EntryVariableInput(*entry_variable)),
+            Self::Argument(i) => Some(InputType::Input(*i)),
             _ => None,
         }
     }

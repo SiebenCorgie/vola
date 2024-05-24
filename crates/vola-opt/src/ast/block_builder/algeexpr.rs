@@ -781,8 +781,7 @@ impl<'a> BlockBuilder<'a> {
             theta.span.clone(),
             BlockBuilderConfig {
                 expect_return: crate::ast::block_builder::RetType::None,
-                allow_eval: false,
-                allow_csg_stmt: false,
+                ..self.config
             },
             self.return_type.clone(),
         );
@@ -943,7 +942,7 @@ impl<'a> BlockBuilder<'a> {
                         //import this function newly, add to context,
                         //then use it
 
-                        let algeimportcv = self
+                        let (algeimportcv, _) = self
                             .opt
                             .graph
                             .import_context(

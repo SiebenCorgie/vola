@@ -1,4 +1,7 @@
-use rvsdg::util::inline::InlineError;
+use rvsdg::{
+    err::GraphError,
+    util::{dead_node_elimination::DneError, inline::InlineError},
+};
 /*
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
@@ -41,6 +44,12 @@ pub enum OptError {
 
     #[error("Failed to inline call: {error}")]
     InlineFailed { error: InlineError },
+
+    #[error("Dead node elimination failed: {0}")]
+    DneFailed(#[from] DneError),
+
+    #[error("Internal RVSDG graph error: {0}")]
+    InternalGraphError(#[from] GraphError),
 }
 
 impl OptError {

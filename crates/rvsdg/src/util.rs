@@ -10,7 +10,7 @@ use crate::{
     err::GraphError,
     nodes::{LangNode, NodeType},
     region::RegionLocation,
-    EdgeRef, Rvsdg, SmallColl,
+    EdgeRef, NodeRef, Rvsdg, SmallColl,
 };
 
 pub mod cfg;
@@ -43,9 +43,10 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
         src_region: RegionLocation,
         src: OutportLocation,
         path: &[RegionLocation],
-    ) -> OutportLocation {
+    ) -> (OutportLocation, SmallColl<EdgeRef>) {
         let mut current_region = src_region;
         let mut next_out_port = src;
+        let mut created_edges = SmallColl::new();
         for reg in path {
             assert!(
                 self.region(&current_region)
@@ -109,15 +110,16 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
             };
 
             //connect ports from next_out to new_port
-            self.connect(next_out_port, new_in_port, E::value_edge())
+            let edg = self
+                .connect(next_out_port, new_in_port, E::value_edge())
                 .unwrap();
-
+            created_edges.push(edg);
             //advance region and port
             next_out_port = new_out_port;
             current_region = reg.clone();
         }
 
-        next_out_port
+        (next_out_port, created_edges)
     }
 
     ///Similarly to [Self::build_import_path_cv], but imports values via normal arguments to inner regions.
@@ -210,7 +212,6 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
             next_out_port = new_out_port;
             current_region = reg.clone();
         }
-
         (next_out_port, created_edges)
     }
 
@@ -276,11 +277,11 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
         &mut self,
         src: OutportLocation,
         dst: RegionLocation,
-    ) -> Result<OutportLocation, GraphError> {
+    ) -> Result<(OutportLocation, SmallColl<EdgeRef>), GraphError> {
         // there is one edgecase, which is when src is within dst's region. So src.parent == dst.parent. In that case we
         // can immediately return the src.
         if self.node(src.node).parent == Some(dst.clone()) {
-            return Ok(src);
+            return Ok((src, SmallColl::new()));
         }
 
         //Find out what our dst region should be. Similarly to Rvsdg::connect we need to figure
@@ -332,5 +333,21 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
         } else {
             Ok(parent_stack.into_iter().collect())
         }
+    }
+
+    ///Tries to the closest lambda or phi node that _surounds_ `node`.
+    pub fn find_parent_lambda_or_phi(&self, node: NodeRef) -> Option<NodeRef> {
+        let mut parent = self.node(node).parent.clone();
+
+        while let Some(p) = parent.take() {
+            if self.node(p.node).node_type.is_lambda() || self.node(p.node).node_type.is_phi() {
+                return Some(p.node);
+            } else {
+                //move to next parent
+                parent = self.node(p.node).parent.clone();
+            }
+        }
+
+        None
     }
 }

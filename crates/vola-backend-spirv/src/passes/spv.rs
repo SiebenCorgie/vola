@@ -371,7 +371,7 @@ impl SpirvBackend {
             .region_to_cfg_scfr(reg)
             .expect("Could not transform region to CFG");
 
-        cfg_to_svg(&cfg, &format!("{reg:?}.svg"));
+        //cfg_to_svg(&cfg, &format!("{reg:?}.svg"));
 
         //Now setup ids for all BasicBlock in the BB.
         //This'll let us setup any control-flow reliably.
@@ -492,15 +492,47 @@ impl SpirvBackend {
                 for i in 0..lvcount {
                     //NOTE: we pre-allocate the id for the argument, so if in_loop_origin
                     //      is also the argument, the id is already valid
+                    //      HOWEVER,
+                    //      we only pre-allocate if there are in-loop producers.
+                    //      of a _new_ value. Otherwise the loop just uses, but does not modify
+                    //      the node. In that case we also don't append a Phi
+                    let lv_result_inport = InportLocation {
+                        node: *src_node,
+                        input: InputType::Result(i),
+                    };
+                    let lv_input_port = InportLocation {
+                        node: *src_node,
+                        input: InputType::Input(i),
+                    };
+                    let is_modified_in_loop =
+                        self.graph.find_producer_inp(lv_result_inport).is_some();
 
-                    let loop_variable_id = builder.id();
-                    ctx.set_port_id(
-                        OutportLocation {
-                            node: *src_node,
-                            output: OutputType::Argument(i),
-                        },
-                        loop_variable_id,
-                    );
+                    if is_modified_in_loop {
+                        let loop_variable_id = builder.id();
+                        ctx.set_port_id(
+                            OutportLocation {
+                                node: *src_node,
+                                output: OutputType::Argument(i),
+                            },
+                            loop_variable_id,
+                        );
+                    } else {
+                        //in the unmodified case, we just copy over the old id to the
+                        //new port.
+                        let value_producer = self.graph.find_producer_inp(lv_input_port);
+                        if let Some(prod) = value_producer {
+                            //if there is an actual producer,
+                            //set the _in-loop-id_
+                            let prod_id = ctx.get_port_id(&prod).unwrap();
+                            ctx.set_port_id(
+                                OutportLocation {
+                                    node: *src_node,
+                                    output: OutputType::Argument(i),
+                                },
+                                prod_id,
+                            );
+                        }
+                    }
                 }
 
                 let pre_loop_bb_id = *bb_label.get(pre_loop_bb).unwrap();
@@ -522,52 +554,83 @@ impl SpirvBackend {
                 //let ctrl_bb_id = *bb_label.get(&ctrl_tail).unwrap();
                 let last_loop_bb_id = *bb_label.get(&last_loop_bb).unwrap();
                 for i in 0..lvcount {
-                    let pre_loop_origin = self
+                    let lv_port = InportLocation {
+                        node: *src_node,
+                        input: InputType::Input(i),
+                    };
+                    //skip loop-variables that are not used
+                    let consumer = self.graph.find_consumer_in(InportLocation {
+                        node: *src_node,
+                        input: InputType::Input(i),
+                    });
+                    if self
                         .graph
-                        .find_producer_inp(InportLocation {
+                        .find_consumer_in(InportLocation {
                             node: *src_node,
                             input: InputType::Input(i),
                         })
-                        .unwrap();
-                    let in_loop_origin = self
-                        .graph
-                        .find_producer_inp(InportLocation {
-                            node: *src_node,
-                            input: InputType::Result(i),
-                        })
-                        .unwrap();
+                        .len()
+                        == 0
+                    {
+                        continue;
+                    } else {
+                        println!("{lv_port:?} has consumers {:?}", consumer);
+                    }
 
-                    let pre_loop_origin_id = *ctx.node_mapping.get(&pre_loop_origin).unwrap();
-                    let in_loop_origin_id = *ctx.node_mapping.get(&in_loop_origin).unwrap();
-                    let argument_id = *ctx
-                        .node_mapping
-                        .get(&OutportLocation {
+                    let pre_loop_origin = if let Some(prod) =
+                        self.graph.find_producer_inp(InportLocation {
                             node: *src_node,
-                            output: OutputType::Argument(i),
-                        })
-                        .unwrap();
-                    //NOTE: currently theta can only produce one outpu
-                    let result_type = self
-                        .find_type(
-                            OutportLocation {
+                            input: InputType::Input(i),
+                        }) {
+                        prod
+                    } else {
+                        //Ignore loop variable if there is no producer _before_ the loop
+                        continue;
+                    };
+                    let in_loop_origin = self.graph.find_producer_inp(InportLocation {
+                        node: *src_node,
+                        input: InputType::Result(i),
+                    });
+
+                    //If there is an in-loop-origin, this is a _true_, modified value
+                    //otherwise its just a _used_ value.
+                    //we only append a phi in the case of a used value
+                    if let Some(in_loop_origin) = in_loop_origin {
+                        let pre_loop_origin_id = *ctx.node_mapping.get(&pre_loop_origin).unwrap();
+                        let in_loop_origin_id = *ctx.node_mapping.get(&in_loop_origin).unwrap();
+                        let argument_id = *ctx
+                            .node_mapping
+                            .get(&OutportLocation {
                                 node: *src_node,
                                 output: OutputType::Argument(i),
-                            }
-                            .into(),
-                        )
-                        .unwrap();
-                    let result_type_id = register_or_get_type(builder, ctx, &result_type);
-                    //now append phi- for both
-                    builder
-                        .phi(
-                            result_type_id,
-                            Some(argument_id),
-                            [
-                                (pre_loop_origin_id, pre_loop_bb_id),
-                                (in_loop_origin_id, last_loop_bb_id),
-                            ],
-                        )
-                        .unwrap();
+                            })
+                            .unwrap();
+                        //NOTE: currently theta can only produce one outpu
+                        let result_type = self
+                            .find_type(
+                                OutportLocation {
+                                    node: *src_node,
+                                    output: OutputType::Argument(i),
+                                }
+                                .into(),
+                            )
+                            .unwrap();
+                        let result_type_id = register_or_get_type(builder, ctx, &result_type);
+                        //now append phi- for both
+                        builder
+                            .phi(
+                                result_type_id,
+                                Some(argument_id),
+                                [
+                                    (pre_loop_origin_id, pre_loop_bb_id),
+                                    (in_loop_origin_id, last_loop_bb_id),
+                                ],
+                            )
+                            .unwrap();
+                    }
+                    {
+                        //in the _unmodified-lv_ case, we just copy over the source id
+                    }
                 }
                 //recurse into the loop body
                 self.serialize_cfg_node(ctx, builder, cfg, bb_label, *loop_entry_bb)
@@ -717,13 +780,15 @@ impl SpirvBackend {
                     .entry_var_count();
                 //setup the entry-var id for each argument.
                 for ev in 0..ev_count {
-                    let src = self
-                        .graph
-                        .find_producer_inp(InportLocation {
-                            node: *src_node,
-                            input: InputType::EntryVariableInput(ev),
-                        })
-                        .unwrap();
+                    let src = if let Some(prod) = self.graph.find_producer_inp(InportLocation {
+                        node: *src_node,
+                        input: InputType::EntryVariableInput(ev),
+                    }) {
+                        prod
+                    } else {
+                        //ignore ev if there is no producer for the ev
+                        continue;
+                    };
 
                     let src_id = *ctx.node_mapping.get(&src).unwrap();
                     for bidx in 0..2 {
