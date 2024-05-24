@@ -16,6 +16,7 @@ use ahash::AHashMap;
 use rvsdg::attrib::AttribLocation;
 use rvsdg::edge::OutportLocation;
 use rvsdg::region::RegionLocation;
+use rvsdg::util::Path;
 use rvsdg::NodeRef;
 use rvsdg::{
     attrib::FlagStore, edge::LangEdge, nodes::LangNode, rvsdg_derive_lang::LangNode,
@@ -324,5 +325,90 @@ impl Optimizer {
             .nodes
             .contains(&port.node)
             && !port.output.is_argument()
+    }
+
+    pub fn find_path_type(&self, path: &Path) -> Result<Ty, OptError> {
+        if let Some(start_type) = self.find_type(&path.start.into()) {
+            return Ok(start_type);
+        }
+        if let Some(end_type) = self.find_type(&path.end.into()) {
+            return Ok(end_type);
+        }
+
+        for edg in &path.edges {
+            if let Some(ty) = self.find_type(&edg.into()) {
+                return Ok(ty);
+            }
+        }
+
+        //if we didn't find anything yet, try all ports instead
+        for edg in &path.edges {
+            let src = self.graph.edge(*edg).src().clone();
+            if let Some(t) = self.find_type(&src.into()) {
+                return Ok(t);
+            }
+            let dst = self.graph.edge(*edg).dst().clone();
+            if let Some(t) = self.find_type(&dst.into()) {
+                return Ok(t);
+            }
+        }
+        Err(OptError::NotTypeOnPath)
+    }
+
+    ///types the `path` of edges based on any found type information it can find on that path.
+    ///
+    /// If successful, return the type that was set on the path.
+    pub fn type_path(&mut self, path: &Path) -> Result<Ty, OptError> {
+        //We first try the start and end port. If we can't find anything on there,
+        //we walk the path and try to find anything.
+        //if that ain't working as well, we gotta return with an error
+
+        let found_type = self.find_path_type(&path)?;
+
+        for edg in &path.edges {
+            self.graph.edge_mut(*edg).ty.set_type(found_type.clone());
+        }
+
+        Ok(found_type)
+    }
+
+    ///Imports the `src` into `target_region`. Also takes care of type-setting any created paths
+    pub fn import_context(
+        &mut self,
+        src: OutportLocation,
+        target_region: RegionLocation,
+    ) -> Result<OutportLocation, OptError> {
+        let (out, path) = self.graph.import_context(src, target_region)?;
+        if let Some(p) = path {
+            match self.type_path(&p) {
+                Ok(_) => {}
+                //Just report that one, but that can happen
+                Err(OptError::NotTypeOnPath) => {
+                    log::error!("{}", OptError::NotTypeOnPath);
+                }
+                Err(other) => return Err(other),
+            }
+        }
+        Ok(out)
+    }
+
+    ///Imports the `src` into `target_region`. Also takes care of type-setting any created paths
+    pub fn import_argument(
+        &mut self,
+        src: OutportLocation,
+        target_region: RegionLocation,
+    ) -> Result<OutportLocation, OptError> {
+        let (out, path) = self.graph.import_argument(src, target_region)?;
+        if let Some(p) = path {
+            match self.type_path(&p) {
+                Ok(_) => {}
+                //Just report that one, but that can happen
+                Err(OptError::NotTypeOnPath) => {
+                    log::warn!("{}", OptError::NotTypeOnPath);
+                }
+                Err(other) => return Err(other),
+            }
+        }
+        Ok(out)
     }
 }

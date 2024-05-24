@@ -21,6 +21,13 @@ pub mod inline;
 pub mod liveness;
 pub mod region_utils;
 
+///Path of multiple edges from `start` to `end`.
+pub struct Path {
+    pub start: OutportLocation,
+    pub end: InportLocation,
+    pub edges: SmallColl<EdgeRef>,
+}
+
 impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
     ///Builds the import path from `src` down to `path`'s last region.
     ///
@@ -43,7 +50,7 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
         src_region: RegionLocation,
         src: OutportLocation,
         path: &[RegionLocation],
-    ) -> (OutportLocation, SmallColl<EdgeRef>) {
+    ) -> (OutportLocation, Option<Path>) {
         let mut current_region = src_region;
         let mut next_out_port = src;
         let mut created_edges = SmallColl::new();
@@ -119,7 +126,22 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
             current_region = reg.clone();
         }
 
-        (next_out_port, created_edges)
+        //reverse the edge-order, since we are going from _inside_ to outside
+        let path = if created_edges.len() > 0 {
+            created_edges.reverse();
+            let start = self.edge(*created_edges.first().unwrap()).src().clone();
+            let end = self.edge(*created_edges.last().unwrap()).dst().clone();
+            let path = Path {
+                start,
+                end,
+                edges: created_edges,
+            };
+            Some(path)
+        } else {
+            None
+        };
+
+        (next_out_port, path)
     }
 
     ///Similarly to [Self::build_import_path_cv], but imports values via normal arguments to inner regions.
@@ -128,12 +150,12 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
         src_region: RegionLocation,
         src: OutportLocation,
         path: &[RegionLocation],
-    ) -> (OutportLocation, SmallColl<EdgeRef>) {
+    ) -> (OutportLocation, Option<Path>) {
         //Again, pretty similar to the cv version. BUT:
         // We check for each _next_out_port_ if its already connected to
         // current_region.node.
         // if so, instead of setting up a new connection, we use the already existing one.
-        let mut created_edges = SmallColl::new();
+        let mut used_edges = SmallColl::new();
 
         let mut current_region = src_region;
         let mut next_out_port = src;
@@ -165,16 +187,20 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
                             input: input_ty,
                         };
 
-                        existing_connection = Some((in_port, out_port));
+                        existing_connection = Some((in_port, out_port, src));
                         break;
                     }
                 }
             }
 
             //child property holds, advance with new connection into child
-            let (_new_in_port, new_out_port) = if let Some((existing_in, existing_out)) =
-                existing_connection
+            let (_new_in_port, new_out_port) = if let Some((
+                existing_in,
+                existing_out,
+                reuse_edge,
+            )) = existing_connection
             {
+                used_edges.push(reuse_edge);
                 (existing_in, existing_out)
             } else {
                 let (new_in_port, new_out_port) = match &mut self.node_mut(reg.node).node_type {
@@ -205,14 +231,30 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
                 let edg = self
                     .connect(next_out_port, new_in_port, E::value_edge())
                     .unwrap();
-                created_edges.push(edg);
+                used_edges.push(edg);
                 (new_in_port, new_out_port)
             };
             //advance region and port
             next_out_port = new_out_port;
             current_region = reg.clone();
         }
-        (next_out_port, created_edges)
+
+        //reverse the edge-order, since we are going from _inside_ to outside
+        let path = if used_edges.len() > 0 {
+            used_edges.reverse();
+            let start = self.edge(*used_edges.first().unwrap()).src().clone();
+            let end = self.edge(*used_edges.last().unwrap()).dst().clone();
+            let path = Path {
+                start,
+                end,
+                edges: used_edges,
+            };
+            Some(path)
+        } else {
+            None
+        };
+
+        (next_out_port, path)
     }
 
     ///Lets you import `src` as an argument into `dst`. Contrary to [import_context] it'll use arguments, loop variables etc.
@@ -229,7 +271,7 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
         &mut self,
         src: OutportLocation,
         dst: RegionLocation,
-    ) -> Result<(OutportLocation, SmallColl<EdgeRef>), GraphError> {
+    ) -> Result<(OutportLocation, Option<Path>), GraphError> {
         //similar to the cv version, first map out of dst_region
         //an check for _src_ in that region till we either found the node,
         //or we find the omega-node, in which case we failed to find the node.
@@ -237,7 +279,7 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
         // there is one edgecase, which is when src is within dst's region. So src.parent == dst.parent. In that case we
         // can immediately return the src.
         if self.node(src.node).parent == Some(dst.clone()) {
-            return Ok((src, SmallColl::with_capacity(0)));
+            return Ok((src, None));
         }
 
         //Find out what our dst region should be. Similarly to Rvsdg::connect we need to figure
@@ -277,11 +319,11 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
         &mut self,
         src: OutportLocation,
         dst: RegionLocation,
-    ) -> Result<(OutportLocation, SmallColl<EdgeRef>), GraphError> {
+    ) -> Result<(OutportLocation, Option<Path>), GraphError> {
         // there is one edgecase, which is when src is within dst's region. So src.parent == dst.parent. In that case we
         // can immediately return the src.
         if self.node(src.node).parent == Some(dst.clone()) {
-            return Ok((src, SmallColl::new()));
+            return Ok((src, None));
         }
 
         //Find out what our dst region should be. Similarly to Rvsdg::connect we need to figure

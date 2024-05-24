@@ -19,6 +19,7 @@ use crate::{
     err::GraphError,
     nodes::{ApplyNode, LangNode, NodeType},
     region::{Region, RegionLocation},
+    util::Path,
     EdgeRef, NodeRef, Rvsdg, SmallColl,
 };
 pub use inter_proc::{DeltaBuilder, LambdaBuilder, OmegaBuilder, PhiBuilder};
@@ -305,7 +306,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> RegionBuilder<'a, N, E> {
     pub fn import_context(
         &mut self,
         src: OutportLocation,
-    ) -> Result<(OutportLocation, SmallColl<EdgeRef>), GraphError> {
+    ) -> Result<(OutportLocation, Option<Path>), GraphError> {
         let region = self.parent_location();
         self.ctx_mut().import_context(src, region)
     }

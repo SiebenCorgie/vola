@@ -50,6 +50,9 @@ pub enum OptError {
 
     #[error("Internal RVSDG graph error: {0}")]
     InternalGraphError(#[from] GraphError),
+
+    #[error("Could not find anything that was typeset on the path")]
+    NotTypeOnPath,
 }
 
 impl OptError {

@@ -405,7 +405,12 @@ impl Optimizer {
                     })?;
                     //ninline += 1;
                     //now inline ourselfs
-                    self.graph.inline_apply_node(node).unwrap();
+                    let paths = self.graph.inline_apply_node(node).unwrap();
+                    for p in paths {
+                        if let Err(e) = self.type_path(&p) {
+                            log::error!("Could not type inlined-path: {e}");
+                        }
+                    }
                 } else {
                     #[cfg(feature = "log")]
                     log::error!("ApplyNode {node} had no def in {region:?}");
@@ -565,20 +570,7 @@ impl Optimizer {
                 //if needed, and hook that up instead.
                 _ => {
                     let imported = if self.graph.node(srcport.node).parent.unwrap() != region {
-                        let (imported, edges) = self.graph.import_context(srcport, region).unwrap();
-                        //tag all new edges with the argument's type
-                        //NOTE: We know that the typ is _correct_ from the concept-check above + the fact,
-                        //      that the type-derive pass also respects's the concepts's argument types
-                        if let Some(ty) = self.find_type(&srcport.into()) {
-                            for edg in edges {
-                                self.graph.edge_mut(edg).ty.set_type(ty.clone());
-                            }
-                        } else {
-                            log::error!(
-                                "Could not find type for CSG-Arg's edges while dispatching field"
-                            );
-                        }
-                        imported
+                        self.import_context(srcport, region).unwrap()
                     } else {
                         srcport
                     };
@@ -610,20 +602,7 @@ impl Optimizer {
                 // hooked up as a CV-Arg to some parent region.
                 _ => {
                     let imported = if self.graph.node(srcport.node).parent.unwrap() != region {
-                        let (imported, edges) = self.graph.import_context(srcport, region).unwrap();
-                        //tag all new edges with the argument's type
-                        //NOTE: We know that the typ is _correct_ from the concept-check above + the fact,
-                        //      that the type-derive pass also respects's the concepts's argument types
-                        if let Some(ty) = self.find_type(&srcport.into()) {
-                            for edg in edges {
-                                self.graph.edge_mut(edg).ty.set_type(ty.clone());
-                            }
-                        } else {
-                            log::error!(
-                                "Could not find type for CSG-Arg's edges while dispatching field"
-                            );
-                        }
-                        imported
+                        self.import_context(srcport, region).unwrap()
                     } else {
                         srcport
                     };
@@ -720,15 +699,7 @@ impl Optimizer {
         for (subidx, subtree_output) in csg_subtrees.iter().enumerate() {
             //If needed, import the subtree_output to our region.
             let subtree_output = if self.graph.node(subtree_output.node).parent.unwrap() != region {
-                let (port, edges) = self.graph.import_context(*subtree_output, region).unwrap();
-                if let Some(ty) = self.find_type(&subtree_output.into()) {
-                    for edg in edges {
-                        self.graph.edge_mut(edg).ty.set_type(ty.clone());
-                    }
-                } else {
-                    log::error!("Couldn't find imported tree's type while importing into dispatched region!");
-                }
-                port
+                self.import_context(*subtree_output, region).unwrap()
             } else {
                 *subtree_output
             };
@@ -751,15 +722,7 @@ impl Optimizer {
         //before we can actually do that, we have to make sure, that the argument is actually in our context thought.
         for argport in &mut alge_args {
             *argport = if self.graph.node(argport.node).parent.unwrap() != region {
-                let (port, edges) = self.graph.import_context(*argport, region).unwrap();
-                if let Some(ty) = self.find_type(&argport.clone().into()) {
-                    for edg in edges {
-                        self.graph.edge_mut(edg).ty.set_type(ty.clone());
-                    }
-                } else {
-                    log::warn!("Couldn't find imported tree's type while importing into dispatched region!");
-                }
-                port
+                self.import_context(*argport, region).unwrap()
             } else {
                 *argport
             };
