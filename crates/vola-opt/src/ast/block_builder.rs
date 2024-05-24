@@ -206,7 +206,6 @@ impl<'a> BlockBuilder<'a> {
                     self.region 
                 )
                 .expect("failed to import cv-argument for eval into gamma node");
-                println!("Import with {} gamma", edges.len());
                 (gamma_port, edges)
             },
             NodeType::Theta(_) => {
@@ -220,7 +219,6 @@ impl<'a> BlockBuilder<'a> {
                     self.region 
                 )
                 .expect("failed to import cv-argument for eval into theta node");
-                println!("Import with {} theta", edges.len());
                 (theta_port, edges)
             },
             NodeType::Phi(_) => todo!("Phi nodes not yet supported"),

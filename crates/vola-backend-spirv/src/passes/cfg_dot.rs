@@ -1,7 +1,6 @@
 use std::path::Path;
 
 use graphviz_rust::{
-    attributes::label,
     cmd::Format,
     exec_dot,
     printer::{DotPrinter, PrinterContext},
@@ -9,7 +8,7 @@ use graphviz_rust::{
 use rvsdg::util::cfg::{Cfg, CfgNode};
 use vola_common::dot::{DotNode, GraphvizBuilder};
 
-struct CfgBundle<'a> {
+pub struct CfgBundle<'a> {
     id: u64,
     node: &'a CfgNode,
 }
@@ -46,43 +45,26 @@ impl<'a> DotNode for CfgBundle<'a> {
             CfgNode::BasicBlock(bb) => {
                 builder.connect_by_id(format!("{}", self.id), format!("{}", bb.exit_node.ffi()));
             }
-            CfgNode::LoopHeader {
-                src_node,
-                loop_entry_bb,
-                pre_loop_bb,
-                ctrl_tail,
-            } => {
+            CfgNode::LoopHeader { loop_entry_bb, .. } => {
                 builder.connect_by_id(format!("{}", self.id), format!("{}", loop_entry_bb.ffi()));
             }
             CfgNode::LoopCtrlTail {
-                last_bb,
-                loop_entry_bb,
                 post_loop_bb,
-                condition_src,
-                src_node,
                 header,
+                ..
             } => {
                 builder.connect_by_id(format!("{}", self.id), format!("{}", post_loop_bb.ffi()));
                 builder.connect_by_id(format!("{}", self.id), format!("{}", header.ffi()));
             }
             CfgNode::BranchHeader {
-                src_node,
-                condition_src,
-                last_bb,
                 true_branch,
                 false_branch,
-                merge,
-                post_merge_block,
+                ..
             } => {
                 builder.connect_by_id(format!("{}", self.id), format!("{}", true_branch.ffi()));
                 builder.connect_by_id(format!("{}", self.id), format!("{}", false_branch.ffi()));
             }
-            CfgNode::BranchMerge {
-                src_node,
-                src_true,
-                src_false,
-                next,
-            } => {
+            CfgNode::BranchMerge { next, .. } => {
                 builder.connect_by_id(format!("{}", self.id), format!("{}", next.ffi()));
             }
         }
@@ -92,6 +74,7 @@ impl<'a> DotNode for CfgBundle<'a> {
 
 ///Renders the `cfg` as an SVG file to `svg_path`. If it fails it'll
 /// print the error to the console, but won't panic.
+#[allow(dead_code)]
 pub fn cfg_to_svg(cfg: &Cfg, svg_path: impl AsRef<Path>) {
     //Our strategy is, that we have a stable IDing scheme, so we
     //really can just iterate over all (key, cfg) node pairs and

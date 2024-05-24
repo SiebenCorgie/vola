@@ -21,7 +21,7 @@ use std::collections::VecDeque;
 
 use ahash::{AHashMap, AHashSet};
 use rvsdg::{
-    edge::{InportLocation, InputType, OutportLocation, OutputType},
+    edge::{InportLocation, InputType, OutportLocation},
     nodes::{ApplyNode, NodeType},
     region::RegionLocation,
     smallvec::SmallVec,

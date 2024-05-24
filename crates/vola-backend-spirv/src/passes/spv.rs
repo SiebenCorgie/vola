@@ -1,14 +1,13 @@
 use core::panic;
 
-use ahash::{AHashMap, AHashSet, HashMap};
+use ahash::{AHashMap, AHashSet};
 use rspirv::{
     dr::{Builder, Instruction, Operand},
     spirv::{FunctionControl, LoopControl, SelectionControl, Word},
 };
 use rvsdg::{
-    builder,
     edge::{InportLocation, InputType, OutportLocation, OutputType},
-    nodes::{ApplyNode, NodeType, StructuralNode},
+    nodes::{NodeType, StructuralNode},
     region::RegionLocation,
     smallvec::{smallvec, SmallVec},
     util::cfg::{Cfg, CfgNode, CfgRef},
@@ -17,11 +16,9 @@ use rvsdg::{
 
 use crate::{
     graph::BackendOp,
-    spv::{ArithBaseTy, SpvOp, SpvType, TyShape},
+    spv::{ArithBaseTy, SpvType, TyShape},
     BackendSpirvError, SpirvBackend, SpirvConfig, SpirvModule,
 };
-
-use super::cfg_dot::cfg_to_svg;
 
 pub struct EmitCtx {
     pub extinst_ids: AHashMap<String, Word>,
@@ -364,7 +361,6 @@ impl SpirvBackend {
         builder: &mut Builder,
         reg: RegionLocation,
     ) -> Result<(), BackendSpirvError> {
-        println!("Begin {reg:?}");
         //Generate the CSG for this region
         let cfg = self
             .graph
@@ -536,33 +532,19 @@ impl SpirvBackend {
                 }
 
                 let pre_loop_bb_id = *bb_label.get(pre_loop_bb).unwrap();
-                let (last_loop_bb, post_loop_bb, header_bb) = {
-                    if let CfgNode::LoopCtrlTail {
-                        last_bb,
-                        post_loop_bb,
-                        header,
-                        ..
-                    } = cfg.nodes.get(*ctrl_tail).unwrap()
+                let last_loop_bb = {
+                    if let CfgNode::LoopCtrlTail { last_bb, .. } =
+                        cfg.nodes.get(*ctrl_tail).unwrap()
                     {
-                        (last_bb, post_loop_bb, header)
+                        last_bb
                     } else {
                         panic!("Expected this to be ctrl tail actually");
                     }
                 };
 
-                let post_loop_bb_id = *bb_label.get(&post_loop_bb).unwrap();
                 //let ctrl_bb_id = *bb_label.get(&ctrl_tail).unwrap();
                 let last_loop_bb_id = *bb_label.get(&last_loop_bb).unwrap();
                 for i in 0..lvcount {
-                    let lv_port = InportLocation {
-                        node: *src_node,
-                        input: InputType::Input(i),
-                    };
-                    //skip loop-variables that are not used
-                    let consumer = self.graph.find_consumer_in(InportLocation {
-                        node: *src_node,
-                        input: InputType::Input(i),
-                    });
                     if self
                         .graph
                         .find_consumer_in(InportLocation {
@@ -573,8 +555,6 @@ impl SpirvBackend {
                         == 0
                     {
                         continue;
-                    } else {
-                        println!("{lv_port:?} has consumers {:?}", consumer);
                     }
 
                     let pre_loop_origin = if let Some(prod) =
@@ -640,7 +620,7 @@ impl SpirvBackend {
                 loop_entry_bb,
                 post_loop_bb,
                 condition_src,
-                header,
+                header: _,
                 src_node,
             } => {
                 //after the loop body, add the merge and conditional branch
@@ -739,7 +719,7 @@ impl SpirvBackend {
             CfgNode::BranchHeader {
                 src_node,
                 condition_src,
-                last_bb,
+                last_bb: _,
                 true_branch,
                 false_branch,
                 merge,
@@ -869,7 +849,6 @@ impl SpirvBackend {
                     {
                         continue;
                     }
-                    println!("Try {ev_location:?}");
                     let in_true_src = self
                         .graph
                         .find_producer_inp(InportLocation {
@@ -880,7 +859,6 @@ impl SpirvBackend {
                             },
                         })
                         .unwrap();
-                    println!("true_src: {in_true_src:?}");
                     let in_true_src_id = *ctx.node_mapping.get(&in_true_src).unwrap();
 
                     let in_false_src = self
@@ -918,12 +896,7 @@ impl SpirvBackend {
                 //finally continue with the post-merge block
                 self.serialize_cfg_node(ctx, builder, cfg, bb_label, *post_merge_block)
             }
-            CfgNode::BranchMerge {
-                src_node,
-                src_true,
-                src_false,
-                next,
-            } => {
+            CfgNode::BranchMerge { .. } => {
                 //tell whoever serializes this, that we need to branch to the
                 //output
                 builder.branch(*bb_label.get(&node).unwrap()).unwrap();
@@ -968,7 +941,6 @@ impl SpirvBackend {
     ) -> Result<Word, BackendSpirvError> {
         match simple_node {
             BackendOp::SpirvOp(spvop) => {
-                println!("{} -> {}", node, spvop.name());
                 //Collect the SPIR-V ids of all inputs
                 let src_ids = input_srcs
                     .iter()
@@ -1036,299 +1008,7 @@ impl SpirvBackend {
             .unwrap();
         Ok(result_id)
     }
-    /*
-        fn serialize_node(
-            &self,
-            ctx: &mut EmitCtx,
-            builder: &mut Builder,
-            input_srcs: &SmallColl<OutportLocation>,
-            result_type: &SpvType,
-            parent_region: RegionLocation,
-            node: NodeRef,
-        ) -> Result<Word, BackendSpirvError> {
-            let mut src_ids = input_srcs
-                .iter()
-                .map(|node| *ctx.node_mapping.get(node).unwrap())
-                .collect::<SmallColl<Word>>();
-            match &self.graph.node(node).node_type {
-                NodeType::Simple(s) => match &s.op {
-                    BackendOp::SpirvOp(spvop) => {
-                        let result_id = builder.id();
-                        let result_type_id = register_or_get_type(builder, ctx, result_type);
-                        let instruction =
-                            spvop.build_instruction(&ctx, &src_ids, result_type_id, result_id);
 
-                        //TODO: kinda hack atm.
-                        if spvop.instruction_is_type_or_constant() {
-                            //goes into the type_constant header
-                            builder.module_mut().types_global_values.push(instruction);
-                        } else {
-                            //Goes into the current builder
-                            builder
-                                .insert_into_block(rspirv::dr::InsertPoint::End, instruction)
-                                .unwrap();
-                        }
-
-                        Ok(result_id)
-                    }
-                    BackendOp::HlOp(o) => panic!("Unexpected HlOp in SPIR-V serialization: {o:?}"),
-                    BackendOp::Dummy => panic!("Unexpected Dummy node in SPIR-V serialization"),
-                },
-                NodeType::Apply(_a) => {}
-                NodeType::Gamma(g) => {
-                    //Build the gamma-region scope for each branch, and then recurse the branch.
-                    //After all of them returning,
-                    //append the (SPIR-V)-phi node and return the result id.
-
-                    assert!(g.regions().len() == 2);
-                    //NOTE: all branches have the same result type, always.
-                    let result_type_id = *ctx.type_mapping.get(result_type).unwrap();
-                    let merge_label_id = builder.id();
-                    let _selection_merge_id = builder
-                        .selection_merge(merge_label_id, SelectionControl::NONE)
-                        .unwrap();
-                    let if_label = builder.id();
-                    let else_label = builder.id();
-                    //TODO: implement some kind of static gamma-analysis to have nice branch weights.
-                    let _cond_branch = builder
-                        .branch_conditional(src_ids[0], if_label, else_label, [])
-                        .unwrap();
-
-                    //This is the Vec<(branch_result_id, branch_block_id)> used by op phi, but already flattened
-                    //the way _it isi needed_.
-                    let mut result_parent_pairs: SmallColl<(u32, u32)> = SmallVec::new();
-                    //now, for both gamma-blocks: Setup the jump-label,
-                    //then emit the block, finally, emit the unconditional branch to the merge_label
-                    for (blockid, index) in [(if_label, 0), (else_label, 1)] {
-                        let gamma_region = RegionLocation {
-                            node,
-                            region_index: index,
-                        };
-                        let block_entry_label = builder.begin_block(Some(blockid)).unwrap();
-                        ctx.push_block_id(gamma_region, block_entry_label);
-                        //make it possible for the emit_region to resolve,
-                        //by seeding all entry_variabels
-                        for idx in 1..src_ids.len() {
-                            //map the entry_var_input idx-1 to entry_var_argument
-                            ctx.node_mapping.insert(
-                                OutportLocation {
-                                    node,
-                                    output: OutputType::EntryVariableArgument {
-                                        branch: index,
-                                        entry_variable: idx - 1,
-                                    },
-                                },
-                                src_ids[idx],
-                            );
-                        }
-
-                        self.emit_region(ctx, builder, gamma_region)
-                            .expect("Expected return value from gamma-region");
-
-                        //Retrive the result_id, by looking it up in the just used ctx
-                        let result_connected_port = self
-                            .graph
-                            .region(&gamma_region)
-                            .unwrap()
-                            .result_src(&self.graph, 0)
-                            .unwrap();
-
-                        let result_id = *ctx.node_mapping.get(&result_connected_port).unwrap();
-                        //read out the last block id of our own region, and use that as src-label
-                        //for the following _out-of-branch_ phi-instruction.
-                        let exit_block_id = ctx
-                            .region_blocks
-                            .get(&gamma_region)
-                            .unwrap()
-                            .last()
-                            .cloned()
-                            .unwrap();
-
-                        //NOTE: We need to reconstruct the basic-block id of result_id, since we _don't know_
-                        //      what emit_region above might have done basic-block wise.
-                        //      so the idea is, to go to result_id's definition, and then reverse
-                        //      until we find the def.
-                        //
-                        //      A nice thing is, that we can use the blockid pre-given as a _lower-bound_.
-                        //      so... thats nice I guess.
-                        result_parent_pairs.push((result_id, exit_block_id));
-                        //branch to the merge label
-                        builder.branch(merge_label_id).unwrap();
-                    }
-
-                    //finally, append the merge label, and the phi, that'll emit our actual _created_ value.
-                    let _ = builder.begin_block(Some(merge_label_id)).unwrap();
-                    ctx.push_block_id(parent_region, merge_label_id);
-                    let resid = builder
-                        .phi(result_type_id, None, result_parent_pairs)
-                        .unwrap();
-
-                    //also register the associated _out_of_gamma_port_
-                    //with the id
-                    ctx.node_mapping.insert(
-                        OutportLocation {
-                            node,
-                            output: OutputType::ExitVariableOutput(0),
-                        },
-                        resid,
-                    );
-                    Ok(resid)
-                }
-                NodeType::Theta(t) => {
-                    //We basically build a do-while thingy here.
-                    //which works by branching into the loop block, then selecting the
-                    //loop index and loop-variable based on
-                    //weather we come from the last iteration, or not.
-                    //we then just append the whole block,
-                    //and finally branch of, based on the condition
-                    //that was emitted.
-
-                    let loop_body_label = builder.id();
-                    let loop_merge_label = builder.id();
-                    //The id given to the loop index after it changed
-                    let loop_index_id = builder.id();
-                    let loop_index_src = src_ids[0];
-
-                    //The loop dominating block id
-                    let pre_loop_block_id = *ctx
-                        .region_blocks
-                        .get(&parent_region)
-                        .unwrap()
-                        .last()
-                        .unwrap();
-                    let theta_region = RegionLocation {
-                        node,
-                        region_index: 0,
-                    };
-                    let _ = builder.branch(loop_body_label).unwrap();
-                    let _into_body_label = builder.begin_block(Some(loop_body_label)).unwrap();
-                    ctx.push_block_id(theta_region, loop_body_label);
-
-                    //NOTE: for each used LV, use a phi-instruction to select the correct value _within_ the body
-                    //      however, at this point we don't know (yet) the _in-loop_ id for those. So what we do is
-                    //      pre-allocate an id for each loop-variable which gets associated with the lv-port
-                    //      then we build the block, and afterwards prepend the phi instructions with the newly allocated
-                    //      IDs to the start of loop_body_label.
-                    //      The out-of-loop id will be the src_id[lv_idx], the _in_loop_ id wil be the _last_use_id_ that is connected to the
-                    //      respective lv_result
-                    let loop_body_label_block_index = builder.selected_block().unwrap();
-
-                    for i in 0..t.loop_variable_count() {
-                        let loop_variable_id = builder.id();
-                        ctx.node_mapping.insert(
-                            OutportLocation {
-                                node,
-                                output: OutputType::Argument(i),
-                            },
-                            loop_variable_id,
-                        );
-                    }
-
-                    //now emit the body
-                    self.emit_region(ctx, builder, theta_region)?;
-
-                    //now collect all result_connected lvs and prepend the phi-node to the start of the
-                    //loop_body
-
-                    let post_loop_block = builder.selected_block().unwrap();
-                    builder
-                        .select_block(Some(loop_body_label_block_index))
-                        .unwrap();
-                    for i in 0..t.loop_variable_count() {
-                        let pre_loop_id = src_ids[i];
-                        //early out if the result is not connected
-                        if t.lv_result(i).unwrap().edge.is_none() {
-                            continue;
-                        }
-                        let in_loop_src = self
-                            .graph
-                            .edge(t.lv_result(i).unwrap().edge.unwrap())
-                            .src()
-                            .clone();
-                        let in_loop_id = *ctx.node_mapping.get(&in_loop_src).unwrap();
-                        //get the pre-allocated id back.
-                        let phi_id = *ctx
-                            .node_mapping
-                            .get(&OutportLocation {
-                                node,
-                                output: OutputType::Argument(i),
-                            })
-                            .unwrap();
-                        let typeid = {
-                            //recover the type by checking the result-connected edge type
-                            //FIXME: we might want to unify that with the lv-input connected edge type.
-                            //       but in theory this should be already done by the type pass.
-                            let edgety = self
-                                .graph
-                                .edge(t.lv_result(i).unwrap().edge.unwrap())
-                                .ty
-                                .get_type()
-                                .unwrap();
-                            register_or_get_type(builder, ctx, &edgety)
-                        };
-                        builder
-                            .insert_into_block(
-                                rspirv::dr::InsertPoint::Begin,
-                                Instruction::new(
-                                    rspirv::spirv::Op::Phi,
-                                    Some(typeid),
-                                    Some(phi_id),
-                                    vec![
-                                        //Use the pre-loop-id, if we come from pre-loop-block-id
-                                        Operand::IdRef(pre_loop_id),
-                                        Operand::IdRef(pre_loop_block_id),
-                                        //Use the in_loop_id, if we come from the loop body
-                                        Operand::IdRef(in_loop_id),
-                                        Operand::IdRef(loop_body_label),
-                                    ],
-                                ),
-                            )
-                            .unwrap();
-                    }
-                    //return to the end of the theta-region related blocks
-                    builder.select_block(Some(post_loop_block)).unwrap();
-
-                    //finally, merge the loop and _out_of_loop_ flow and branch based on the predicate
-                    let predicate_port = self.graph.edge(t.loop_predicate().edge.unwrap()).src();
-                    let predicate_id = *ctx.node_mapping.get(predicate_port).unwrap();
-
-                    builder
-                        .loop_merge(loop_merge_label, loop_body_label, LoopControl::empty(), [])
-                        .unwrap();
-                    builder
-                        .branch_conditional(predicate_id, loop_body_label, loop_merge_label, [])
-                        .unwrap();
-
-                    //finally start post-theta block
-                    builder.begin_block(Some(loop_merge_label)).unwrap();
-                    ctx.push_block_id(parent_region, loop_merge_label);
-                    //And return the loop-value. Note that, by convention this is always the
-                    // 3rd output of the loop
-                    //so we just use the 3rd-result-connected-node.
-                    //Also, we select the right loop value after branching _into_ the loop, since this is a do-while loop, not a while-do. So
-                    //basically at this point the result connected node is _already_ the right one.
-                    let loop_value_src = self
-                        .graph
-                        .edge(t.lv_result(2).unwrap().edge.unwrap())
-                        .src()
-                        .clone();
-                    let loop_value_id = *ctx.node_mapping.get(&loop_value_src).unwrap();
-                    //NOTE: Also write that to the result id, if someone else want's to use / query
-                    //      the result port
-                    ctx.node_mapping.insert(
-                        OutportLocation {
-                            node,
-                            output: OutputType::Output(2),
-                        },
-                        loop_value_id,
-                    );
-                    Ok(loop_value_id)
-                }
-                //TODO: implement ifs / matches and loops so we could _in principle_ emit those.
-                any => panic!("Unsupported node type {any:?}"),
-            }
-        }
-    */
     ///Returns the order of argument tys for a λ-function, or Non if `lmd` is not a lambda node.
     pub fn get_arg_tys(&self, lmdref: NodeRef) -> Option<SmallColl<Option<SpvType>>> {
         if self.graph.node(lmdref).node_type.is_lambda() {
