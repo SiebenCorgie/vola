@@ -1,3 +1,4 @@
+use rvsdg::SmallColl;
 use vola_common::{ariadne::Label, error::error_reporter, report, Span};
 
 use crate::{OptError, Optimizer};
@@ -13,10 +14,11 @@ impl Optimizer {
         #[cfg(feature = "log")]
         log::info!("inline alge functions");
 
+        let mut created_paths = SmallColl::new();
         for algefn in self.alge_fn.values() {
             if let Some(caller) = self.graph.find_caller(algefn.lambda) {
                 for c in caller {
-                    self.graph.inline_apply_node(c).map_err(|e| {
+                    let mut paths = self.graph.inline_apply_node(c).map_err(|e| {
                         let span = self
                             .span_tags
                             .get(&(c.into()))
@@ -35,10 +37,16 @@ impl Optimizer {
                         );
                         err
                     })?;
+                    created_paths.append(&mut paths);
                 }
             }
         }
 
+        for p in created_paths {
+            if let Err(e) = self.type_path(&p) {
+                log::warn!("{e} while inlining all alge-fn");
+            }
+        }
         if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("DUMP_INLINE_ALGE").is_ok() {
             //self.dump_svg("post_type_derive.svg", true);
             self.push_debug_state("Inline Algebraic");

@@ -9,7 +9,7 @@
 //!
 
 use graphviz_rust::{
-    attributes::NodeAttributes,
+    attributes::{EdgeAttributes, NodeAttributes},
     dot_structures::{Edge, Node, NodeId, Subgraph},
 };
 
@@ -76,6 +76,25 @@ impl GraphvizBuilder {
                 graphviz_rust::dot_structures::Vertex::N(b.node_id()),
             ),
             attributes: vec![],
+        };
+
+        self.active_subgraph
+            .as_mut()
+            .unwrap()
+            .stmts
+            .push(graphviz_rust::dot_structures::Stmt::Edge(edge));
+    }
+
+    pub fn connect_by_id(&mut self, a: String, b: String) {
+        let a = NodeId(graphviz_rust::dot_structures::Id::Plain(a), None);
+        let b = NodeId(graphviz_rust::dot_structures::Id::Plain(b), None);
+
+        let edge = Edge {
+            ty: graphviz_rust::dot_structures::EdgeTy::Pair(
+                graphviz_rust::dot_structures::Vertex::N(a),
+                graphviz_rust::dot_structures::Vertex::N(b),
+            ),
+            attributes: vec![EdgeAttributes::dir(graphviz_rust::attributes::dir::forward)],
         };
 
         self.active_subgraph

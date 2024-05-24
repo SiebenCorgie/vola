@@ -46,6 +46,7 @@ Note that vola does not support shadowing. If you just want to change the value 
             return Err(err);
         }
 
+        //make sure that the builder erutrns something
         let def_port = self.setup_alge_expr(expr)?;
 
         //mark as var-producer

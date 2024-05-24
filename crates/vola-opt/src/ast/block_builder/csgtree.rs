@@ -179,7 +179,7 @@ impl<'a> BlockBuilder<'a> {
                             .opt
                             .graph
                             .on_region(&self.region, |reg| {
-                                let imported = reg
+                                let (imported, _edges) = reg
                                     .import_context(OutportLocation {
                                         node: fdef.lambda,
                                         output: rvsdg::edge::OutputType::LambdaDeclaration,

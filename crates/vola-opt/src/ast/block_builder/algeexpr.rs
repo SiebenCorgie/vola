@@ -406,7 +406,10 @@ impl<'a> BlockBuilder<'a> {
         let if_lmd_ctx = self.lmd_ctx.clone();
         let mut if_block_builder = BlockBuilder {
             span: if_block.span.clone(),
-            config: self.config.clone(),
+            config: BlockBuilderConfig {
+                expect_return: crate::ast::block_builder::RetType::AlgebraicExpr,
+                ..self.config
+            },
             csg_operands: self.csg_operands.clone(),
             return_type: self.return_type.clone(),
             lmd_ctx: if_lmd_ctx,
@@ -445,7 +448,10 @@ impl<'a> BlockBuilder<'a> {
         let else_lmd_ctx = self.lmd_ctx.clone();
         let mut else_block_builder = BlockBuilder {
             span: self.span.clone(), //FIXME: not really the correct span, but have no better one atm :/
-            config: self.config.clone(),
+            config: BlockBuilderConfig {
+                expect_return: crate::ast::block_builder::RetType::AlgebraicExpr,
+                ..self.config
+            },
             csg_operands: self.csg_operands.clone(),
             return_type: self.return_type.clone(),
             lmd_ctx: else_lmd_ctx,
@@ -775,8 +781,7 @@ impl<'a> BlockBuilder<'a> {
             theta.span.clone(),
             BlockBuilderConfig {
                 expect_return: crate::ast::block_builder::RetType::None,
-                allow_eval: false,
-                allow_csg_stmt: false,
+                ..self.config
             },
             self.return_type.clone(),
         );
@@ -937,7 +942,7 @@ impl<'a> BlockBuilder<'a> {
                         //import this function newly, add to context,
                         //then use it
 
-                        let algeimportcv = self
+                        let (algeimportcv, _) = self
                             .opt
                             .graph
                             .import_context(

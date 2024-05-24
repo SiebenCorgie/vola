@@ -10,3 +10,7 @@ mod legalization;
 mod spv;
 pub use spv::EmitCtx;
 mod hl_dispatch;
+//Not really a pass, but a small utility that allows us to
+//render a region's CFG to svg.
+#[cfg(feature = "dot")]
+mod cfg_dot;

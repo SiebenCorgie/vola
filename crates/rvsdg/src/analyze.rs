@@ -188,7 +188,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> Iterator for ReachableWal
 
 impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
     ///Traverses context-variable boundaries of inter-procedural nodes as well as entry-variable boundaries
-    /// of γ-Nodes, until it finds the producing port of `input`.
+    /// of γ-Nodes and input/argument boundaries of theta-nodes, until it finds the producing port of `input`.
     ///
     /// That might be a lambda_definition, entry_variable, or anything else, that is not a context variable.
     /// Note that the producer is possibly outside the region of the original `inport`. So it is not safe to use that node for inter
@@ -259,6 +259,27 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
                         panic!("Invalid hop: node {:?} has EVArgument({entry_variable}), but not a EVInput({entry_variable})", next_port.node);
                     }
                 }
+                OutputType::Argument(i) => {
+                    //Traverse _outside_ the theta node, if this is a theta-node argument
+                    if self.node(next_port.node).node_type.is_theta() {
+                        //check that the related input is used as well.
+                        if let Some(src) = self.node(next_port.node).input_src(&self, i) {
+                            //have a valid src, set this up as the next port, and push our selfs
+                            //into the visited list
+                            next_port = src;
+                            if visited.contains(&src.node) {
+                                panic!("detected loop in producer chain, which is invalid!");
+                            }
+                            visited.insert(next_port.node);
+                        } else {
+                            //Happens if the theta-input is not connected
+                            return None;
+                        }
+                    } else {
+                        //Is not a theta-node argument, so this is the origin of _something_
+                        return Some(next_port);
+                    }
+                }
                 //Any other case, return the the node
                 _ => return Some(next_port),
             }
@@ -272,6 +293,80 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
         };
 
         self.find_producer_out(start_out)
+    }
+
+    //Finds all consumers of this `src` port. The finder traverses all _traversable_
+    // node boundaries. So _into_ gamma/theta regions as well as into lambda/phi regions if connected
+    // to a context variable.
+    pub fn find_consumer_out(&self, src: OutportLocation) -> SmallColl<InportLocation> {
+        //NOTE find the first set of connected inport, and union all consumers
+        //FIXME: The union_set is kinda dirty atm.
+        let mut union_set = AHashSet::new();
+        for connected in &self.node(src.node).outport(&src.output).unwrap().edges {
+            let dst = self.edge(*connected).dst().clone();
+            let consumers = self.find_consumer_in(dst);
+            for found in consumers {
+                union_set.insert(found);
+            }
+        }
+
+        union_set.into_iter().collect()
+    }
+
+    //Finds all consumers of this `src` port. The finder traverses all _traversable_
+    // node boundaries. So _into_ gamma/theta regions as well as into lambda/phi regions if connected
+    // to a context variable.
+    pub fn find_consumer_in(&self, src: InportLocation) -> SmallColl<InportLocation> {
+        let mut seen = AHashSet::new();
+        let mut collected = SmallColl::new();
+
+        let mut waiting = vec![src];
+
+        while let Some(next) = waiting.pop() {
+            if seen.contains(&next) {
+                continue;
+            }
+
+            //try to map the port _into_ all regions. If thats possible,
+            //push back the next candidate. If not this means the node is a consumer
+            let subregcount = self.node(next.node).regions().len();
+            if subregcount > 0 {
+                let mut pushed_already = false;
+                for regixd in 0..subregcount {
+                    if let Some(mapped_into) = next.input.map_to_in_region(regixd) {
+                        //found new candidate outport, push all connected inports
+                        let outport = OutportLocation {
+                            node: next.node,
+                            output: mapped_into,
+                        };
+                        for connected in &self
+                            .node(outport.node)
+                            .outport(&outport.output)
+                            .unwrap()
+                            .edges
+                        {
+                            let dst = self.edge(*connected).dst().clone();
+                            waiting.push(dst);
+                        }
+                    } else {
+                        //could not map into region, so is a consumer as well, for instance
+                        // a GammaPredicate
+                        if !pushed_already {
+                            pushed_already = true;
+                            collected.push(next);
+                        }
+                    }
+                }
+            } else {
+                //in case of 0 subregions this must be a consumer
+                // since its either a apply or a simple node
+                collected.push(next);
+            }
+
+            seen.insert(next);
+        }
+
+        collected
     }
 
     ///Tries to find a callable definition at the end of this producer-chain. The helper lets you trace over

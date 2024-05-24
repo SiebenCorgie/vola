@@ -7,12 +7,12 @@ use crate::{
     err::GraphError,
     nodes::{LangNode, NodeType, StructuralNode},
     region::RegionLocation,
-    NodeRef, Rvsdg,
+    NodeRef, Rvsdg, SmallColl,
 };
 use ahash::AHashMap;
 use smallvec::SmallVec;
 
-use super::copy::StructuralClone;
+use super::{copy::StructuralClone, Path};
 
 use thiserror::Error;
 
@@ -40,7 +40,9 @@ impl<
     ///
     ///
     /// NOTE: the inliner currently does not handle Phi nodes.
-    pub fn inline_apply_node(&mut self, node: NodeRef) -> Result<(), InlineError> {
+    ///
+    /// Returns any created path of edges. This mostly happens if the inlined calldef uses context.
+    pub fn inline_apply_node(&mut self, node: NodeRef) -> Result<SmallColl<Path>, InlineError> {
         let dst_region = self
             .node(node)
             .parent
@@ -130,7 +132,7 @@ impl<
         let cvcount = match &self.node(call_lmd).node_type {
             NodeType::Phi(phi) => {
                 assert!(
-                    phi.rv_argument(0).is_none(),
+                    phi.rv_count == 0,
                     "Inliner does not support recursion variables!"
                 );
                 phi.context_variable_count()
@@ -149,10 +151,10 @@ impl<
             argument_remapping.insert(lmd_port, src);
         }
 
+        let mut paths = SmallColl::new();
         //Add context variable remapping
         //This is a little more involved. We add a new CV to the dst_lmd for each
         //context variable that is connected in the src_region.
-
         for cvidx in 0..cvcount {
             //Try to find a producer for the orginal cvidx. If there is none, we can ignore that
             let src_cv_port = OutportLocation {
@@ -162,9 +164,13 @@ impl<
             if let Some(connected_callable) = self.find_producer_out(src_cv_port) {
                 //was connected, import the callable into the dst region and add the remapping
                 match self.import_context(connected_callable, dst_region) {
-                    Ok(dst_cv) => {
+                    Ok((dst_cv, path)) => {
                         //add to remapping
                         let is_new = cv_remapping.insert(src_cv_port, dst_cv);
+                        //and push path if needed
+                        if let Some(p) = path {
+                            paths.push(p);
+                        }
                         assert!(is_new.is_none());
                     }
                     Err(e) => {
@@ -276,6 +282,6 @@ impl<
             }
         }
 
-        Ok(())
+        Ok(paths)
     }
 }

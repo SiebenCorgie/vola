@@ -355,8 +355,8 @@ fn live_port_count() {
 
     //found those by counting in the svg dump 🤝.
     assert!(
-        liveness_map.flags.len() == 44,
-        "{} != 44",
+        liveness_map.flags.len() == 49,
+        "{} != 49",
         liveness_map.flags.len()
     );
 }

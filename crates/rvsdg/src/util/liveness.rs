@@ -112,7 +112,7 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
                 if src_port.output.is_argument() {
                     //so first step, the carry-over process
                     for _subregidx in 0..subreg_count {
-                        //check if we can carry over, to dat
+                        //check if we can carry over
                         if let Some(carried_over_port) = src_port.output.map_out_of_region() {
                             let new_inport = InportLocation {
                                 node: src_port.node,
@@ -138,24 +138,30 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
                         //activate _all_ results for the λ/ϕ/δ nodes.
                         //TODO: Not entirely correct, we should analyse if those results are in fact used
                         //      by the caller (in case of the delta and lambda nodes).
-
-                        for resport in self.node(src_port.node).result_types(0) {
-                            //flag as live and push back
-                            let new_inport = InportLocation {
-                                node: src_port.node,
-                                input: resport,
-                            };
-                            flags.set(new_inport.clone().into(), true);
-                            waiting_ports.push_back(new_inport);
+                        let is_seen = seen_nodes.contains(&src_port.node);
+                        if !is_seen {
+                            for resport in self.node(src_port.node).result_types(0) {
+                                //flag as live and push back
+                                let new_inport = InportLocation {
+                                    node: src_port.node,
+                                    input: resport,
+                                };
+                                flags.set(new_inport.clone().into(), true);
+                                waiting_ports.push_back(new_inport);
+                            }
                         }
                     }
                     NodeType::Gamma(_g) => {
-                        let gamma_pred = InportLocation {
-                            node: src_port.node,
-                            input: InputType::GammaPredicate,
-                        };
-                        flags.set(gamma_pred.clone().into(), true);
-                        waiting_ports.push_back(gamma_pred);
+                        let is_seen = seen_nodes.contains(&src_port.node);
+                        //mark gamma predicate always as live
+                        if !is_seen {
+                            let gamma_pred = InportLocation {
+                                node: src_port.node,
+                                input: InputType::GammaPredicate,
+                            };
+                            flags.set(gamma_pred.clone().into(), true);
+                            waiting_ports.push_back(gamma_pred);
+                        }
                     }
                     NodeType::Theta(t) => {
                         let theta_seen = seen_nodes.contains(&src_port.node);
