@@ -13,7 +13,6 @@
 //! Later on we'll probably start introducing optimizations and compiler-based inference of properties.
 
 mod cleanup_backend;
-//mod field_dispatch;
 mod field_inliner;
 mod inline_alge_fn;
 mod specializer;

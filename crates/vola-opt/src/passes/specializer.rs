@@ -612,7 +612,8 @@ impl Optimizer {
             eval_node: eval,
         })
     }
-
+    //NOTE: Maybe use that later again.
+    #[allow(dead_code)]
     fn rewire_host(
         &mut self,
         host_region: RegionLocation,
