@@ -331,6 +331,7 @@ impl Optimizer {
                 .expect("expected eval to be typed!");
             let call_src =
                 if self.graph.node(spec_ctx.eval_node).parent != Some(spec_ctx.host_region) {
+                    /*
                     //if the eval is not in the host region, find the
                     //CV-idx that imports the eval-src from the host-region, and rewire it to
                     //the just created lmd decl.
@@ -347,7 +348,15 @@ impl Optimizer {
                     self.graph
                         .node(spec_ctx.eval_node)
                         .input_src(&self.graph, 0)
-                        .unwrap()
+                        .unwrap()*/
+                    self.import_context(
+                        OutportLocation {
+                            node: in_host_region_impl,
+                            output: OutputType::LambdaDeclaration,
+                        },
+                        eval_region,
+                    )
+                    .unwrap()
                 } else {
                     //If the eval is in the host region, we can use the call-source as is
                     OutportLocation {
@@ -402,7 +411,14 @@ impl Optimizer {
 
             self.graph.remove_node(spec_ctx.eval_node)?;
             self.graph.on_region(&eval_region, |r| {
-                let (args, argty): (SmallColl<_>, SmallColl<_>) = args.into_iter().collect();
+                let (args, argty): (SmallColl<_>, SmallColl<_>) = args.into_iter().fold(
+                    (SmallColl::new(), SmallColl::new()),
+                    |(mut argcoll, mut tycoll), (a, t)| {
+                        argcoll.push(a);
+                        tycoll.push(t);
+                        (argcoll, tycoll)
+                    },
+                );
                 let (call, edg) = r.call(call_src, &args).unwrap();
                 assert!(edg.len() == argty.len() + 1);
                 for (edg, ty) in edg.into_iter().skip(1).zip(argty.into_iter()) {
