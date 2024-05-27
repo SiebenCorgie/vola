@@ -1,12 +1,6 @@
 module std;
 
 
-concept Color: vec3 -> vec3;
-
-impl Sphere for Color(at){
-	[1.0, 1.0, 0.0]
-}
-
 impl Box for Color(at){
 	[0.0, 1.0, 0.0]
 }

@@ -137,3 +137,12 @@ fn in_loop_eval() {
         .unwrap();
     target.try_verify().unwrap();
 }
+#[test]
+fn multi_concept_eval_in_loop_eval() {
+    let pipeline = volac::Pipeline::new_in_memory();
+    //NOTE: This tests both, in-gamma-eval, and in-loop-eval
+    let target = pipeline
+        .execute_on_file(&"tests/vola_src/subtree_multi_concept_eval.vola")
+        .unwrap();
+    target.try_verify().unwrap();
+}
