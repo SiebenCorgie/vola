@@ -112,6 +112,9 @@ impl Optimizer {
         // can be imported as a context variable. Same goes for any parameters from a used field-def. This
         // is, because we first inline all field-defs before specializing.
 
+        //NOTE inline takes care of bringing all CSG nodes into the same region
+        self.inline_export(key)?;
+
         if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("DUMP_BEFORE_SPECIALIZE").is_ok()
         {
             self.push_debug_state(&format!("before specialize {key}"));
