@@ -1,6 +1,5 @@
 module std;
 
-concept Color: vec3 -> vec3;
 operation ColorFlip();
 
 impl ColorFlip<sub> for Color(at){

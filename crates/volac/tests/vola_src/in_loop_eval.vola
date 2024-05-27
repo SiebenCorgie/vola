@@ -1,0 +1,23 @@
+module std;
+
+
+
+operation nRepeat(n: i);
+impl nRepeat<sub> for SDF3D(at){
+    let d = for d_off = [10000.0, 0.0] in 0..n{
+		let t = at.x - d_off.y + 1.0;
+		let d_off_x = min(d_off.x, eval sub.SDF3D([d_off.y, 0.0, t]));
+		d_off = [d_off_x, d_off.y - 3.0];
+    };
+
+    d.x
+}
+
+
+export myFn(at: vec3){
+	csg t = nRepeat(3){
+		Sphere(1.0)
+	};
+	eval t.SDF3D(at)
+}
+

@@ -1,7 +1,7 @@
 entity Sphere(radius: s);
 entity Box(extent: vec3);
 concept SDF3D: vec3 -> s;
-
+concept Color: vec3 -> vec3;
 
 ///Simple union operation
 operation Union();
@@ -30,6 +30,10 @@ fn noise(p: s) -> s{
 //Declares that we need the parameter `@` to define SDF3D of Sphere
 impl Sphere for SDF3D(at){
      length(at) - radius
+}
+
+impl Sphere for Color(at){
+	at
 }
 
 impl Box for SDF3D(at){

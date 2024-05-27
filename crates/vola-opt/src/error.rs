@@ -33,6 +33,9 @@ pub enum OptError {
         errstring: String,
     },
 
+    #[error("Internal compiler error: {0}\nPlease file an issue!")]
+    Internal(String),
+
     #[error("Cannot convert AstType {srcty:?} to a valid optimizer type")]
     TypeConversionError { srcty: vola_ast::common::Ty },
 

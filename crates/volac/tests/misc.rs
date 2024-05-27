@@ -14,7 +14,7 @@ fn eval_in_entity() {
     let pipeline = volac::Pipeline::new_in_memory();
 
     let expected_error = PipelineError::OptError(vola_opt::OptError::Any {
-        text: "Failed to dispatch all fields with 1 errors".to_owned(),
+        text: "Could not find implementation of \"SDF3D\" for \"InnerEntity\"".to_owned(),
     });
     match pipeline.execute_on_file(&"tests/vola_src/undefined_impl.vola") {
         Err(e) => {
@@ -124,6 +124,25 @@ fn theta_simple_local_variable() {
 
     let target = pipeline
         .execute_on_file(&"tests/vola_src/theta_local_variable.vola")
+        .unwrap();
+    target.try_verify().unwrap();
+}
+
+#[test]
+fn in_loop_eval() {
+    let pipeline = volac::Pipeline::new_in_memory();
+    //NOTE: This tests both, in-gamma-eval, and in-loop-eval
+    let target = pipeline
+        .execute_on_file(&"tests/vola_src/in_loop_eval.vola")
+        .unwrap();
+    target.try_verify().unwrap();
+}
+#[test]
+fn multi_concept_eval_in_loop_eval() {
+    let pipeline = volac::Pipeline::new_in_memory();
+    //NOTE: This tests both, in-gamma-eval, and in-loop-eval
+    let target = pipeline
+        .execute_on_file(&"tests/vola_src/subtree_multi_concept_eval.vola")
         .unwrap();
     target.try_verify().unwrap();
 }

@@ -1,3 +1,4 @@
+use vola_opt::OptError;
 use volac::PipelineError;
 
 ///Tests a cutoff implementation of a sub tree.
@@ -85,8 +86,11 @@ fn eval_in_export() {
 fn eval_in_entity() {
     let pipeline = volac::Pipeline::new_in_memory();
     match pipeline.execute_on_file(&"tests/vola_src/eval_in_entity.vola") {
-        Err(PipelineError::OptError(vola_opt::OptError::ErrorsOccurred(1))) => {}
-        Err(e) => panic!("Wrong kind of error, expected ErrorsOccurred(1), got {e:?}"),
+        Err(PipelineError::OptError(vola_opt::OptError::Any { text })) => {
+            assert!(text == "Could not find implementation of \"SDF3D\" for \"InnerEntity\"")
+        }
+        Err(PipelineError::OptError(OptError::ErrorsOccurred(1))) => {}
+        Err(e) => panic!("Wrong kind of error, expected Any, got {e:?}"),
         Ok(_) => panic!("Expected 1 error"),
     }
 }

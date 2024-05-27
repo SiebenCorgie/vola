@@ -185,6 +185,11 @@ impl OptEdge {
             Self::State => None,
         }
     }
+
+    pub fn with_type(mut self, ty: Ty) -> Self {
+        self.set_type(ty);
+        self
+    }
 }
 
 impl LangEdge for OptEdge {
