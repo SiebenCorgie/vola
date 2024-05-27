@@ -189,9 +189,9 @@ impl Pipeline {
         //do mandatory type derivation
         opt.type_derive()?;
 
-        //do mandatory dispatch of all exports
-        opt.dispatch_all_exports()?;
+        opt.specialize_all_exports()?;
 
+        opt.inline_field_exports()?;
         //do some _post_everyting_ cleanup
         opt.cleanup_export_lmd();
 

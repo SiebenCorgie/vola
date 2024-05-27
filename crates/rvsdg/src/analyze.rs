@@ -14,6 +14,7 @@ use crate::{
     edge::{InportLocation, InputType, LangEdge, OutportLocation, OutputType},
     nodes::LangNode,
     region::RegionLocation,
+    util::Path,
     NodeRef, Rvsdg, SmallColl,
 };
 
@@ -605,6 +606,50 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
         }
 
         DependencyGraph { graph }
+    }
+
+    ///Traces the path backwards from _end_ to its start.
+    ///
+    /// Traverses node boundaries like CVs or loop-variables.
+    pub fn trace_path(&self, end: InportLocation) -> Path {
+        let mut edges = SmallColl::new();
+        let start_src = if let Some(edg) = self.node(end.node).inport(&end.input).unwrap().edge {
+            edges.push(edg);
+            self.edge(edg).src
+        } else {
+            panic!("Expected at least one edge on path");
+        };
+        let mut path = Path {
+            start: start_src,
+            end,
+            edges,
+        };
+
+        //now append path-parts till we reached an end
+        loop {
+            if let Some(mapped_out) = path.start.output.map_out_of_region() {
+                match self.node(path.start.node).inport(&mapped_out) {
+                    Some(next_dst_port) => {
+                        //was able to map last start _out of region_ so there could be _something_ connected
+                        if let Some(edg) = next_dst_port.edge {
+                            path.edges.push(edg);
+                            path.start = self.edge(edg).src;
+                        }
+                    }
+                    None => {
+                        //The mapping works, but the port does in fact not exist, break as well
+                        break;
+                    }
+                }
+            } else {
+                //cannot map out of region, so end
+                break;
+            }
+        }
+
+        //NOTE reverse the order of edges, since we start pushing from the end
+        path.edges.reverse();
+        path
     }
 }
 

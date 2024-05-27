@@ -25,6 +25,7 @@ pub mod region_utils;
 pub struct Path {
     pub start: OutportLocation,
     pub end: InportLocation,
+    ///Edges in the order from _start_ to _end_
     pub edges: SmallColl<EdgeRef>,
 }
 
