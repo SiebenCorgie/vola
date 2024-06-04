@@ -29,6 +29,8 @@ use vola_common::Span;
 
 use crate::OptGraph;
 
+pub(crate) mod impl_utils;
+
 ///A node of some dialect
 pub trait DialectNode: LangNode + Any + View {
     ///Dialect identifier of this node.
