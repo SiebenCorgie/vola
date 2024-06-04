@@ -253,6 +253,32 @@ impl Optimizer {
             node_name: csg_name.clone(),
         };
 
+        let subtree_count = self
+            .graph
+            .node(spec_ctx.csg_tree.node)
+            .node_type
+            .unwrap_simple_ref()
+            .try_downcast_ref::<CsgOp>()
+            .unwrap()
+            .subtree_count;
+
+        //NOTE: we prepare the identity implementation at this point, if the subtree-count is 0 and there
+        //      is no such implblock yet.
+        if !self.concept_impl.contains_key(&implkey) && subtree_count == 1 {
+            if let Err(e) = self.implement_identity_for_concept(implkey.clone()) {
+                report(
+                    error_reporter(e.clone(), spec_ctx.tree_access_span.clone())
+                        .with_label(
+                            Label::new(spec_ctx.tree_access_span)
+                                .with_message("While specializing this tree-access"),
+                        )
+                        .finish(),
+                );
+
+                return Err(e);
+            }
+        }
+
         //Try to get such an impl block, if successful, test that the arguments match, the types match etc.
         let created_spec_node = if let Some(concept_impl) = self.concept_impl.get(&implkey) {
             //If we found a concept impl for that tree, import it into the _host_region_
@@ -275,14 +301,7 @@ impl Optimizer {
             //of the just specialized/imported impl block.
             //then do the same with the
             // arguments.
-            let subtree_count = self
-                .graph
-                .node(spec_ctx.csg_tree.node)
-                .node_type
-                .unwrap_simple_ref()
-                .try_downcast_ref::<CsgOp>()
-                .unwrap()
-                .subtree_count;
+
             let arg_count = self.graph.node(spec_ctx.csg_tree.node).inputs().len() - subtree_count;
             for subtree_idx in 0..subtree_count {
                 //disconnect from csg-node and connect to the just created λ
@@ -460,12 +479,19 @@ impl Optimizer {
             report(
                 error_reporter(err.clone(), span.clone())
                     .with_label(
-                        Label::new(span).with_message("While trying to specialize this eval"),
+                        Label::new(span)
+                            .with_message("While trying to specialize this eval")
+                            .with_color(vola_common::ariadne::Color::Green),
                     )
-                    .with_label(Label::new(csgspan).with_message("For this CSG-Node"))
+                    .with_label(
+                        Label::new(csgspan)
+                            .with_message("For this CSG-Node")
+                            .with_color(vola_common::ariadne::Color::Green),
+                    )
                     .with_label(
                         Label::new(spec_ctx.tree_access_span.clone())
-                            .with_message("For this tree-access"),
+                            .with_message("For this tree-access")
+                            .with_color(vola_common::ariadne::Color::Green),
                     )
                     .finish(),
             );

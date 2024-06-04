@@ -175,7 +175,7 @@ impl Optimizer {
         // We do this by building the function-context helper that contains all concept-args as defined variables, as well as the
         // operation variables.
 
-        //Create the lambda node. NOTE that we currently alway export. For debug purposes.
+        //Create the lambda node.
         let (lmd, lmd_region) = self.graph.on_omega_node(|omg| {
             let export_impl_block = std::env::var("VOLA_EXPORT_ALL").is_ok();
             omg.new_function(export_impl_block, |lmd_builder| {

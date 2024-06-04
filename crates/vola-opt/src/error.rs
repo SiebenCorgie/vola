@@ -56,6 +56,9 @@ pub enum OptError {
 
     #[error("Could not find anything that was typeset on the path")]
     NotTypeOnPath,
+
+    #[error("Failed to generate identitiy-implementation: {0}")]
+    AIIFailed(String),
 }
 
 impl OptError {
