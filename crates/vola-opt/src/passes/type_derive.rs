@@ -678,11 +678,15 @@ impl Optimizer {
 
         //find all input types. If we have them, propagate them _into_ 
         //the regions. 
-        //Then recurse the region derive
-        //if we not have all of them, return Ok(None), since we need to restart later
+        //Then recurse the region derive.
+        //Note that we only need the type on any 
+        //EV that is acutally used by any of the branches.
+        
         let subregion_count = self.graph.node(node).regions().len();
         assert!(subregion_count > 0);
         for input_type in self.graph.node(node).inport_types(){
+
+            
             if let Some(ty) = self.find_type(&InportLocation{node, input: input_type}.into()).clone(){
                 for ridx in 0..subregion_count{
                     if let Some(mapped_internally) = input_type.map_to_in_region(ridx){
@@ -690,8 +694,25 @@ impl Optimizer {
                     }
                 }
             }else{
-                //this one wasn't set, so return
-                return Ok(None);
+                //NOTE: We check if the port is in use. If not, its okey if no type information was 
+                //      found
+                let is_in_use = {
+                    let mut is_in_use = false;
+                    for subreg in 0..subregion_count{
+                        if let Some(p) = self.graph.node(node).outport(&input_type.map_to_in_region(subreg).unwrap()){
+                             if p.edges.len() > 0 {
+                                 is_in_use = true;
+                                 break;
+                             }
+                        }
+                    }
+                    is_in_use
+                };
+
+                if is_in_use{
+                    //Port is in use, but input is untype, therfore try again later.
+                    return Ok(None);
+                }
             }
         }
 
@@ -897,7 +918,10 @@ impl Optimizer {
                     
                     (ty, node.output(0))},
                     NodeType::Apply(a) => {let ty = self.try_apply_derive(a, &region_src_span); (ty, node.output(0))},
-                    NodeType::Gamma(_g) => {let ty = self.try_gamma_derive(node); (ty, node.output(0))},
+                    NodeType::Gamma(_g) => {
+                        let ty = self.try_gamma_derive(node);
+                        (ty, node.output(0))
+                    },
                     //NOTE: by convention the θ-Node resolves to output 2
                     NodeType::Theta(_t) => {let ty = self.try_theta_derive(node); (ty, node.output(2))},
                     t => {
@@ -977,28 +1001,41 @@ impl Optimizer {
             for failed_node in &build_stack {
                 let node = self.graph.node(*failed_node);
                 let span = match &node.node_type {
-                    NodeType::Simple(s) => s.span.clone(),
+                    NodeType::Simple(s) => Some(s.span.clone()),
                     NodeType::Apply(_) => {
                         if let Some(span) = self.span_tags.get(&failed_node.clone().into()) {
-                            span.clone()
+                            Some(span.clone())
                         } else {
-                            Span::empty()
+                            None
                         }
                     }
-                    _ => Span::empty(),
+                    _ => None,
                 };
                 
                 let err = OptError::Any {
                     text: format!("Failed to derive a type"),
                 };
+
+                if let Some(span) = span{
+                    report(
+                        error_reporter(err.clone(), span.clone())
+                            .with_label(Label::new(span.clone()).with_message("for this"))
+                            .finish(),
+                    );
+                }else{
+                    report(
+                        error_reporter(err.clone(), Span::empty())
+                            .with_message(&format!("On note of type {} without span", &node.node_type)).finish()
+                    );
+                }
                 
-                report(
-                    error_reporter(err.clone(), span.clone())
-                        .with_label(Label::new(span.clone()).with_message("for this"))
-                        .finish(),
-                );
             }
 
+            
+            if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("DUMP_TYPE_DERIVE_FAILED").is_ok() {
+                self.push_debug_state("type derive failed");
+            }
+            
             return Err(OptError::TypeDeriveFailed {
                 errorcount: build_stack.len(),
             });

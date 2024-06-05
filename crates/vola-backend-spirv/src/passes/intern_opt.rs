@@ -315,6 +315,7 @@ impl BackendOp {
             WkOp::Length => BackendOp::SpirvOp(SpvOp::GlslOp(GlOp::Length)),
             WkOp::SquareRoot => BackendOp::SpirvOp(SpvOp::GlslOp(GlOp::Sqrt)),
             WkOp::Exp => BackendOp::SpirvOp(SpvOp::GlslOp(GlOp::Exp)),
+            WkOp::Pow => BackendOp::SpirvOp(SpvOp::GlslOp(GlOp::Pow)),
             WkOp::Min => BackendOp::HlOp(HlOp::Min),
             WkOp::Max => BackendOp::HlOp(HlOp::Max),
             WkOp::Mix => BackendOp::HlOp(HlOp::Mix),

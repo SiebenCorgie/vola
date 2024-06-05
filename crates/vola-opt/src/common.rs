@@ -113,6 +113,14 @@ impl Ty {
         }
     }
 
+    pub fn is_scalar(&self) -> bool {
+        if let Self::Scalar = self {
+            true
+        } else {
+            false
+        }
+    }
+
     ///Tries to derive a type that would be produced by indexing with `index` into the `Ty`.
     pub(crate) fn try_derive_access_index(&self, index: usize) -> Result<Ty, OptError> {
         match self {

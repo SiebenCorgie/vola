@@ -59,6 +59,7 @@ pub enum WkOp {
     Length,
     SquareRoot,
     Exp,
+    Pow,
     Min,
     Max,
     Mix,
@@ -106,7 +107,8 @@ impl WkOp {
             WkOp::Cross => 2,
             WkOp::Length => 1,
             WkOp::SquareRoot => 1,
-            WkOp::Exp => 2,
+            WkOp::Exp => 1,
+            WkOp::Pow => 2,
             WkOp::Min => 2,
             WkOp::Max => 2,
             WkOp::Mix => 3,
@@ -136,6 +138,7 @@ impl WkOp {
             "length" => Some(Self::Length),
             "sqrt" => Some(Self::SquareRoot),
             "exp" => Some(Self::Exp),
+            "pow" => Some(Self::Pow),
             "min" => Some(Self::Min),
             "max" => Some(Self::Max),
             "mix" | "lerp" => Some(Self::Mix),
@@ -385,22 +388,47 @@ impl WkOp {
                 Ok(Some(Ty::Scalar))
             }
             WkOp::Exp => {
-                if sig.len() != 2 {
+                if sig.len() != 1 {
                     return Err(OptError::Any {
-                        text: format!("Exp expects two operand, got {:?}", sig.len()),
+                        text: format!("Exp expects one operand, got {:?}", sig.len()),
                     });
                 }
-                match (&sig[0], &sig[1]) {
-                    (Ty::Scalar, Ty::Scalar) => {}
+                match &sig[0] {
+                    Ty::Scalar => {}
                     _ => {
                         return Err(OptError::Any {
-                            text: format!("Exp expects operands of type scalar, got {:?}", sig),
+                            text: format!("Exp expects operands of type scalar, got {:?}", sig[0]),
                         })
                     }
                 }
 
                 //seems to be alright, return scalar
                 Ok(Some(Ty::Scalar))
+            }
+            WkOp::Pow => {
+                if sig.len() != 2 {
+                    return Err(OptError::Any {
+                        text: format!("{:?} expects two operands, got {:?}", self, sig.len()),
+                    });
+                }
+
+                if sig[0] != sig[1] {
+                    return Err(OptError::Any {
+                        text: format!("{:?} expects the two operands to be of the same type. but got {:?} & {:?}", self, sig[0], sig[1]),
+                    });
+                }
+
+                if !sig[0].is_scalar() && !sig[0].is_vector() {
+                    return Err(OptError::Any {
+                        text: format!(
+                            "{:?} expects operands to be vectors or scalars, got {:?}",
+                            self, sig[0]
+                        ),
+                    });
+                }
+
+                //Cross returns the same vector type as supplied
+                Ok(Some(sig[0].clone()))
             }
             WkOp::Mix | WkOp::Clamp => {
                 if sig.len() != 3 {

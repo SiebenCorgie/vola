@@ -83,7 +83,13 @@ impl FromTreeSitter for Expr {
                             "Unknown Binary operation {}",
                             operator_node.kind()
                         ));
-                        report(error_reporter(err.clone(), ctx.span(&operator_node)).finish());
+                        report(
+                            error_reporter(err.clone(), ctx.span(&operator_node))
+                                .with_label(
+                                    Label::new(ctx.span(&operator_node)).with_message("here"),
+                                )
+                                .finish(),
+                        );
                         return Err(err);
                     }
                 };
