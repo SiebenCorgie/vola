@@ -8,9 +8,7 @@
 
 use ahash::AHashMap;
 use rvsdg::{
-    region::RegionLocation,
-    smallvec::{smallvec, SmallVec},
-    NodeRef,
+    edge::OutputType, region::RegionLocation, smallvec::{smallvec, SmallVec}, NodeRef
 };
 use vola_ast::common::Ident;
 use vola_common::{ariadne::Label, error::error_reporter, report, Span};
@@ -19,6 +17,7 @@ use crate::{
     alge::WkOp, ast::block_builder::{BlockBuilder, BlockBuilderConfig}, common::{LmdContext, Ty}, OptError, Optimizer
 };
 
+#[derive(Clone)]
 pub struct AlgeFn {
     pub span: Span,
     pub name: Ident,
@@ -134,7 +133,7 @@ impl Optimizer {
         self.names.set(algedef.lambda.into(), algename.clone());
         self.span_tags
             .set(algedef.lambda.into(), algedef.span.clone());
-
+        self.typemap.set(lambda.as_outport_location(OutputType::LambdaDeclaration).into(), Ty::Callable);
         //TODO: set the out-edge type?
         assert!(self.alge_fn.insert(algename, algedef).is_none());
         Ok(lambda)

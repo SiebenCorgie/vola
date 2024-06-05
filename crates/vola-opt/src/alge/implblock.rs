@@ -294,7 +294,12 @@ impl Optimizer {
             format!("Impl {} for {}", src_csg_def.name.0, concept_impl.concept.0),
         );
         self.span_tags.set(lmd.into(), concept_impl.span.clone());
-
+        //Also mark as CSGTree
+        self.typemap.set(
+            lmd.as_outport_location(OutputType::LambdaDeclaration)
+                .into(),
+            Ty::CSGTree,
+        );
         //This iterator maps us the concept's argument types in order
 
         //now we chain first the csg-def's arg-types, followed by the concept args (which is our definition), to

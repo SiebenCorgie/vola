@@ -388,7 +388,11 @@ impl Optimizer {
         let (out, path) = self.graph.import_context(src, target_region)?;
         if let Some(p) = path {
             match self.type_path(&p) {
-                Ok(_) => {}
+                Ok(ty) => {
+                    for edg in p.edges {
+                        self.graph.edge_mut(edg).ty.set_type(ty.clone());
+                    }
+                }
                 //Just report that one, but that can happen
                 Err(OptError::NotTypeOnPath) => {
                     log::error!("{}", OptError::NotTypeOnPath);

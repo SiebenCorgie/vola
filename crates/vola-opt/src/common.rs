@@ -48,12 +48,9 @@ pub enum Ty {
     ///A tree of CSG operations in some form.
     CSGTree,
 
-    ///A callable which implements `concept`. Since the namespace of `concepts` is unique, we can be sure
-    /// which one it is.
-    //TODO: We might want to use some kind of TypeId thing at some point ^^
-    Callable {
-        concept: String,
-    },
+    //Some callable. So usually the source is either a λ-decleration or a phi-decleration.
+    //Inspect the producer for more information
+    Callable,
 }
 
 impl From<vola_ast::common::Ty> for Ty {
@@ -80,7 +77,7 @@ impl Display for Ty {
             Ty::Matrix { width, height } => write!(f, "Matrix{width}x{height}"),
             Ty::Tensor { dim } => write!(f, "Tensor[{dim:?}]"),
             Ty::CSGTree => write!(f, "CSGTree"),
-            Ty::Callable { concept } => write!(f, "Callable(\"{concept}\")"),
+            Ty::Callable => write!(f, "Callable"),
         }
     }
 }

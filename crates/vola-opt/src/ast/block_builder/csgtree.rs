@@ -175,18 +175,15 @@ impl<'a> BlockBuilder<'a> {
                         for arg in c.args {
                             args.push(self.setup_alge_expr(arg)?);
                         }
+                        let fdefsrc = OutportLocation {
+                            node: fdef.lambda,
+                            output: rvsdg::edge::OutputType::LambdaDeclaration,
+                        };
+                        let imported = self.opt.import_context(fdefsrc, self.region)?;
                         let (call_node, _) = self
                             .opt
                             .graph
-                            .on_region(&self.region, |reg| {
-                                let (imported, _edges) = reg
-                                    .import_context(OutportLocation {
-                                        node: fdef.lambda,
-                                        output: rvsdg::edge::OutputType::LambdaDeclaration,
-                                    })
-                                    .unwrap();
-                                reg.call(imported, &args).unwrap()
-                            })
+                            .on_region(&self.region, |reg| reg.call(imported, &args).unwrap())
                             .unwrap();
                         //NOTE: We tag the apply node with a span, since the apply-node itself has no span
                         //associated, but in this case we have an actual source-level location.

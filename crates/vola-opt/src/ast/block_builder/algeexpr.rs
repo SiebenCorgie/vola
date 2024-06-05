@@ -934,7 +934,7 @@ impl<'a> BlockBuilder<'a> {
 
             Ok(opnode)
         } else {
-            if let Some(algefn) = self.opt.alge_fn.get(&call.ident.0) {
+            if let Some(algefn) = self.opt.alge_fn.get(&call.ident.0).cloned() {
                 let alge_import =
                     if let Some(imported) = self.lmd_ctx.known_function(&algefn.name.0) {
                         imported
@@ -942,9 +942,8 @@ impl<'a> BlockBuilder<'a> {
                         //import this function newly, add to context,
                         //then use it
 
-                        let (algeimportcv, _) = self
+                        let algeimportcv = self
                             .opt
-                            .graph
                             .import_context(
                                 algefn
                                     .lambda
