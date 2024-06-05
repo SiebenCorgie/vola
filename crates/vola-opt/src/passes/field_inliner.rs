@@ -52,17 +52,30 @@ impl Optimizer {
     //Small recursive helper that explores all Apply nodes, and inlines their call-defs, before
     //inlining itself.
     fn fully_inline_region(&mut self, region: RegionLocation) -> Result<(), OptError> {
-        //This first inlines all sub-regions whitin this region.
-        for node in self.graph.region(&region).unwrap().nodes.clone() {
-            let regcount = self.graph.node(node).regions().len();
-            for regidx in 0..regcount {
-                self.fully_inline_region(RegionLocation {
-                    node,
-                    region_index: regidx,
-                })?;
+        //now recursively go through all sub regions (that are no λs, so gamma an theta for now)
+        //and call the inliner in there as well
+        for node in self.graph.live_nodes(region) {
+            if node == region.node || !self.graph.region(&region).unwrap().nodes.contains(&node) {
+                continue;
+            }
+            let (subregcount, is_valid) = {
+                let node = self.graph.node(node);
+
+                (
+                    node.regions().len(),
+                    node.node_type.is_gamma() || node.node_type.is_theta(),
+                )
+            };
+
+            if is_valid && subregcount > 0 {
+                for regidx in 0..subregcount {
+                    self.fully_inline_region(RegionLocation {
+                        node,
+                        region_index: regidx,
+                    })?;
+                }
             }
         }
-
         //NOTE: We only inline connected apply nodes, since we'd outherwise might touch _undefined_
         //      parts of the region.
         //
@@ -99,8 +112,9 @@ impl Optimizer {
                 }
             }
         }
+
         //for good measures, remove all unused CVs after importing _everything_
-        self.graph.remove_unused_context_variables(region.node);
+        //self.graph.remove_unused_context_variables(region.node);
         Ok(())
     }
 }

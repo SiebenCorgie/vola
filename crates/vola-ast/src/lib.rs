@@ -29,7 +29,7 @@ pub mod module;
 mod passes;
 
 pub use error::AstError;
-use smallvec::smallvec;
+use smallvec::{smallvec, SmallVec};
 
 use std::path::Path;
 
@@ -144,7 +144,8 @@ impl VolaAst {
         let mut root_ast = parser.parse_from_byte(Some(root_file), &bytes)?;
 
         //now resolve relative to the ast all submodules
-        root_ast.resolve_modules(file, parser)?;
+        let _ = root_ast.resolve_modules(file, parser)?;
+
         Ok(root_ast)
     }
     pub fn new_from_bytes(bytes: &[u8], parser: &dyn VolaParser) -> Result<Self, AstError> {
@@ -217,6 +218,8 @@ impl VolaAst {
                         path.push(p.0.clone());
                     }
 
+                    let mut stem_path = m.path.clone();
+                    let _ = stem_path.pop();
                     path.set_extension("vola");
 
                     if !path.exists() {
@@ -232,7 +235,7 @@ impl VolaAst {
                         return Err(err);
                     }
 
-                    let sub_ast = Self::resolve_module(&path, parser)?;
+                    let sub_ast = Self::resolve_module(&path, &stem_path, parser)?;
                     assert!(seen_modules.insert(m.path.clone()));
 
                     //delete the module statement.

@@ -8,7 +8,7 @@
 
 use rvsdg::{
     edge::{InportLocation, InputType, LangEdge, OutportLocation, OutputType},
-    nodes::NodeType,
+    nodes::{NodeType, StructuralNode},
     region::{Inport, Outport, RegionLocation},
     smallvec::smallvec,
     NodeRef, SmallColl,
@@ -44,6 +44,9 @@ impl Optimizer {
             }
         }
 
+        if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("DUMP_POST_SPECIALIZE").is_ok() {
+            self.push_debug_state(&format!("post specialize"));
+        }
         if errors.len() > 0 {
             Err(errors.remove(0))
         } else {
@@ -284,9 +287,10 @@ impl Optimizer {
             //If we found a concept impl for that tree, import it into the _host_region_
             // and hook it up to the eval node's first input.
 
-            let in_host_region_impl = self
-                .graph
-                .deep_copy_node(concept_impl.lambda, spec_ctx.host_region);
+            let in_host_region_impl =
+                self.deep_copy_lmd_into_region(concept_impl.lambda, spec_ctx.host_region)?;
+
+            //NOTE: Reconnect the context variables that are
 
             //tag with debug info
             self.names.set(
@@ -547,6 +551,63 @@ impl Optimizer {
             }
         }
         evals
+    }
+
+    fn deep_copy_lmd_into_region(
+        &mut self,
+        lmd: NodeRef,
+        region: RegionLocation,
+    ) -> Result<NodeRef, OptError> {
+        //NOTE: This is similar to an inlining, but easier. We just copy over the lmd and fix
+        //      up the context variables
+        let in_host_region_impl = self.graph.deep_copy_node(lmd, region);
+        let cvcount = self
+            .graph
+            .node(in_host_region_impl)
+            .node_type
+            .unwrap_lambda_ref()
+            .context_variable_count();
+        for cvidx in 0..cvcount {
+            let old_dst = InportLocation {
+                node: lmd,
+                input: InputType::ContextVariableInput(cvidx),
+            };
+            if let Some(producer) = self.graph.find_producer_inp(old_dst) {
+                let in_context_port = self.import_context(producer, region)?;
+                //Set type for import path
+                let ty = if let Some(ty) = self.find_type(&in_context_port.clone().into()) {
+                    ty
+                } else {
+                    log::warn!("Could not find type for imported prototype, using Callable");
+                    Ty::Callable
+                };
+                //now hook up to the
+                let _edg = self.graph.connect(
+                    in_context_port,
+                    InportLocation {
+                        node: in_host_region_impl,
+                        input: InputType::ContextVariableInput(cvidx),
+                    },
+                    OptEdge::value_edge().with_type(ty),
+                )?;
+            } else {
+                //For sanity, make sure that it shouldn't be connected indeed
+                if self
+                    .graph
+                    .node(lmd)
+                    .inport(&InputType::ContextVariableInput(cvidx))
+                    .map(|p| p.edge.is_some())
+                    .unwrap_or(false)
+                {
+                    //Throw an error if the cv was conncted
+                    return Err(OptError::Internal(format!(
+                        "Could not inline λ-template while specializing {lmd}"
+                    )));
+                }
+            }
+        }
+
+        Ok(in_host_region_impl)
     }
 
     fn eval_node_to_spec_ctx(
