@@ -1,0 +1,3 @@
+[submodule "vola-stdlib/vola-sdf-stdlib"]
+	path = vola-stdlib/vola-sdf-stdlib
+	url = git@gitlab.com:tendsinmende/vola-sdf-stdlib.git
