@@ -972,8 +972,28 @@ impl<'a> BlockBuilder<'a> {
                 //and hookup the arguments. Bail if the argument count does not
                 //fit
 
-                //import algefn
+                //make sure we can connect the function to that many arguments
+                if algefn.args.len() != subargs.len() {
+                    let err = OptError::Any {
+                        text: format!(
+                            "Function expects {} arguments, but call supplied {}",
+                            algefn.args.len(),
+                            subargs.len()
+                        ),
+                    };
+                    report(
+                        error_reporter(err.clone(), expr_span.clone())
+                            .with_label(Label::new(expr_span.clone()).with_message("This call"))
+                            .with_label(
+                                Label::new(algefn.span.clone()).with_message("For this function"),
+                            )
+                            .finish(),
+                    );
 
+                    return Err(err);
+                }
+
+                //import algefn
                 let applynode_output = self
                     .opt
                     .graph

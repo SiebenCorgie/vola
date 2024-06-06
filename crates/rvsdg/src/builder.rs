@@ -281,17 +281,14 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> RegionBuilder<'a, N, E> {
                 }
             }
 
-            let edg = self
-                .ctx_mut()
-                .connect(
-                    arg_src.clone(),
-                    InportLocation {
-                        node: apply_node_ref,
-                        input: InputType::Input(1 + idx),
-                    },
-                    E::value_edge(),
-                )
-                .unwrap();
+            let edg = self.ctx_mut().connect(
+                arg_src.clone(),
+                InportLocation {
+                    node: apply_node_ref,
+                    input: InputType::Input(1 + idx),
+                },
+                E::value_edge(),
+            )?;
             arg_edges.push(edg);
         }
 
