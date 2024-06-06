@@ -262,13 +262,27 @@ impl SpirvBackend {
             .unwrap_lambda_ref()
             .context_variable_count();
         for cvidx in 0..cvcount {
-            let def_node = self
-                .graph
-                .find_callabel_def(OutportLocation {
-                    node: lmd,
-                    output: OutputType::ContextVariableArgument(cvidx),
-                })
-                .expect("Could not get call-def of used cv");
+            let port = OutportLocation {
+                node: lmd,
+                output: OutputType::ContextVariableArgument(cvidx),
+            };
+            let is_in_use = self.graph.find_consumer_out(port).len() > 0;
+
+            let def_node = match self.graph.find_callabel_def(port) {
+                Some(n) => n,
+                None => {
+                    if is_in_use {
+                        return Err(BackendSpirvError::Any {
+                            text: format!(
+                                "Context Variable {port:?} is in use, but has no producer!"
+                            ),
+                        });
+                    } else {
+                        //has no producers, but is also not in use, so safe to skip
+                        continue;
+                    }
+                }
+            };
             //now register it as the cvport
             let def_id = ctx.get_port_id(&def_node).unwrap();
             //this forwards the λ-def mapping as the cv into this region

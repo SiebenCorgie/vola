@@ -1,9 +1,9 @@
 use std::path::Path;
 
-use smallvec::{SmallVec, ToSmallVec};
+use smallvec::SmallVec;
 use vola_common::FileString;
 
-use crate::{common::Ident, error::AstError, AstEntry, TopLevelNode, VolaAst, VolaParser};
+use crate::{common::Ident, error::AstError, AstEntry, VolaAst, VolaParser};
 
 impl VolaAst {
     pub(crate) fn resolve_module(

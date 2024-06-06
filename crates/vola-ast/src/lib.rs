@@ -29,7 +29,7 @@ pub mod module;
 mod passes;
 
 pub use error::AstError;
-use smallvec::{smallvec, SmallVec};
+use smallvec::smallvec;
 
 use std::path::Path;
 
