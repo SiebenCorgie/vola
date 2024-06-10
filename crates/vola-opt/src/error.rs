@@ -17,6 +17,8 @@ use vola_common::{
     Reportable,
 };
 
+use crate::common::Ty;
+
 impl Reportable for OptError {}
 
 ///Runtime optimizer errors. Note that at this point errors are pretty specific and mostly can't be recovered from.
@@ -44,6 +46,11 @@ pub enum OptError {
 
     #[error("Type derivation failed in λ-Node")]
     TypeDeriveFailed { errorcount: usize },
+
+    #[error("Type resolution error, set to {set}, but was derived to {derive}")]
+    TypeResolutionErrorSet { set: Ty, derive: Ty },
+    #[error("Type resolution error, derived once to {a}, now is {b}")]
+    TypeResolutionErrorDerive { a: Ty, b: Ty },
 
     #[error("Failed to inline call: {error}")]
     InlineFailed { error: InlineError },

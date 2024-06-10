@@ -53,6 +53,8 @@ Note that vola does not support shadowing. If you just want to change the value 
         self.opt
             .var_producer
             .set(def_port.into(), decl_name.0.clone());
+
+        self.opt.names.set(def_port.into(), decl_name.0.clone());
         //register in the lmd context
         self.lmd_ctx.add_define(
             decl_name.0,

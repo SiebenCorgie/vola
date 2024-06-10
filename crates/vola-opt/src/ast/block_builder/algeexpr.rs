@@ -21,7 +21,7 @@ use crate::{
     alge::{CallOp, ConstantIndex, Construct, EvalNode, ImmNat, ImmScalar, WkOp},
     ast::block_builder::BlockBuilderConfig,
     common::{FnImport, LmdContext, VarDef},
-    OptEdge, OptError, OptNode, TypeState,
+    OptEdge, OptError, OptNode,
 };
 
 use super::BlockBuilder;
@@ -998,10 +998,12 @@ impl<'a> BlockBuilder<'a> {
                     .opt
                     .graph
                     .on_region(&self.region, |regbuilder| {
-                        let (applynode, input_edges) =
+                        let (applynode, _input_edges) =
                             regbuilder.call(alge_import.port.clone(), &subargs).unwrap();
+
                         //Set edge types already, since we know them
                         //from the imported function
+                        /*
                         //NOTE: that the first input is always just a callable
                         for (argidx, edg) in input_edges.iter().skip(1).enumerate() {
                             assert!(
@@ -1013,7 +1015,7 @@ impl<'a> BlockBuilder<'a> {
                                     == Some(TypeState::Unset)
                             );
                         }
-
+                        */
                         applynode.output(0)
                     })
                     .unwrap();
@@ -1021,6 +1023,9 @@ impl<'a> BlockBuilder<'a> {
                 self.opt
                     .typemap
                     .set(applynode_output.clone().into(), alge_import.ret.clone());
+                self.opt
+                    .span_tags
+                    .set(applynode_output.node.into(), expr_span.clone());
                 Ok(applynode_output)
             } else {
                 let err = OptError::Any {

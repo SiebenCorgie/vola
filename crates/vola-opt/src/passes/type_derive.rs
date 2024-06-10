@@ -65,6 +65,11 @@ impl Optimizer {
         #[cfg(feature = "log")]
         log::info!("type derive");
 
+
+        if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("DUMP_PRE_TYPE_DERIVE").is_ok() {
+            self.push_debug_state("pre type derive");
+        }
+
         let mut error_count = 0;
         let mut resolve_set = AHashSet::new();
         let implblocks = self
@@ -219,7 +224,6 @@ impl Optimizer {
         }
 
         if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("DUMP_TYPE_DERIVE").is_ok() {
-            //self.dump_svg("post_type_derive.svg", true);
             self.push_debug_state("post type derive");
         }
 
@@ -511,6 +515,7 @@ impl Optimizer {
 
     fn try_apply_derive(
         &self,
+        node: NodeRef,
         apply: &ApplyNode,
         region_src_span: &Span,
     ) -> Result<Option<Ty>, OptError> {
@@ -584,7 +589,12 @@ impl Optimizer {
                     let argcount = apply.get_call_arg_count();
                     for i in 0..argcount {
                         if let Some(edg) = apply.argument_input(i).unwrap().edge {
-                            let ty = self.graph.edge(edg).ty.get_type().unwrap();
+                            let ty = if let Some(ty) = self.graph.edge(edg).ty.get_type(){
+                                ty
+                            }else{
+                                //type of argument not yet derived
+                                return Ok(None);  
+                            };
                             apply_sig.push(ty.clone());
                         } else {
                             let err = OptError::Any {
@@ -607,13 +617,15 @@ impl Optimizer {
                     if apply_node_sig[i] != expected_call_sig[i] {
                         let err = OptError::Any {
                             text: format!(
-                                "apply node's {i}-th input expected type {:?} but got {:?}",
+                                "call's {i}-th input: expected type {:?} but got {:?}",
                                 expected_call_sig[i], apply_node_sig[i]
                             ),
                         };
+                        let call_span = self.find_span(node.into()).unwrap_or(Span::empty());
                         report(
-                            error_reporter(err.clone(), region_src_span.clone())
-                                .with_label(Label::new(region_src_span.clone()).with_message("In this region"))
+                            error_reporter(err.clone(), span.clone())
+                                .with_label(Label::new(call_span).with_message("For this call"))
+                                .with_label(Label::new(span.clone()).with_message("of this function"))
                                 .finish(),
                         );
                         return Err(err);
@@ -917,7 +929,7 @@ impl Optimizer {
                     );
                     
                     (ty, node.output(0))},
-                    NodeType::Apply(a) => {let ty = self.try_apply_derive(a, &region_src_span); (ty, node.output(0))},
+                    NodeType::Apply(a) => {let ty = self.try_apply_derive(node, a, &region_src_span); (ty, node.output(0))},
                     NodeType::Gamma(_g) => {
                         let ty = self.try_gamma_derive(node);
                         (ty, node.output(0))
@@ -960,9 +972,19 @@ impl Optimizer {
                             .clone()
                             .iter()
                         {
-                            self.graph.edge_mut(*edg).ty = OptEdge::Value {
-                                ty: TypeState::Derived(ty.clone()),
-                            };
+                            
+                            if let Err(e) = self.graph.edge_mut(*edg).ty.set_derived_state(ty.clone()){
+                                
+                                if let Some(span) = self.find_span(resolved_port.node.into()){
+                                    report(error_reporter(e.clone(), span.clone()).with_label(Label::new(span.clone()).with_message("On this node")).finish());
+                                    
+                                }else{
+                                    report(error_reporter(e.clone(), Span::empty()).finish());
+                                }
+                                
+                                return Err(e);
+
+                            }
                         }
                     }
                     Ok(None) => {
@@ -970,14 +992,7 @@ impl Optimizer {
                         build_stack.push_front(node);
                     }
                     Err(e) => {
-                        let span = self
-                            .graph
-                            .node(node)
-                            .node_type
-                            .unwrap_simple_ref()
-                            .span
-                            .clone();
-                        
+                        let span = self.find_span(node.into()).unwrap_or(Span::empty()); 
                         report(
                             error_reporter(e.clone(), span.clone())
                                 .with_label(Label::new(span.clone()).with_message("on this operation"))

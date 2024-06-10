@@ -15,6 +15,7 @@ use crate::{common::Ty, Optimizer};
 use ahash::AHashMap;
 use rvsdg::attrib::AttribLocation;
 use rvsdg::edge::OutportLocation;
+use rvsdg::nodes::NodeType;
 use rvsdg::region::RegionLocation;
 use rvsdg::util::Path;
 use rvsdg::NodeRef;
@@ -147,15 +148,34 @@ impl OptEdge {
     ///
     /// Panics if the state is already derived.
     //TODO: Make that nicer. Shouldn't happen thought. However, better panic then creating invalid state.
-    pub fn set_derived_state(&mut self, ts: Ty) {
+    pub fn set_derived_state(&mut self, ts: Ty) -> Result<(), OptError> {
         match self {
             OptEdge::State => panic!("Cannot set type on state edge"),
             OptEdge::Value { ty } => match ty {
-                TypeState::Unset => *ty = TypeState::Derived(ts),
-                TypeState::Derived(t) => {
-                    panic!("Type state was already derived as {t:?}, cannot overwrite as {ts:?}")
+                TypeState::Unset => {
+                    *ty = TypeState::Derived(ts);
+                    Ok(())
                 }
-                TypeState::Set(_) => {}
+                TypeState::Derived(t) => {
+                    if t != &ts {
+                        Err(OptError::TypeResolutionErrorDerive {
+                            a: t.clone(),
+                            b: ts,
+                        })
+                    } else {
+                        Ok(())
+                    }
+                }
+                TypeState::Set(t) => {
+                    if t != &ts {
+                        Err(OptError::TypeResolutionErrorSet {
+                            set: t.clone(),
+                            derive: ts,
+                        })
+                    } else {
+                        Ok(())
+                    }
+                }
             },
         }
     }
@@ -250,6 +270,32 @@ impl View for OptEdge {
 }
 
 impl Optimizer {
+    //Tries to find a span for this node or port.
+    //This'll first check if a span tag is active, if not,
+    //tries to use the simple-node's span, or tries one of the porst
+    pub fn find_span(&self, loc: AttribLocation) -> Option<Span> {
+        if let Some(s) = self.span_tags.get(&loc) {
+            return Some(s.clone());
+        }
+
+        match loc {
+            AttribLocation::Node(n) => {
+                if let NodeType::Simple(sn) = &self.graph.node(n).node_type {
+                    return Some(sn.span.clone());
+                }
+
+                for output in self.graph.node(n).outport_types() {
+                    if let Some(s) = self.find_span(OutportLocation { node: n, output }.into()) {
+                        return Some(s);
+                    }
+                }
+
+                None
+            }
+            _ => None,
+        }
+    }
+
     ///Utility that tries to find type information in the vicinity of `loc`
     pub fn find_type(&self, loc: &AttribLocation) -> Option<Ty> {
         if let Some(t) = self.typemap.get(loc) {
