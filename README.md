@@ -1,6 +1,6 @@
 <div align="center">
 
-# Vola
+<img src="resources/vola_logo.svg" alt="Vola">
 
 **VO**lume **LA**nguage: A research [DSL](https://en.wikipedia.org/wiki/Domain-specific_language) that evaluates volume functions.
 
@@ -110,19 +110,8 @@ If you are interested in the runtime SPIR-V patching, have a look at [spv-patche
 
 
 ## Roadmap
-
-**Milestone 0**: MVP
-
-- [x] Simple grammar to get started
-- [x] Simple middle end pass (static-dispatch, type resolving etc.)
-- [x] middle-end => SPIR-T pass for gpu code emission. (Is a rspirv based backend for now. )
-- [x] SPIR-V test app (`vola-cli`) that tests the whole text-file -> SPIR-V chain
-- [ ] Vulkan test app (`runtime-patch`) that tests runtime patching of actually executed shaders. => Checkout [vola-sdf-renderer](https://gitlab.com/tendsinmende/vola-sdf-renderer).
-
-**Milestone 1**
-
-- [ ] Refine grammar to account for goal specified in `docs/goals.md`
-- [ ] Find a way to do (static?) derivative calculation on SDF values possibly based on [Enzyme](https://enzyme.mit.edu/)
+- ✨More [stdlib](https://gitlab.com/tendsinmende/vola-sdf-stdlib) features ✨
+- Find a way to do (static?) derivative calculation on SDF values possibly based on [Enzyme](https://enzyme.mit.edu/)
 
 
 ## License
