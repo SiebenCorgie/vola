@@ -245,12 +245,32 @@ impl FromTreeSitter for Expr {
             }
             "gamma_expr" => ExprTy::GammaExpr(Box::new(GammaExpr::parse(ctx, dta, &child_node)?)),
             "theta_expr" => ExprTy::ThetaExpr(Box::new(ThetaExpr::parse(ctx, dta, &child_node)?)),
+            "splat_expr" => {
+                let mut walker = child_node.walk();
+                let mut children = child_node.children(&mut walker);
+                //Parse the _list_ of [expr ; count].
+                ParserError::consume_expected_node_string(ctx, dta, children.next(), "[")?;
+                let subexpr = Expr::parse(ctx, dta, &children.next().unwrap())?;
+                ParserError::consume_expected_node_string(ctx, dta, children.next(), ";")?;
+                let count = Digit::parse(ctx, dta, &children.next().unwrap())?;
+                ParserError::consume_expected_node_string(ctx, dta, children.next(), "]")?;
+                ParserError::assert_ast_level_empty(ctx, children.next())?;
+
+                ExprTy::SplatExpr {
+                    expr: Box::new(subexpr),
+                    count: count.0,
+                }
+            }
             _ => {
                 let err = ParserError::UnexpectedAstNode {
                     kind: child_node.kind().to_owned(),
-                    expected: " unary expression| binary expression | eval expression | (alge expression) | literal | field access | identifier | call | list | gamma_expr | theta_expr ".to_owned(),
+                    expected: "unary expression| binary expression | eval expression | (alge expression) | literal | field access | identifier | call | list | gamma_expr | theta_expr | splat_expr ".to_owned(),
                 };
-                report(error_reporter(err.clone(), ctx.span(&child_node)).finish());
+                report(
+                    error_reporter(err.clone(), ctx.span(&child_node))
+                        .with_label(Label::new(ctx.span(&child_node)).with_message("here"))
+                        .finish(),
+                );
                 return Err(err);
             }
         };

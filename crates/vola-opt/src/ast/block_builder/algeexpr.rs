@@ -277,6 +277,48 @@ impl<'a> BlockBuilder<'a> {
                 );
                 return Err(err);
             }
+            ExprTy::SplatExpr { expr, count } => {
+                //The splat expression is a shortcut for
+                //building vectors / matrixes etc from elements.
+                //So thats exactly what we are emitting as well.
+
+                if count < 2 {
+                    let err = OptError::Any {
+                        text: format!("Splat expression's count cannot be less than 2"),
+                    };
+                    report(
+                        error_reporter(err.clone(), expr.span.clone())
+                            .with_label(
+                                Label::new(expr.span.clone())
+                                    .with_message("Consider removing this splat expression"),
+                            )
+                            .finish(),
+                    );
+
+                    return Err(err);
+                }
+
+                let src_expr = self.setup_alge_expr(*expr)?;
+                let mut items: SmallColl<OutportLocation> = SmallColl::new();
+                for _ in 0..count {
+                    items.push(src_expr);
+                }
+
+                let mut node = Construct::new();
+                node.inputs = smallvec![Input::default(); items.len()];
+
+                let opnode = self
+                    .opt
+                    .graph
+                    .on_region(&self.region, |regbuilder| {
+                        let (opnode, _) = regbuilder
+                            .connect_node(OptNode::new(node, expr_span), &items)
+                            .unwrap();
+                        opnode.output(0)
+                    })
+                    .unwrap();
+                Ok(opnode)
+            }
             ExprTy::GammaExpr(e) => self.setup_gamma_expr(*e, expr_span),
             ExprTy::ThetaExpr(t) => self.setup_theta_expr(*t, expr_span),
         }

@@ -95,6 +95,7 @@ impl Expr {
             ExprTy::ThetaExpr(t) => t.span.clone(),
             ExprTy::GammaExpr(e) => e.span.clone(),
             ExprTy::AccessExpr(e) => e.span.clone(),
+            ExprTy::SplatExpr { expr, count: _ } => expr.span.clone(),
         }
     }
 }
@@ -155,6 +156,10 @@ pub enum ExprTy {
     AccessExpr(AccessDesc),
     GammaExpr(Box<GammaExpr>),
     ThetaExpr(Box<ThetaExpr>),
+    SplatExpr {
+        expr: Box<Expr>,
+        count: usize,
+    },
 }
 
 ///Binds an algebraic expression to an identifier

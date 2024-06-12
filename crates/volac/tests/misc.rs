@@ -158,3 +158,14 @@ fn aii_impl() {
         .unwrap();
     target.try_verify().unwrap();
 }
+
+#[test]
+fn splat_expr() {
+    let pipeline = volac::Pipeline::new_in_memory();
+    //Splat-expression implementation:
+    // https://gitlab.com/tendsinmende/vola/-/merge_requests/33
+    let target = pipeline
+        .execute_on_file(&"tests/vola_src/splatuse.vola")
+        .unwrap();
+    target.try_verify().unwrap();
+}

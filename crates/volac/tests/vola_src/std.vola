@@ -1,6 +1,7 @@
 entity Sphere(radius: s);
 entity Box(extent: vec3);
 concept SDF3D: vec3 -> s;
+concept SDF2D: vec2 -> s;
 concept Color: vec3 -> vec3;
 
 ///Simple union operation
