@@ -1,0 +1,133 @@
+//NOTE: Splatuse is just the improved bezier implementation.
+module std;
+
+
+fn step(edge: s, x: s) -> s{
+	if x < edge{
+		0.0
+	}else{
+		1.0
+	}
+}
+
+fn sign(a: s) -> s{
+	if a > 0.0{
+		1.0
+	}else if a < 0.0{
+		-1.0
+	}else{
+		0.0
+	}
+}
+
+fn sign_v2(a: vec2) -> vec2{
+	let x = if a.x > 0.0{
+		1.0
+	}else if a.x < 0.0{
+		-1.0
+	}else{
+		0.0
+	};
+	let y = if a.y > 0.0{
+		1.0
+	}else if a.y < 0.0{
+		-1.0
+	}else{
+		0.0
+	};
+
+	[x,y]
+}
+
+
+//A bezier spline from point p0 to p2 guided by p1. 
+entity Bezier(p0: vec2, p1: vec2, p2: vec2, thickness: s);
+
+
+fn test_cross(a: vec2, b: vec2, p: vec2) -> s{
+	sign((b.y - a.y) * (p.x - a.x) - (b.x - a.x)*(p.y - a.y))
+}
+fn sign_bezier(A: vec2, B: vec2, C: vec2, p: vec2) -> s{
+	let a = C - A;
+	let b = B - A;
+	let c = p - A;
+	let bdiv = a.x * b.y - b.x * a.y;
+	let bary = [
+		c.x * b.y - b.x * c.y,
+		a.x * c.y - c.x * a.y
+	] / [bdiv; 2];
+	let d = [bary.y * 0.5, 0.0] + [1.0 - bary.x - bary.y; 2];
+
+	mix(
+		sign(d.x * d.x - d.y),
+		mix(
+			-1.0, 
+			1.0,
+			step(test_cross(A, B, p) * test_cross(B, C, p), 0.0)
+		),
+		step((d.x - d.y), 0.0)
+	) * test_cross(A, C, B)
+}
+
+
+fn solve_cubic(a: s, b: s, c: s) -> vec3{
+	let p = b - a*a / 3.0;
+	let p3 = p*p*p;
+	let q = a * (2.0 * a * a - 9.0 * b) / 27.0 + c;
+	let d = q * q + 4.0 * p3 / 27.0;
+	let offset = -a / 3.0;
+
+	if d >= 0.0{
+		let z = sqrt(d);
+		let xy = ([z, -z] - [q; 2]) / [2.0; 2];
+		let uv = sign_v2(xy) * pow(abs(xy), [1.0 / 3.0; 2]);
+		let res = offset + uv.x + uv.y;
+		[res, res, res]
+	}else{
+		let v = acos(-sqrt(-27.0 / p3) * q / 2.0) / 3.0;
+		let m = cos(v);
+		let n = sin(v) * 1.732050808;
+		let rt = sqrt(-p / 3.0);
+		[m + m, -n -m, n - m] / [rt; 3] + [offset; 3]
+	}
+}
+
+//Credits to Inigo Quilez: https://iquilezles.org/articles/distfunctions2d/
+//
+// There are also some ideas in this 
+// presentation: https://www.cl.cam.ac.uk/teaching//1718/FGraphics/4.%20Beziers%20Curves%20and%20Surfaces.pdf
+//
+// Also note to self: Once auto-diff has landed
+// we can use the following paper to derive the sdf:
+// https://www.fil.univ-lille.fr/~poteaux/fichiers/smi-ext-abs.pdf
+impl Bezier for SDF2D(at){
+	let A = p0;
+	let B = p1;
+	let C = p2;
+	let p = at;
+	let mB = abs(sign_v2(B * 2.0 - A - C));
+	B = mix(B + [0.001, 0.001], B, mB);
+	//NOTE this shadows the original a,b,c
+	let a = B - A;
+	let b = A - B * 2.0 + C;
+	let c = a * 2.0;
+	let d = A - p;
+
+	let k = [3.0 * dot(a, b), 2.0 * dot(a, a) + dot(d,b), dot(d,a)] / [dot(b,b), dot(b,b), dot(b,b)];
+	let t = clamp(solve_cubic(k.x, k.y, k.z), [0.0; 3], [1.0; 3]);
+	let pos = A + (c+b*t.x) * t.x;
+	let dis = length(pos - p);
+	pos = A + (c+ b*t.y) * t.y;
+	dis = min(dis, length(pos - p));
+	pos = A + (c + b*t.z) * t.z;
+	dis = min(dis, length(pos - p));
+	abs(dis * sign_bezier(A,B,C,p)) - thickness
+}
+
+
+
+export myfn(at: vec2){
+	csg t = Bezier([0.0, 1.0], [1.0, 0.0], [2.0, 2.0], 0.1);
+
+	eval t.SDF2D(at)
+}

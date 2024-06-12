@@ -490,6 +490,7 @@ impl DotNode for Expr {
             ExprTy::AccessExpr(_e) => format!("AccessDesc"),
             ExprTy::GammaExpr(e) => e.content(),
             ExprTy::ThetaExpr(t) => t.content(),
+            ExprTy::SplatExpr { expr: _, count } => format!("Splat<{count}>"),
         }
     }
 
@@ -540,6 +541,7 @@ impl DotNode for Expr {
             ExprTy::GammaExpr(e) => e.build_children(builder),
             ExprTy::ThetaExpr(t) => t.build_children(builder),
             ExprTy::Ident(_) | ExprTy::Literal(_) => builder,
+            ExprTy::SplatExpr { expr, count: _ } => expr.build_children(builder),
         }
     }
 }
