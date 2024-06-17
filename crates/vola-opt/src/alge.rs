@@ -196,7 +196,7 @@ impl WkOp {
 
                 if sig[0] != sig[1] {
                     return Err(OptError::Any {
-                        text: format!("{:?} expects the two operands, to be of the same type. but got {:?} & {:?}", self, sig[0], sig[1]),
+                        text: format!("{:?} expects the two operands to be of the same type. but got {:?} & {:?}", self, sig[0], sig[1]),
                     });
                 }
 
@@ -539,9 +539,33 @@ impl WkOp {
                     }
                 }
             }
-            wk => Err(OptError::Any {
-                text: format!("derive not implemented for {:?}", wk),
-            }),
+            WkOp::And | WkOp::Or => {
+                //Right now we only allow those on single bools, othewise we'd need a way to represent vecs
+                //of bools etc. Which we don't (yet, ever?).
+                if sig.len() != 2 {
+                    return Err(OptError::Any {
+                        text: format!("{:?} expects two operands, got {}", self, sig.len()),
+                    });
+                }
+
+                if sig[0] != sig[1] {
+                    return Err(OptError::Any {
+                        text: format!(
+                            "{:?} expectes the same type for both operands, got {} & {}",
+                            self, sig[0], sig[1]
+                        ),
+                    });
+                }
+
+                match &sig[0]{
+                    Ty::Bool  =>  Ok(Some(Ty::Bool)),
+                    any => {
+                        Err(OptError::Any { text: format!("Cannot use comperator {:?} on {}. Consider breaking it down into a single bool value", self, any) })
+                    }
+                }
+            } // wk => Err(OptError::Any {
+              //     text: format!("derive not implemented for {:?}", wk),
+              // }),
         }
     }
 }
