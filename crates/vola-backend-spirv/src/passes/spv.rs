@@ -1187,6 +1187,8 @@ fn register_or_get_type(builder: &mut Builder, ctx: &mut EmitCtx, ty: &SpvType) 
                 TyShape::Scalar => basetype,
                 TyShape::Vector { width } => builder.type_vector(basetype, *width),
                 TyShape::Matrix { width, height } => {
+                    //NOTE: by definition SPIRV uses column-major format. So the _height_ of our
+                    //      matrix is the _width_ of the column vectors, and we have _width_-times columns
                     let column_type = builder.type_vector(basetype, *height);
                     builder.type_matrix(column_type, *width)
                 }

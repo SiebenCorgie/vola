@@ -130,7 +130,7 @@ impl Ty {
             Ty::Vector { width } => {
                 if index >= *width {
                     Err(OptError::Any {
-                        text: format!("Vector of width {width} cannot be index with {index}"),
+                        text: format!("Vector of width {width} cannot be indexed with {index}"),
                     })
                 } else {
                     //Otherwise always resolves to an scalar
@@ -138,12 +138,12 @@ impl Ty {
                 }
             }
             Ty::Matrix { width, height } => {
-                if index >= *height {
+                if index >= *width {
                     Err(OptError::Any {
-                        text: format!("Matrix {width}x{height} cannot be index with {index}"),
+                        text: format!("Matrix {width}x{height} cannot be indexed with {index}"),
                     })
                 } else {
-                    Ok(Ty::Vector { width: *width })
+                    Ok(Ty::Vector { width: *height })
                 }
             }
             Ty::Tensor { dim } => match dim.len() {

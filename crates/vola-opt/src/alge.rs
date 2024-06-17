@@ -1023,10 +1023,12 @@ impl DialectNode for Construct {
         let listlen = signature.len();
         match &signature[0] {
             Ty::Scalar => Ok(Some(Ty::Vector { width: listlen })),
-            //NOTE this makes us effectively create line first matrices... doc that somewhere...
+            //NOTE:
+            // This creates a column-major matrix. So each vector is a _column_ of this matrix. This is somewhat unintuitive
+            // since maths do it the other way around, but glsl / spirv do it like that. So we keep that convention
             Ty::Vector { width } => Ok(Some(Ty::Matrix {
-                width: *width,
-                height: listlen,
+                width: listlen,
+                height: *width,
             })),
             Ty::Matrix { width, height } => {
                 let mut tensor_sizes = SmallVec::new();
