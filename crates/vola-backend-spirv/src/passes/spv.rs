@@ -405,10 +405,33 @@ impl SpirvBackend {
         //Now setup all simple-node-output ids.
         //this lets us fetch node-ids before they are actually emitted later on
         for cfg_node in cfg.nodes.values() {
-            if let CfgNode::BasicBlock(bb) = cfg_node {
-                for simple_node in &bb.nodes {
-                    ctx.node_mapping.insert(simple_node.output(0), builder.id());
+            match cfg_node {
+                CfgNode::BasicBlock(bb) => {
+                    for simple_node in &bb.nodes {
+                        ctx.node_mapping.insert(simple_node.output(0), builder.id());
+                    }
                 }
+                //Pre-declare all used output as well
+                CfgNode::LoopHeader { src_node, .. } | CfgNode::BranchHeader { src_node, .. } => {
+                    for output in self.graph.node(*src_node).outport_types() {
+                        let port = OutportLocation {
+                            node: *src_node,
+                            output,
+                        };
+                        let in_use = self
+                            .graph
+                            .node(*src_node)
+                            .outport(&output)
+                            .unwrap()
+                            .edges
+                            .len()
+                            > 0;
+                        if in_use {
+                            ctx.node_mapping.insert(port, builder.id());
+                        }
+                    }
+                }
+                _ => {}
             }
         }
 
@@ -835,16 +858,6 @@ impl SpirvBackend {
                     .node_type
                     .unwrap_gamma_ref()
                     .exit_var_count();
-                //preset all ev_output ids
-                for ev in 0..exit_var_count {
-                    ctx.node_mapping.insert(
-                        OutportLocation {
-                            node: *src_node,
-                            output: OutputType::ExitVariableOutput(ev),
-                        },
-                        builder.id(),
-                    );
-                }
                 //now collect all ev connected ev ports
                 for ev in 0..exit_var_count {
                     let ev_location = OutportLocation {
