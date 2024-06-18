@@ -82,7 +82,7 @@ pub enum WkOp {
 
 impl WkOp {
     ///Returns the input-count for the op
-    fn in_count(&self) -> usize {
+    pub fn in_count(&self) -> usize {
         match self {
             WkOp::Not => 1,
             WkOp::Neg => 1,
@@ -258,23 +258,35 @@ impl WkOp {
                         },
                         Ty::Scalar,
                     ) => Ok(Some(sig.remove(0))),
-                    (Ty::Vector { width }, Ty::Matrix { width: _t, height }) => {
+                    (
+                        Ty::Vector { width: vecwidth },
+                        Ty::Matrix {
+                            width: num_columns,
+                            height: _,
+                        },
+                    ) => {
                         //NOTE: we can only do that, if the Vector::width
-                        //      is the same has Matrix height.
+                        //      is the same has Matrix width.
                         //TODO: Decide if we really want to make that bound check already in the optimizer.
                         //      generally speaking this is more of a SPIR-V issue. Other backends could implement
                         //      other Matrix/Vector multiplication
-                        if width != height {
-                            Err(OptError::Any { text: format!("Matrix-Vector multiplication expects the Matrix's \"height\" to be the same as the Vector's \"width\". Got h={height} & w={width} instead.") })
+                        if vecwidth != num_columns {
+                            Err(OptError::Any { text: format!("Vector-Matrix multiplication expects the Matrix's \"width\" to be equal to Vector's \"width\". Matrix width = {num_columns} & vector_width = {vecwidth}") })
                         } else {
                             //Use the vector's type.
                             Ok(Some(sig.remove(0)))
                         }
                     }
-                    (Ty::Matrix { width: _t, height }, Ty::Vector { width }) => {
+                    (
+                        Ty::Matrix {
+                            width: num_columns,
+                            height: _,
+                        },
+                        Ty::Vector { width: vecwidth },
+                    ) => {
                         //Similar to above.
-                        if width != height {
-                            Err(OptError::Any { text: format!("Vector- Matrix multiplication expects the Matrix's \"height\" to be the same as the Vector's \"width\". Got h={height} & w={width} instead.") })
+                        if num_columns != vecwidth {
+                            Err(OptError::Any { text: format!("Vector-Matrix multiplication expects the Matrix's \"width\" to be equal to Vector's \"width\". Matrix width = {num_columns} & vector_width = {vecwidth}") })
                         } else {
                             //Use the vector's type.
                             Ok(Some(sig.remove(1)))

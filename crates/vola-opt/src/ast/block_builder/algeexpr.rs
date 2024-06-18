@@ -963,18 +963,50 @@ impl<'a> BlockBuilder<'a> {
             subargs.push(arg);
         }
         if let Some(wknode) = WkOp::try_parse(&call.ident.0) {
+            if wknode.in_count() != subargs.len() {
+                let err = OptError::Any {
+                    text: format!(
+                        "build-in call \"{wknode:?}\" expects {} inputs, got {}",
+                        wknode.in_count(),
+                        subargs.len()
+                    ),
+                };
+
+                report(
+                    error_reporter(err.clone(), expr_span.clone())
+                        .with_label(Label::new(expr_span).with_message("On this call"))
+                        .finish(),
+                );
+
+                return Err(err);
+            }
+
             let opnode = self
                 .opt
                 .graph
                 .on_region(&self.region, |regbuilder| {
-                    let (opnode, _) = regbuilder
-                        .connect_node(OptNode::new(CallOp::new(wknode), expr_span), &subargs)
-                        .unwrap();
-                    opnode.output(0)
+                    match regbuilder.connect_node(
+                        OptNode::new(CallOp::new(wknode), expr_span.clone()),
+                        &subargs,
+                    ) {
+                        Ok(r) => Ok(r.0.output(0)),
+                        Err(e) => {
+                            let err = OptError::Any {
+                                text: format!("Could no build call expression: {e}"),
+                            };
+
+                            report(
+                                error_reporter(err.clone(), expr_span.clone())
+                                    .with_label(Label::new(expr_span).with_message("On this call"))
+                                    .finish(),
+                            );
+
+                            Err(err)
+                        }
+                    }
                 })
                 .unwrap();
-
-            Ok(opnode)
+            opnode
         } else {
             if let Some(algefn) = self.opt.alge_fn.get(&call.ident.0).cloned() {
                 let alge_import =

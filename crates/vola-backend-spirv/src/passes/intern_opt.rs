@@ -14,7 +14,7 @@ use rvsdg::{
     smallvec::smallvec,
     util::graph_type_transform::{GraphMapping, GraphTypeTransformer, GraphTypeTransformerError},
 };
-use vola_common::{error::error_reporter, report, Span};
+// use vola_common::{error::error_reporter, report, Span};
 use vola_opt::{
     alge::{CallOp, ConstantIndex, Construct, ImmNat, ImmScalar, WkOp},
     OptEdge, OptNode, Optimizer,
@@ -24,7 +24,7 @@ use crate::{
     graph::{BackendEdge, BackendNode, BackendOp},
     hl::HlOp,
     spv::{CoreOp, GlOp, SpvOp, SpvType},
-    BackendSpirvError, SpirvBackend,
+    SpirvBackend,
 };
 
 pub struct InterningTransformer;
@@ -45,17 +45,17 @@ impl GraphTypeTransformer for InterningTransformer {
                         if let Ok(converted) = t.try_into() {
                             converted
                         } else {
-                            report(
-                                error_reporter(
-                                    BackendSpirvError::Any {
-                                        text: format!(
-                                        "could not convert edge to SpirvType, was of type {ty:?}"
-                                    ),
-                                    },
-                                    Span::empty(),
-                                )
-                                .finish(),
-                            );
+                            // report(
+                            //     error_reporter(
+                            //         BackendSpirvError::Any {
+                            //             text: format!(
+                            //             "could not convert edge to SpirvType, was of type {ty:?}"
+                            //         ),
+                            //         },
+                            //         Span::empty(),
+                            //     )
+                            //     .finish(),
+                            // );
                             SpvType::Undefined
                         }
                     })

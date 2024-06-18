@@ -112,7 +112,9 @@ impl RegionLayout {
             let mut result_connected_nodes = AHashSet::default();
             let result_count = rvsdg.region(&region).unwrap().results.len();
             for residx in 0..result_count {
-                for connected_result in &rvsdg.region(&region).unwrap().result_src(&rvsdg, residx) {
+                if let Some(connected_result) =
+                    &rvsdg.region(&region).unwrap().result_src(&rvsdg, residx)
+                {
                     result_connected_nodes.insert(connected_result.node);
                 }
             }
