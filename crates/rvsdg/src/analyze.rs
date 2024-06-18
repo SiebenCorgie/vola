@@ -277,7 +277,7 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
                             return None;
                         }
                     } else {
-                        //Is not a theta-node argument, so this is the origin of _something_
+                        // Is not a theta-node argument, so this is the origin of _something_
                         return Some(next_port);
                     }
                 }

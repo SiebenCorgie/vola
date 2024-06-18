@@ -523,6 +523,17 @@ impl SpirvBackend {
                 // use both to mark the loop-argument output with the generated result id of
                 // the phi-instruction
                 for i in 0..lvcount {
+                    if self
+                        .graph
+                        .find_consumer_in(InportLocation {
+                            node: *src_node,
+                            input: InputType::Input(i),
+                        })
+                        .len()
+                        == 0
+                    {
+                        continue;
+                    }
                     //NOTE: we pre-allocate the id for the argument, so if in_loop_origin
                     //      is also the argument, the id is already valid
                     //      HOWEVER,
@@ -537,10 +548,16 @@ impl SpirvBackend {
                         node: *src_node,
                         input: InputType::Input(i),
                     };
+                    //Is modified in loop, if the connected node is not the src_node
                     let is_modified_in_loop =
-                        self.graph.find_producer_inp(lv_result_inport).is_some();
+                        if let Some(insrc) = self.graph.inport_src(lv_result_inport) {
+                            insrc.node != *src_node
+                        } else {
+                            false
+                        };
 
                     if is_modified_in_loop {
+                        //create a new id, that is used by the phi-instruction later on
                         let loop_variable_id = builder.id();
                         ctx.set_port_id(
                             OutportLocation {
@@ -552,7 +569,8 @@ impl SpirvBackend {
                     } else {
                         //in the unmodified case, we just copy over the old id to the
                         //new port.
-                        let value_producer = self.graph.find_producer_inp(lv_input_port);
+                        let value_producer = self.graph.inport_src(lv_input_port);
+
                         if let Some(prod) = value_producer {
                             //if there is an actual producer,
                             //set the _in-loop-id_
@@ -564,6 +582,8 @@ impl SpirvBackend {
                                 },
                                 prod_id,
                             );
+                        } else {
+                            panic!("Value producer unconnected!")
                         }
                     }
                 }
@@ -594,17 +614,17 @@ impl SpirvBackend {
                         continue;
                     }
 
-                    let pre_loop_origin = if let Some(prod) =
-                        self.graph.find_producer_inp(InportLocation {
+                    let pre_loop_origin = if let Some(preloop_src) =
+                        self.graph.inport_src(InportLocation {
                             node: *src_node,
                             input: InputType::Input(i),
                         }) {
-                        prod
+                        preloop_src
                     } else {
-                        //Ignore loop variable if there is no producer _before_ the loop
                         continue;
                     };
-                    let in_loop_origin = self.graph.find_producer_inp(InportLocation {
+
+                    let in_loop_origin = self.graph.inport_src(InportLocation {
                         node: *src_node,
                         input: InputType::Result(i),
                     });
@@ -613,8 +633,14 @@ impl SpirvBackend {
                     //otherwise its just a _used_ value.
                     //we only append a phi in the case of a used value
                     if let Some(in_loop_origin) = in_loop_origin {
+                        if in_loop_origin.node == *src_node {
+                            continue;
+                        }
+
                         let pre_loop_origin_id = *ctx.node_mapping.get(&pre_loop_origin).unwrap();
+
                         let in_loop_origin_id = *ctx.node_mapping.get(&in_loop_origin).unwrap();
+
                         let argument_id = *ctx
                             .node_mapping
                             .get(&OutportLocation {
@@ -734,7 +760,7 @@ impl SpirvBackend {
 
                     let in_loop_src = self
                         .graph
-                        .find_producer_inp(InportLocation {
+                        .inport_src(InportLocation {
                             node: *src_node,
                             input: InputType::Result(lv),
                         })
@@ -797,15 +823,21 @@ impl SpirvBackend {
                     .entry_var_count();
                 //setup the entry-var id for each argument.
                 for ev in 0..ev_count {
-                    let src = if let Some(prod) = self.graph.find_producer_inp(InportLocation {
+                    let evport = InportLocation {
                         node: *src_node,
                         input: InputType::EntryVariableInput(ev),
-                    }) {
+                    };
+                    let src = if let Some(prod) = self.graph.inport_src(evport) {
                         prod
                     } else {
                         //ignore ev if there is no producer for the ev
                         continue;
                     };
+
+                    //Check that there is at least one consumen
+                    if self.graph.find_consumer_in(evport).len() == 0 {
+                        continue;
+                    }
 
                     let src_id = *ctx.node_mapping.get(&src).unwrap();
                     for bidx in 0..2 {
@@ -878,7 +910,7 @@ impl SpirvBackend {
                     }
                     let in_true_src = self
                         .graph
-                        .find_producer_inp(InportLocation {
+                        .inport_src(InportLocation {
                             node: *src_node,
                             input: InputType::ExitVariableResult {
                                 branch: 0,
@@ -890,7 +922,7 @@ impl SpirvBackend {
 
                     let in_false_src = self
                         .graph
-                        .find_producer_inp(InportLocation {
+                        .inport_src(InportLocation {
                             node: *src_node,
                             input: InputType::ExitVariableResult {
                                 branch: 1,

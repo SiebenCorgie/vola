@@ -480,4 +480,19 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
     pub fn nodes(&self) -> slotmap::basic::Keys<NodeRef, Node<N>> {
         self.nodes.keys()
     }
+
+    ///Returns the connected src port of `inport`, if there is some.
+    ///
+    /// Panics if either the referenced node, or the safed edge are non-existent.
+    pub fn inport_src(&self, inport: InportLocation) -> Option<OutportLocation> {
+        if let Some(port) = self.node(inport.node).inport(&inport.input) {
+            if let Some(edg) = port.edge {
+                Some(self.edge(edg).src().clone())
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    }
 }
