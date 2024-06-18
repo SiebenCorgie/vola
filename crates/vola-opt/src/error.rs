@@ -47,6 +47,9 @@ pub enum OptError {
     #[error("Type derivation failed in λ-Node")]
     TypeDeriveFailed { errorcount: usize },
 
+    #[error("Type derive failed: {text}")]
+    TypeDeriveError { text: String },
+
     #[error("Type resolution error, set to {set}, but was derived to {derive}")]
     TypeResolutionErrorSet { set: Ty, derive: Ty },
     #[error("Type resolution error, derived once to {a}, now is {b}")]

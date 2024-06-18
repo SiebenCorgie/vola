@@ -1054,7 +1054,9 @@ impl DialectNode for Construct {
                 dim.push(listlen);
                 Ok(Some(Ty::Tensor { dim }))
             }
-            _ => panic!("enountered non-algebraic type"),
+            _ => Err(OptError::TypeDeriveError {
+                text: format!("Cannot construct \"List\" from \"{}\"", signature[0]),
+            }),
         }
     }
 }
