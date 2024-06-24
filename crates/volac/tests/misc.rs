@@ -169,3 +169,12 @@ fn splat_expr() {
         .unwrap();
     target.try_verify().unwrap();
 }
+
+#[test]
+fn csg_scope_local_variable() {
+    let pipeline = volac::Pipeline::new_in_memory();
+    let target = pipeline
+        .execute_on_file(&"tests/vola_src/csg_scope_local_variable.vola")
+        .unwrap();
+    target.try_verify().unwrap();
+}
