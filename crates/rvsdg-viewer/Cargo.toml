@@ -12,10 +12,10 @@ viewer = ["smallvec", "bincode"]
 
 [dependencies]
 rvsdg = {path = "../rvsdg"}
-ahash.workspace = true
+ahash = {workspace = true, features = ["serde"]}
 priority-queue = "2.0"
 log.workspace = true
 serde = {workspace = true, features = ["derive"]}
 glam = {workspace = true, features = ["serde", "mint"]}
-smallvec = {workspace = true, optional = true}
+smallvec = {workspace = true, optional = true, features = ["serde"]}
 bincode = {workspace = true, optional = true}

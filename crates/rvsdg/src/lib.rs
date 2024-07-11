@@ -45,6 +45,8 @@ pub mod verify;
 
 ///SmallVec based collection for dynamically sized, but usually small collections through out the RVSDG.
 pub type SmallColl<T> = SmallVec<[T; 3]>;
+///Smallmap based map using ahash for up to 32 elements on the stack.
+pub type SmallMap<K, V> = small_map::ASmallMap<32, K, V>;
 
 new_key_type! {pub struct NodeRef;}
 impl Display for NodeRef {

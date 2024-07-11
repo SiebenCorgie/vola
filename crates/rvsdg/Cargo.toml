@@ -24,6 +24,7 @@ smallvec.workspace = true
 rvsdg-derive-lang = {path = "../rvsdg-derive-lang", optional = true}
 log = {workspace = true, optional = true}
 serde = {workspace = true, optional = true, features = ["derive"]}
+small-map = {workspace = true, features = ["hashes"]}
 
 [dev-dependencies]
 rvsdg-viewer = {path = "../rvsdg-viewer"}

@@ -2,16 +2,23 @@ use rvsdg::{
     common::VSEdge,
     nodes::LangNode,
     region::{Input, Output},
+    util::cne::CneTypeEq,
     Rvsdg,
 };
 
 use rvsdg_viewer::View;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct LNode {
     pub name: String,
     pub inputs: Vec<Input>,
     pub outputs: Vec<Output>,
+}
+
+impl CneTypeEq for LNode {
+    fn type_equal(&self, other: &Self) -> bool {
+        self.name == other.name
+    }
 }
 
 impl LNode {

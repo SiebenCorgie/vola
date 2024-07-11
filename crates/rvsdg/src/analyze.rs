@@ -16,6 +16,7 @@ use ahash::{AHashMap, AHashSet};
 
 mod region_walker;
 pub use region_walker::RegionWalker;
+mod topo_ord;
 
 use crate::{
     edge::{InportLocation, InputType, LangEdge, OutportLocation, OutputType},
