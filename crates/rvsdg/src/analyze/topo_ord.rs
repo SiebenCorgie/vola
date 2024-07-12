@@ -30,7 +30,7 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
                 if !seen_nodes.contains(&src.node) {
                     forward_order.push(src.node);
                     seen_nodes.insert(src.node);
-                    for n in self.walk_predecessors(src.node) {
+                    for n in self.walk_predecessors_in_region(src.node) {
                         if n.node == regionloc.node {
                             continue;
                         }
