@@ -2,7 +2,7 @@ use rvsdg::{
     common::VSEdge,
     nodes::LangNode,
     region::{Input, Output},
-    util::cne::CneTypeEq,
+    util::node_equality::NodeTypeEq,
     Rvsdg,
 };
 
@@ -15,7 +15,7 @@ pub struct LNode {
     pub outputs: Vec<Output>,
 }
 
-impl CneTypeEq for LNode {
+impl NodeTypeEq for LNode {
     fn type_equal(&self, other: &Self) -> bool {
         self.name == other.name
     }

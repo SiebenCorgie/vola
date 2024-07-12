@@ -1,12 +1,7 @@
 //! Showcases how to build a graph via the RVSDG builder utilities and executing a CommonNodeElemination (CNE)
 //! on it.
 
-use rvsdg::{
-    common::VSEdge,
-    edge::{InportLocation, InputType, OutportLocation, OutputType},
-    nodes::NodeType,
-    Rvsdg,
-};
+use rvsdg::{common::VSEdge, edge::InputType, Rvsdg};
 use test_rvsdg::LNode;
 #[path = "../tests/test_rvsdg.rs"]
 mod test_rvsdg;
@@ -50,7 +45,8 @@ fn main() {
         });
     });
 
-    crate::test_rvsdg::dump_graph_to_svg(&rvsdg, "before_cne");
-    rvsdg.common_node_elemination().unwrap();
-    crate::test_rvsdg::dump_graph_to_svg(&rvsdg, "after_cne");
+    crate::test_rvsdg::dump_graph_to_svg(&rvsdg, "before_cne.svg");
+    let removed = rvsdg.common_node_elemination().unwrap();
+    crate::test_rvsdg::dump_graph_to_svg(&rvsdg, "after_cne.svg");
+    println!("Removed {} nodes:\n {removed:?}", removed.len());
 }

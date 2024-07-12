@@ -1,9 +1,4 @@
-use rvsdg::{
-    common::VSEdge,
-    edge::{InportLocation, InputType, OutportLocation, OutputType},
-    nodes::NodeType,
-    Rvsdg,
-};
+use rvsdg::{common::VSEdge, edge::InputType, Rvsdg};
 use test_rvsdg::LNode;
 
 mod test_rvsdg;
@@ -48,7 +43,10 @@ fn simple_cne() {
         });
     });
 
-    crate::test_rvsdg::dump_graph_to_svg(&rvsdg, "before_cne");
-    rvsdg.common_node_elemination().unwrap();
-    crate::test_rvsdg::dump_graph_to_svg(&rvsdg, "after_cne");
+    let removed = rvsdg.common_node_elemination().unwrap();
+    assert!(
+        removed.len() == 1,
+        "expected 1 removed nodes from dead_node elemination after CNE, got {}",
+        removed.len()
+    );
 }

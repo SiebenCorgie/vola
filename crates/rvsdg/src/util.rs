@@ -20,6 +20,7 @@ use crate::{
     EdgeRef, NodeRef, Rvsdg, SmallColl,
 };
 
+pub mod abstract_node_type;
 pub mod cfg;
 ///Common-Node-Elemination
 pub mod cne;
@@ -28,6 +29,7 @@ pub mod dead_node_elimination;
 pub mod graph_type_transform;
 pub mod inline;
 pub mod liveness;
+pub mod node_equality;
 pub mod region_utils;
 
 ///Path of multiple edges from `start` to `end`.

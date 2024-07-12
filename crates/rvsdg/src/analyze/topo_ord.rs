@@ -1,8 +1,3 @@
-use std::collections::VecDeque;
-
-use ahash::AHashSet;
-use small_map::SmallMap;
-
 /*
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
@@ -10,6 +5,9 @@ use small_map::SmallMap;
  *
  * 2024 Tendsin Mende
  */
+
+use ahash::AHashSet;
+
 use crate::{edge::LangEdge, nodes::LangNode, region::RegionLocation, NodeRef, Rvsdg};
 
 impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {

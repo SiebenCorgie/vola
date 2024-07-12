@@ -42,6 +42,7 @@ pub use theta::{LoopNode, ThetaNode};
 use crate::{
     edge::{InportLocation, InputType, LangEdge, OutportLocation, OutputType},
     region::{Inport, Input, Outport, Output, Region, RegionLocation},
+    util::abstract_node_type::AbstractNodeType,
     EdgeRef, Rvsdg, SmallColl,
 };
 
@@ -525,6 +526,11 @@ impl<N: LangNode + 'static> Node<N> {
 
     pub fn output_edges(&self) -> SmallVec<[SmallVec<[EdgeRef; 3]>; 3]> {
         self.outputs().iter().map(|op| op.edges.clone()).collect()
+    }
+
+    ///Shortcut that returns the abstract node type, without having to borrow the actual value of the node.
+    pub fn into_abstract(&self) -> AbstractNodeType {
+        AbstractNodeType::from(&self.node_type)
     }
 }
 
