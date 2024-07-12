@@ -129,7 +129,7 @@ impl RegionLayout {
             let mut pass_list = result_connected_nodes.clone();
             //Walk all predecessors to all results, and push them into the list
             for res in result_connected_nodes {
-                for pre in rvsdg.walk_predecessors(res) {
+                for pre in rvsdg.walk_predecessors_in_region(res) {
                     pass_list.insert(pre.node);
                 }
             }
