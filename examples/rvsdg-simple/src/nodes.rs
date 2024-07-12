@@ -5,7 +5,7 @@ use rvsdg::{
 use rvsdg_viewer::{Color, View};
 
 ///Builds the simple rvsdg structures presented in figure 2 of the RVSDG paper.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum MyNodes {
     Load,
     Store,
@@ -29,6 +29,12 @@ pub struct LNode {
     inputs: Vec<Input>,
     #[outputs]
     outputs: Vec<Output>,
+}
+
+impl PartialEq for LNode {
+    fn eq(&self, other: &Self) -> bool {
+        other.node.eq(&self.node)
+    }
 }
 
 impl LNode {

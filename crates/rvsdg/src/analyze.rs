@@ -1,3 +1,10 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ *
+ * 2024 Tendsin Mende
+ */
 //! RVSDG analyzis tools
 //!
 //! Provides several tools to analyse an RVSDG. Including walker utilities
@@ -9,6 +16,7 @@ use ahash::{AHashMap, AHashSet};
 
 mod region_walker;
 pub use region_walker::RegionWalker;
+mod topo_ord;
 
 use crate::{
     edge::{InportLocation, InputType, LangEdge, OutportLocation, OutputType},
@@ -24,6 +32,9 @@ use self::region_walker::RegionLocationWalker;
 ///
 /// All node ports are traversed only once. So a node can be touched multiple times by the Iterator, but once all
 /// output ports are touched, the node won't occur anymore.
+///
+/// Note that this iterator traverses region boundaries. So for instance if a node is indirectly connected to a context variable
+/// of some λ-node, the iterator will break out of thea λ-node's body, and traverse the outside region.
 pub struct PredWalker<'a, N: LangNode + 'static, E: LangEdge + 'static> {
     walked: AHashSet<OutportLocation>,
     walker_stack: VecDeque<OutportLocation>,
@@ -55,6 +66,54 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> Iterator for PredWalker<'
                 }
             }
 
+            Some(n)
+        } else {
+            None
+        }
+    }
+}
+
+///Utility that walks the predecessors of a node in breadth-first style. Stops at the region's boundaries of the seeding node.
+///
+/// If you don't want that, have a look at [PredWalker].
+///
+/// All node ports are traversed only once. So a node can be touched multiple times by the Iterator, but once all
+/// output ports are touched, the node won't occur anymore.
+pub struct PredWalkerRegion<'a, N: LangNode + 'static, E: LangEdge + 'static> {
+    walked: AHashSet<OutportLocation>,
+    walker_stack: VecDeque<OutportLocation>,
+    region_boundary_node: NodeRef,
+    ctx: &'a Rvsdg<N, E>,
+}
+
+impl<'a, N: LangNode + 'static, E: LangEdge + 'static> PredWalkerRegion<'a, N, E> {
+    //NOTE: assumes that `node` has a parent, so is not the OmegaNode.
+    fn new(ctx: &'a Rvsdg<N, E>, node: NodeRef) -> Self {
+        let region_boundary_node = ctx.node(node).parent.unwrap().node;
+        //Init stack
+        let stack = ctx.node(node).pred(ctx).collect();
+        PredWalkerRegion {
+            walked: AHashSet::default(),
+            walker_stack: stack,
+            ctx,
+            region_boundary_node,
+        }
+    }
+}
+
+impl<'a, N: LangNode + 'static, E: LangEdge + 'static> Iterator for PredWalkerRegion<'a, N, E> {
+    type Item = OutportLocation;
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(n) = self.walker_stack.pop_back() {
+            //collect this nodes predecessors, but only if the node is _not_ the region_boundary_node.
+            if n.node != self.region_boundary_node {
+                for pred in self.ctx.node(n.node).pred(self.ctx) {
+                    if !self.walked.contains(&pred) {
+                        self.walker_stack.push_front(pred.clone());
+                        self.walked.insert(pred.clone());
+                    }
+                }
+            }
             Some(n)
         } else {
             None
@@ -457,6 +516,11 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
     ///Iterates over all predecessors of this node, see [PredWalker] for more info.
     pub fn walk_predecessors<'a>(&'a self, node: NodeRef) -> PredWalker<'a, N, E> {
         PredWalker::new(self, node)
+    }
+
+    ///Walks all predecessors of `node`, but stops at the region boundaries of the region `node` is in.
+    pub fn walk_predecessors_in_region<'a>(&'a self, node: NodeRef) -> PredWalkerRegion<'a, N, E> {
+        PredWalkerRegion::new(self, node)
     }
 
     ///Iterates over all successors of this node, see [SuccWalker] for more info.

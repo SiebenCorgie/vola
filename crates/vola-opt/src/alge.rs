@@ -713,6 +713,14 @@ impl DialectNode for CallOp {
         self.op.try_derive_type(signature)
     }
 
+    fn is_operation_equal(&self, other: &OptNode) -> bool {
+        if let Some(other_cop) = other.try_downcast_ref::<CallOp>() {
+            other_cop.op == self.op
+        } else {
+            false
+        }
+    }
+
     fn structural_copy(&self, span: vola_common::Span) -> crate::OptNode {
         OptNode {
             span,
@@ -770,6 +778,16 @@ impl DialectNode for EvalNode {
         }
     }
 
+    fn is_operation_equal(&self, other: &OptNode) -> bool {
+        //NOTE: this is _correct_, becauset the _eval_ itself is only keyed by the concept it calls.
+        //      So if two evals reference the same sub-tree, and call the same concept, they can indeed
+        //      be unified.
+        if let Some(other_cop) = other.try_downcast_ref::<EvalNode>() {
+            other_cop.called_concept == self.called_concept
+        } else {
+            false
+        }
+    }
     fn try_derive_type(
         &self,
         _typemap: &FlagStore<Ty>,
@@ -898,6 +916,14 @@ impl DialectNode for ImmScalar {
         Ok(Some(Ty::Scalar))
     }
 
+    fn is_operation_equal(&self, other: &OptNode) -> bool {
+        if let Some(other_cop) = other.try_downcast_ref::<ImmScalar>() {
+            other_cop.lit == self.lit
+        } else {
+            false
+        }
+    }
+
     fn structural_copy(&self, span: vola_common::Span) -> OptNode {
         OptNode {
             span,
@@ -944,6 +970,13 @@ impl DialectNode for ImmNat {
         Ok(Some(Ty::Nat))
     }
 
+    fn is_operation_equal(&self, other: &OptNode) -> bool {
+        if let Some(other_cop) = other.try_downcast_ref::<ImmNat>() {
+            other_cop.lit == self.lit
+        } else {
+            false
+        }
+    }
     fn structural_copy(&self, span: vola_common::Span) -> OptNode {
         OptNode {
             span,
@@ -989,6 +1022,14 @@ impl DialectNode for Construct {
         }
     }
 
+    fn is_operation_equal(&self, other: &OptNode) -> bool {
+        //NOTE: Two construct nodes are always equal
+        if let Some(_other_cop) = other.try_downcast_ref::<Construct>() {
+            true
+        } else {
+            false
+        }
+    }
     fn try_derive_type(
         &self,
         _typemap: &FlagStore<Ty>,
@@ -1109,6 +1150,14 @@ impl DialectNode for ConstantIndex {
             }
         } else {
             Ok(None)
+        }
+    }
+    fn is_operation_equal(&self, other: &OptNode) -> bool {
+        //NOTE: Two construct nodes are always equal
+        if let Some(other_cop) = other.try_downcast_ref::<ConstantIndex>() {
+            other_cop.access == self.access
+        } else {
+            false
         }
     }
 

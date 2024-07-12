@@ -1,3 +1,10 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ *
+ * 2024 Tendsin Mende
+ */
 //! Implements some helper function when working with the RVSDG.
 //!
 //! Usually those helpers are implemented on the [RVSDG](crate::Rvsdg) directly. For instance
@@ -13,12 +20,16 @@ use crate::{
     EdgeRef, NodeRef, Rvsdg, SmallColl,
 };
 
+pub mod abstract_node_type;
 pub mod cfg;
+///Common-Node-Elemination
+pub mod cne;
 pub mod copy;
 pub mod dead_node_elimination;
 pub mod graph_type_transform;
 pub mod inline;
 pub mod liveness;
+pub mod node_equality;
 pub mod region_utils;
 
 ///Path of multiple edges from `start` to `end`.

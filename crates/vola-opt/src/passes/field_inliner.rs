@@ -102,7 +102,7 @@ impl Optimizer {
                     let paths = self.graph.inline_apply_node(node).unwrap();
                     for p in paths {
                         if let Err(e) = self.type_path(&p) {
-                            log::error!("Could not type inlined-path: {e}");
+                            log::trace!("Could not type inlined-path: {e}");
                         }
                     }
                 } else {

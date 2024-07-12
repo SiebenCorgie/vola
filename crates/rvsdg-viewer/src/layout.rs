@@ -1,3 +1,10 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ *
+ * 2024 Tendsin Mende
+ */
 //! The new, improved layouting mechanism for the viewer.
 //!
 //! We build the graph layout in multiple steps
@@ -122,7 +129,7 @@ impl RegionLayout {
             let mut pass_list = result_connected_nodes.clone();
             //Walk all predecessors to all results, and push them into the list
             for res in result_connected_nodes {
-                for pre in rvsdg.walk_predecessors(res) {
+                for pre in rvsdg.walk_predecessors_in_region(res) {
                     pass_list.insert(pre.node);
                 }
             }

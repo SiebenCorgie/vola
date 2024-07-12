@@ -98,6 +98,14 @@ impl DialectNode for CsgOp {
         }
     }
 
+    fn is_operation_equal(&self, other: &OptNode) -> bool {
+        //NOTE: Two construct nodes are always equal
+        if let Some(other_cop) = other.try_downcast_ref::<CsgOp>() {
+            other_cop.op == self.op && other_cop.subtree_count == self.subtree_count
+        } else {
+            false
+        }
+    }
     fn try_derive_type(
         &self,
         _typemap: &FlagStore<crate::common::Ty>,
@@ -236,6 +244,17 @@ impl DialectNode for TreeAccess {
                 inputs: smallvec![Input::default(); self.inputs.len()],
                 output: Output::default(),
             }),
+        }
+    }
+
+    fn is_operation_equal(&self, other: &OptNode) -> bool {
+        //NOTE: Two construct nodes are always equal
+        if let Some(other_cop) = other.try_downcast_ref::<TreeAccess>() {
+            other_cop.called_concept == self.called_concept
+                && other_cop.input_signature == self.input_signature
+                && other_cop.return_type == self.return_type
+        } else {
+            false
         }
     }
 

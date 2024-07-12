@@ -1,3 +1,10 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ *
+ * 2024 Tendsin Mende
+ */
 //! # RVSDG-Nodes
 //!
 //! The represents data, and control-flow in a single graph. The graph is acyclic. It therfore introduces different nodes to represent
@@ -35,6 +42,7 @@ pub use theta::{LoopNode, ThetaNode};
 use crate::{
     edge::{InportLocation, InputType, LangEdge, OutportLocation, OutputType},
     region::{Inport, Input, Outport, Output, Region, RegionLocation},
+    util::abstract_node_type::AbstractNodeType,
     EdgeRef, Rvsdg, SmallColl,
 };
 
@@ -518,6 +526,11 @@ impl<N: LangNode + 'static> Node<N> {
 
     pub fn output_edges(&self) -> SmallVec<[SmallVec<[EdgeRef; 3]>; 3]> {
         self.outputs().iter().map(|op| op.edges.clone()).collect()
+    }
+
+    ///Shortcut that returns the abstract node type, without having to borrow the actual value of the node.
+    pub fn into_abstract(&self) -> AbstractNodeType {
+        AbstractNodeType::from(&self.node_type)
     }
 }
 

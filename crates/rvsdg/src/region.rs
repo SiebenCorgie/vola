@@ -1,3 +1,10 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ *
+ * 2024 Tendsin Mende
+ */
 use ahash::AHashSet;
 use smallvec::smallvec;
 
@@ -8,7 +15,7 @@ use crate::{
 };
 
 ///A Outport allows us to define multiple destination edges. It is the base type for [Output] and [Argument].
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Outport {
     pub edges: SmallColl<EdgeRef>,
 }
@@ -25,7 +32,7 @@ pub type Output = Outport;
 pub type Argument = Outport;
 
 ///A in port allows us to define at most a single src edge. It is the base type for [Input] and [RegResult].
-#[derive(Debug, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Inport {
     pub edge: Option<EdgeRef>,
 }

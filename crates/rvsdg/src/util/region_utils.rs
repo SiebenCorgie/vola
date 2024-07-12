@@ -1,3 +1,10 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ *
+ * 2024 Tendsin Mende
+ */
 use core::panic;
 
 use ahash::{AHashMap, AHashSet};
@@ -220,7 +227,7 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
             if let Some(src) = region_content.result_src(self, resultidx) {
                 //insert the seeding node. If this wasn't already in the map, walk the predecessors as well
                 if live_variables.insert(src.node) {
-                    for pred in self.walk_predecessors(src.node) {
+                    for pred in self.walk_predecessors_in_region(src.node) {
                         //ignore the src region
                         if pred.node == region.node {
                             continue;

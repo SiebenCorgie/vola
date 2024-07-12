@@ -192,7 +192,9 @@ impl Pipeline {
         opt.specialize_all_exports()?;
 
         opt.inline_field_exports()?;
+
         //do some _post_everyting_ cleanup
+        opt.cne_exports().expect("Failed to execute CNE");
         opt.cleanup_export_lmd();
 
         if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("VOLA_OPT_FINAL").is_ok() {
