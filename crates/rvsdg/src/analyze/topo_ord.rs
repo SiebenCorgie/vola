@@ -42,8 +42,6 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
                         }
                     }
                 }
-            } else {
-                println!("No result!");
             }
         }
 

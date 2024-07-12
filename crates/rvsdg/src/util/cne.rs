@@ -49,7 +49,8 @@ impl<N: LangNode + NodeTypeEq + Debug + 'static, E: LangEdge + 'static> Rvsdg<N,
         // equivalent-mark-chaseing (see [chase_fold]) is already _fully seen_. So that we can be sure that any
         // port-sink, is in fact a sink, and won't be marked afterwards.
         let topord = self.topological_order_region(region);
-        assert!(topord.len() == self.region(&region).unwrap().nodes.len());
+        //NOTE: it could be that the topoord leaves dead nodes out, however, there should never be more nodes in the topo-ord.
+        assert!(topord.len() <= self.region(&region).unwrap().nodes.len());
 
         //For each node, try to find _any_ equivalent.
         //if found, unify them and continue

@@ -456,7 +456,10 @@ impl Optimizer {
                 }
                 //Just report that one, but that can happen
                 Err(OptError::NotTypeOnPath) => {
-                    log::error!("{}", OptError::NotTypeOnPath);
+                    log::info!(
+                        "ContextImport {src:?} -> {target_region:?}: {}",
+                        OptError::NotTypeOnPath
+                    );
                 }
                 Err(other) => return Err(other),
             }

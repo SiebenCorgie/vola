@@ -55,11 +55,19 @@ impl Optimizer {
         #[cfg(feature = "log")]
         log::info!("CNE Exports");
 
-        let mut deleted = Vec::new();
-        for export in self.export_fn.values() {
-            self.graph.cne_region(export.lambda_region, &mut deleted)?;
+        if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("DUMP_BEFORE_CNE").is_ok() {
+            self.push_debug_state("before cne");
         }
+        //let mut deleted = Vec::new();
+        //TODO: actually only do the exports, right now we just do _all_
+        //for export in self.export_fn.values() {
+        //    self.graph.cne_region(export.lambda_region, &mut deleted)?;
+        //}
+        let deleted = self.graph.common_node_elemination()?;
 
+        if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("DUMP_AFTER_CNE").is_ok() {
+            self.push_debug_state("after cne");
+        }
         println!("Cne deleted {} nodes", deleted.len());
 
         Ok(())
