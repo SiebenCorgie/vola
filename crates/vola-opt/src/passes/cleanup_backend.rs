@@ -1,3 +1,5 @@
+use rvsdg::util::cne::CneError;
+
 use crate::Optimizer;
 
 impl Optimizer {
@@ -46,5 +48,20 @@ impl Optimizer {
         if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("DUMP_CV_CLEANUP").is_ok() {
             self.push_debug_state("post cv cleanup");
         }
+    }
+
+    ///Executes CNE on all exported λs
+    pub fn cne_exports(&mut self) -> Result<(), CneError> {
+        #[cfg(feature = "log")]
+        log::info!("CNE Exports");
+
+        let mut deleted = Vec::new();
+        for export in self.export_fn.values() {
+            self.graph.cne_region(export.lambda_region, &mut deleted)?;
+        }
+
+        println!("Cne deleted {} nodes", deleted.len());
+
+        Ok(())
     }
 }

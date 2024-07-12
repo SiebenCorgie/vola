@@ -27,7 +27,7 @@ pub enum CneError {
     GraphErr(#[from] GraphError),
 }
 
-impl<N: LangNode + NodeTypeEq + Debug + 'static, E: LangEdge + Eq + 'static> Rvsdg<N, E> {
+impl<N: LangNode + NodeTypeEq + Debug + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
     ///Performs common-node-elemination on the whole graph. If successful, returns all eleminated nodes.
     pub fn common_node_elemination(&mut self) -> Result<Vec<Node<N>>, CneError> {
         let mut nodes = Vec::new();
@@ -36,7 +36,7 @@ impl<N: LangNode + NodeTypeEq + Debug + 'static, E: LangEdge + Eq + 'static> Rvs
     }
 
     ///Applies CNE to the region (and all its sub regions). Collects all eleminated nodes in `deleted_node`.
-    fn cne_region(
+    pub fn cne_region(
         &mut self,
         region: RegionLocation,
         deleted_node: &mut Vec<Node<N>>,

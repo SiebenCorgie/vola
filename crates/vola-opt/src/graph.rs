@@ -17,6 +17,7 @@ use rvsdg::attrib::AttribLocation;
 use rvsdg::edge::OutportLocation;
 use rvsdg::nodes::NodeType;
 use rvsdg::region::RegionLocation;
+use rvsdg::util::node_equality::NodeTypeEq;
 use rvsdg::util::Path;
 use rvsdg::NodeRef;
 use rvsdg::{
@@ -52,6 +53,9 @@ pub trait DialectNode: LangNode + Any + View {
             text: format!("Type resolution not implemented for {}", self.name()),
         })
     }
+
+    ///Used to check if two nodes implement the same operation.
+    fn is_operation_equal(&self, other: &OptNode) -> bool;
 
     ///Builds a structural copy of this node, where no inputs/outputs are connected.
     /// Needed to break up the `dyn` indirection in OptNode.
@@ -99,6 +103,17 @@ impl StructuralClone for OptNode {
 impl StructuralClone for OptEdge {
     fn structural_copy(&self) -> Self {
         self.clone()
+    }
+}
+
+impl NodeTypeEq for OptNode {
+    fn type_equal(&self, other: &OptNode) -> bool {
+        //escape hatch
+        if self.node.dialect() != other.node.dialect() {
+            return false;
+        }
+
+        self.node.is_operation_equal(other)
     }
 }
 
