@@ -24,6 +24,7 @@ pub mod abstract_node_type;
 pub mod cfg;
 ///Common-Node-Elemination
 pub mod cne;
+pub mod cnf;
 pub mod copy;
 pub mod dead_node_elimination;
 pub mod graph_type_transform;
