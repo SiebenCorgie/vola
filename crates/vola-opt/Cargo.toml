@@ -1,6 +1,6 @@
 [package]
 name = "vola-opt"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 license = "MPL-2.0"
 authors = ["Tendsin Mende"]
@@ -14,12 +14,12 @@ profile = []
 log = ["dep:log"]
 
 [dependencies]
-rvsdg = {path = "../rvsdg"}
-rvsdg-viewer = {path = "../rvsdg-viewer", optional = true}
-vola-ast = {path = "../vola-ast"}
-vola-common = {path = "../vola-common"}
+rvsdg = { path = "../rvsdg" }
+rvsdg-viewer = { path = "../rvsdg-viewer", optional = true }
+vola-ast = { path = "../vola-ast" }
+vola-common = { path = "../vola-common" }
 ahash.workspace = true
-log = {workspace = true, optional = true}
+log = { workspace = true, optional = true }
 
 [dev-dependencies]
 pretty_env_logger.workspace = true

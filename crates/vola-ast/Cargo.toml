@@ -1,6 +1,6 @@
 [package]
 name = "vola-ast"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 license = "MPL-2.0"
 authors = ["Tendsin Mende"]
@@ -13,15 +13,15 @@ serde = ["dep:serde"]
 dot = ["vola-common/dot"]
 
 [dependencies]
-vola-common = {path = "../vola-common"}
+vola-common = { path = "../vola-common" }
 thiserror.workspace = true
 ahash.workspace = true
-graphviz-rust = {workspace = true, optional = true}
+graphviz-rust = { workspace = true, optional = true }
 backtrace.workspace = true
 lazy_static.workspace = true
-smallvec = {workspace = true, features = ["serde"]}
-serde = {workspace = true, optional = true}
+smallvec = { workspace = true, features = ["serde"] }
+serde = { workspace = true, optional = true }
 
 
 [dev-dependencies]
-vola-tree-sitter-parser = {path = "../vola-tree-sitter-parser"}
+vola-tree-sitter-parser = { path = "../vola-tree-sitter-parser" }
