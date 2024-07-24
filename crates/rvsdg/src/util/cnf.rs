@@ -98,7 +98,7 @@ impl<N: LangNode + 'static> CnfCtx<N> {
                     };
 
                     //Now try to build a new node from those inputs
-                    if let Some(mut new_node) = new_node {
+                    if let Some(new_node) = new_node {
                         //if it worked, disconnect all inputs, and replace the node with the just created one.
                         assert!(
                             new_node.inputs().len() == 0,
@@ -112,22 +112,22 @@ impl<N: LangNode + 'static> CnfCtx<N> {
                         );
 
                         //Needed so we can mutate the graph below :(
-                        let edges: SmallColl<_> = graph
+                        let input_edges: SmallColl<_> = graph
                             .node(node)
                             .inputs()
                             .iter()
                             .filter_map(|inp| inp.edge.clone())
                             .collect();
-                        for edge in edges {
+
+                        for edge in input_edges {
                             graph.disconnect(edge)?;
                         }
-                        //swap out actual node
-                        std::mem::swap(
-                            graph.node_mut(node).node_type.unwrap_simple_mut(),
-                            &mut new_node,
-                        );
+
+                        let _replace_id = graph.replace_node(node, new_node)?;
+
+                        let replaced_node = graph.remove_node(node)?;
                         //and add folded node to collector
-                        self.folded_nodes.push(NodeType::Simple(new_node));
+                        self.folded_nodes.push(replaced_node.node_type);
                     } else {
                     }
                 }
