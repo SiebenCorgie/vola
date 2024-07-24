@@ -5,8 +5,11 @@
  *
  * 2024 Tendsin Mende
  */
-//! Generic inliner.
 
+//! Generic inliner.
+//!
+//! See
+//! - [inline_apply_node](crate::Rvsdg::inline_apply_node)
 use core::panic;
 
 use crate::{

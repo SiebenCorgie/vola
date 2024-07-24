@@ -10,7 +10,7 @@
 use crate::{edge::LangEdge, err::LegalizationError, nodes::LangNode, Rvsdg};
 
 impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
-    ///Returns true, if set parental relations of all [Node]s are correct.
+    ///Returns true, if set parental relations of all [Node](crate::nodes::Node)s are correct.
     ///
     /// correct means: If `node.parent = Some(region_location)`, then  `region_location.nodes.contains(node)`
     pub fn verify_parental_relations(&self) -> bool {

@@ -20,7 +20,7 @@ use super::StructuralNode;
 pub type LoopNode = ThetaNode;
 /// θ-nodes are _tail-controlled_ loops, i.e. do-while loops.
 ///
-/// As per the paper, head controlled loops can be constructed by employing a [γ-node](GammaNode) (aka. IF-ELSE) to do the first
+/// As per the paper, head controlled loops can be constructed by employing a [γ-node](crate::nodes::GammaNode) (aka. IF-ELSE) to do the first
 /// decision. Therefore only one Loop node exists, which makes writing transformation passes easier later on.
 ///
 /// The `loop_body`'s first result is the loops predicate, all following outputs must type-match the input of the body.

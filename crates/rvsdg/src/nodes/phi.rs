@@ -21,17 +21,17 @@ pub type RecursionNode = PhiNode;
 
 /// ϕ-Nodes represent a environment for mutual recursion, i.e `fn f(){... return f();}`.
 ///
-/// In essence this is similar to the idea of a [λ-Node](LambdaNode). However, it allows you to not only declare the function (what a LambdaNode does via its single output),
+/// In essence this is similar to the idea of a [λ-Node](crate::nodes::LambdaNode). However, it allows you to not only declare the function (what a LambdaNode does via its single output),
 /// but also use that function in that deceleration. This is done by not only setting an output (again, like the LambdaNode), but also having an argument, that
 /// is the deceleration defined by the output.
 ///
 ///
 /// An added concept, next to the already known context_variables are recursion_variables. Their concept is similar to loop_variables. They are
-/// the variables needed by the recursive [ApplyNode] to represent a variable that is taken, and returned at each recursion level.
+/// the variables needed by the recursive [ApplyNode](crate::nodes::ApplyNode) to represent a variable that is taken, and returned at each recursion level.
 /// Have a look at the [ϕ-Builder](crate::builder::PhiBuilder::add_recursion_variable) for an example.
 ///
 ///
-/// By definition the PhiNode has only an internal [λ-Node](LambdaNode), where the first context variable is an import of itself. This models the recursion.
+/// By definition the PhiNode has only an internal [λ-Node](crate::nodes::LambdaNode), where the first context variable is an import of itself. This models the recursion.
 /// It follows all other context-variables (imported from outside the ϕ-Node), the recursion-variable (modelling recursive data flow), and finally all non recursive
 /// arguments.
 ///

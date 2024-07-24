@@ -5,8 +5,16 @@
  *
  * 2024 Tendsin Mende
  */
-//! This module implements the generic dead-node-elimination (DNE).
 
+//! This module implements the generic dead-node-elimination (DNE).
+//!
+//! See
+//!
+//! - [dead_node_elimination](crate::Rvsdg::dead_node_elimination)
+//! - [dne_region](crate::Rvsdg::dne_region)
+//!
+//!
+//! The pass depends in large parts on [liveness analysis](crate::util::liveness).
 #[derive(Clone, Debug, Error)]
 pub enum DneError {}
 

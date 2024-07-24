@@ -6,6 +6,15 @@
  * 2024 Tendsin Mende
  */
 
+//! Implements _Common-Node-Elemination_. The pass effectively fuses nodes that are known to describe the same operation.
+//!
+//! See
+//!
+//! - [common_node_elemination](crate::Rvsdg::common_node_elemination)
+//! - [cne_region](crate::Rvsdg::cne_region)
+//!
+//! For the implemetation to become available, the node type `N` of `Rvsdg<N, E>` has to implement [NodeTypeEq]. This allows the pass
+//! to generically decide if two nodes describe the same operation.
 use std::fmt::Debug;
 
 use thiserror::Error;

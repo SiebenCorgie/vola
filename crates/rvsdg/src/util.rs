@@ -22,7 +22,6 @@ use crate::{
 
 pub mod abstract_node_type;
 pub mod cfg;
-///Common-Node-Elemination
 pub mod cne;
 pub mod cnf;
 pub mod copy;
@@ -270,7 +269,7 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
         (next_out_port, path)
     }
 
-    ///Lets you import `src` as an argument into `dst`. Contrary to [import_context] it'll use arguments, loop variables etc.
+    ///Lets you import `src` as an argument into `dst`. Contrary to [import_context](Self::import_context) it'll use arguments, loop variables etc.
     ///to create the path.
     ///
     /// Is able to resolve import collissions. For instance if a GammaNode branch imports a
