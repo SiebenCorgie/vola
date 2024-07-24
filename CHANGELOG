@@ -9,11 +9,13 @@ For all Vola and RVSDG related crates.
 
 - [PR34](https://gitlab.com/tendsinmende/vola/-/merge_requests/34): Add _Common-Node-Elemination_ pass. This is similar to _Common-Subexpression-Elemination_ but works across regions
 - [PR35](https://gitlab.com/tendsinmende/vola/-/merge_requests/35): Add _Constant-Node-Folding_ pass. This adds a `ConstantFoldable` trait. If implemented, nodes can chose to constant-fold them selfs, based on compile-time known inputs.
+- Add Doc pointers to the generically implemented passes in the `utils` module.
 
 ### Changed
 
 ### Fixed
 
+- Fixes _most_ doc errors in the `rvsdg` crate.
 
 ## [0.1]
 
