@@ -13,6 +13,8 @@ For all Vola and RVSDG related crates.
 
 ### Changed
 
+- [PR36]https://gitlab.com/tendsinmende/vola/-/merge_requests/35): Refactor WkOp into several node types for easier partial implementations
+
 ### Fixed
 
 - Fixes _most_ doc errors in the `rvsdg` crate.

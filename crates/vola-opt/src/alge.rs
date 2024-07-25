@@ -10,6 +10,7 @@
 
 use ahash::AHashMap;
 use arithmetic::{BinaryArith, BinaryArithOp, UnaryArith, UnaryArithOp};
+use logical::{BinaryBool, BinaryBoolOp, UnaryBool, UnaryBoolOp};
 use rvsdg::{
     attrib::FlagStore,
     nodes::NodeType,
@@ -85,11 +86,6 @@ macro_rules! implViewAlgeOp {
 /// some well known _function_like_ ops in the SPIRV spec. For instance
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WkOp {
-    //WK unary ops
-    //TODO: do we really want to include NOT? I mean flipping floats is fun I guess,
-    // but also error prone.
-    Not,
-
     //relation
     Lt,
     Gt,
@@ -97,10 +93,6 @@ pub enum WkOp {
     Gte,
     Eq,
     NotEq,
-
-    //logical
-    And,
-    Or,
 
     //Call like ops we _know_
     Dot,
@@ -122,17 +114,12 @@ impl WkOp {
     ///Returns the input-count for the op
     pub fn in_count(&self) -> usize {
         match self {
-            WkOp::Not => 1,
-
             WkOp::Lt => 2,
             WkOp::Gt => 2,
             WkOp::Lte => 2,
             WkOp::Gte => 2,
             WkOp::Eq => 2,
             WkOp::NotEq => 2,
-
-            WkOp::And => 2,
-            WkOp::Or => 2,
 
             WkOp::Dot => 2,
             WkOp::Cross => 2,
@@ -154,24 +141,6 @@ impl WkOp {
         // empty. However, its a good place to unify this check even if the type resolution changes at some point.
 
         match self {
-            WkOp::Not => {
-                if sig.len() != 1 {
-                    return Err(OptError::Any {
-                        text: format!("{:?} expects one operand, got {:?}", self, sig.len()),
-                    });
-                }
-                if !sig[0].is_algebraic() {
-                    return Err(OptError::Any {
-                        text: format!(
-                            "{:?} expects algebraic operand (scalar, vector, matrix, tensor) got {:?}",
-                            self, sig[0]
-                        ),
-                    });
-                }
-                //seem allright, for neg, we return the _same_ datatype as we get
-                Ok(Some(sig.remove(0)))
-            }
-
             WkOp::Min | WkOp::Max => {
                 //For those we need _the same algebraic_ for both inputs.
                 //NOTE: Mul is a little _special_ since
@@ -411,31 +380,6 @@ impl WkOp {
                         Err(OptError::Any { text: format!("Cannot use comperator {:?} on {}. Consider breaking it down to either a simple scalar or natural value", self, any) })
                     }
                 }
-            }
-            WkOp::And | WkOp::Or => {
-                //Right now we only allow those on single bools, othewise we'd need a way to represent vecs
-                //of bools etc. Which we don't (yet, ever?).
-                if sig.len() != 2 {
-                    return Err(OptError::Any {
-                        text: format!("{:?} expects two operands, got {}", self, sig.len()),
-                    });
-                }
-
-                if sig[0] != sig[1] {
-                    return Err(OptError::Any {
-                        text: format!(
-                            "{:?} expectes the same type for both operands, got {} & {}",
-                            self, sig[0], sig[1]
-                        ),
-                    });
-                }
-
-                match &sig[0]{
-                    Ty::Bool  =>  Ok(Some(Ty::Bool)),
-                    any => {
-                        Err(OptError::Any { text: format!("Cannot use comperator {:?} on {}. Consider breaking it down into a single bool value", self, any) })
-                    }
-                }
             } // wk => Err(OptError::Any {
               //     text: format!("derive not implemented for {:?}", wk),
               // }),
@@ -530,7 +474,9 @@ impl From<vola_ast::alge::UnaryOp> for OptNode {
             vola_ast::alge::UnaryOp::Neg => {
                 OptNode::new(UnaryArith::new(UnaryArithOp::Neg), Span::empty())
             }
-            vola_ast::alge::UnaryOp::Not => OptNode::new(CallOp::new(WkOp::Not), Span::empty()),
+            vola_ast::alge::UnaryOp::Not => {
+                OptNode::new(UnaryBool::new(UnaryBoolOp::Not), Span::empty())
+            }
         }
     }
 }
@@ -563,8 +509,12 @@ impl From<vola_ast::alge::BinaryOp> for OptNode {
                 OptNode::new(CallOp::new(WkOp::NotEq), Span::empty())
             }
 
-            vola_ast::alge::BinaryOp::Or => OptNode::new(CallOp::new(WkOp::Or), Span::empty()),
-            vola_ast::alge::BinaryOp::And => OptNode::new(CallOp::new(WkOp::And), Span::empty()),
+            vola_ast::alge::BinaryOp::Or => {
+                OptNode::new(BinaryBool::new(BinaryBoolOp::Or), Span::empty())
+            }
+            vola_ast::alge::BinaryOp::And => {
+                OptNode::new(BinaryBool::new(BinaryBoolOp::And), Span::empty())
+            }
         }
     }
 }

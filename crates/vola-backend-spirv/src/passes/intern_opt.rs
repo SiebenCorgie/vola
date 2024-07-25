@@ -18,6 +18,7 @@ use rvsdg::{
 use vola_opt::{
     alge::{
         arithmetic::{BinaryArith, BinaryArithOp, UnaryArith, UnaryArithOp},
+        logical::{BinaryBool, BinaryBoolOp, UnaryBool, UnaryBoolOp},
         trigonometric::{Trig, TrigOp},
         CallOp, ConstantIndex, Construct, WkOp,
     },
@@ -286,6 +287,21 @@ impl BackendOp {
         if let Some(lconst) = optnode.try_downcast_ref::<Construct>() {
             return Some(Self::from_construct(lconst));
         }
+        if let Some(binarybool) = optnode.try_downcast_ref::<BinaryBool>() {
+            match binarybool.op {
+                BinaryBoolOp::And => {
+                    return Some(BackendOp::SpirvOp(SpvOp::CoreOp(CoreOp::LogicalAnd)))
+                }
+                BinaryBoolOp::Or => {
+                    return Some(BackendOp::SpirvOp(SpvOp::CoreOp(CoreOp::LogicalOr)))
+                }
+            }
+        }
+        if let Some(unarybool) = optnode.try_downcast_ref::<UnaryBool>() {
+            match unarybool.op {
+                UnaryBoolOp::Not => return Some(BackendOp::SpirvOp(SpvOp::CoreOp(CoreOp::Not))),
+            }
+        }
 
         None
     }
@@ -331,17 +347,12 @@ impl BackendOp {
 
     fn from_wk(wk: &WkOp) -> Self {
         match wk {
-            WkOp::Not => BackendOp::SpirvOp(SpvOp::CoreOp(CoreOp::Not)),
-
             WkOp::Lt => BackendOp::HlOp(HlOp::Lt),
             WkOp::Gt => BackendOp::HlOp(HlOp::Gt),
             WkOp::Lte => BackendOp::HlOp(HlOp::Lte),
             WkOp::Gte => BackendOp::HlOp(HlOp::Gte),
             WkOp::Eq => BackendOp::HlOp(HlOp::Eq),
             WkOp::NotEq => BackendOp::HlOp(HlOp::Neq),
-
-            WkOp::And => BackendOp::SpirvOp(SpvOp::CoreOp(CoreOp::LogicalAnd)),
-            WkOp::Or => BackendOp::SpirvOp(SpvOp::CoreOp(CoreOp::LogicalOr)),
 
             WkOp::Dot => BackendOp::SpirvOp(SpvOp::CoreOp(CoreOp::Dot)),
             WkOp::Cross => BackendOp::SpirvOp(SpvOp::GlslOp(GlOp::Cross)),
