@@ -17,12 +17,13 @@ use rvsdg::{
 // use vola_common::{error::error_reporter, report, Span};
 use vola_opt::{
     alge::{
-        arithmetic::{BinaryArith, BinaryArithOp, UnaryArith, UnaryArithOp},
+        arithmetic::{BinaryArith, UnaryArith, UnaryArithOp},
+        buildin::{Buildin, BuildinOp},
         logical::{BinaryBool, BinaryBoolOp, UnaryBool, UnaryBoolOp},
         matrix::{UnaryMatrix, UnaryMatrixOp},
         relational::{BinaryRel, BinaryRelOp},
         trigonometric::{Trig, TrigOp},
-        CallOp, ConstantIndex, Construct, WkOp,
+        ConstantIndex, Construct,
     },
     imm::{ImmNat, ImmScalar},
     OptEdge, OptNode, Optimizer,
@@ -278,8 +279,8 @@ impl BackendOp {
             return Some(Self::from_trig(unary_arith.op));
         }
 
-        if let Some(callop) = optnode.try_downcast_ref::<CallOp>() {
-            return Some(Self::from_wk(&callop.op));
+        if let Some(buildin) = optnode.try_downcast_ref::<Buildin>() {
+            return Some(Self::from_buildin(buildin.op));
         }
 
         if let Some(facc) = optnode.try_downcast_ref::<ConstantIndex>() {
@@ -371,18 +372,18 @@ impl BackendOp {
         }
     }
 
-    fn from_wk(wk: &WkOp) -> Self {
+    fn from_buildin(wk: BuildinOp) -> Self {
         match wk {
-            WkOp::Dot => BackendOp::SpirvOp(SpvOp::CoreOp(CoreOp::Dot)),
-            WkOp::Cross => BackendOp::SpirvOp(SpvOp::GlslOp(GlOp::Cross)),
-            WkOp::Length => BackendOp::SpirvOp(SpvOp::GlslOp(GlOp::Length)),
-            WkOp::SquareRoot => BackendOp::SpirvOp(SpvOp::GlslOp(GlOp::Sqrt)),
-            WkOp::Exp => BackendOp::SpirvOp(SpvOp::GlslOp(GlOp::Exp)),
-            WkOp::Pow => BackendOp::SpirvOp(SpvOp::GlslOp(GlOp::Pow)),
-            WkOp::Min => BackendOp::HlOp(HlOp::Min),
-            WkOp::Max => BackendOp::HlOp(HlOp::Max),
-            WkOp::Mix => BackendOp::HlOp(HlOp::Mix),
-            WkOp::Clamp => BackendOp::HlOp(HlOp::Clamp),
+            BuildinOp::Dot => BackendOp::SpirvOp(SpvOp::CoreOp(CoreOp::Dot)),
+            BuildinOp::Cross => BackendOp::SpirvOp(SpvOp::GlslOp(GlOp::Cross)),
+            BuildinOp::Length => BackendOp::SpirvOp(SpvOp::GlslOp(GlOp::Length)),
+            BuildinOp::SquareRoot => BackendOp::SpirvOp(SpvOp::GlslOp(GlOp::Sqrt)),
+            BuildinOp::Exp => BackendOp::SpirvOp(SpvOp::GlslOp(GlOp::Exp)),
+            BuildinOp::Pow => BackendOp::SpirvOp(SpvOp::GlslOp(GlOp::Pow)),
+            BuildinOp::Min => BackendOp::HlOp(HlOp::Min),
+            BuildinOp::Max => BackendOp::HlOp(HlOp::Max),
+            BuildinOp::Mix => BackendOp::HlOp(HlOp::Mix),
+            BuildinOp::Clamp => BackendOp::HlOp(HlOp::Clamp),
         }
     }
 

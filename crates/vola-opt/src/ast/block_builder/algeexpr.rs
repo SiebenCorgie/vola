@@ -22,7 +22,7 @@ use crate::{
     alge::{
         arithmetic::{BinaryArith, BinaryArithOp},
         relational::{BinaryRel, BinaryRelOp},
-        CallOp, ConstantIndex, Construct, EvalNode, WkOp,
+        ConstantIndex, Construct, EvalNode,
     },
     ast::block_builder::BlockBuilderConfig,
     common::{FnImport, LmdContext, VarDef},

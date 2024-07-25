@@ -9,9 +9,7 @@
 //! Pass that destructs any immediate value that is not `ImmScalar` or `ImmNat`
 //! into a tree of just those two and `Construct` nodes.
 
-use rvsdg::{
-    builder, nodes::NodeType, region::RegionLocation, smallvec::SmallVec, NodeRef, SmallColl,
-};
+use rvsdg::{nodes::NodeType, region::RegionLocation, NodeRef, SmallColl};
 use vola_common::Span;
 
 use crate::{
