@@ -19,6 +19,7 @@ use vola_opt::{
     alge::{
         arithmetic::{BinaryArith, BinaryArithOp, UnaryArith, UnaryArithOp},
         logical::{BinaryBool, BinaryBoolOp, UnaryBool, UnaryBoolOp},
+        relational::{BinaryRel, BinaryRelOp},
         trigonometric::{Trig, TrigOp},
         CallOp, ConstantIndex, Construct, WkOp,
     },
@@ -287,6 +288,11 @@ impl BackendOp {
         if let Some(lconst) = optnode.try_downcast_ref::<Construct>() {
             return Some(Self::from_construct(lconst));
         }
+
+        if let Some(binray_rel) = optnode.try_downcast_ref::<BinaryRel>() {
+            return Some(Self::from_binary_rel(binray_rel.op));
+        }
+
         if let Some(binarybool) = optnode.try_downcast_ref::<BinaryBool>() {
             match binarybool.op {
                 BinaryBoolOp::And => {
@@ -304,6 +310,17 @@ impl BackendOp {
         }
 
         None
+    }
+
+    fn from_binary_rel(rel: BinaryRelOp) -> Self {
+        match rel {
+            BinaryRelOp::Lt => BackendOp::HlOp(HlOp::Lt),
+            BinaryRelOp::Gt => BackendOp::HlOp(HlOp::Gt),
+            BinaryRelOp::Lte => BackendOp::HlOp(HlOp::Lte),
+            BinaryRelOp::Gte => BackendOp::HlOp(HlOp::Gte),
+            BinaryRelOp::Eq => BackendOp::HlOp(HlOp::Eq),
+            BinaryRelOp::NotEq => BackendOp::HlOp(HlOp::Neq),
+        }
     }
 
     fn from_imm_scalar(imm: &ImmScalar) -> Self {
@@ -347,13 +364,6 @@ impl BackendOp {
 
     fn from_wk(wk: &WkOp) -> Self {
         match wk {
-            WkOp::Lt => BackendOp::HlOp(HlOp::Lt),
-            WkOp::Gt => BackendOp::HlOp(HlOp::Gt),
-            WkOp::Lte => BackendOp::HlOp(HlOp::Lte),
-            WkOp::Gte => BackendOp::HlOp(HlOp::Gte),
-            WkOp::Eq => BackendOp::HlOp(HlOp::Eq),
-            WkOp::NotEq => BackendOp::HlOp(HlOp::Neq),
-
             WkOp::Dot => BackendOp::SpirvOp(SpvOp::CoreOp(CoreOp::Dot)),
             WkOp::Cross => BackendOp::SpirvOp(SpvOp::GlslOp(GlOp::Cross)),
             WkOp::Length => BackendOp::SpirvOp(SpvOp::GlslOp(GlOp::Length)),

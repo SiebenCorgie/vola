@@ -11,6 +11,7 @@
 use ahash::AHashMap;
 use arithmetic::{BinaryArith, BinaryArithOp, UnaryArith, UnaryArithOp};
 use logical::{BinaryBool, BinaryBoolOp, UnaryBool, UnaryBoolOp};
+use relational::{BinaryRel, BinaryRelOp};
 use rvsdg::{
     attrib::FlagStore,
     nodes::NodeType,
@@ -33,12 +34,12 @@ use crate::{
 
 pub mod algefn;
 pub mod arithmetic;
-pub mod boolean;
 pub mod buildin;
 pub mod constant_fold;
 pub mod implblock;
 pub mod logical;
 pub mod matrix;
+pub mod relational;
 pub mod trigonometric;
 
 pub const ALGE_VIEW_COLOR: Color = Color {
@@ -86,14 +87,6 @@ macro_rules! implViewAlgeOp {
 /// some well known _function_like_ ops in the SPIRV spec. For instance
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WkOp {
-    //relation
-    Lt,
-    Gt,
-    Lte,
-    Gte,
-    Eq,
-    NotEq,
-
     //Call like ops we _know_
     Dot,
     Cross,
@@ -114,13 +107,6 @@ impl WkOp {
     ///Returns the input-count for the op
     pub fn in_count(&self) -> usize {
         match self {
-            WkOp::Lt => 2,
-            WkOp::Gt => 2,
-            WkOp::Lte => 2,
-            WkOp::Gte => 2,
-            WkOp::Eq => 2,
-            WkOp::NotEq => 2,
-
             WkOp::Dot => 2,
             WkOp::Cross => 2,
             WkOp::Length => 1,
@@ -355,31 +341,6 @@ impl WkOp {
 
                 //seems to be alright, return scalar
                 Ok(Some(sig[0].clone()))
-            }
-            WkOp::Lt | WkOp::Gt | WkOp::Lte | WkOp::Gte | WkOp::Eq | WkOp::NotEq => {
-                //Right now we only allow those on scalars / nats, othewise we'd need a way to represent vecs
-                //of bools etc. Which we don't (yet, ever?).
-                if sig.len() != 2 {
-                    return Err(OptError::Any {
-                        text: format!("{:?} expects two operands, got {}", self, sig.len()),
-                    });
-                }
-
-                if sig[0] != sig[1] {
-                    return Err(OptError::Any {
-                        text: format!(
-                            "{:?} expectes the same type for both operands, got {} & {}",
-                            self, sig[0], sig[1]
-                        ),
-                    });
-                }
-
-                match &sig[0]{
-                    Ty::Nat | Ty::Scalar  =>  Ok(Some(Ty::Bool)),
-                    any => {
-                        Err(OptError::Any { text: format!("Cannot use comperator {:?} on {}. Consider breaking it down to either a simple scalar or natural value", self, any) })
-                    }
-                }
             } // wk => Err(OptError::Any {
               //     text: format!("derive not implemented for {:?}", wk),
               // }),
@@ -500,13 +461,23 @@ impl From<vola_ast::alge::BinaryOp> for OptNode {
                 OptNode::new(BinaryArith::new(BinaryArithOp::Mod), Span::empty())
             }
 
-            vola_ast::alge::BinaryOp::Lt => OptNode::new(CallOp::new(WkOp::Lt), Span::empty()),
-            vola_ast::alge::BinaryOp::Gt => OptNode::new(CallOp::new(WkOp::Gt), Span::empty()),
-            vola_ast::alge::BinaryOp::Gte => OptNode::new(CallOp::new(WkOp::Gte), Span::empty()),
-            vola_ast::alge::BinaryOp::Lte => OptNode::new(CallOp::new(WkOp::Lte), Span::empty()),
-            vola_ast::alge::BinaryOp::Eq => OptNode::new(CallOp::new(WkOp::Eq), Span::empty()),
+            vola_ast::alge::BinaryOp::Lt => {
+                OptNode::new(BinaryRel::new(BinaryRelOp::Lt), Span::empty())
+            }
+            vola_ast::alge::BinaryOp::Gt => {
+                OptNode::new(BinaryRel::new(BinaryRelOp::Gt), Span::empty())
+            }
+            vola_ast::alge::BinaryOp::Gte => {
+                OptNode::new(BinaryRel::new(BinaryRelOp::Gte), Span::empty())
+            }
+            vola_ast::alge::BinaryOp::Lte => {
+                OptNode::new(BinaryRel::new(BinaryRelOp::Lte), Span::empty())
+            }
+            vola_ast::alge::BinaryOp::Eq => {
+                OptNode::new(BinaryRel::new(BinaryRelOp::Eq), Span::empty())
+            }
             vola_ast::alge::BinaryOp::NotEq => {
-                OptNode::new(CallOp::new(WkOp::NotEq), Span::empty())
+                OptNode::new(BinaryRel::new(BinaryRelOp::NotEq), Span::empty())
             }
 
             vola_ast::alge::BinaryOp::Or => {

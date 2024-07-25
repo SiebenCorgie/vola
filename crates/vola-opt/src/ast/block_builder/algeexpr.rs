@@ -21,6 +21,7 @@ use vola_common::{ariadne::Label, error::error_reporter, report, Span};
 use crate::{
     alge::{
         arithmetic::{BinaryArith, BinaryArithOp},
+        relational::{BinaryRel, BinaryRelOp},
         CallOp, ConstantIndex, Construct, EvalNode, WkOp,
     },
     ast::block_builder::BlockBuilderConfig,
@@ -598,7 +599,7 @@ impl<'a> BlockBuilder<'a> {
                     .connect_node(
                         OptNode {
                             span: Span::empty(),
-                            node: Box::new(CallOp::new(WkOp::Lt)),
+                            node: Box::new(BinaryRel::new(BinaryRelOp::Lt)),
                         },
                         &[bound_lower, bound_upper],
                     )
@@ -667,7 +668,10 @@ impl<'a> BlockBuilder<'a> {
                                         //3. routing of the upper bound
                                         let (ltcheck, _) = rg
                                             .connect_node(
-                                                OptNode::new(CallOp::new(WkOp::Lt), Span::empty()),
+                                                OptNode::new(
+                                                    BinaryRel::new(BinaryRelOp::Lt),
+                                                    Span::empty(),
+                                                ),
                                                 &[lv_arg_bound_lower, lv_arg_bound_higher],
                                             )
                                             .unwrap();
