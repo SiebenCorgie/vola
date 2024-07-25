@@ -11,6 +11,7 @@
 use ahash::AHashMap;
 use arithmetic::{BinaryArith, BinaryArithOp, UnaryArith, UnaryArithOp};
 use logical::{BinaryBool, BinaryBoolOp, UnaryBool, UnaryBoolOp};
+use matrix::{UnaryMatrix, UnaryMatrixOp};
 use relational::{BinaryRel, BinaryRelOp};
 use rvsdg::{
     attrib::FlagStore,
@@ -98,9 +99,6 @@ pub enum WkOp {
     Max,
     Mix,
     Clamp,
-
-    //TODO: basically implement the rest of the glsl-ext-inst, cause people might be used to those.
-    Inverse,
 }
 
 impl WkOp {
@@ -117,8 +115,6 @@ impl WkOp {
             WkOp::Max => 2,
             WkOp::Mix => 3,
             WkOp::Clamp => 3,
-
-            WkOp::Inverse => 1,
         }
     }
 
@@ -315,32 +311,6 @@ impl WkOp {
 
                 //seems to be alright, return scalar
                 Ok(Some(sig[0].clone()))
-            }
-
-            WkOp::Inverse => {
-                if sig.len() != 1 {
-                    return Err(OptError::Any {
-                        text: format!("{:?} expects one operand, got {:?}", self, sig.len()),
-                    });
-                }
-                match &sig[0] {
-                    Ty::Matrix { width, height } => {
-                        if width != height {
-                            return Err(OptError::Any { text: format!("Inverse operation expects quadratic matrix, got one with width={width} & height={height}") });
-                        }
-                    }
-                    _ => {
-                        return Err(OptError::Any {
-                            text: format!(
-                                "{:?} expects operands of type matrix, got {:?}",
-                                self, sig
-                            ),
-                        })
-                    }
-                }
-
-                //seems to be alright, return scalar
-                Ok(Some(sig[0].clone()))
             } // wk => Err(OptError::Any {
               //     text: format!("derive not implemented for {:?}", wk),
               // }),
@@ -391,7 +361,10 @@ impl OptNode {
             "asin" => Some(OptNode::new(Trig::new(TrigOp::ASin), Span::empty())),
             "acos" => Some(OptNode::new(Trig::new(TrigOp::ACos), Span::empty())),
             "atan" => Some(OptNode::new(Trig::new(TrigOp::ATan), Span::empty())),
-            "inverse" | "invert" => Some(OptNode::new(CallOp::new(WkOp::Inverse), Span::empty())),
+            "inverse" | "invert" => Some(OptNode::new(
+                UnaryMatrix::new(UnaryMatrixOp::Invert),
+                Span::empty(),
+            )),
             _ => None,
         }
     }

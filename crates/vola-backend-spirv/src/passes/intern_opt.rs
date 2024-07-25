@@ -19,6 +19,7 @@ use vola_opt::{
     alge::{
         arithmetic::{BinaryArith, BinaryArithOp, UnaryArith, UnaryArithOp},
         logical::{BinaryBool, BinaryBoolOp, UnaryBool, UnaryBoolOp},
+        matrix::{UnaryMatrix, UnaryMatrixOp},
         relational::{BinaryRel, BinaryRelOp},
         trigonometric::{Trig, TrigOp},
         CallOp, ConstantIndex, Construct, WkOp,
@@ -309,6 +310,14 @@ impl BackendOp {
             }
         }
 
+        if let Some(matrix_op) = optnode.try_downcast_ref::<UnaryMatrix>() {
+            match matrix_op.op {
+                UnaryMatrixOp::Invert => {
+                    return Some(BackendOp::SpirvOp(SpvOp::GlslOp(GlOp::MatrixInverse)))
+                }
+            }
+        }
+
         None
     }
 
@@ -374,8 +383,6 @@ impl BackendOp {
             WkOp::Max => BackendOp::HlOp(HlOp::Max),
             WkOp::Mix => BackendOp::HlOp(HlOp::Mix),
             WkOp::Clamp => BackendOp::HlOp(HlOp::Clamp),
-
-            WkOp::Inverse => BackendOp::SpirvOp(SpvOp::GlslOp(GlOp::MatrixInverse)),
         }
     }
 
