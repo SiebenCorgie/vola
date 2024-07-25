@@ -18,6 +18,7 @@ use rvsdg::{
 use vola_opt::{
     alge::{
         arithmetic::{BinaryArith, BinaryArithOp, UnaryArith, UnaryArithOp},
+        trigonometric::{Trig, TrigOp},
         CallOp, ConstantIndex, Construct, WkOp,
     },
     imm::{ImmNat, ImmScalar},
@@ -270,6 +271,10 @@ impl BackendOp {
             return Some(Self::from_unary_arith(unary_arith.op));
         }
 
+        if let Some(unary_arith) = optnode.try_downcast_ref::<Trig>() {
+            return Some(Self::from_trig(unary_arith.op));
+        }
+
         if let Some(callop) = optnode.try_downcast_ref::<CallOp>() {
             return Some(Self::from_wk(&callop.op));
         }
@@ -313,6 +318,17 @@ impl BackendOp {
         }
     }
 
+    fn from_trig(op: TrigOp) -> Self {
+        match op {
+            TrigOp::Sin => BackendOp::SpirvOp(SpvOp::GlslOp(GlOp::Sin)),
+            TrigOp::Cos => BackendOp::SpirvOp(SpvOp::GlslOp(GlOp::Cos)),
+            TrigOp::Tan => BackendOp::SpirvOp(SpvOp::GlslOp(GlOp::Tan)),
+            TrigOp::ASin => BackendOp::SpirvOp(SpvOp::GlslOp(GlOp::Asin)),
+            TrigOp::ACos => BackendOp::SpirvOp(SpvOp::GlslOp(GlOp::Acos)),
+            TrigOp::ATan => BackendOp::SpirvOp(SpvOp::GlslOp(GlOp::Atan)),
+        }
+    }
+
     fn from_wk(wk: &WkOp) -> Self {
         match wk {
             WkOp::Not => BackendOp::SpirvOp(SpvOp::CoreOp(CoreOp::Not)),
@@ -337,12 +353,7 @@ impl BackendOp {
             WkOp::Max => BackendOp::HlOp(HlOp::Max),
             WkOp::Mix => BackendOp::HlOp(HlOp::Mix),
             WkOp::Clamp => BackendOp::HlOp(HlOp::Clamp),
-            WkOp::Sin => BackendOp::SpirvOp(SpvOp::GlslOp(GlOp::Sin)),
-            WkOp::Cos => BackendOp::SpirvOp(SpvOp::GlslOp(GlOp::Cos)),
-            WkOp::Tan => BackendOp::SpirvOp(SpvOp::GlslOp(GlOp::Tan)),
-            WkOp::ASin => BackendOp::SpirvOp(SpvOp::GlslOp(GlOp::Asin)),
-            WkOp::ACos => BackendOp::SpirvOp(SpvOp::GlslOp(GlOp::Acos)),
-            WkOp::ATan => BackendOp::SpirvOp(SpvOp::GlslOp(GlOp::Atan)),
+
             WkOp::Inverse => BackendOp::SpirvOp(SpvOp::GlslOp(GlOp::MatrixInverse)),
         }
     }

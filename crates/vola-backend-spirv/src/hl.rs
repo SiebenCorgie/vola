@@ -6,7 +6,7 @@
  * 2024 Tendsin Mende
  */
 
-use vola_opt::alge::arithmetic::BinaryArithOp;
+use vola_opt::alge::arithmetic::{BinaryArithOp, UnaryArithOp};
 
 ///A higher level op. Already in SSA-form and SPIR-V like.
 ///

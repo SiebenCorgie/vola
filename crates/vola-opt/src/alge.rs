@@ -19,6 +19,7 @@ use rvsdg::{
     SmallColl,
 };
 use rvsdg_viewer::Color;
+use trigonometric::{Trig, TrigOp};
 use vola_ast::csg::{CSGConcept, CSGNodeDef};
 use vola_common::Span;
 
@@ -113,12 +114,6 @@ pub enum WkOp {
     Mix,
     Clamp,
 
-    Sin,
-    Cos,
-    Tan,
-    ASin,
-    ACos,
-    ATan,
     //TODO: basically implement the rest of the glsl-ext-inst, cause people might be used to those.
     Inverse,
 }
@@ -149,12 +144,6 @@ impl WkOp {
             WkOp::Max => 2,
             WkOp::Mix => 3,
             WkOp::Clamp => 3,
-            WkOp::Sin => 1,
-            WkOp::Cos => 1,
-            WkOp::Tan => 1,
-            WkOp::ASin => 1,
-            WkOp::ACos => 1,
-            WkOp::ATan => 1,
 
             WkOp::Inverse => 1,
         }
@@ -373,29 +362,6 @@ impl WkOp {
                 Ok(Some(sig[0].clone()))
             }
 
-            WkOp::Sin | WkOp::Cos | WkOp::Tan | WkOp::ASin | WkOp::ACos | WkOp::ATan => {
-                if sig.len() != 1 {
-                    return Err(OptError::Any {
-                        text: format!("{:?} expects one operand, got {:?}", self, sig.len()),
-                    });
-                }
-                match &sig[0] {
-                    Ty::Scalar => {}
-                    Ty::Vector { .. } => {}
-                    _ => {
-                        return Err(OptError::Any {
-                            text: format!(
-                                "{:?} expects operands of type scalar or vector, got {:?}",
-                                self, sig
-                            ),
-                        })
-                    }
-                }
-
-                //seems to be alright, return scalar
-                Ok(Some(sig[0].clone()))
-            }
-
             WkOp::Inverse => {
                 if sig.len() != 1 {
                     return Err(OptError::Any {
@@ -514,12 +480,12 @@ impl OptNode {
                 UnaryArith::new(UnaryArithOp::Floor),
                 Span::empty(),
             )),
-            "sin" => Some(OptNode::new(CallOp::new(WkOp::Sin), Span::empty())),
-            "cos" => Some(OptNode::new(CallOp::new(WkOp::Cos), Span::empty())),
-            "tan" => Some(OptNode::new(CallOp::new(WkOp::Tan), Span::empty())),
-            "asin" => Some(OptNode::new(CallOp::new(WkOp::ASin), Span::empty())),
-            "acos" => Some(OptNode::new(CallOp::new(WkOp::ACos), Span::empty())),
-            "atan" => Some(OptNode::new(CallOp::new(WkOp::ATan), Span::empty())),
+            "sin" => Some(OptNode::new(Trig::new(TrigOp::Sin), Span::empty())),
+            "cos" => Some(OptNode::new(Trig::new(TrigOp::Cos), Span::empty())),
+            "tan" => Some(OptNode::new(Trig::new(TrigOp::Tan), Span::empty())),
+            "asin" => Some(OptNode::new(Trig::new(TrigOp::ASin), Span::empty())),
+            "acos" => Some(OptNode::new(Trig::new(TrigOp::ACos), Span::empty())),
+            "atan" => Some(OptNode::new(Trig::new(TrigOp::ATan), Span::empty())),
             "inverse" | "invert" => Some(OptNode::new(CallOp::new(WkOp::Inverse), Span::empty())),
             _ => None,
         }
