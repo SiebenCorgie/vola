@@ -11,6 +11,7 @@
 use ahash::AHashMap;
 use rvsdg::{
     attrib::FlagStore,
+    nodes::NodeType,
     region::{Input, Output},
     rvsdg_derive_lang::LangNode,
     smallvec::{smallvec, SmallVec},
@@ -22,6 +23,7 @@ use vola_ast::csg::{CSGConcept, CSGNodeDef};
 use crate::{common::Ty, error::OptError, DialectNode, OptEdge, OptGraph, OptNode, TypeState};
 
 pub(crate) mod algefn;
+pub(crate) mod constant_fold;
 pub(crate) mod implblock;
 
 ///Well known ops for the optimizer. Includes all _BinaryOp_ of the Ast, as well as
@@ -877,114 +879,6 @@ impl DialectNode for EvalNode {
 
         //If we made it till here, we actually passed, therfore return the right type
         Ok(Some(output_ty))
-    }
-}
-
-///An immediate scalar number.
-#[derive(LangNode, Debug)]
-pub struct ImmScalar {
-    ///The immediate value
-    pub lit: f64,
-    ///the output port the `lit` value is passed down to.
-    #[output]
-    pub out: Output,
-}
-
-impl ImmScalar {
-    pub fn new(lit: f64) -> Self {
-        ImmScalar {
-            lit,
-            out: Output::default(),
-        }
-    }
-}
-
-implViewAlgeOp!(ImmScalar, "{}f", lit);
-impl DialectNode for ImmScalar {
-    fn dialect(&self) -> &'static str {
-        "alge"
-    }
-
-    fn try_derive_type(
-        &self,
-        _typemap: &FlagStore<Ty>,
-        _graph: &OptGraph,
-        _concepts: &AHashMap<String, CSGConcept>,
-        _csg_defs: &AHashMap<String, CSGNodeDef>,
-    ) -> Result<Option<Ty>, OptError> {
-        //NOTE: all literals are translated to a _scalar_
-        Ok(Some(Ty::Scalar))
-    }
-
-    fn is_operation_equal(&self, other: &OptNode) -> bool {
-        if let Some(other_cop) = other.try_downcast_ref::<ImmScalar>() {
-            other_cop.lit == self.lit
-        } else {
-            false
-        }
-    }
-
-    fn structural_copy(&self, span: vola_common::Span) -> OptNode {
-        OptNode {
-            span,
-            node: Box::new(ImmScalar {
-                lit: self.lit.clone(),
-                out: Output::default(),
-            }),
-        }
-    }
-}
-
-///An immediate natural number.
-#[derive(LangNode, Debug)]
-pub struct ImmNat {
-    //The natural value
-    pub lit: u64,
-    #[output]
-    pub out: Output,
-}
-
-impl ImmNat {
-    pub fn new(lit: usize) -> Self {
-        ImmNat {
-            lit: lit as u64,
-            out: Output::default(),
-        }
-    }
-}
-
-implViewAlgeOp!(ImmNat, "{}i", lit);
-impl DialectNode for ImmNat {
-    fn dialect(&self) -> &'static str {
-        "alge"
-    }
-
-    fn try_derive_type(
-        &self,
-        _typemap: &FlagStore<Ty>,
-        _graph: &OptGraph,
-        _concepts: &AHashMap<String, CSGConcept>,
-        _csg_defs: &AHashMap<String, CSGNodeDef>,
-    ) -> Result<Option<Ty>, OptError> {
-        //NOTE: all literals are translated to a _scalar_
-        Ok(Some(Ty::Nat))
-    }
-
-    fn is_operation_equal(&self, other: &OptNode) -> bool {
-        if let Some(other_cop) = other.try_downcast_ref::<ImmNat>() {
-            other_cop.lit == self.lit
-        } else {
-            false
-        }
-    }
-    fn structural_copy(&self, span: vola_common::Span) -> OptNode {
-        OptNode {
-            span,
-            node: Box::new(ImmNat {
-                lit: self.lit.clone(),
-                out: Output::default(),
-            }),
-        }
     }
 }
 

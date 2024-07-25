@@ -56,6 +56,9 @@ fn main() {
     let pipeline = volac::Pipeline {
         target_format,
         target: volac::Target::File(args.output_name),
+        late_cne: !args.no_opt,
+        late_cnf: !args.no_opt,
+        early_cnf: !args.no_opt,
     };
 
     match pipeline.execute_on_file(&args.src_file) {

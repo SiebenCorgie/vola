@@ -157,6 +157,13 @@ pub struct Pipeline {
     ///The format this pipeline compiles to
     pub target_format: Backend,
     pub target: Target,
+
+    //If the early constant-node-fold is executed before specializing
+    pub early_cnf: bool,
+    //If the late, post specializing cnf is executed
+    pub late_cnf: bool,
+    //If the post-specializing cne is done
+    pub late_cne: bool,
 }
 
 impl Pipeline {
@@ -164,6 +171,10 @@ impl Pipeline {
         Pipeline {
             target_format: Backend::Spirv,
             target: Target::file(output_file),
+
+            early_cnf: true,
+            late_cnf: true,
+            late_cne: true,
         }
     }
 
@@ -172,6 +183,10 @@ impl Pipeline {
         Pipeline {
             target_format: Backend::Spirv,
             target: Target::buffer(),
+
+            early_cnf: true,
+            late_cnf: true,
+            late_cne: true,
         }
     }
 
@@ -182,19 +197,22 @@ impl Pipeline {
         //      serialized somewhere.
         opt.add_ast(ast)?;
 
+        if self.early_cnf {
+            opt.full_graph_cnf()?;
+        }
         //do mandatory type derivation
         opt.type_derive()?;
 
-        //FIXME: This shouldn't be mandatory instead the dispatcher should be able to handle other ContextVariables
-        //       then the ones used while dispatching
-        //opt.inline_alge_fn()?;
-
         opt.specialize_all_exports()?;
-
+        if self.late_cnf {
+            opt.full_graph_cnf()?;
+        }
         opt.inline_field_exports()?;
 
         //do some _post_everyting_ cleanup
-        opt.cne_exports().expect("Failed to execute CNE");
+        if self.late_cne {
+            opt.cne_exports().expect("Failed to execute CNE");
+        }
         opt.cleanup_export_lmd();
 
         if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("VOLA_OPT_FINAL").is_ok() {

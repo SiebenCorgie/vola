@@ -11,12 +11,14 @@ use core::panic;
 use std::{any::Any, fmt::Debug};
 
 use crate::error::OptError;
+use crate::imm::ImmNat;
 use crate::{common::Ty, Optimizer};
 use ahash::AHashMap;
 use rvsdg::attrib::AttribLocation;
 use rvsdg::edge::OutportLocation;
 use rvsdg::nodes::NodeType;
 use rvsdg::region::RegionLocation;
+use rvsdg::util::cnf::ConstantFoldable;
 use rvsdg::util::node_equality::NodeTypeEq;
 use rvsdg::util::Path;
 use rvsdg::NodeRef;
@@ -60,6 +62,14 @@ pub trait DialectNode: LangNode + Any + View {
     ///Builds a structural copy of this node, where no inputs/outputs are connected.
     /// Needed to break up the `dyn` indirection in OptNode.
     fn structural_copy(&self, span: Span) -> OptNode;
+
+    ///Implements the try_constant_fold method of [ConstantFoldable].
+    fn try_constant_fold(
+        &self,
+        src_nodes: &[Option<&rvsdg::nodes::Node<OptNode>>],
+    ) -> Option<OptNode> {
+        None
+    }
 }
 
 ///Single optimizer node of some dialect.4
@@ -114,6 +124,27 @@ impl NodeTypeEq for OptNode {
         }
 
         self.node.is_operation_equal(other)
+    }
+}
+
+impl ConstantFoldable<OptNode, OptEdge> for OptNode {
+    fn try_constant_fold(
+        &self,
+        src_nodes: &[Option<&rvsdg::nodes::Node<OptNode>>],
+    ) -> Option<OptNode> {
+        self.node.try_constant_fold(src_nodes)
+    }
+
+    fn constant_value(&self) -> Option<usize> {
+        if self.node.dialect() == "alge" {
+            if let Some(constant) = self.try_downcast_ref::<ImmNat>() {
+                Some(constant.lit as usize)
+            } else {
+                None
+            }
+        } else {
+            None
+        }
     }
 }
 

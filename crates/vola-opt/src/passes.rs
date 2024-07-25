@@ -13,6 +13,7 @@
 //! Later on we'll probably start introducing optimizations and compiler-based inference of properties.
 
 mod cleanup_backend;
+mod constant_folding;
 mod field_inliner;
 mod inline_alge_fn;
 mod specializer;

@@ -18,9 +18,10 @@ use vola_ast::{
 use vola_common::{ariadne::Label, error::error_reporter, report, Span};
 
 use crate::{
-    alge::{CallOp, ConstantIndex, Construct, EvalNode, ImmNat, ImmScalar, WkOp},
+    alge::{CallOp, ConstantIndex, Construct, EvalNode, WkOp},
     ast::block_builder::BlockBuilderConfig,
     common::{FnImport, LmdContext, VarDef},
+    imm::{ImmNat, ImmScalar},
     OptEdge, OptError, OptNode,
 };
 

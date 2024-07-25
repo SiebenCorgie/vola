@@ -16,7 +16,8 @@ use rvsdg::{
 };
 // use vola_common::{error::error_reporter, report, Span};
 use vola_opt::{
-    alge::{CallOp, ConstantIndex, Construct, ImmNat, ImmScalar, WkOp},
+    alge::{CallOp, ConstantIndex, Construct, WkOp},
+    imm::{ImmNat, ImmScalar},
     OptEdge, OptNode, Optimizer,
 };
 
