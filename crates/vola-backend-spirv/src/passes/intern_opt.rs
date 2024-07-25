@@ -16,7 +16,10 @@ use rvsdg::{
 };
 // use vola_common::{error::error_reporter, report, Span};
 use vola_opt::{
-    alge::{CallOp, ConstantIndex, Construct, WkOp},
+    alge::{
+        arithmetic::{BinaryArith, BinaryArithOp},
+        CallOp, ConstantIndex, Construct, WkOp,
+    },
     imm::{ImmNat, ImmScalar},
     OptEdge, OptNode, Optimizer,
 };
@@ -259,6 +262,10 @@ impl BackendOp {
             return Some(Self::from_imm_nat(imm));
         }
 
+        if let Some(binary_arith) = optnode.try_downcast_ref::<BinaryArith>() {
+            return Some(Self::HlOp(binary_arith.op.into()));
+        }
+
         if let Some(callop) = optnode.try_downcast_ref::<CallOp>() {
             return Some(Self::from_wk(&callop.op));
         }
@@ -295,11 +302,6 @@ impl BackendOp {
             WkOp::Not => BackendOp::SpirvOp(SpvOp::CoreOp(CoreOp::Not)),
             //NOTE: Since we just have floats, we can just use FNegate
             WkOp::Neg => BackendOp::HlOp(HlOp::Negate),
-            WkOp::Add => BackendOp::HlOp(HlOp::Add),
-            WkOp::Sub => BackendOp::HlOp(HlOp::Sub),
-            WkOp::Mul => BackendOp::HlOp(HlOp::Mul),
-            WkOp::Div => BackendOp::HlOp(HlOp::Div),
-            WkOp::Mod => BackendOp::HlOp(HlOp::Mod),
 
             WkOp::Lt => BackendOp::HlOp(HlOp::Lt),
             WkOp::Gt => BackendOp::HlOp(HlOp::Gt),

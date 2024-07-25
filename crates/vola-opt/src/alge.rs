@@ -9,6 +9,7 @@
 //!
 
 use ahash::AHashMap;
+use arithmetic::{BinaryArith, BinaryArithOp};
 use rvsdg::{
     attrib::FlagStore,
     nodes::NodeType,
@@ -28,9 +29,56 @@ use crate::{
     DialectNode, OptEdge, OptGraph, OptNode, TypeState,
 };
 
-pub(crate) mod algefn;
-pub(crate) mod constant_fold;
-pub(crate) mod implblock;
+pub mod algefn;
+pub mod arithmetic;
+pub mod boolean;
+pub mod buildin;
+pub mod constant_fold;
+pub mod implblock;
+pub mod logical;
+pub mod matrix;
+pub mod trigonometric;
+
+pub const ALGE_VIEW_COLOR: Color = Color {
+    r: 200.0 / 255.0,
+    g: 170.0 / 255.0,
+    b: 170.0 / 255.0,
+    a: 1.0,
+};
+
+//Macro that implements the "View" trait for an AlgeDialect op
+macro_rules! implViewAlgeOp {
+    ($opname:ident, $str:expr, $($arg:ident),*) => {
+        impl rvsdg_viewer::View for $opname {
+            fn color(&self) -> Color {
+                Color::from_rgba(200, 170, 170, 255)
+            }
+
+            fn name(&self) -> String {
+                format!($str, $(self.$arg)*,)
+            }
+
+            fn stroke(&self) -> rvsdg_viewer::Stroke {
+                rvsdg_viewer::Stroke::Line
+            }
+        }
+    };
+    ($opname:ident, $str:expr) =>{
+        impl rvsdg_viewer::View for $opname {
+            fn color(&self) -> Color {
+                Color::from_rgba(200, 170, 170, 255)
+            }
+
+            fn name(&self) -> String {
+                $str.to_owned()
+            }
+
+            fn stroke(&self) -> rvsdg_viewer::Stroke {
+                rvsdg_viewer::Stroke::Line
+            }
+        }
+    }
+}
 
 ///Well known ops for the optimizer. Includes all _BinaryOp_ of the Ast, as well as
 /// some well known _function_like_ ops in the SPIRV spec. For instance
@@ -41,13 +89,6 @@ pub enum WkOp {
     // but also error prone.
     Not,
     Neg,
-
-    //WK _standard_ binary ops
-    Add,
-    Sub,
-    Mul,
-    Div,
-    Mod,
 
     //relation
     Lt,
@@ -95,12 +136,6 @@ impl WkOp {
             WkOp::Not => 1,
             WkOp::Neg => 1,
 
-            WkOp::Add => 2,
-            WkOp::Sub => 2,
-            WkOp::Mul => 2,
-            WkOp::Div => 2,
-            WkOp::Mod => 2,
-
             WkOp::Lt => 2,
             WkOp::Gt => 2,
             WkOp::Lte => 2,
@@ -139,35 +174,6 @@ impl WkOp {
         }
     }
 
-    pub fn try_parse(s: &str) -> Option<Self> {
-        match s {
-            "dot" => Some(Self::Dot),
-            "cross" => Some(Self::Cross),
-            "length" => Some(Self::Length),
-            "sqrt" => Some(Self::SquareRoot),
-            "exp" => Some(Self::Exp),
-            "pow" => Some(Self::Pow),
-            "min" => Some(Self::Min),
-            "max" => Some(Self::Max),
-            "mix" | "lerp" => Some(Self::Mix),
-            "mod" => Some(Self::Mod),
-            "clamp" => Some(Self::Clamp),
-            "fract" => Some(Self::Fract),
-            "abs" => Some(Self::Abs),
-            "round" => Some(Self::Round),
-            "ceil" => Some(Self::Ceil),
-            "floor" => Some(Self::Floor),
-            "sin" => Some(Self::Sin),
-            "cos" => Some(Self::Cos),
-            "tan" => Some(Self::Tan),
-            "asin" => Some(Self::ASin),
-            "acos" => Some(Self::ACos),
-            "atan" => Some(Self::ATan),
-            "inverse" | "invert" => Some(Self::Inverse),
-            _ => None,
-        }
-    }
-
     fn try_derive_type(&self, mut sig: SmallVec<[Ty; 2]>) -> Result<Option<Ty>, OptError> {
         //NOTE: sig.len() is somewhat redundant, since the caller wouldn't try to derive if any input is
         // empty. However, its a good place to unify this check even if the type resolution changes at some point.
@@ -191,7 +197,7 @@ impl WkOp {
                 Ok(Some(sig.remove(0)))
             }
 
-            WkOp::Add | WkOp::Sub | WkOp::Div | WkOp::Min | WkOp::Max | WkOp::Mod => {
+            WkOp::Min | WkOp::Max => {
                 //For those we need _the same algebraic_ for both inputs.
                 //NOTE: Mul is a little _special_ since
                 //      there is matrix multiplication with
@@ -219,101 +225,6 @@ impl WkOp {
 
                 //Is okay, for these we return the _same_ type that we got
                 Ok(Some(sig.remove(0)))
-            }
-            WkOp::Mul => {
-                //Multiplication works on:
-                // a x b, where a,b are of the same type,
-                //        where a = Vec and b = Scalar
-                //        where a = Mat and b = Scalar
-                //        where a = Mat and b = Vec
-                //        where a = Vec and b = Mat
-                //        where a = Mat and b = Mat,
-
-                //Still always two inputs one output
-                if sig.len() != 2 {
-                    return Err(OptError::Any {
-                        text: format!("{:?} expects two operands, got {:?}", self, sig.len()),
-                    });
-                }
-
-                if !sig[0].is_algebraic() {
-                    return Err(OptError::Any {
-                        text: format!(
-                            "{:?} expects algebraic operands (scalar, vector, matrix, tensor) got {:?}",
-                            self, sig[0]
-                        ),
-                    });
-                }
-
-                if !sig[1].is_algebraic() {
-                    return Err(OptError::Any {
-                        text: format!(
-                            "{:?} expects algebraic operands (scalar, vector, matrix, tensor) got {:?}",
-                            self, sig[1]
-                        ),
-                    });
-                }
-
-                match (&sig[0], &sig[1]) {
-                    //In that case, use the vector as return type
-                    (Ty::Vector { width: _ }, Ty::Scalar) => Ok(Some(sig.remove(0))),
-                    //In that case, we return the same-sized
-                    //matrix
-                    (
-                        Ty::Matrix {
-                            width: _,
-                            height: _,
-                        },
-                        Ty::Scalar,
-                    ) => Ok(Some(sig.remove(0))),
-                    (
-                        Ty::Vector { width: vecwidth },
-                        Ty::Matrix {
-                            width: num_columns,
-                            height: _,
-                        },
-                    ) => {
-                        //NOTE: we can only do that, if the Vector::width
-                        //      is the same has Matrix width.
-                        //TODO: Decide if we really want to make that bound check already in the optimizer.
-                        //      generally speaking this is more of a SPIR-V issue. Other backends could implement
-                        //      other Matrix/Vector multiplication
-                        if vecwidth != num_columns {
-                            Err(OptError::Any { text: format!("Vector-Matrix multiplication expects the Matrix's \"width\" to be equal to Vector's \"width\". Matrix width = {num_columns} & vector_width = {vecwidth}") })
-                        } else {
-                            //Use the vector's type.
-                            Ok(Some(sig.remove(0)))
-                        }
-                    }
-                    (
-                        Ty::Matrix {
-                            width: num_columns,
-                            height: _,
-                        },
-                        Ty::Vector { width: vecwidth },
-                    ) => {
-                        //Similar to above.
-                        if num_columns != vecwidth {
-                            Err(OptError::Any { text: format!("Vector-Matrix multiplication expects the Matrix's \"width\" to be equal to Vector's \"width\". Matrix width = {num_columns} & vector_width = {vecwidth}") })
-                        } else {
-                            //Use the vector's type.
-                            Ok(Some(sig.remove(1)))
-                        }
-                    }
-                    //if none of those was used, check that
-                    // both are at least the same. Otherwise
-                    //we actually need to return Err
-                    (a, b) => {
-                        if a != b {
-                            Err(OptError::Any {
-                                text: format!("{:?} expects the two operands, to be of the same type. but got {:?} & {:?}", self, sig[0], sig[1]),
-                            })
-                        } else {
-                            //thats okay
-                            Ok(Some(sig.remove(0)))
-                        }
-                    }
-                }
             }
             WkOp::Dot => {
                 if sig.len() != 2 {
@@ -590,67 +501,36 @@ impl WkOp {
     }
 }
 
-impl From<vola_ast::alge::UnaryOp> for WkOp {
-    fn from(value: vola_ast::alge::UnaryOp) -> Self {
-        match value {
-            vola_ast::alge::UnaryOp::Neg => Self::Neg,
-            vola_ast::alge::UnaryOp::Not => Self::Not,
-        }
-    }
-}
-
-impl From<vola_ast::alge::BinaryOp> for WkOp {
-    fn from(value: vola_ast::alge::BinaryOp) -> Self {
-        match value {
-            vola_ast::alge::BinaryOp::Add => Self::Add,
-            vola_ast::alge::BinaryOp::Sub => Self::Sub,
-            vola_ast::alge::BinaryOp::Mul => Self::Mul,
-            vola_ast::alge::BinaryOp::Div => Self::Div,
-            vola_ast::alge::BinaryOp::Mod => Self::Mod,
-
-            vola_ast::alge::BinaryOp::Lt => Self::Lt,
-            vola_ast::alge::BinaryOp::Gt => Self::Gt,
-            vola_ast::alge::BinaryOp::Gte => Self::Gte,
-            vola_ast::alge::BinaryOp::Lte => Self::Lte,
-            vola_ast::alge::BinaryOp::Eq => Self::Eq,
-            vola_ast::alge::BinaryOp::NotEq => Self::NotEq,
-
-            vola_ast::alge::BinaryOp::Or => Self::Or,
-            vola_ast::alge::BinaryOp::And => Self::And,
-        }
-    }
-}
-
-//Macro that implements the "View" trait for an AlgeDialect op
-macro_rules! implViewAlgeOp {
-    ($opname:ident, $str:expr, $($arg:ident),*) => {
-        impl rvsdg_viewer::View for $opname {
-            fn color(&self) -> Color {
-                Color::from_rgba(200, 170, 170, 255)
-            }
-
-            fn name(&self) -> String {
-                format!($str, $(self.$arg)*,)
-            }
-
-            fn stroke(&self) -> rvsdg_viewer::Stroke {
-                rvsdg_viewer::Stroke::Line
-            }
-        }
-    };
-    ($opname:ident, $str:expr) =>{
-        impl rvsdg_viewer::View for $opname {
-            fn color(&self) -> Color {
-                Color::from_rgba(200, 170, 170, 255)
-            }
-
-            fn name(&self) -> String {
-                $str.to_owned()
-            }
-
-            fn stroke(&self) -> rvsdg_viewer::Stroke {
-                rvsdg_viewer::Stroke::Line
-            }
+impl OptNode {
+    pub fn try_parse(s: &str) -> Option<Self> {
+        match s {
+            "dot" => Some(OptNode::new(CallOp::new(WkOp::Dot), Span::empty())),
+            "cross" => Some(OptNode::new(CallOp::new(WkOp::Cross), Span::empty())),
+            "length" => Some(OptNode::new(CallOp::new(WkOp::Length), Span::empty())),
+            "sqrt" => Some(OptNode::new(CallOp::new(WkOp::SquareRoot), Span::empty())),
+            "exp" => Some(OptNode::new(CallOp::new(WkOp::Exp), Span::empty())),
+            "pow" => Some(OptNode::new(CallOp::new(WkOp::Pow), Span::empty())),
+            "min" => Some(OptNode::new(CallOp::new(WkOp::Min), Span::empty())),
+            "max" => Some(OptNode::new(CallOp::new(WkOp::Max), Span::empty())),
+            "mix" | "lerp" => Some(OptNode::new(CallOp::new(WkOp::Mix), Span::empty())),
+            "mod" => Some(OptNode::new(
+                BinaryArith::new(BinaryArithOp::Mod),
+                Span::empty(),
+            )),
+            "clamp" => Some(OptNode::new(CallOp::new(WkOp::Clamp), Span::empty())),
+            "fract" => Some(OptNode::new(CallOp::new(WkOp::Fract), Span::empty())),
+            "abs" => Some(OptNode::new(CallOp::new(WkOp::Abs), Span::empty())),
+            "round" => Some(OptNode::new(CallOp::new(WkOp::Round), Span::empty())),
+            "ceil" => Some(OptNode::new(CallOp::new(WkOp::Ceil), Span::empty())),
+            "floor" => Some(OptNode::new(CallOp::new(WkOp::Floor), Span::empty())),
+            "sin" => Some(OptNode::new(CallOp::new(WkOp::Sin), Span::empty())),
+            "cos" => Some(OptNode::new(CallOp::new(WkOp::Cos), Span::empty())),
+            "tan" => Some(OptNode::new(CallOp::new(WkOp::Tan), Span::empty())),
+            "asin" => Some(OptNode::new(CallOp::new(WkOp::ASin), Span::empty())),
+            "acos" => Some(OptNode::new(CallOp::new(WkOp::ACos), Span::empty())),
+            "atan" => Some(OptNode::new(CallOp::new(WkOp::ATan), Span::empty())),
+            "inverse" | "invert" => Some(OptNode::new(CallOp::new(WkOp::Inverse), Span::empty())),
+            _ => None,
         }
     }
 }
@@ -684,6 +564,49 @@ impl CallOp {
             op.inputs.push(Input::default())
         }
         op
+    }
+}
+
+impl From<vola_ast::alge::UnaryOp> for OptNode {
+    fn from(value: vola_ast::alge::UnaryOp) -> Self {
+        match value {
+            vola_ast::alge::UnaryOp::Neg => OptNode::new(CallOp::new(WkOp::Neg), Span::empty()),
+            vola_ast::alge::UnaryOp::Not => OptNode::new(CallOp::new(WkOp::Not), Span::empty()),
+        }
+    }
+}
+
+impl From<vola_ast::alge::BinaryOp> for OptNode {
+    fn from(value: vola_ast::alge::BinaryOp) -> Self {
+        match value {
+            vola_ast::alge::BinaryOp::Add => {
+                OptNode::new(BinaryArith::new(BinaryArithOp::Add), Span::empty())
+            }
+            vola_ast::alge::BinaryOp::Sub => {
+                OptNode::new(BinaryArith::new(BinaryArithOp::Sub), Span::empty())
+            }
+            vola_ast::alge::BinaryOp::Mul => {
+                OptNode::new(BinaryArith::new(BinaryArithOp::Mul), Span::empty())
+            }
+            vola_ast::alge::BinaryOp::Div => {
+                OptNode::new(BinaryArith::new(BinaryArithOp::Div), Span::empty())
+            }
+            vola_ast::alge::BinaryOp::Mod => {
+                OptNode::new(BinaryArith::new(BinaryArithOp::Mod), Span::empty())
+            }
+
+            vola_ast::alge::BinaryOp::Lt => OptNode::new(CallOp::new(WkOp::Lt), Span::empty()),
+            vola_ast::alge::BinaryOp::Gt => OptNode::new(CallOp::new(WkOp::Gt), Span::empty()),
+            vola_ast::alge::BinaryOp::Gte => OptNode::new(CallOp::new(WkOp::Gte), Span::empty()),
+            vola_ast::alge::BinaryOp::Lte => OptNode::new(CallOp::new(WkOp::Lte), Span::empty()),
+            vola_ast::alge::BinaryOp::Eq => OptNode::new(CallOp::new(WkOp::Eq), Span::empty()),
+            vola_ast::alge::BinaryOp::NotEq => {
+                OptNode::new(CallOp::new(WkOp::NotEq), Span::empty())
+            }
+
+            vola_ast::alge::BinaryOp::Or => OptNode::new(CallOp::new(WkOp::Or), Span::empty()),
+            vola_ast::alge::BinaryOp::And => OptNode::new(CallOp::new(WkOp::And), Span::empty()),
+        }
     }
 }
 
