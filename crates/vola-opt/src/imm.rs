@@ -9,7 +9,9 @@
 //! The immediate value dialect. Takes care of representing typed constant values as well as constant-folding of those.
 
 use ahash::AHashMap;
-use rvsdg::{attrib::FlagStore, region::Output, rvsdg_derive_lang::LangNode};
+use rvsdg::{
+    attrib::FlagStore, region::Output, rvsdg_derive_lang::LangNode, smallvec::SmallVec, SmallColl,
+};
 use vola_ast::csg::{CSGConcept, CSGNodeDef};
 
 use crate::{common::Ty, DialectNode, OptError, OptGraph, OptNode};
@@ -97,6 +99,139 @@ impl DialectNode for ImmScalar {
         OptNode {
             span,
             node: Box::new(ImmScalar {
+                lit: self.lit.clone(),
+                out: Output::default(),
+            }),
+        }
+    }
+}
+
+///An immediate vector.
+#[derive(LangNode, Debug)]
+pub struct ImmVector {
+    ///The immediate value
+    pub lit: SmallVec<[f32; 8]>,
+    ///the output port the `lit` value is passed down to.
+    #[output]
+    pub out: Output,
+}
+
+impl ImmVector {
+    pub fn new(elements: &[f32]) -> Self {
+        ImmVector {
+            lit: SmallVec::from_slice(elements),
+            out: Output::default(),
+        }
+    }
+}
+
+implViewImmOp!(ImmVector, "{:?}", lit);
+impl DialectNode for ImmVector {
+    fn dialect(&self) -> &'static str {
+        "Imm"
+    }
+
+    fn try_derive_type(
+        &self,
+        _typemap: &FlagStore<Ty>,
+        _graph: &OptGraph,
+        _concepts: &AHashMap<String, CSGConcept>,
+        _csg_defs: &AHashMap<String, CSGNodeDef>,
+    ) -> Result<Option<Ty>, OptError> {
+        //NOTE: all literals are translated to a _scalar_
+        Ok(Some(Ty::Vector {
+            width: self.lit.len(),
+        }))
+    }
+
+    fn is_operation_equal(&self, other: &OptNode) -> bool {
+        if let Some(other_cop) = other.try_downcast_ref::<ImmVector>() {
+            other_cop.lit == self.lit
+        } else {
+            false
+        }
+    }
+
+    fn structural_copy(&self, span: vola_common::Span) -> OptNode {
+        OptNode {
+            span,
+            node: Box::new(ImmVector {
+                lit: self.lit.clone(),
+                out: Output::default(),
+            }),
+        }
+    }
+}
+
+///An immediate vector.
+#[derive(LangNode, Debug)]
+pub struct ImmMatrix {
+    width: usize,
+    height: usize,
+    ///The immediate value
+    pub lit: SmallColl<SmallColl<f32>>,
+    ///the output port the `lit` value is passed down to.
+    #[output]
+    pub out: Output,
+}
+
+impl ImmMatrix {
+    pub fn new(columns: &[&[f32]]) -> Self {
+        //We are as wide as we have columns, and are as heigh has each column has elements.
+        //see
+        // Construct::try_derive_type for more information
+        let width = columns.len();
+        let height = columns[0].len();
+
+        for col in columns {
+            assert!(col.len() == height)
+        }
+
+        ImmMatrix {
+            width,
+            height,
+            lit: columns
+                .iter()
+                .map(|col| SmallVec::from_slice(col))
+                .collect(),
+            out: Output::default(),
+        }
+    }
+}
+
+implViewImmOp!(ImmMatrix, "{:?}", lit);
+impl DialectNode for ImmMatrix {
+    fn dialect(&self) -> &'static str {
+        "Imm"
+    }
+
+    fn try_derive_type(
+        &self,
+        _typemap: &FlagStore<Ty>,
+        _graph: &OptGraph,
+        _concepts: &AHashMap<String, CSGConcept>,
+        _csg_defs: &AHashMap<String, CSGNodeDef>,
+    ) -> Result<Option<Ty>, OptError> {
+        //NOTE: all literals are translated to a _scalar_
+        Ok(Some(Ty::Vector {
+            width: self.lit.len(),
+        }))
+    }
+
+    fn is_operation_equal(&self, other: &OptNode) -> bool {
+        if let Some(other_cop) = other.try_downcast_ref::<ImmMatrix>() {
+            other_cop.lit == self.lit
+        } else {
+            false
+        }
+    }
+
+    fn structural_copy(&self, span: vola_common::Span) -> OptNode {
+        OptNode {
+            span,
+            node: Box::new(ImmMatrix {
+                width: self.width,
+                height: self.height,
                 lit: self.lit.clone(),
                 out: Output::default(),
             }),
