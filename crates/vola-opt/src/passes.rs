@@ -15,6 +15,7 @@
 mod cleanup_backend;
 mod constant_folding;
 mod field_inliner;
+mod imm_scalarizer;
 mod inline_alge_fn;
 mod specializer;
 mod type_derive;

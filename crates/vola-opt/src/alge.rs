@@ -904,6 +904,10 @@ impl Construct {
             output: Output::default(),
         }
     }
+    pub fn with_inputs(mut self, count: usize) -> Self {
+        self.inputs = smallvec![Input::default(); count];
+        self
+    }
 }
 
 implViewAlgeOp!(Construct, "Construct");

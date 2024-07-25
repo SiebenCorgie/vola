@@ -110,7 +110,7 @@ impl DialectNode for ImmScalar {
 #[derive(LangNode, Debug)]
 pub struct ImmVector {
     ///The immediate value
-    pub lit: SmallVec<[f64; 8]>,
+    pub lit: SmallColl<f64>,
     ///the output port the `lit` value is passed down to.
     #[output]
     pub out: Output,

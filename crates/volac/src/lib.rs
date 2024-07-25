@@ -213,6 +213,15 @@ impl Pipeline {
         if self.late_cne {
             opt.cne_exports().expect("Failed to execute CNE");
         }
+
+        if let Backend::Spirv = self.target_format {
+            //In the case of the spirv-backend, we need to destruct all combined constant values into
+            //_just_constant_ again.
+            opt.imm_scalarize().unwrap();
+            //for good measures, combine constants again
+            opt.cne_exports().unwrap();
+        }
+
         opt.cleanup_export_lmd();
 
         if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("VOLA_OPT_FINAL").is_ok() {

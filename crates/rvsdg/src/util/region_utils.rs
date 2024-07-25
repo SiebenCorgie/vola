@@ -15,7 +15,7 @@ use crate::{
     err::GraphError,
     nodes::{LangNode, NodeType, StructuralNode},
     region::RegionLocation,
-    NodeRef, Rvsdg,
+    NodeRef, Rvsdg, SmallColl,
 };
 
 impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
@@ -212,6 +212,59 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
 
         //reconnected everything, so we can return
         Ok(replacee_ref)
+    }
+
+    ///Replaces all uses of `replaced` with `replacee`. Contrary to [replace_node] this does not change inputs to `replacee`.
+    /// Instead all _output-connected-edges_ of `replaced` are routed to `replacee`.
+    ///
+    /// Assumes that:
+    /// - both have same amount of outputs
+    /// - both are in the same region
+    /// - both are simple nodes
+    pub fn replace_node_uses(
+        &mut self,
+        replaced: NodeRef,
+        replacee: NodeRef,
+    ) -> Result<(), GraphError> {
+        if !self.node(replaced).node_type.is_simple() {
+            return Err(GraphError::InvalidNode(replaced));
+        }
+        if !self.node(replacee).node_type.is_simple() {
+            return Err(GraphError::InvalidNode(replacee));
+        }
+
+        let reg_a = self.node(replaced).parent.clone();
+        let reg_b = self.node(replacee).parent.clone();
+        if reg_a != reg_b {
+            return Err(GraphError::NodesNotInSameRegion {
+                src: reg_a.expect("Cannot replace in toplevel region and fail"),
+                dst: reg_b.expect("Cannot replace in toplevel region and fail"),
+            });
+        }
+
+        assert!(self.node(replaced).outputs().len() == self.node(replacee).outputs().len());
+
+        for out_ty in self.node(replaced).outport_types() {
+            let mut edge_dst_pack = SmallColl::new();
+            for connection in self.node(replaced).outport(&out_ty).unwrap().edges.clone() {
+                let dst = self.edge(connection).dst;
+                let val = self.disconnect(connection)?;
+                edge_dst_pack.push((val, dst));
+            }
+
+            for (val, dst) in edge_dst_pack {
+                self.connect(
+                    OutportLocation {
+                        node: replacee,
+                        output: out_ty,
+                    },
+                    dst,
+                    val,
+                )?;
+            }
+        }
+
+        Ok(())
     }
 
     ///Utility that collects all node, that are `live`, so connected to any result
