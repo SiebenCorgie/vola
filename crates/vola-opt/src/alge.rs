@@ -9,6 +9,11 @@
 //!
 
 use ahash::AHashMap;
+use arithmetic::{BinaryArith, BinaryArithOp, UnaryArith, UnaryArithOp};
+use buildin::{Buildin, BuildinOp};
+use logical::{BinaryBool, BinaryBoolOp, UnaryBool, UnaryBoolOp};
+use matrix::{UnaryMatrix, UnaryMatrixOp};
+use relational::{BinaryRel, BinaryRelOp};
 use rvsdg::{
     attrib::FlagStore,
     nodes::NodeType,
@@ -18,6 +23,7 @@ use rvsdg::{
     SmallColl,
 };
 use rvsdg_viewer::Color;
+use trigonometric::{Trig, TrigOp};
 use vola_ast::csg::{CSGConcept, CSGNodeDef};
 use vola_common::Span;
 
@@ -28,598 +34,22 @@ use crate::{
     DialectNode, OptEdge, OptGraph, OptNode, TypeState,
 };
 
-pub(crate) mod algefn;
-pub(crate) mod constant_fold;
-pub(crate) mod implblock;
+pub mod algefn;
+pub mod arithmetic;
+pub mod buildin;
+pub mod constant_fold;
+pub mod implblock;
+pub mod logical;
+pub mod matrix;
+pub mod relational;
+pub mod trigonometric;
 
-///Well known ops for the optimizer. Includes all _BinaryOp_ of the Ast, as well as
-/// some well known _function_like_ ops in the SPIRV spec. For instance
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum WkOp {
-    //WK unary ops
-    //TODO: do we really want to include NOT? I mean flipping floats is fun I guess,
-    // but also error prone.
-    Not,
-    Neg,
-
-    //WK _standard_ binary ops
-    Add,
-    Sub,
-    Mul,
-    Div,
-    Mod,
-
-    //relation
-    Lt,
-    Gt,
-    Lte,
-    Gte,
-    Eq,
-    NotEq,
-
-    //logical
-    And,
-    Or,
-
-    //Call like ops we _know_
-    Dot,
-    Cross,
-    Length,
-    SquareRoot,
-    Exp,
-    Pow,
-    Min,
-    Max,
-    Mix,
-    Clamp,
-
-    Abs,
-    Fract,
-    Round,
-    Ceil,
-    Floor,
-    Sin,
-    Cos,
-    Tan,
-    ASin,
-    ACos,
-    ATan,
-    //TODO: basically implement the rest of the glsl-ext-inst, cause people might be used to those.
-    Inverse,
-}
-
-impl WkOp {
-    ///Returns the input-count for the op
-    pub fn in_count(&self) -> usize {
-        match self {
-            WkOp::Not => 1,
-            WkOp::Neg => 1,
-
-            WkOp::Add => 2,
-            WkOp::Sub => 2,
-            WkOp::Mul => 2,
-            WkOp::Div => 2,
-            WkOp::Mod => 2,
-
-            WkOp::Lt => 2,
-            WkOp::Gt => 2,
-            WkOp::Lte => 2,
-            WkOp::Gte => 2,
-            WkOp::Eq => 2,
-            WkOp::NotEq => 2,
-
-            WkOp::And => 2,
-            WkOp::Or => 2,
-
-            WkOp::Dot => 2,
-            WkOp::Cross => 2,
-            WkOp::Length => 1,
-            WkOp::SquareRoot => 1,
-            WkOp::Exp => 1,
-            WkOp::Pow => 2,
-            WkOp::Min => 2,
-            WkOp::Max => 2,
-            WkOp::Mix => 3,
-            WkOp::Clamp => 3,
-            WkOp::Round => 1,
-
-            WkOp::Abs => 1,
-            WkOp::Fract => 1,
-            WkOp::Ceil => 1,
-            WkOp::Floor => 1,
-
-            WkOp::Sin => 1,
-            WkOp::Cos => 1,
-            WkOp::Tan => 1,
-            WkOp::ASin => 1,
-            WkOp::ACos => 1,
-            WkOp::ATan => 1,
-
-            WkOp::Inverse => 1,
-        }
-    }
-
-    pub fn try_parse(s: &str) -> Option<Self> {
-        match s {
-            "dot" => Some(Self::Dot),
-            "cross" => Some(Self::Cross),
-            "length" => Some(Self::Length),
-            "sqrt" => Some(Self::SquareRoot),
-            "exp" => Some(Self::Exp),
-            "pow" => Some(Self::Pow),
-            "min" => Some(Self::Min),
-            "max" => Some(Self::Max),
-            "mix" | "lerp" => Some(Self::Mix),
-            "mod" => Some(Self::Mod),
-            "clamp" => Some(Self::Clamp),
-            "fract" => Some(Self::Fract),
-            "abs" => Some(Self::Abs),
-            "round" => Some(Self::Round),
-            "ceil" => Some(Self::Ceil),
-            "floor" => Some(Self::Floor),
-            "sin" => Some(Self::Sin),
-            "cos" => Some(Self::Cos),
-            "tan" => Some(Self::Tan),
-            "asin" => Some(Self::ASin),
-            "acos" => Some(Self::ACos),
-            "atan" => Some(Self::ATan),
-            "inverse" | "invert" => Some(Self::Inverse),
-            _ => None,
-        }
-    }
-
-    fn try_derive_type(&self, mut sig: SmallVec<[Ty; 2]>) -> Result<Option<Ty>, OptError> {
-        //NOTE: sig.len() is somewhat redundant, since the caller wouldn't try to derive if any input is
-        // empty. However, its a good place to unify this check even if the type resolution changes at some point.
-
-        match self {
-            WkOp::Not | WkOp::Neg => {
-                if sig.len() != 1 {
-                    return Err(OptError::Any {
-                        text: format!("{:?} expects one operand, got {:?}", self, sig.len()),
-                    });
-                }
-                if !sig[0].is_algebraic() {
-                    return Err(OptError::Any {
-                        text: format!(
-                            "{:?} expects algebraic operand (scalar, vector, matrix, tensor) got {:?}",
-                            self, sig[0]
-                        ),
-                    });
-                }
-                //seem allright, for neg, we return the _same_ datatype as we get
-                Ok(Some(sig.remove(0)))
-            }
-
-            WkOp::Add | WkOp::Sub | WkOp::Div | WkOp::Min | WkOp::Max | WkOp::Mod => {
-                //For those we need _the same algebraic_ for both inputs.
-                //NOTE: Mul is a little _special_ since
-                //      there is matrix multiplication with
-                //      vectors and stuff
-                if sig.len() != 2 {
-                    return Err(OptError::Any {
-                        text: format!("{:?} expects two operands, got {:?}", self, sig.len()),
-                    });
-                }
-
-                if sig[0] != sig[1] {
-                    return Err(OptError::Any {
-                        text: format!("{:?} expects the two operands to be of the same type. but got {:?} & {:?}", self, sig[0], sig[1]),
-                    });
-                }
-
-                if !sig[0].is_algebraic() {
-                    return Err(OptError::Any {
-                        text: format!(
-                            "{:?} expects algebraic operands (scalar, vector, matrix, tensor) got {:?}",
-                            self, sig[0]
-                        ),
-                    });
-                }
-
-                //Is okay, for these we return the _same_ type that we got
-                Ok(Some(sig.remove(0)))
-            }
-            WkOp::Mul => {
-                //Multiplication works on:
-                // a x b, where a,b are of the same type,
-                //        where a = Vec and b = Scalar
-                //        where a = Mat and b = Scalar
-                //        where a = Mat and b = Vec
-                //        where a = Vec and b = Mat
-                //        where a = Mat and b = Mat,
-
-                //Still always two inputs one output
-                if sig.len() != 2 {
-                    return Err(OptError::Any {
-                        text: format!("{:?} expects two operands, got {:?}", self, sig.len()),
-                    });
-                }
-
-                if !sig[0].is_algebraic() {
-                    return Err(OptError::Any {
-                        text: format!(
-                            "{:?} expects algebraic operands (scalar, vector, matrix, tensor) got {:?}",
-                            self, sig[0]
-                        ),
-                    });
-                }
-
-                if !sig[1].is_algebraic() {
-                    return Err(OptError::Any {
-                        text: format!(
-                            "{:?} expects algebraic operands (scalar, vector, matrix, tensor) got {:?}",
-                            self, sig[1]
-                        ),
-                    });
-                }
-
-                match (&sig[0], &sig[1]) {
-                    //In that case, use the vector as return type
-                    (Ty::Vector { width: _ }, Ty::Scalar) => Ok(Some(sig.remove(0))),
-                    //In that case, we return the same-sized
-                    //matrix
-                    (
-                        Ty::Matrix {
-                            width: _,
-                            height: _,
-                        },
-                        Ty::Scalar,
-                    ) => Ok(Some(sig.remove(0))),
-                    (
-                        Ty::Vector { width: vecwidth },
-                        Ty::Matrix {
-                            width: num_columns,
-                            height: _,
-                        },
-                    ) => {
-                        //NOTE: we can only do that, if the Vector::width
-                        //      is the same has Matrix width.
-                        //TODO: Decide if we really want to make that bound check already in the optimizer.
-                        //      generally speaking this is more of a SPIR-V issue. Other backends could implement
-                        //      other Matrix/Vector multiplication
-                        if vecwidth != num_columns {
-                            Err(OptError::Any { text: format!("Vector-Matrix multiplication expects the Matrix's \"width\" to be equal to Vector's \"width\". Matrix width = {num_columns} & vector_width = {vecwidth}") })
-                        } else {
-                            //Use the vector's type.
-                            Ok(Some(sig.remove(0)))
-                        }
-                    }
-                    (
-                        Ty::Matrix {
-                            width: num_columns,
-                            height: _,
-                        },
-                        Ty::Vector { width: vecwidth },
-                    ) => {
-                        //Similar to above.
-                        if num_columns != vecwidth {
-                            Err(OptError::Any { text: format!("Vector-Matrix multiplication expects the Matrix's \"width\" to be equal to Vector's \"width\". Matrix width = {num_columns} & vector_width = {vecwidth}") })
-                        } else {
-                            //Use the vector's type.
-                            Ok(Some(sig.remove(1)))
-                        }
-                    }
-                    //if none of those was used, check that
-                    // both are at least the same. Otherwise
-                    //we actually need to return Err
-                    (a, b) => {
-                        if a != b {
-                            Err(OptError::Any {
-                                text: format!("{:?} expects the two operands, to be of the same type. but got {:?} & {:?}", self, sig[0], sig[1]),
-                            })
-                        } else {
-                            //thats okay
-                            Ok(Some(sig.remove(0)))
-                        }
-                    }
-                }
-            }
-            WkOp::Dot => {
-                if sig.len() != 2 {
-                    return Err(OptError::Any {
-                        text: format!("{:?} expects two operands, got {:?}", self, sig.len()),
-                    });
-                }
-
-                if sig[0] != sig[1] {
-                    return Err(OptError::Any {
-                        text: format!("{:?} expects the two operands to be of the same type. but got {:?} & {:?}", self, sig[0], sig[1]),
-                    });
-                }
-
-                if !sig[0].is_vector() {
-                    return Err(OptError::Any {
-                        text: format!(
-                            "{:?} expects operands to be vectors, got {:?}",
-                            self, sig[0]
-                        ),
-                    });
-                }
-
-                Ok(Some(Ty::Scalar))
-            }
-            WkOp::Cross => {
-                if sig.len() != 2 {
-                    return Err(OptError::Any {
-                        text: format!("{:?} expects two operands, got {:?}", self, sig.len()),
-                    });
-                }
-
-                if sig[0] != sig[1] {
-                    return Err(OptError::Any {
-                        text: format!("{:?} expects the two operands to be of the same type. but got {:?} & {:?}", self, sig[0], sig[1]),
-                    });
-                }
-
-                if !sig[0].is_vector() {
-                    return Err(OptError::Any {
-                        text: format!(
-                            "{:?} expects operands to be vectors, got {:?}",
-                            self, sig[0]
-                        ),
-                    });
-                }
-
-                //Cross returns the same vector type as supplied
-                Ok(Some(sig[0].clone()))
-            }
-            WkOp::Length => {
-                if sig.len() != 1 {
-                    return Err(OptError::Any {
-                        text: format!("Length expects one operand, got {:?}", sig.len()),
-                    });
-                }
-                match &sig[0] {
-                    Ty::Vector { .. } => {}
-                    _ => {
-                        return Err(OptError::Any {
-                            text: format!(
-                                "Length expects operand of type vector, got {:?}",
-                                sig[0]
-                            ),
-                        })
-                    }
-                }
-
-                //seems to be alright, return scalar
-                Ok(Some(Ty::Scalar))
-            }
-
-            WkOp::SquareRoot => {
-                if sig.len() != 1 {
-                    return Err(OptError::Any {
-                        text: format!("SquareRoot expects one operand, got {:?}", sig.len()),
-                    });
-                }
-                match &sig[0] {
-                    Ty::Scalar => {}
-                    _ => {
-                        return Err(OptError::Any {
-                            text: format!(
-                                "SquareRoot expects operand of type scalar, got {:?}",
-                                sig[0]
-                            ),
-                        })
-                    }
-                }
-
-                //seems to be alright, return scalar
-                Ok(Some(Ty::Scalar))
-            }
-            WkOp::Exp => {
-                if sig.len() != 1 {
-                    return Err(OptError::Any {
-                        text: format!("Exp expects one operand, got {:?}", sig.len()),
-                    });
-                }
-                match &sig[0] {
-                    Ty::Scalar => {}
-                    _ => {
-                        return Err(OptError::Any {
-                            text: format!("Exp expects operands of type scalar, got {:?}", sig[0]),
-                        })
-                    }
-                }
-
-                //seems to be alright, return scalar
-                Ok(Some(Ty::Scalar))
-            }
-            WkOp::Pow => {
-                if sig.len() != 2 {
-                    return Err(OptError::Any {
-                        text: format!("{:?} expects two operands, got {:?}", self, sig.len()),
-                    });
-                }
-
-                if sig[0] != sig[1] {
-                    return Err(OptError::Any {
-                        text: format!("{:?} expects the two operands to be of the same type. but got {:?} & {:?}", self, sig[0], sig[1]),
-                    });
-                }
-
-                if !sig[0].is_scalar() && !sig[0].is_vector() {
-                    return Err(OptError::Any {
-                        text: format!(
-                            "{:?} expects operands to be vectors or scalars, got {:?}",
-                            self, sig[0]
-                        ),
-                    });
-                }
-
-                //Cross returns the same vector type as supplied
-                Ok(Some(sig[0].clone()))
-            }
-            WkOp::Mix | WkOp::Clamp => {
-                if sig.len() != 3 {
-                    return Err(OptError::Any {
-                        text: format!("{:?} expects three operand, got {:?}", self, sig.len()),
-                    });
-                }
-                match (&sig[0], &sig[1], &sig[2]) {
-                    (Ty::Scalar, Ty::Scalar, Ty::Scalar) => {},
-                    (Ty::Vector{width: w0}, Ty::Vector{width: w1}, Ty::Vector{width: w2}) => {
-                        if w0 != w1 || w0 != w2{
-                            return Err(OptError::Any {
-                                text: format!("{:?} expects operands of type scalar or vector (of equal width), got {:?}", self, sig),
-                            });
-                        }
-                    },
-                    _ => {
-                        return Err(OptError::Any {
-                            text: format!("{:?} expects operands of type scalar or vector (of equal width), got {:?}", self, sig),
-                        })
-                    }
-                }
-
-                //seems to be alright, return scalar
-                Ok(Some(sig[0].clone()))
-            }
-
-            WkOp::Abs
-            | WkOp::Fract
-            | WkOp::Round
-            | WkOp::Ceil
-            | WkOp::Floor
-            | WkOp::Sin
-            | WkOp::Cos
-            | WkOp::Tan
-            | WkOp::ASin
-            | WkOp::ACos
-            | WkOp::ATan => {
-                if sig.len() != 1 {
-                    return Err(OptError::Any {
-                        text: format!("{:?} expects one operand, got {:?}", self, sig.len()),
-                    });
-                }
-                match &sig[0] {
-                    Ty::Scalar => {}
-                    Ty::Vector { .. } => {}
-                    _ => {
-                        return Err(OptError::Any {
-                            text: format!(
-                                "{:?} expects operands of type scalar or vector, got {:?}",
-                                self, sig
-                            ),
-                        })
-                    }
-                }
-
-                //seems to be alright, return scalar
-                Ok(Some(sig[0].clone()))
-            }
-
-            WkOp::Inverse => {
-                if sig.len() != 1 {
-                    return Err(OptError::Any {
-                        text: format!("{:?} expects one operand, got {:?}", self, sig.len()),
-                    });
-                }
-                match &sig[0] {
-                    Ty::Matrix { width, height } => {
-                        if width != height {
-                            return Err(OptError::Any { text: format!("Inverse operation expects quadratic matrix, got one with width={width} & height={height}") });
-                        }
-                    }
-                    _ => {
-                        return Err(OptError::Any {
-                            text: format!(
-                                "{:?} expects operands of type matrix, got {:?}",
-                                self, sig
-                            ),
-                        })
-                    }
-                }
-
-                //seems to be alright, return scalar
-                Ok(Some(sig[0].clone()))
-            }
-            WkOp::Lt | WkOp::Gt | WkOp::Lte | WkOp::Gte | WkOp::Eq | WkOp::NotEq => {
-                //Right now we only allow those on scalars / nats, othewise we'd need a way to represent vecs
-                //of bools etc. Which we don't (yet, ever?).
-                if sig.len() != 2 {
-                    return Err(OptError::Any {
-                        text: format!("{:?} expects two operands, got {}", self, sig.len()),
-                    });
-                }
-
-                if sig[0] != sig[1] {
-                    return Err(OptError::Any {
-                        text: format!(
-                            "{:?} expectes the same type for both operands, got {} & {}",
-                            self, sig[0], sig[1]
-                        ),
-                    });
-                }
-
-                match &sig[0]{
-                    Ty::Nat | Ty::Scalar  =>  Ok(Some(Ty::Bool)),
-                    any => {
-                        Err(OptError::Any { text: format!("Cannot use comperator {:?} on {}. Consider breaking it down to either a simple scalar or natural value", self, any) })
-                    }
-                }
-            }
-            WkOp::And | WkOp::Or => {
-                //Right now we only allow those on single bools, othewise we'd need a way to represent vecs
-                //of bools etc. Which we don't (yet, ever?).
-                if sig.len() != 2 {
-                    return Err(OptError::Any {
-                        text: format!("{:?} expects two operands, got {}", self, sig.len()),
-                    });
-                }
-
-                if sig[0] != sig[1] {
-                    return Err(OptError::Any {
-                        text: format!(
-                            "{:?} expectes the same type for both operands, got {} & {}",
-                            self, sig[0], sig[1]
-                        ),
-                    });
-                }
-
-                match &sig[0]{
-                    Ty::Bool  =>  Ok(Some(Ty::Bool)),
-                    any => {
-                        Err(OptError::Any { text: format!("Cannot use comperator {:?} on {}. Consider breaking it down into a single bool value", self, any) })
-                    }
-                }
-            } // wk => Err(OptError::Any {
-              //     text: format!("derive not implemented for {:?}", wk),
-              // }),
-        }
-    }
-}
-
-impl From<vola_ast::alge::UnaryOp> for WkOp {
-    fn from(value: vola_ast::alge::UnaryOp) -> Self {
-        match value {
-            vola_ast::alge::UnaryOp::Neg => Self::Neg,
-            vola_ast::alge::UnaryOp::Not => Self::Not,
-        }
-    }
-}
-
-impl From<vola_ast::alge::BinaryOp> for WkOp {
-    fn from(value: vola_ast::alge::BinaryOp) -> Self {
-        match value {
-            vola_ast::alge::BinaryOp::Add => Self::Add,
-            vola_ast::alge::BinaryOp::Sub => Self::Sub,
-            vola_ast::alge::BinaryOp::Mul => Self::Mul,
-            vola_ast::alge::BinaryOp::Div => Self::Div,
-            vola_ast::alge::BinaryOp::Mod => Self::Mod,
-
-            vola_ast::alge::BinaryOp::Lt => Self::Lt,
-            vola_ast::alge::BinaryOp::Gt => Self::Gt,
-            vola_ast::alge::BinaryOp::Gte => Self::Gte,
-            vola_ast::alge::BinaryOp::Lte => Self::Lte,
-            vola_ast::alge::BinaryOp::Eq => Self::Eq,
-            vola_ast::alge::BinaryOp::NotEq => Self::NotEq,
-
-            vola_ast::alge::BinaryOp::Or => Self::Or,
-            vola_ast::alge::BinaryOp::And => Self::And,
-        }
-    }
-}
+pub const ALGE_VIEW_COLOR: Color = Color {
+    r: 200.0 / 255.0,
+    g: 170.0 / 255.0,
+    b: 170.0 / 255.0,
+    a: 1.0,
+};
 
 //Macro that implements the "View" trait for an AlgeDialect op
 macro_rules! implViewAlgeOp {
@@ -655,88 +85,118 @@ macro_rules! implViewAlgeOp {
     }
 }
 
-///In the algebraic dialect all operations are unified into a Call-Like op.
-///
-/// Think of it like prefix notation. So the expression `a + b` becomes `add(a, b)`, `-a` becomes `neg(a)` etc.
-///
-/// this'll make optimizing easier later on.
-///
-/// Note that always only one result is returned. So only site-effect free ops can be modeled by this node.
-#[derive(LangNode)]
-pub struct CallOp {
-    #[inputs]
-    pub inputs: SmallVec<[Input; 2]>,
-    #[output]
-    pub output: Output,
-
-    pub op: WkOp,
-}
-
-impl CallOp {
-    pub fn new(op: WkOp) -> Self {
-        let mut op = CallOp {
-            inputs: SmallVec::new(),
-            output: Output::default(),
-            op,
-        };
-        //configure input count
-        for _ in 0..op.op.in_count() {
-            op.inputs.push(Input::default())
+impl OptNode {
+    pub fn try_parse(s: &str) -> Option<Self> {
+        match s {
+            "dot" => Some(OptNode::new(Buildin::new(BuildinOp::Dot), Span::empty())),
+            "cross" => Some(OptNode::new(Buildin::new(BuildinOp::Cross), Span::empty())),
+            "length" => Some(OptNode::new(Buildin::new(BuildinOp::Length), Span::empty())),
+            "sqrt" => Some(OptNode::new(
+                Buildin::new(BuildinOp::SquareRoot),
+                Span::empty(),
+            )),
+            "exp" => Some(OptNode::new(Buildin::new(BuildinOp::Exp), Span::empty())),
+            "pow" => Some(OptNode::new(Buildin::new(BuildinOp::Pow), Span::empty())),
+            "min" => Some(OptNode::new(Buildin::new(BuildinOp::Min), Span::empty())),
+            "max" => Some(OptNode::new(Buildin::new(BuildinOp::Max), Span::empty())),
+            "mix" | "lerp" => Some(OptNode::new(Buildin::new(BuildinOp::Mix), Span::empty())),
+            "mod" => Some(OptNode::new(
+                BinaryArith::new(BinaryArithOp::Mod),
+                Span::empty(),
+            )),
+            "clamp" => Some(OptNode::new(Buildin::new(BuildinOp::Clamp), Span::empty())),
+            "fract" => Some(OptNode::new(
+                UnaryArith::new(UnaryArithOp::Fract),
+                Span::empty(),
+            )),
+            "abs" => Some(OptNode::new(
+                UnaryArith::new(UnaryArithOp::Abs),
+                Span::empty(),
+            )),
+            "round" => Some(OptNode::new(
+                UnaryArith::new(UnaryArithOp::Round),
+                Span::empty(),
+            )),
+            "ceil" => Some(OptNode::new(
+                UnaryArith::new(UnaryArithOp::Ceil),
+                Span::empty(),
+            )),
+            "floor" => Some(OptNode::new(
+                UnaryArith::new(UnaryArithOp::Floor),
+                Span::empty(),
+            )),
+            "sin" => Some(OptNode::new(Trig::new(TrigOp::Sin), Span::empty())),
+            "cos" => Some(OptNode::new(Trig::new(TrigOp::Cos), Span::empty())),
+            "tan" => Some(OptNode::new(Trig::new(TrigOp::Tan), Span::empty())),
+            "asin" => Some(OptNode::new(Trig::new(TrigOp::ASin), Span::empty())),
+            "acos" => Some(OptNode::new(Trig::new(TrigOp::ACos), Span::empty())),
+            "atan" => Some(OptNode::new(Trig::new(TrigOp::ATan), Span::empty())),
+            "inverse" | "invert" => Some(OptNode::new(
+                UnaryMatrix::new(UnaryMatrixOp::Invert),
+                Span::empty(),
+            )),
+            _ => None,
         }
-        op
     }
 }
 
-implViewAlgeOp!(CallOp, "{:?}", op);
-impl DialectNode for CallOp {
-    fn dialect(&self) -> &'static str {
-        "alge"
-    }
-
-    fn try_derive_type(
-        &self,
-        _typemap: &FlagStore<Ty>,
-        graph: &OptGraph,
-        _concepts: &AHashMap<String, CSGConcept>,
-        _csg_defs: &AHashMap<String, CSGNodeDef>,
-    ) -> Result<Option<Ty>, OptError> {
-        //For all WKOps we first collect all inputs, then let the op check itself.
-        // For now we already bail if any type is unset, since we currently don't have any ops that
-        // _don't_ care about any input.
-        let mut signature: SmallVec<[Ty; 2]> = SmallVec::new();
-        for (idx, inp) in self.inputs.iter().enumerate() {
-            if let Some(edg) = inp.edge {
-                //resolve if there is a type set
-                if let Some(t) = graph.edge(edg).ty.get_type() {
-                    signature.insert(idx, t.clone());
-                } else {
-                    return Ok(None);
-                }
-            } else {
-                //input not set atm. so return None as well
-                return Ok(None);
+impl From<vola_ast::alge::UnaryOp> for OptNode {
+    fn from(value: vola_ast::alge::UnaryOp) -> Self {
+        match value {
+            vola_ast::alge::UnaryOp::Neg => {
+                OptNode::new(UnaryArith::new(UnaryArithOp::Neg), Span::empty())
+            }
+            vola_ast::alge::UnaryOp::Not => {
+                OptNode::new(UnaryBool::new(UnaryBoolOp::Not), Span::empty())
             }
         }
-
-        self.op.try_derive_type(signature)
     }
+}
 
-    fn is_operation_equal(&self, other: &OptNode) -> bool {
-        if let Some(other_cop) = other.try_downcast_ref::<CallOp>() {
-            other_cop.op == self.op
-        } else {
-            false
-        }
-    }
+impl From<vola_ast::alge::BinaryOp> for OptNode {
+    fn from(value: vola_ast::alge::BinaryOp) -> Self {
+        match value {
+            vola_ast::alge::BinaryOp::Add => {
+                OptNode::new(BinaryArith::new(BinaryArithOp::Add), Span::empty())
+            }
+            vola_ast::alge::BinaryOp::Sub => {
+                OptNode::new(BinaryArith::new(BinaryArithOp::Sub), Span::empty())
+            }
+            vola_ast::alge::BinaryOp::Mul => {
+                OptNode::new(BinaryArith::new(BinaryArithOp::Mul), Span::empty())
+            }
+            vola_ast::alge::BinaryOp::Div => {
+                OptNode::new(BinaryArith::new(BinaryArithOp::Div), Span::empty())
+            }
+            vola_ast::alge::BinaryOp::Mod => {
+                OptNode::new(BinaryArith::new(BinaryArithOp::Mod), Span::empty())
+            }
 
-    fn structural_copy(&self, span: vola_common::Span) -> crate::OptNode {
-        OptNode {
-            span,
-            node: Box::new(CallOp {
-                inputs: smallvec![Input::default(); self.inputs.len()],
-                output: Output::default(),
-                op: self.op.clone(),
-            }),
+            vola_ast::alge::BinaryOp::Lt => {
+                OptNode::new(BinaryRel::new(BinaryRelOp::Lt), Span::empty())
+            }
+            vola_ast::alge::BinaryOp::Gt => {
+                OptNode::new(BinaryRel::new(BinaryRelOp::Gt), Span::empty())
+            }
+            vola_ast::alge::BinaryOp::Gte => {
+                OptNode::new(BinaryRel::new(BinaryRelOp::Gte), Span::empty())
+            }
+            vola_ast::alge::BinaryOp::Lte => {
+                OptNode::new(BinaryRel::new(BinaryRelOp::Lte), Span::empty())
+            }
+            vola_ast::alge::BinaryOp::Eq => {
+                OptNode::new(BinaryRel::new(BinaryRelOp::Eq), Span::empty())
+            }
+            vola_ast::alge::BinaryOp::NotEq => {
+                OptNode::new(BinaryRel::new(BinaryRelOp::NotEq), Span::empty())
+            }
+
+            vola_ast::alge::BinaryOp::Or => {
+                OptNode::new(BinaryBool::new(BinaryBoolOp::Or), Span::empty())
+            }
+            vola_ast::alge::BinaryOp::And => {
+                OptNode::new(BinaryBool::new(BinaryBoolOp::And), Span::empty())
+            }
         }
     }
 }

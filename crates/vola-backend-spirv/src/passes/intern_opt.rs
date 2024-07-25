@@ -16,7 +16,15 @@ use rvsdg::{
 };
 // use vola_common::{error::error_reporter, report, Span};
 use vola_opt::{
-    alge::{CallOp, ConstantIndex, Construct, WkOp},
+    alge::{
+        arithmetic::{BinaryArith, UnaryArith, UnaryArithOp},
+        buildin::{Buildin, BuildinOp},
+        logical::{BinaryBool, BinaryBoolOp, UnaryBool, UnaryBoolOp},
+        matrix::{UnaryMatrix, UnaryMatrixOp},
+        relational::{BinaryRel, BinaryRelOp},
+        trigonometric::{Trig, TrigOp},
+        ConstantIndex, Construct,
+    },
     imm::{ImmNat, ImmScalar},
     OptEdge, OptNode, Optimizer,
 };
@@ -259,8 +267,20 @@ impl BackendOp {
             return Some(Self::from_imm_nat(imm));
         }
 
-        if let Some(callop) = optnode.try_downcast_ref::<CallOp>() {
-            return Some(Self::from_wk(&callop.op));
+        if let Some(binary_arith) = optnode.try_downcast_ref::<BinaryArith>() {
+            return Some(Self::HlOp(binary_arith.op.into()));
+        }
+
+        if let Some(unary_arith) = optnode.try_downcast_ref::<UnaryArith>() {
+            return Some(Self::from_unary_arith(unary_arith.op));
+        }
+
+        if let Some(unary_arith) = optnode.try_downcast_ref::<Trig>() {
+            return Some(Self::from_trig(unary_arith.op));
+        }
+
+        if let Some(buildin) = optnode.try_downcast_ref::<Buildin>() {
+            return Some(Self::from_buildin(buildin.op));
         }
 
         if let Some(facc) = optnode.try_downcast_ref::<ConstantIndex>() {
@@ -271,7 +291,46 @@ impl BackendOp {
             return Some(Self::from_construct(lconst));
         }
 
+        if let Some(binray_rel) = optnode.try_downcast_ref::<BinaryRel>() {
+            return Some(Self::from_binary_rel(binray_rel.op));
+        }
+
+        if let Some(binarybool) = optnode.try_downcast_ref::<BinaryBool>() {
+            match binarybool.op {
+                BinaryBoolOp::And => {
+                    return Some(BackendOp::SpirvOp(SpvOp::CoreOp(CoreOp::LogicalAnd)))
+                }
+                BinaryBoolOp::Or => {
+                    return Some(BackendOp::SpirvOp(SpvOp::CoreOp(CoreOp::LogicalOr)))
+                }
+            }
+        }
+        if let Some(unarybool) = optnode.try_downcast_ref::<UnaryBool>() {
+            match unarybool.op {
+                UnaryBoolOp::Not => return Some(BackendOp::SpirvOp(SpvOp::CoreOp(CoreOp::Not))),
+            }
+        }
+
+        if let Some(matrix_op) = optnode.try_downcast_ref::<UnaryMatrix>() {
+            match matrix_op.op {
+                UnaryMatrixOp::Invert => {
+                    return Some(BackendOp::SpirvOp(SpvOp::GlslOp(GlOp::MatrixInverse)))
+                }
+            }
+        }
+
         None
+    }
+
+    fn from_binary_rel(rel: BinaryRelOp) -> Self {
+        match rel {
+            BinaryRelOp::Lt => BackendOp::HlOp(HlOp::Lt),
+            BinaryRelOp::Gt => BackendOp::HlOp(HlOp::Gt),
+            BinaryRelOp::Lte => BackendOp::HlOp(HlOp::Lte),
+            BinaryRelOp::Gte => BackendOp::HlOp(HlOp::Gte),
+            BinaryRelOp::Eq => BackendOp::HlOp(HlOp::Eq),
+            BinaryRelOp::NotEq => BackendOp::HlOp(HlOp::Neq),
+        }
     }
 
     fn from_imm_scalar(imm: &ImmScalar) -> Self {
@@ -290,49 +349,41 @@ impl BackendOp {
         })
     }
 
-    fn from_wk(wk: &WkOp) -> Self {
-        match wk {
-            WkOp::Not => BackendOp::SpirvOp(SpvOp::CoreOp(CoreOp::Not)),
+    fn from_unary_arith(op: UnaryArithOp) -> Self {
+        match op {
+            UnaryArithOp::Abs => BackendOp::HlOp(HlOp::Abs),
+            UnaryArithOp::Ceil => BackendOp::SpirvOp(SpvOp::GlslOp(GlOp::Ceil)),
+            UnaryArithOp::Floor => BackendOp::SpirvOp(SpvOp::GlslOp(GlOp::Floor)),
+            UnaryArithOp::Round => BackendOp::SpirvOp(SpvOp::GlslOp(GlOp::Round)),
+            UnaryArithOp::Fract => BackendOp::SpirvOp(SpvOp::GlslOp(GlOp::Fract)),
             //NOTE: Since we just have floats, we can just use FNegate
-            WkOp::Neg => BackendOp::HlOp(HlOp::Negate),
-            WkOp::Add => BackendOp::HlOp(HlOp::Add),
-            WkOp::Sub => BackendOp::HlOp(HlOp::Sub),
-            WkOp::Mul => BackendOp::HlOp(HlOp::Mul),
-            WkOp::Div => BackendOp::HlOp(HlOp::Div),
-            WkOp::Mod => BackendOp::HlOp(HlOp::Mod),
+            UnaryArithOp::Neg => BackendOp::HlOp(HlOp::Negate),
+        }
+    }
 
-            WkOp::Lt => BackendOp::HlOp(HlOp::Lt),
-            WkOp::Gt => BackendOp::HlOp(HlOp::Gt),
-            WkOp::Lte => BackendOp::HlOp(HlOp::Lte),
-            WkOp::Gte => BackendOp::HlOp(HlOp::Gte),
-            WkOp::Eq => BackendOp::HlOp(HlOp::Eq),
-            WkOp::NotEq => BackendOp::HlOp(HlOp::Neq),
+    fn from_trig(op: TrigOp) -> Self {
+        match op {
+            TrigOp::Sin => BackendOp::SpirvOp(SpvOp::GlslOp(GlOp::Sin)),
+            TrigOp::Cos => BackendOp::SpirvOp(SpvOp::GlslOp(GlOp::Cos)),
+            TrigOp::Tan => BackendOp::SpirvOp(SpvOp::GlslOp(GlOp::Tan)),
+            TrigOp::ASin => BackendOp::SpirvOp(SpvOp::GlslOp(GlOp::Asin)),
+            TrigOp::ACos => BackendOp::SpirvOp(SpvOp::GlslOp(GlOp::Acos)),
+            TrigOp::ATan => BackendOp::SpirvOp(SpvOp::GlslOp(GlOp::Atan)),
+        }
+    }
 
-            WkOp::And => BackendOp::SpirvOp(SpvOp::CoreOp(CoreOp::LogicalAnd)),
-            WkOp::Or => BackendOp::SpirvOp(SpvOp::CoreOp(CoreOp::LogicalOr)),
-
-            WkOp::Dot => BackendOp::SpirvOp(SpvOp::CoreOp(CoreOp::Dot)),
-            WkOp::Cross => BackendOp::SpirvOp(SpvOp::GlslOp(GlOp::Cross)),
-            WkOp::Length => BackendOp::SpirvOp(SpvOp::GlslOp(GlOp::Length)),
-            WkOp::SquareRoot => BackendOp::SpirvOp(SpvOp::GlslOp(GlOp::Sqrt)),
-            WkOp::Exp => BackendOp::SpirvOp(SpvOp::GlslOp(GlOp::Exp)),
-            WkOp::Pow => BackendOp::SpirvOp(SpvOp::GlslOp(GlOp::Pow)),
-            WkOp::Min => BackendOp::HlOp(HlOp::Min),
-            WkOp::Max => BackendOp::HlOp(HlOp::Max),
-            WkOp::Mix => BackendOp::HlOp(HlOp::Mix),
-            WkOp::Clamp => BackendOp::HlOp(HlOp::Clamp),
-            WkOp::Abs => BackendOp::HlOp(HlOp::Abs),
-            WkOp::Fract => BackendOp::SpirvOp(SpvOp::GlslOp(GlOp::Fract)),
-            WkOp::Round => BackendOp::SpirvOp(SpvOp::GlslOp(GlOp::Round)),
-            WkOp::Ceil => BackendOp::SpirvOp(SpvOp::GlslOp(GlOp::Ceil)),
-            WkOp::Floor => BackendOp::SpirvOp(SpvOp::GlslOp(GlOp::Floor)),
-            WkOp::Sin => BackendOp::SpirvOp(SpvOp::GlslOp(GlOp::Sin)),
-            WkOp::Cos => BackendOp::SpirvOp(SpvOp::GlslOp(GlOp::Cos)),
-            WkOp::Tan => BackendOp::SpirvOp(SpvOp::GlslOp(GlOp::Tan)),
-            WkOp::ASin => BackendOp::SpirvOp(SpvOp::GlslOp(GlOp::Asin)),
-            WkOp::ACos => BackendOp::SpirvOp(SpvOp::GlslOp(GlOp::Acos)),
-            WkOp::ATan => BackendOp::SpirvOp(SpvOp::GlslOp(GlOp::Atan)),
-            WkOp::Inverse => BackendOp::SpirvOp(SpvOp::GlslOp(GlOp::MatrixInverse)),
+    fn from_buildin(wk: BuildinOp) -> Self {
+        match wk {
+            BuildinOp::Dot => BackendOp::SpirvOp(SpvOp::CoreOp(CoreOp::Dot)),
+            BuildinOp::Cross => BackendOp::SpirvOp(SpvOp::GlslOp(GlOp::Cross)),
+            BuildinOp::Length => BackendOp::SpirvOp(SpvOp::GlslOp(GlOp::Length)),
+            BuildinOp::SquareRoot => BackendOp::SpirvOp(SpvOp::GlslOp(GlOp::Sqrt)),
+            BuildinOp::Exp => BackendOp::SpirvOp(SpvOp::GlslOp(GlOp::Exp)),
+            BuildinOp::Pow => BackendOp::SpirvOp(SpvOp::GlslOp(GlOp::Pow)),
+            BuildinOp::Min => BackendOp::HlOp(HlOp::Min),
+            BuildinOp::Max => BackendOp::HlOp(HlOp::Max),
+            BuildinOp::Mix => BackendOp::HlOp(HlOp::Mix),
+            BuildinOp::Clamp => BackendOp::HlOp(HlOp::Clamp),
         }
     }
 

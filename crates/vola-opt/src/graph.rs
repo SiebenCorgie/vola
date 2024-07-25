@@ -90,6 +90,11 @@ impl OptNode {
         }
     }
 
+    pub fn with_span(mut self, span: Span) -> Self {
+        self.span = span;
+        self
+    }
+
     ///Tries to downcast the inner `node` to `T`.
     pub fn try_downcast_ref<'a, T: DialectNode + Send + Sync + 'static>(&'a self) -> Option<&'a T> {
         let upcast: &'a dyn Any = self.node.as_ref();
