@@ -66,7 +66,7 @@ pub trait DialectNode: LangNode + Any + View {
     ///Implements the try_constant_fold method of [ConstantFoldable].
     fn try_constant_fold(
         &self,
-        src_nodes: &[Option<&rvsdg::nodes::Node<OptNode>>],
+        #[allow(unused_variables)] src_nodes: &[Option<&rvsdg::nodes::Node<OptNode>>],
     ) -> Option<OptNode> {
         None
     }

@@ -19,8 +19,14 @@ use rvsdg::{
 };
 use rvsdg_viewer::Color;
 use vola_ast::csg::{CSGConcept, CSGNodeDef};
+use vola_common::Span;
 
-use crate::{common::Ty, error::OptError, DialectNode, OptEdge, OptGraph, OptNode, TypeState};
+use crate::{
+    common::Ty,
+    error::OptError,
+    imm::{ImmMatrix, ImmScalar, ImmVector},
+    DialectNode, OptEdge, OptGraph, OptNode, TypeState,
+};
 
 pub(crate) mod algefn;
 pub(crate) mod constant_fold;
@@ -994,6 +1000,78 @@ impl DialectNode for Construct {
             }),
         }
     }
+
+    fn try_constant_fold(
+        &self,
+        src_nodes: &[Option<&rvsdg::nodes::Node<OptNode>>],
+    ) -> Option<OptNode> {
+        if src_nodes.len() == 0 {
+            return None;
+        }
+        if src_nodes[0].is_none() {
+            return None;
+        }
+
+        //We can constant fold a set of scalars into a vector, and a set of
+        //equal width vectors into a matrix.
+        //
+        //Everything else can be ignored.
+        //
+        // Since both depend on _all nodes being the same_ we can just try_cast the first node, and depending on if its a scalar
+        // or vector, try to cast the rest. If it ain't any of these, just bail
+
+        if let NodeType::Simple(s) = &src_nodes[0].unwrap().node_type {
+            if s.try_downcast_ref::<ImmScalar>().is_some() {
+                //try to build vector of scalars
+                let mut scalars = SmallColl::new();
+                for srcn in src_nodes {
+                    if let Some(NodeType::Simple(s)) = srcn.map(|n| &n.node_type) {
+                        if let Some(scalar) = s.try_downcast_ref::<ImmScalar>() {
+                            scalars.push(scalar.lit);
+                        } else {
+                            //Was no scalar actualy, bail
+                            return None;
+                        }
+                    } else {
+                        //If couldn't be cast, bail
+                        return None;
+                    }
+                }
+
+                //If we reached this, we could fold all constants into one vec
+                return Some(OptNode::new(ImmVector::new(&scalars), Span::empty()));
+            }
+
+            //try folding into matix with equal-width vectors
+            if let Some(first_vec) = s.try_downcast_ref::<ImmVector>() {
+                let expected_column_height = first_vec.lit.len();
+                let mut columns = SmallColl::new();
+
+                for srcn in src_nodes {
+                    if let Some(NodeType::Simple(s)) = srcn.map(|n| &n.node_type) {
+                        if let Some(vec) = s.try_downcast_ref::<ImmVector>() {
+                            //Bail if not same size
+                            if vec.lit.len() != expected_column_height {
+                                return None;
+                            }
+                            columns.push(SmallColl::from_slice(&vec.lit));
+                        } else {
+                            //Was no scalar actualy, bail
+                            return None;
+                        }
+                    } else {
+                        //If couldn't be cast, bail
+                        return None;
+                    }
+                }
+
+                //If we reached this, we could fold all constants into one matrix
+                return Some(OptNode::new(ImmMatrix::new(columns), Span::empty()));
+            }
+        }
+
+        None
+    }
 }
 
 ///Selects a subset of an _aggregated_ value. For instance an element of a matrix, a row in a matrix or a sub-matrix of an tensor.
@@ -1064,5 +1142,42 @@ impl DialectNode for ConstantIndex {
                 output: Output::default(),
             }),
         }
+    }
+
+    fn try_constant_fold(
+        &self,
+        src_nodes: &[Option<&rvsdg::nodes::Node<OptNode>>],
+    ) -> Option<OptNode> {
+        //we can fold any ImmVector and ImmMatrix into a the next lower representation.
+        //The access _should_ be valid / in-bounds, otherwise the type-derive pass before _should_ have paniced.
+
+        if src_nodes.len() > 1 {
+            #[cfg(feature = "log")]
+            log::error!("ConstantIndex had {} inputs, expected 1", src_nodes.len());
+        }
+
+        if src_nodes.len() != 1 {
+            return None;
+        }
+
+        if let Some(NodeType::Simple(s)) = src_nodes[0].map(|n| &n.node_type) {
+            if let Some(vec) = s.try_downcast_ref::<ImmVector>() {
+                assert!(vec.lit.len() > self.access);
+                return Some(OptNode::new(
+                    ImmScalar::new(vec.lit[self.access]),
+                    Span::empty(),
+                ));
+            }
+
+            if let Some(mat) = s.try_downcast_ref::<ImmMatrix>() {
+                assert!(mat.lit.len() > self.access);
+                return Some(OptNode::new(
+                    ImmVector::new(mat.lit[self.access].as_slice()),
+                    Span::empty(),
+                ));
+            }
+        }
+
+        None
     }
 }

@@ -110,14 +110,14 @@ impl DialectNode for ImmScalar {
 #[derive(LangNode, Debug)]
 pub struct ImmVector {
     ///The immediate value
-    pub lit: SmallVec<[f32; 8]>,
+    pub lit: SmallVec<[f64; 8]>,
     ///the output port the `lit` value is passed down to.
     #[output]
     pub out: Output,
 }
 
 impl ImmVector {
-    pub fn new(elements: &[f32]) -> Self {
+    pub fn new(elements: &[f64]) -> Self {
         ImmVector {
             lit: SmallVec::from_slice(elements),
             out: Output::default(),
@@ -169,31 +169,28 @@ pub struct ImmMatrix {
     width: usize,
     height: usize,
     ///The immediate value
-    pub lit: SmallColl<SmallColl<f32>>,
+    pub lit: SmallColl<SmallColl<f64>>,
     ///the output port the `lit` value is passed down to.
     #[output]
     pub out: Output,
 }
 
 impl ImmMatrix {
-    pub fn new(columns: &[&[f32]]) -> Self {
+    pub fn new(columns: SmallColl<SmallColl<f64>>) -> Self {
         //We are as wide as we have columns, and are as heigh has each column has elements.
         //see
         // Construct::try_derive_type for more information
         let width = columns.len();
         let height = columns[0].len();
 
-        for col in columns {
+        for col in &columns {
             assert!(col.len() == height)
         }
 
         ImmMatrix {
             width,
             height,
-            lit: columns
-                .iter()
-                .map(|col| SmallVec::from_slice(col))
-                .collect(),
+            lit: columns,
             out: Output::default(),
         }
     }
@@ -213,8 +210,9 @@ impl DialectNode for ImmMatrix {
         _csg_defs: &AHashMap<String, CSGNodeDef>,
     ) -> Result<Option<Ty>, OptError> {
         //NOTE: all literals are translated to a _scalar_
-        Ok(Some(Ty::Vector {
-            width: self.lit.len(),
+        Ok(Some(Ty::Matrix {
+            width: self.width,
+            height: self.height,
         }))
     }
 
