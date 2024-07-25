@@ -9,7 +9,7 @@
 //!
 
 use ahash::AHashMap;
-use arithmetic::{BinaryArith, BinaryArithOp};
+use arithmetic::{BinaryArith, BinaryArithOp, UnaryArith, UnaryArithOp};
 use rvsdg::{
     attrib::FlagStore,
     nodes::NodeType,
@@ -88,7 +88,6 @@ pub enum WkOp {
     //TODO: do we really want to include NOT? I mean flipping floats is fun I guess,
     // but also error prone.
     Not,
-    Neg,
 
     //relation
     Lt,
@@ -114,11 +113,6 @@ pub enum WkOp {
     Mix,
     Clamp,
 
-    Abs,
-    Fract,
-    Round,
-    Ceil,
-    Floor,
     Sin,
     Cos,
     Tan,
@@ -134,7 +128,6 @@ impl WkOp {
     pub fn in_count(&self) -> usize {
         match self {
             WkOp::Not => 1,
-            WkOp::Neg => 1,
 
             WkOp::Lt => 2,
             WkOp::Gt => 2,
@@ -156,13 +149,6 @@ impl WkOp {
             WkOp::Max => 2,
             WkOp::Mix => 3,
             WkOp::Clamp => 3,
-            WkOp::Round => 1,
-
-            WkOp::Abs => 1,
-            WkOp::Fract => 1,
-            WkOp::Ceil => 1,
-            WkOp::Floor => 1,
-
             WkOp::Sin => 1,
             WkOp::Cos => 1,
             WkOp::Tan => 1,
@@ -179,7 +165,7 @@ impl WkOp {
         // empty. However, its a good place to unify this check even if the type resolution changes at some point.
 
         match self {
-            WkOp::Not | WkOp::Neg => {
+            WkOp::Not => {
                 if sig.len() != 1 {
                     return Err(OptError::Any {
                         text: format!("{:?} expects one operand, got {:?}", self, sig.len()),
@@ -387,17 +373,7 @@ impl WkOp {
                 Ok(Some(sig[0].clone()))
             }
 
-            WkOp::Abs
-            | WkOp::Fract
-            | WkOp::Round
-            | WkOp::Ceil
-            | WkOp::Floor
-            | WkOp::Sin
-            | WkOp::Cos
-            | WkOp::Tan
-            | WkOp::ASin
-            | WkOp::ACos
-            | WkOp::ATan => {
+            WkOp::Sin | WkOp::Cos | WkOp::Tan | WkOp::ASin | WkOp::ACos | WkOp::ATan => {
                 if sig.len() != 1 {
                     return Err(OptError::Any {
                         text: format!("{:?} expects one operand, got {:?}", self, sig.len()),
@@ -518,11 +494,26 @@ impl OptNode {
                 Span::empty(),
             )),
             "clamp" => Some(OptNode::new(CallOp::new(WkOp::Clamp), Span::empty())),
-            "fract" => Some(OptNode::new(CallOp::new(WkOp::Fract), Span::empty())),
-            "abs" => Some(OptNode::new(CallOp::new(WkOp::Abs), Span::empty())),
-            "round" => Some(OptNode::new(CallOp::new(WkOp::Round), Span::empty())),
-            "ceil" => Some(OptNode::new(CallOp::new(WkOp::Ceil), Span::empty())),
-            "floor" => Some(OptNode::new(CallOp::new(WkOp::Floor), Span::empty())),
+            "fract" => Some(OptNode::new(
+                UnaryArith::new(UnaryArithOp::Fract),
+                Span::empty(),
+            )),
+            "abs" => Some(OptNode::new(
+                UnaryArith::new(UnaryArithOp::Abs),
+                Span::empty(),
+            )),
+            "round" => Some(OptNode::new(
+                UnaryArith::new(UnaryArithOp::Round),
+                Span::empty(),
+            )),
+            "ceil" => Some(OptNode::new(
+                UnaryArith::new(UnaryArithOp::Ceil),
+                Span::empty(),
+            )),
+            "floor" => Some(OptNode::new(
+                UnaryArith::new(UnaryArithOp::Floor),
+                Span::empty(),
+            )),
             "sin" => Some(OptNode::new(CallOp::new(WkOp::Sin), Span::empty())),
             "cos" => Some(OptNode::new(CallOp::new(WkOp::Cos), Span::empty())),
             "tan" => Some(OptNode::new(CallOp::new(WkOp::Tan), Span::empty())),
@@ -570,7 +561,9 @@ impl CallOp {
 impl From<vola_ast::alge::UnaryOp> for OptNode {
     fn from(value: vola_ast::alge::UnaryOp) -> Self {
         match value {
-            vola_ast::alge::UnaryOp::Neg => OptNode::new(CallOp::new(WkOp::Neg), Span::empty()),
+            vola_ast::alge::UnaryOp::Neg => {
+                OptNode::new(UnaryArith::new(UnaryArithOp::Neg), Span::empty())
+            }
             vola_ast::alge::UnaryOp::Not => OptNode::new(CallOp::new(WkOp::Not), Span::empty()),
         }
     }

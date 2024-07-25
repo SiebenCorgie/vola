@@ -238,3 +238,125 @@ impl DialectNode for BinaryArith {
         }
     }
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UnaryArithOp {
+    Neg,
+    Abs,
+    Fract,
+    Ceil,
+    Floor,
+    Round,
+}
+
+#[derive(LangNode)]
+pub struct UnaryArith {
+    pub op: UnaryArithOp,
+    #[input]
+    pub inputs: Input,
+    #[output]
+    pub output: Output,
+}
+
+impl UnaryArith {
+    pub fn new(op: UnaryArithOp) -> Self {
+        UnaryArith {
+            op,
+            inputs: Input::default(),
+            output: Output::default(),
+        }
+    }
+}
+
+impl View for UnaryArith {
+    fn name(&self) -> String {
+        format!("{:?}", self.op)
+    }
+
+    fn stroke(&self) -> rvsdg_viewer::Stroke {
+        rvsdg_viewer::Stroke::Line
+    }
+    fn color(&self) -> Color {
+        super::ALGE_VIEW_COLOR
+    }
+}
+
+impl DialectNode for UnaryArith {
+    fn dialect(&self) -> &'static str {
+        "alge"
+    }
+    fn try_derive_type(
+        &self,
+        _typemap: &rvsdg::attrib::FlagStore<Ty>,
+        graph: &crate::OptGraph,
+        _concepts: &ahash::AHashMap<String, vola_ast::csg::CSGConcept>,
+        _csg_defs: &ahash::AHashMap<String, vola_ast::csg::CSGNodeDef>,
+    ) -> Result<Option<Ty>, OptError> {
+        let input_ty = if let Some(edg) = &self.inputs.edge {
+            //resolve if there is a type set
+            if let Some(t) = graph.edge(*edg).ty.get_type() {
+                t.clone()
+            } else {
+                return Ok(None);
+            }
+        } else {
+            //input not set atm. so return None as well
+            return Ok(None);
+        };
+
+        match &self.op {
+            UnaryArithOp::Neg => {
+                if !input_ty.is_algebraic() {
+                    return Err(OptError::Any {
+                        text: format!(
+                            "{:?} expects algebraic operand (scalar, vector, matrix, tensor) got {:?}",
+                            self.op,input_ty
+                        ),
+                    });
+                }
+                //seem allright, for neg, we return the _same_ datatype as we get
+                Ok(Some(input_ty))
+            }
+            UnaryArithOp::Abs
+            | UnaryArithOp::Fract
+            | UnaryArithOp::Round
+            | UnaryArithOp::Ceil
+            | UnaryArithOp::Floor => {
+                match input_ty {
+                    Ty::Scalar => {}
+                    Ty::Vector { .. } => {}
+                    _ => {
+                        return Err(OptError::Any {
+                            text: format!(
+                                "{:?} expects operands of type scalar or vector, got {:?}",
+                                self.op, input_ty
+                            ),
+                        })
+                    }
+                }
+
+                //seems to be alright, return scalar
+                Ok(Some(input_ty))
+            }
+        }
+    }
+
+    fn structural_copy(&self, span: vola_common::Span) -> crate::OptNode {
+        OptNode {
+            span,
+            node: Box::new(UnaryArith {
+                inputs: Input::default(),
+                output: Output::default(),
+                op: self.op.clone(),
+            }),
+        }
+    }
+
+    fn is_operation_equal(&self, other: &crate::OptNode) -> bool {
+        if let Some(other_cop) = other.try_downcast_ref::<UnaryArith>() {
+            other_cop.op == self.op
+        } else {
+            false
+        }
+    }
+}

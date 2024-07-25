@@ -17,7 +17,7 @@ use rvsdg::{
 // use vola_common::{error::error_reporter, report, Span};
 use vola_opt::{
     alge::{
-        arithmetic::{BinaryArith, BinaryArithOp},
+        arithmetic::{BinaryArith, BinaryArithOp, UnaryArith, UnaryArithOp},
         CallOp, ConstantIndex, Construct, WkOp,
     },
     imm::{ImmNat, ImmScalar},
@@ -266,6 +266,10 @@ impl BackendOp {
             return Some(Self::HlOp(binary_arith.op.into()));
         }
 
+        if let Some(unary_arith) = optnode.try_downcast_ref::<UnaryArith>() {
+            return Some(Self::from_unary_arith(unary_arith.op));
+        }
+
         if let Some(callop) = optnode.try_downcast_ref::<CallOp>() {
             return Some(Self::from_wk(&callop.op));
         }
@@ -297,11 +301,21 @@ impl BackendOp {
         })
     }
 
+    fn from_unary_arith(op: UnaryArithOp) -> Self {
+        match op {
+            UnaryArithOp::Abs => BackendOp::HlOp(HlOp::Abs),
+            UnaryArithOp::Ceil => BackendOp::SpirvOp(SpvOp::GlslOp(GlOp::Ceil)),
+            UnaryArithOp::Floor => BackendOp::SpirvOp(SpvOp::GlslOp(GlOp::Floor)),
+            UnaryArithOp::Round => BackendOp::SpirvOp(SpvOp::GlslOp(GlOp::Round)),
+            UnaryArithOp::Fract => BackendOp::SpirvOp(SpvOp::GlslOp(GlOp::Fract)),
+            //NOTE: Since we just have floats, we can just use FNegate
+            UnaryArithOp::Neg => BackendOp::HlOp(HlOp::Negate),
+        }
+    }
+
     fn from_wk(wk: &WkOp) -> Self {
         match wk {
             WkOp::Not => BackendOp::SpirvOp(SpvOp::CoreOp(CoreOp::Not)),
-            //NOTE: Since we just have floats, we can just use FNegate
-            WkOp::Neg => BackendOp::HlOp(HlOp::Negate),
 
             WkOp::Lt => BackendOp::HlOp(HlOp::Lt),
             WkOp::Gt => BackendOp::HlOp(HlOp::Gt),
@@ -323,11 +337,6 @@ impl BackendOp {
             WkOp::Max => BackendOp::HlOp(HlOp::Max),
             WkOp::Mix => BackendOp::HlOp(HlOp::Mix),
             WkOp::Clamp => BackendOp::HlOp(HlOp::Clamp),
-            WkOp::Abs => BackendOp::HlOp(HlOp::Abs),
-            WkOp::Fract => BackendOp::SpirvOp(SpvOp::GlslOp(GlOp::Fract)),
-            WkOp::Round => BackendOp::SpirvOp(SpvOp::GlslOp(GlOp::Round)),
-            WkOp::Ceil => BackendOp::SpirvOp(SpvOp::GlslOp(GlOp::Ceil)),
-            WkOp::Floor => BackendOp::SpirvOp(SpvOp::GlslOp(GlOp::Floor)),
             WkOp::Sin => BackendOp::SpirvOp(SpvOp::GlslOp(GlOp::Sin)),
             WkOp::Cos => BackendOp::SpirvOp(SpvOp::GlslOp(GlOp::Cos)),
             WkOp::Tan => BackendOp::SpirvOp(SpvOp::GlslOp(GlOp::Tan)),
