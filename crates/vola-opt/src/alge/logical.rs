@@ -8,12 +8,14 @@
 
 //! Logical operations
 use rvsdg::{
+    nodes::NodeType,
     region::{Input, Output},
     rvsdg_derive_lang::LangNode,
 };
 use rvsdg_viewer::View;
+use vola_common::Span;
 
-use crate::{common::Ty, DialectNode, OptError, OptNode};
+use crate::{common::Ty, imm::ImmBool, DialectNode, OptError, OptNode};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UnaryBoolOp {
@@ -107,6 +109,29 @@ impl DialectNode for UnaryBool {
             other_cop.op == self.op
         } else {
             false
+        }
+    }
+
+    fn try_constant_fold(
+        &self,
+        #[allow(unused_variables)] src_nodes: &[Option<&rvsdg::nodes::Node<OptNode>>],
+    ) -> Option<OptNode> {
+        if src_nodes.len() == 0 {
+            return None;
+        }
+
+        if src_nodes[0].is_none() {
+            return None;
+        }
+
+        if let NodeType::Simple(s) = &src_nodes[0].as_ref().unwrap().node_type {
+            if let Some(bool) = s.try_downcast_ref::<ImmBool>() {
+                Some(OptNode::new(ImmBool::new(!bool.lit), s.span.clone()))
+            } else {
+                None
+            }
+        } else {
+            None
         }
     }
 }
@@ -217,6 +242,42 @@ impl DialectNode for BinaryBool {
             other_cop.op == self.op
         } else {
             false
+        }
+    }
+
+    fn try_constant_fold(
+        &self,
+        #[allow(unused_variables)] src_nodes: &[Option<&rvsdg::nodes::Node<OptNode>>],
+    ) -> Option<OptNode> {
+        if src_nodes.len() != 2 {
+            return None;
+        }
+
+        if src_nodes[0].is_none() || src_nodes[1].is_none() {
+            return None;
+        }
+
+        if let (NodeType::Simple(a), NodeType::Simple(b)) = (
+            &src_nodes[0].as_ref().unwrap().node_type,
+            &src_nodes[1].as_ref().unwrap().node_type,
+        ) {
+            if let (Some(bool_a), Some(bool_b)) = (
+                a.try_downcast_ref::<ImmBool>(),
+                b.try_downcast_ref::<ImmBool>(),
+            ) {
+                let op = match self.op {
+                    BinaryBoolOp::Or => |a: bool, b: bool| a || b,
+                    BinaryBoolOp::And => |a: bool, b: bool| a && b,
+                };
+                Some(OptNode::new(
+                    ImmBool::new(op(bool_a.lit, bool_b.lit)),
+                    Span::empty(),
+                ))
+            } else {
+                None
+            }
+        } else {
+            None
         }
     }
 }
