@@ -18,14 +18,14 @@
 use thiserror::Error;
 
 use crate::{
-    edge::{InportLocation, LangEdge},
+    edge::{InportLocation, InputType, LangEdge},
     err::GraphError,
     nodes::{LangNode, Node, NodeType},
     region::RegionLocation,
     Rvsdg, SmallColl,
 };
 
-use super::abstract_node_type::AbstractNodeType;
+use super::{abstract_node_type::AbstractNodeType, copy::StructuralClone};
 
 #[derive(Debug, Error, Clone)]
 pub enum CnfError {
@@ -47,9 +47,8 @@ pub trait ConstantFoldable<N: LangNode + 'static, E: LangEdge + 'static> {
     }
 
     ///Must implement the constant `usize` value this node describes. This is used to fold
-    /// Gamma nodes by statically chosing a branch, or unrolling and compacting theta nodes if the bound
-    /// is constant.
-    fn constant_value(&self) -> Option<usize> {
+    /// Gamma nodes by statically chosing a branch.
+    fn constant_gamma_branch(&self) -> Option<usize> {
         None
     }
 }
@@ -60,14 +59,14 @@ struct CnfCtx<N: LangNode + 'static> {
     folded_nodes: Vec<NodeType<N>>,
 }
 
-impl<N: LangNode + 'static> CnfCtx<N> {
-    pub fn cnf_region<E: LangEdge + 'static>(
+impl<N: LangNode + StructuralClone + 'static> CnfCtx<N> {
+    pub fn cnf_region<E: LangEdge + StructuralClone + 'static>(
         &mut self,
         graph: &mut Rvsdg<N, E>,
         region: RegionLocation,
     ) -> Result<(), CnfError>
     where
-        N: ConstantFoldable<N, E>,
+        N: ConstantFoldable<N, E> + 'static,
     {
         //NOTE: The idea is similar to how the common-node-elemination works. We traverse the region in topological order.
         //      For any node that _could_ be folded, we call the `try_constant_fold` implementation with all dependencies.
@@ -131,6 +130,39 @@ impl<N: LangNode + 'static> CnfCtx<N> {
                     } else {
                     }
                 }
+                AbstractNodeType::Gamma => {
+                    //Check if we can specialize the gamma-node for a constant predicate, if not just cnf all sub-regions
+                    let specialization_index = if let Some(specialized_branch) =
+                        graph.inport_src(InportLocation {
+                            node,
+                            input: InputType::GammaPredicate,
+                        }) {
+                        if let NodeType::Simple(s) = &graph.node(specialized_branch.node).node_type
+                        {
+                            s.constant_gamma_branch()
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    };
+
+                    if let Some(spec_branch) = specialization_index {
+                        //if we can specialize, pre cnf only the one branch, then pull it out of the gamma
+                        self.cnf_region(
+                            graph,
+                            RegionLocation {
+                                node,
+                                region_index: spec_branch,
+                            },
+                        )?;
+                        graph.gamma_specialize_for_branch(node, spec_branch);
+                    } else {
+                        for region_index in 0..graph.node(node).regions().len() {
+                            self.cnf_region(graph, RegionLocation { node, region_index })?;
+                        }
+                    }
+                }
                 _ => {
                     //TODO: Implement gamma and theta folding
                     //
@@ -146,7 +178,7 @@ impl<N: LangNode + 'static> CnfCtx<N> {
     }
 }
 
-impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E>
+impl<N: LangNode + StructuralClone + 'static, E: LangEdge + StructuralClone + 'static> Rvsdg<N, E>
 where
     N: ConstantFoldable<N, E>,
 {

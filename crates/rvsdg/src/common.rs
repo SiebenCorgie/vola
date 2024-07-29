@@ -5,7 +5,7 @@
  *
  * 2024 Tendsin Mende
  */
-use crate::{edge::LangEdge, Rvsdg};
+use crate::{edge::LangEdge, util::copy::StructuralClone, Rvsdg};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum VSEdge {
@@ -39,6 +39,12 @@ impl LangEdge for VSEdge {
 
     fn value_edge() -> Self {
         Self::Value
+    }
+}
+
+impl StructuralClone for VSEdge {
+    fn structural_copy(&self) -> Self {
+        self.clone()
     }
 }
 

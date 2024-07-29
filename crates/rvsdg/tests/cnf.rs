@@ -1,12 +1,6 @@
-use rvsdg::{
-    common::VSEdge,
-    edge::{InportLocation, InputType, OutportLocation, OutputType},
-    nodes::NodeType,
-    util::cnf::ConstantFoldable,
-    Rvsdg,
-};
+use rvsdg::{common::VSEdge, edge::InputType, nodes::NodeType, util::cnf::ConstantFoldable, Rvsdg};
 use rvsdg_viewer::View;
-use test_rvsdg::{dump_graph_to_svg, LNode};
+use test_rvsdg::LNode;
 
 mod test_rvsdg;
 

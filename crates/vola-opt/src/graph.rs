@@ -11,7 +11,7 @@ use core::panic;
 use std::{any::Any, fmt::Debug};
 
 use crate::error::OptError;
-use crate::imm::ImmNat;
+use crate::imm::ImmBool;
 use crate::{common::Ty, Optimizer};
 use ahash::AHashMap;
 use rvsdg::attrib::AttribLocation;
@@ -140,16 +140,18 @@ impl ConstantFoldable<OptNode, OptEdge> for OptNode {
         self.node.try_constant_fold(src_nodes)
     }
 
-    fn constant_value(&self) -> Option<usize> {
-        if self.node.dialect() == "alge" {
-            if let Some(constant) = self.try_downcast_ref::<ImmNat>() {
-                Some(constant.lit as usize)
-            } else {
-                None
+    fn constant_gamma_branch(&self) -> Option<usize> {
+        if self.node.dialect() == "Imm" {
+            if let Some(boolean) = self.try_downcast_ref::<ImmBool>() {
+                if boolean.lit {
+                    return Some(0);
+                } else {
+                    return Some(1);
+                }
             }
-        } else {
-            None
         }
+
+        None
     }
 }
 

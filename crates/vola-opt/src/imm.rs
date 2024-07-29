@@ -258,7 +258,7 @@ impl ImmNat {
 implViewImmOp!(ImmNat, "{}i", lit);
 impl DialectNode for ImmNat {
     fn dialect(&self) -> &'static str {
-        "alge"
+        "Imm"
     }
 
     fn try_derive_type(
