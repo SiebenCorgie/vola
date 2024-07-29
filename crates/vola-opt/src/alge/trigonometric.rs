@@ -11,10 +11,16 @@
 use rvsdg::{
     region::{Input, Output},
     rvsdg_derive_lang::LangNode,
+    SmallColl,
 };
 use rvsdg_viewer::{Color, View};
+use vola_common::Span;
 
-use crate::{common::Ty, DialectNode, OptError, OptNode};
+use crate::{
+    common::Ty,
+    imm::{ImmScalar, ImmVector},
+    DialectNode, OptError, OptNode,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TrigOp {
@@ -115,5 +121,54 @@ impl DialectNode for Trig {
         } else {
             false
         }
+    }
+
+    fn try_constant_fold(
+        &self,
+        #[allow(unused_variables)] src_nodes: &[Option<&rvsdg::nodes::Node<OptNode>>],
+    ) -> Option<OptNode> {
+        //defined on singular scalar or vector
+        if src_nodes.len() == 0 {
+            return None;
+        }
+
+        if src_nodes[0].is_none() {
+            return None;
+        }
+
+        if !src_nodes[0].as_ref().unwrap().node_type.is_simple() {
+            return None;
+        }
+
+        let op = match self.op {
+            TrigOp::Sin => f64::sin,
+            TrigOp::Cos => f64::cos,
+            TrigOp::Tan => f64::tan,
+            TrigOp::ASin => f64::asin,
+            TrigOp::ACos => f64::acos,
+            TrigOp::ATan => f64::atan,
+        };
+
+        if let Some(vec) = src_nodes[0]
+            .as_ref()
+            .unwrap()
+            .node_type
+            .unwrap_simple_ref()
+            .try_downcast_ref::<ImmVector>()
+        {
+            let new: SmallColl<f64> = vec.lit.iter().map(|element| op(*element)).collect();
+            return Some(OptNode::new(ImmVector::new(new.as_slice()), Span::empty()));
+        }
+        if let Some(scalar) = src_nodes[0]
+            .as_ref()
+            .unwrap()
+            .node_type
+            .unwrap_simple_ref()
+            .try_downcast_ref::<ImmScalar>()
+        {
+            return Some(OptNode::new(ImmScalar::new(op(scalar.lit)), Span::empty()));
+        }
+
+        None
     }
 }
