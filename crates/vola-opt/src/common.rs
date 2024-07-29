@@ -118,6 +118,21 @@ impl Ty {
         }
     }
 
+    pub fn is_matrix(&self) -> bool {
+        if let Self::Matrix { .. } = self {
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn is_tensor(&self) -> bool {
+        if let Self::Tensor { .. } = self {
+            true
+        } else {
+            false
+        }
+    }
     ///Tries to derive a type that would be produced by indexing with `index` into the `Ty`.
     pub(crate) fn try_derive_access_index(&self, index: usize) -> Result<Ty, OptError> {
         match self {

@@ -14,6 +14,7 @@ use rvsdg::{
     region::{Input, Output},
     rvsdg_derive_lang::LangNode,
     smallvec::{smallvec, SmallVec},
+    SmallColl,
 };
 use rvsdg_viewer::{Color, View};
 use vola_ast::csg::{CSGConcept, CSGNodeDef};
@@ -104,16 +105,143 @@ impl BuildinOp {
         }
     }
 
+    fn constant_handle_binary(&self, a: &OptNode, b: &OptNode) -> Option<OptNode> {
+        match self {
+            Self::Dot => {
+                //only defined on vectors
+                if let (Some(a), Some(b)) = (
+                    a.try_downcast_ref::<ImmVector>(),
+                    b.try_downcast_ref::<ImmVector>(),
+                ) {
+                    if a.lit.len() != b.lit.len() {
+                        return None;
+                    }
+                    let mut acc = 0.0;
+
+                    for i in 0..a.lit.len() {
+                        acc += a.lit[i] * b.lit[i];
+                    }
+
+                    Some(OptNode::new(ImmScalar::new(acc), Span::empty()))
+                } else {
+                    None
+                }
+            }
+            Self::Cross => {
+                //Only defined for vectors
+                if let (Some(a), Some(b)) = (
+                    a.try_downcast_ref::<ImmVector>(),
+                    b.try_downcast_ref::<ImmVector>(),
+                ) {
+                    if a.lit.len() != b.lit.len() {
+                        return None;
+                    }
+
+                    //NOTE: Well, we need _generic_ determinant product and stuff
+                    //      like that here. Sooo... do we want a generic lin-alg crate
+                    //      at this point, or not?
+                    #[cfg(feature = "log")]
+                    log::error!("constant folding cross-product not implemented!");
+
+                    None
+                } else {
+                    None
+                }
+            }
+            Self::Min | Self::Max | Self::Pow => {
+                //Fetch the correct f64 op, then apply it either pair wise,
+                //or for the two scalars
+                let op = match self {
+                    Self::Min => f64::min,
+                    Self::Max => f64::max,
+                    Self::Pow => f64::powf,
+                    _ => return None,
+                };
+
+                if let (Some(a), Some(b)) = (
+                    a.try_downcast_ref::<ImmVector>(),
+                    b.try_downcast_ref::<ImmVector>(),
+                ) {
+                    if a.lit.len() != b.lit.len() {
+                        return None;
+                    }
+                    let mut new = SmallColl::new();
+
+                    for i in 0..a.lit.len() {
+                        new.push(op(a.lit[i], b.lit[i]));
+                    }
+
+                    return Some(OptNode::new(ImmVector::new(&new), Span::empty()));
+                }
+
+                if let (Some(a), Some(b)) = (
+                    a.try_downcast_ref::<ImmScalar>(),
+                    b.try_downcast_ref::<ImmScalar>(),
+                ) {
+                    return Some(OptNode::new(
+                        ImmScalar::new(op(a.lit, b.lit)),
+                        Span::empty(),
+                    ));
+                }
+
+                None
+            }
+            _ => None,
+        }
+    }
+
+    fn constant_handle_3ops(&self, a: &OptNode, b: &OptNode, c: &OptNode) -> Option<OptNode> {
+        match self {
+            Self::Mix | Self::Clamp => {
+                let op = match self {
+                    Self::Mix => |a: f64, b: f64, c: f64| {
+                        let c = c.clamp(0.0, 1.0);
+                        a * (1.0 - c) + b * c
+                    },
+                    Self::Clamp => f64::clamp,
+                    _ => return None,
+                };
+
+                if let (Some(a), Some(b), Some(c)) = (
+                    a.try_downcast_ref::<ImmVector>(),
+                    b.try_downcast_ref::<ImmVector>(),
+                    c.try_downcast_ref::<ImmVector>(),
+                ) {
+                    if a.lit.len() != b.lit.len() {
+                        return None;
+                    }
+                    let mut new = SmallColl::new();
+
+                    for i in 0..a.lit.len() {
+                        new.push(op(a.lit[i], b.lit[i], c.lit[i]));
+                    }
+
+                    return Some(OptNode::new(ImmVector::new(&new), Span::empty()));
+                }
+
+                if let (Some(a), Some(b), Some(c)) = (
+                    a.try_downcast_ref::<ImmScalar>(),
+                    b.try_downcast_ref::<ImmScalar>(),
+                    c.try_downcast_ref::<ImmScalar>(),
+                ) {
+                    return Some(OptNode::new(
+                        ImmScalar::new(op(a.lit, b.lit, c.lit)),
+                        Span::empty(),
+                    ));
+                }
+
+                None
+            }
+            _ => None,
+        }
+    }
+
     fn try_derive_type(&self, mut sig: SmallVec<[Ty; 2]>) -> Result<Option<Ty>, OptError> {
         //NOTE: sig.len() is somewhat redundant, since the caller wouldn't try to derive if any input is
         // empty. However, its a good place to unify this check even if the type resolution changes at some point.
 
         match self {
             Self::Min | Self::Max => {
-                //For those we need _the same algebraic_ for both inputs.
-                //NOTE: Mul is a little _special_ since
-                //      there is matrix multiplication with
-                //      vectors and stuff
                 if sig.len() != 2 {
                     return Err(OptError::Any {
                         text: format!("{:?} expects two operands, got {:?}", self, sig.len()),
@@ -126,7 +254,7 @@ impl BuildinOp {
                     });
                 }
 
-                if !sig[0].is_algebraic() {
+                if !sig[0].is_algebraic() || sig[0].is_matrix() || sig[1].is_tensor() {
                     return Err(OptError::Any {
                         text: format!(
                             "{:?} expects algebraic operands (scalar, vector, matrix, tensor) got {:?}",
@@ -426,11 +554,43 @@ impl DialectNode for Buildin {
             | BuildinOp::Min
             | BuildinOp::Max => {
                 //Binary case
-                todo!()
+                if src_nodes.len() < 2 {
+                    return None;
+                }
+                if src_nodes[0].is_none() || src_nodes[1].is_none() {
+                    return None;
+                }
+                if !src_nodes[0].as_ref().unwrap().node_type.is_simple()
+                    || !src_nodes[1].as_ref().unwrap().node_type.is_simple()
+                {
+                    return None;
+                }
+
+                self.op.constant_handle_binary(
+                    src_nodes[0].as_ref().unwrap().node_type.unwrap_simple_ref(),
+                    src_nodes[1].as_ref().unwrap().node_type.unwrap_simple_ref(),
+                )
             }
             BuildinOp::Mix | BuildinOp::Clamp => {
                 //3-component case
-                todo!()
+                if src_nodes.len() < 3 {
+                    return None;
+                }
+                if src_nodes[0].is_none() || src_nodes[1].is_none() || src_nodes[2].is_none() {
+                    return None;
+                }
+                if !src_nodes[0].as_ref().unwrap().node_type.is_simple()
+                    || !src_nodes[1].as_ref().unwrap().node_type.is_simple()
+                    || !src_nodes[2].as_ref().unwrap().node_type.is_simple()
+                {
+                    return None;
+                }
+
+                self.op.constant_handle_3ops(
+                    src_nodes[0].as_ref().unwrap().node_type.unwrap_simple_ref(),
+                    src_nodes[1].as_ref().unwrap().node_type.unwrap_simple_ref(),
+                    src_nodes[2].as_ref().unwrap().node_type.unwrap_simple_ref(),
+                )
             }
         }
     }
