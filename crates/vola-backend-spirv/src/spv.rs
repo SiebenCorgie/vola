@@ -653,6 +653,7 @@ pub enum SpvOp {
         resolution: u32,
         bits: u32,
     },
+    ConstantBool(bool),
     ///_some_ kind of constant extract. The exact instruction depends on _what_ is
     // being used, but we _know_ that the access indices are _constant_.
     Extract(SmallVec<[u32; 3]>),
@@ -672,6 +673,7 @@ impl SpvOp {
                 format!("f{}: {}", resolution, f32::from_bits(*bits))
             }
             SpvOp::ConstantInt { resolution, bits } => format!("i{resolution}: {bits}"),
+            SpvOp::ConstantBool(b) => format!("{b}"),
             SpvOp::Extract(ex) => format!("Extract: {:?}", ex),
             SpvOp::Construct => "ConstantConstruct".to_owned(),
         }
@@ -751,7 +753,7 @@ impl SpvOp {
 
                 type_pattern_check_gl_op(glsl_grammar, glslop, inputs, output)
             }
-            SpvOp::ConstantFloat { .. } | SpvOp::ConstantInt { .. } => {
+            SpvOp::ConstantFloat { .. } | SpvOp::ConstantInt { .. } | SpvOp::ConstantBool(_) => {
                 //thats always cool I think :eyes:
                 Ok(())
             }
@@ -772,7 +774,9 @@ impl SpvOp {
 
     pub fn instruction_is_type_or_constant(&self) -> bool {
         match self {
-            SpvOp::ConstantFloat { .. } | SpvOp::ConstantInt { .. } => true,
+            SpvOp::ConstantFloat { .. } | SpvOp::ConstantInt { .. } | SpvOp::ConstantBool(_) => {
+                true
+            }
             _ => false,
         }
     }
@@ -829,6 +833,14 @@ impl SpvOp {
                     Some(result_id),
                     vec![operand],
                 )
+            }
+            SpvOp::ConstantBool(b) => {
+                //Similar hack, since constant bool has to be defined _outside_ as well
+                let core_op = match b {
+                    true => CoreOp::ConstantTrue,
+                    false => CoreOp::ConstantFalse,
+                };
+                Instruction::new(core_op, Some(result_type_id), Some(result_id), vec![])
             }
             SpvOp::Extract(chain) => {
                 //right now this always translates to OpCompositeExtract

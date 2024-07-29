@@ -25,7 +25,7 @@ use vola_opt::{
         trigonometric::{Trig, TrigOp},
         ConstantIndex, Construct,
     },
-    imm::{ImmNat, ImmScalar},
+    imm::{ImmBool, ImmNat, ImmScalar},
     OptEdge, OptNode, Optimizer,
 };
 
@@ -265,6 +265,10 @@ impl BackendOp {
 
         if let Some(imm) = optnode.try_downcast_ref::<ImmNat>() {
             return Some(Self::from_imm_nat(imm));
+        }
+
+        if let Some(imm) = optnode.try_downcast_ref::<ImmBool>() {
+            return Some(Self::SpirvOp(SpvOp::ConstantBool(imm.lit)));
         }
 
         if let Some(binary_arith) = optnode.try_downcast_ref::<BinaryArith>() {

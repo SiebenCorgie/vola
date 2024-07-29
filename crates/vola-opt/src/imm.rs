@@ -289,3 +289,58 @@ impl DialectNode for ImmNat {
         }
     }
 }
+
+///An immediate bool.
+#[derive(LangNode, Debug)]
+pub struct ImmBool {
+    ///The immediate value
+    pub lit: bool,
+    ///the output port the `lit` value is passed down to.
+    #[output]
+    pub out: Output,
+}
+
+impl ImmBool {
+    pub fn new(lit: bool) -> Self {
+        ImmBool {
+            lit,
+            out: Output::default(),
+        }
+    }
+}
+
+implViewImmOp!(ImmBool, "{}", lit);
+impl DialectNode for ImmBool {
+    fn dialect(&self) -> &'static str {
+        "Imm"
+    }
+
+    fn try_derive_type(
+        &self,
+        _typemap: &FlagStore<Ty>,
+        _graph: &OptGraph,
+        _concepts: &AHashMap<String, CSGConcept>,
+        _csg_defs: &AHashMap<String, CSGNodeDef>,
+    ) -> Result<Option<Ty>, OptError> {
+        //NOTE: all literals are translated to a _scalar_
+        Ok(Some(Ty::Bool))
+    }
+
+    fn is_operation_equal(&self, other: &OptNode) -> bool {
+        if let Some(other_cop) = other.try_downcast_ref::<ImmBool>() {
+            other_cop.lit == self.lit
+        } else {
+            false
+        }
+    }
+
+    fn structural_copy(&self, span: vola_common::Span) -> OptNode {
+        OptNode {
+            span,
+            node: Box::new(ImmBool {
+                lit: self.lit.clone(),
+                out: Output::default(),
+            }),
+        }
+    }
+}
