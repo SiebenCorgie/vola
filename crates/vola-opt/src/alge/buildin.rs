@@ -17,8 +17,13 @@ use rvsdg::{
 };
 use rvsdg_viewer::{Color, View};
 use vola_ast::csg::{CSGConcept, CSGNodeDef};
+use vola_common::Span;
 
-use crate::{common::Ty, DialectNode, OptError, OptGraph, OptNode};
+use crate::{
+    common::Ty,
+    imm::{ImmScalar, ImmVector},
+    DialectNode, OptError, OptGraph, OptNode,
+};
 
 ///Buildin optimizer ops that are _not-standard_.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -50,6 +55,52 @@ impl BuildinOp {
             Self::Max => 2,
             Self::Mix => 3,
             Self::Clamp => 3,
+        }
+    }
+
+    fn constant_handle_unary(&self, input: &OptNode) -> Option<OptNode> {
+        match self {
+            Self::Length => {
+                //must be on vector
+                if let Some(vec) = input.try_downcast_ref::<ImmVector>() {
+                    let mut acc = 0.0;
+                    //Not length is defined as all elements squared, then
+                    // sqrt of acc. Aka. "euclidean distance".
+                    for ele in &vec.lit {
+                        acc += ele * ele;
+                    }
+
+                    Some(OptNode::new(ImmScalar::new(acc.sqrt()), Span::empty()))
+                } else {
+                    None
+                }
+            }
+            Self::SquareRoot => {
+                //only defined on Scalar
+                if let Some(scalar) = input.try_downcast_ref::<ImmScalar>() {
+                    Some(OptNode::new(
+                        ImmScalar::new(scalar.lit.sqrt()),
+                        Span::empty(),
+                    ))
+                } else {
+                    None
+                }
+            }
+
+            Self::Exp => {
+                //only defined on Scalar
+                if let Some(scalar) = input.try_downcast_ref::<ImmScalar>() {
+                    Some(OptNode::new(
+                        ImmScalar::new(scalar.lit.exp()),
+                        Span::empty(),
+                    ))
+                } else {
+                    None
+                }
+            }
+
+            //All others are undefined / unfoldable
+            _ => None,
         }
     }
 
@@ -345,6 +396,42 @@ impl DialectNode for Buildin {
                 output: Output::default(),
                 op: self.op.clone(),
             }),
+        }
+    }
+
+    fn try_constant_fold(
+        &self,
+        #[allow(unused_variables)] src_nodes: &[Option<&rvsdg::nodes::Node<OptNode>>],
+    ) -> Option<OptNode> {
+        match self.op {
+            BuildinOp::Length | BuildinOp::SquareRoot | BuildinOp::Exp => {
+                //unary case
+                if src_nodes.len() == 0 {
+                    return None;
+                }
+                if src_nodes[0].is_none() {
+                    return None;
+                }
+                if !src_nodes[0].as_ref().unwrap().node_type.is_simple() {
+                    return None;
+                }
+
+                self.op.constant_handle_unary(
+                    src_nodes[0].as_ref().unwrap().node_type.unwrap_simple_ref(),
+                )
+            }
+            BuildinOp::Dot
+            | BuildinOp::Cross
+            | BuildinOp::Pow
+            | BuildinOp::Min
+            | BuildinOp::Max => {
+                //Binary case
+                todo!()
+            }
+            BuildinOp::Mix | BuildinOp::Clamp => {
+                //3-component case
+                todo!()
+            }
         }
     }
 }
