@@ -8,13 +8,22 @@
 
 //! base arithmetic operations
 
-use crate::{common::Ty, DialectNode, OptError, OptNode};
+use std::ops::Neg;
+
+use crate::{
+    common::Ty,
+    imm::{ImmMatrix, ImmScalar, ImmVector},
+    DialectNode, OptError, OptNode,
+};
 use rvsdg::{
+    nodes::NodeType,
     region::{Input, Output},
     rvsdg_derive_lang::LangNode,
     smallvec::SmallVec,
+    SmallColl,
 };
 use rvsdg_viewer::{Color, View};
+use vola_common::Span;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BinaryArithOp {
@@ -23,6 +32,18 @@ pub enum BinaryArithOp {
     Mul,
     Div,
     Mod,
+}
+
+impl BinaryArithOp {
+    pub fn apply_on_scalar(&self, a: f64, b: f64) -> f64 {
+        match self {
+            Self::Add => a + b,
+            Self::Sub => a - b,
+            Self::Mul => a * b,
+            Self::Div => a / b,
+            Self::Mod => a % b,
+        }
+    }
 }
 
 #[derive(LangNode)]
@@ -154,7 +175,7 @@ impl BinaryArith {
                     ) => {
                         //Similar to above.
                         if num_columns != vecwidth {
-                            Err(OptError::Any { text: format!("Vector-Matrix multiplication expects the Matrix's \"width\" to be equal to Vector's \"width\". Matrix width = {num_columns} & vector_width = {vecwidth}") })
+                            Err(OptError::Any { text: format!("Matrix-Vector multiplication expects the Matrix's \"width\" to be equal to Vector's \"width\". Matrix width = {num_columns} & vector_width = {vecwidth}") })
                         } else {
                             //Use the vector's type.
                             Ok(Some(sig[1].clone()))
@@ -237,6 +258,33 @@ impl DialectNode for BinaryArith {
             false
         }
     }
+
+    fn try_constant_fold(
+        &self,
+        src_nodes: &[Option<&rvsdg::nodes::Node<OptNode>>],
+    ) -> Option<OptNode> {
+        if src_nodes.len() != 2 {
+            return None;
+        }
+        if src_nodes[0].is_none() || src_nodes[1].is_none() {
+            return None;
+        }
+
+        //similar to the unary case, but for two inputs. We try to cast the first one to ImmScalar/Vector/Matrix,
+        //and then try to do it with the second one as well.
+        //
+        //an exception is `Mul`, which can use all kinds of operand combinations as is no necessarly
+        match (
+            src_nodes[0].map(|n| &n.node_type),
+            src_nodes[1].map(|n| &n.node_type),
+        ) {
+            (Some(NodeType::Simple(a)), Some(NodeType::Simple(b))) => match self.op {
+                BinaryArithOp::Mul => crate::alge::constant_fold::handle_constant_mul(a, b),
+                _ => crate::alge::constant_fold::handle_piece_wise(&self.op, a, b),
+            },
+            _ => None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -247,6 +295,19 @@ pub enum UnaryArithOp {
     Ceil,
     Floor,
     Round,
+}
+
+impl UnaryArithOp {
+    pub fn apply_on_scalar(&self, s: f64) -> f64 {
+        match self {
+            Self::Abs => s.abs(),
+            Self::Ceil => s.ceil(),
+            Self::Floor => s.floor(),
+            Self::Fract => s.fract(),
+            Self::Round => s.round(),
+            Self::Neg => s.neg(),
+        }
+    }
 }
 
 #[derive(LangNode)]
@@ -357,6 +418,53 @@ impl DialectNode for UnaryArith {
             other_cop.op == self.op
         } else {
             false
+        }
+    }
+
+    fn try_constant_fold(
+        &self,
+        src_nodes: &[Option<&rvsdg::nodes::Node<OptNode>>],
+    ) -> Option<OptNode> {
+        if src_nodes.len() != 1 {
+            return None;
+        }
+        if src_nodes[0].is_none() {
+            return None;
+        }
+
+        //Try to cast the first src node into any of the known imm values, if successfull, try to apply the operation
+        //to the value, and build a new, constant immediate node
+        if let Some(NodeType::Simple(s)) = &src_nodes[0].map(|n| &n.node_type) {
+            if let Some(scalar) = s.try_downcast_ref::<ImmScalar>() {
+                let new = self.op.apply_on_scalar(scalar.lit);
+                return Some(OptNode::new(ImmScalar::new(new), Span::empty()));
+            }
+
+            if let Some(vector) = s.try_downcast_ref::<ImmVector>() {
+                let mut new_vec = ImmVector::new(&[]);
+                for element in &vector.lit {
+                    new_vec.lit.push(self.op.apply_on_scalar(*element));
+                }
+
+                return Some(OptNode::new(new_vec, Span::empty()));
+            }
+
+            if let Some(matrix) = s.try_downcast_ref::<ImmMatrix>() {
+                let mut columns = SmallColl::new();
+                for col in &matrix.lit {
+                    let mut newcol = SmallColl::new();
+                    for element in col {
+                        newcol.push(self.op.apply_on_scalar(*element));
+                    }
+                    columns.push(newcol);
+                }
+
+                return Some(OptNode::new(ImmMatrix::new(columns), Span::empty()));
+            }
+
+            None
+        } else {
+            None
         }
     }
 }
