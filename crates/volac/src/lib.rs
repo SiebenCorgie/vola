@@ -252,7 +252,15 @@ impl Pipeline {
                     .build()
                     .expect("Failed to build SPIR-V module from backend graph.");
 
-                if std::env::var("VOLA_DUMP_VIEWER").is_ok() {
+                if std::env::var("VOLA_DUMP_ALL").is_ok()
+                    || std::env::var("VOLA_SPIRV_FINAL").is_ok()
+                {
+                    backend.push_debug_state("Emitted SPIR-V Graph");
+                }
+                if std::env::var("VOLA_DUMP_ALL").is_ok()
+                    || std::env::var("VOLA_DUMP_SPIRV_STATE").is_ok()
+                    || std::env::var("VOLA_DUMP_VIEWER").is_ok()
+                {
                     backend.dump_debug_state(&"SpirvState.bin");
                 }
                 let words = spvmodule.assemble();

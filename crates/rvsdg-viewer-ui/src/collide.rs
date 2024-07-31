@@ -11,7 +11,7 @@ use rvsdg_viewer::{
     primitives::{Prim, PrimTree},
 };
 
-const COLLISION_LINE_WIDTH: f32 = 2.0;
+const COLLISION_LINE_WIDTH: f32 = 1.0;
 ///Queries the `tree`, reutrns an ID of `AttribLocation`, if any is found at `at` relative to the
 ///`tree`'s origin.
 pub fn find_collision(tree: &PrimTree, mut at: Vec2) -> Option<AttribLocation> {

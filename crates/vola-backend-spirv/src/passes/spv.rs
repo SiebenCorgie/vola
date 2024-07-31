@@ -17,7 +17,7 @@ use rvsdg::{
 use crate::{
     graph::BackendOp,
     spv::{ArithBaseTy, SpvType, TyShape},
-    BackendSpirvError, SpirvBackend, SpirvConfig, SpirvModule,
+    BackendSpirvError, SpirvBackend, SpirvModule,
 };
 
 pub struct EmitCtx {
@@ -44,7 +44,7 @@ impl EmitCtx {
 }
 
 impl SpirvBackend {
-    pub fn into_spv_module(&self, config: &SpirvConfig) -> Result<SpirvModule, BackendSpirvError> {
+    pub fn into_spv_module(&mut self) -> Result<SpirvModule, BackendSpirvError> {
         //Build the initial _empty_ module with the header specified by config
         let mut b = Builder::new();
         let mut ctx = EmitCtx {
@@ -52,7 +52,7 @@ impl SpirvBackend {
             type_mapping: AHashMap::default(),
             node_mapping: AHashMap::default(),
         };
-        b.set_version(config.version_major, config.version_minor);
+        b.set_version(self.config.version_major, self.config.version_minor);
         b.memory_model(
             rspirv::spirv::AddressingModel::Logical,
             rspirv::spirv::MemoryModel::Vulkan,
@@ -62,16 +62,21 @@ impl SpirvBackend {
         b.capability(rspirv::spirv::Capability::Shader);
         b.capability(rspirv::spirv::Capability::VulkanMemoryModel);
 
-        for ext in &config.extensions {
+        for ext in &self.config.extensions {
             b.extension(ext.clone());
         }
 
-        for ext_inst in &config.ext_inst {
+        for ext_inst in &self.config.ext_inst {
             let id = b.ext_inst_import(ext_inst.clone());
             assert!(ctx.extinst_ids.insert(ext_inst.clone(), id).is_none());
         }
 
         self.emit_into(&mut ctx, &mut b)?;
+
+        //overwrite all IDs
+        for (port, id) in &ctx.node_mapping {
+            self.spirv_id_map.set(port.clone().into(), *id);
+        }
 
         Ok(b.module())
     }
@@ -381,7 +386,7 @@ impl SpirvBackend {
             .region_to_cfg_scfr(reg)
             .expect("Could not transform region to CFG");
 
-        //cfg_to_svg(&cfg, &format!("{reg:?}.svg"));
+        //super::cfg_dot::cfg_to_svg(&cfg, &self, &format!("{reg:?}.svg"));
 
         //Now setup ids for all BasicBlock in the BB.
         //This'll let us setup any control-flow reliably.

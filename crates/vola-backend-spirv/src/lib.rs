@@ -76,12 +76,13 @@ pub struct SpirvBackend {
     //      the builder
     graph: Rvsdg<BackendNode, BackendEdge>,
     ///Can be used to tag things with their identifiers
-    idents: FlagStore<String>,
+    pub(crate) idents: FlagStore<String>,
     ///Can be used to tag things with a source-span, if there is such a thing.
     spans: FlagStore<Span>,
     ///Used to declare types on _none-edge_ things. Mostly ports to derive a type for an unused
     ///attribute later on.
-    typemap: FlagStore<SpvType>,
+    pub(crate) typemap: FlagStore<SpvType>,
+    pub(crate) spirv_id_map: FlagStore<u32>,
     config: SpirvConfig,
 
     #[cfg(feature = "viewer")]
@@ -95,6 +96,7 @@ impl SpirvBackend {
             idents: FlagStore::new(),
             spans: FlagStore::new(),
             typemap: FlagStore::new(),
+            spirv_id_map: FlagStore::new(),
             config,
             #[cfg(feature = "viewer")]
             viewer: ViewerState::new(),
@@ -119,8 +121,8 @@ impl SpirvBackend {
     }
 
     ///Builds the module based on the current configuration and graph.
-    pub fn build(&self) -> Result<SpirvModule, BackendSpirvError> {
-        self.into_spv_module(&self.config)
+    pub fn build(&mut self) -> Result<SpirvModule, BackendSpirvError> {
+        self.into_spv_module()
     }
 
     pub fn dump_svg(&self, name: &str, ignore_dead_node: bool) {
@@ -154,6 +156,7 @@ impl SpirvBackend {
             .with_flags("Name", &self.idents)
             .with_flags("Span", &self.spans)
             .with_flags("Type", &local_typemap)
+            .with_flags("SPIRV-ID", &self.spirv_id_map)
             .build();
 
         if std::env::var("VOLA_ALWAYS_WRITE_DUMP").is_ok() {
