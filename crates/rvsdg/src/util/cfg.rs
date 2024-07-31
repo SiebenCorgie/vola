@@ -5,6 +5,12 @@
  *
  * 2024 Tendsin Mende
  */
+
+//! This module implements SCFG structurizer for the Rvsdg.
+//! Each node in the resulting SCFG is describe by a [CfgNode] in a [Cfg] graph.
+//!
+//! At the moment only the [scfr](crate::Rvsdg::region_to_cfg_scfr) algorithm is implemented.
+
 use slotmap::{new_key_type, Key, SlotMap};
 
 use crate::{edge::OutportLocation, NodeRef};

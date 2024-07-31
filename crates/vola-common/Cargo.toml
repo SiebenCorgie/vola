@@ -1,6 +1,6 @@
 [package]
 name = "vola-common"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 license = "MPL-2.0"
 authors = ["Tendsin Mende"]
@@ -15,12 +15,12 @@ dot = ["graphviz-rust"]
 thiserror.workspace = true
 backtrace.workspace = true
 tree-sitter.workspace = true
-ahash = {workspace = true, features = ["serde"]}
-smallvec = {workspace = true, features = ["serde"]}
-smallstr = {workspace = true, features = ["serde"]}
-serde = {workspace = true, features = ["derive"]}
+ahash = { workspace = true, features = ["serde"] }
+smallvec = { workspace = true, features = ["serde"] }
+smallstr = { workspace = true, features = ["serde"] }
+serde = { workspace = true, features = ["derive"] }
 serde-lexpr.workspace = true
-graphviz-rust = {workspace = true, optional = true}
+graphviz-rust = { workspace = true, optional = true }
 lazy_static.workspace = true
-rvsdg-viewer = {path = "../rvsdg-viewer"}
-ariadne = {workspace = true, features = ["auto-color"]}
+rvsdg-viewer = { path = "../rvsdg-viewer" }
+ariadne = { workspace = true, features = ["auto-color"] }

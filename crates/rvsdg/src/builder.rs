@@ -32,7 +32,7 @@ use crate::{
 pub use inter_proc::{DeltaBuilder, LambdaBuilder, OmegaBuilder, PhiBuilder};
 pub use intra_proc::{GammaBuilder, ThetaBuilder};
 
-///Probably the most used builder. Represents a simple [Region](crate::region::Region) within one of the higher level nodes.
+///Probably the most used builder. Represents a simple [Region] within one of the higher level nodes.
 pub struct RegionBuilder<'a, N: LangNode + 'static, E: LangEdge + 'static> {
     ctx: &'a mut Rvsdg<N, E>,
     parent_region_index: usize,
@@ -174,7 +174,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> RegionBuilder<'a, N, E> {
         (created_node, res)
     }
 
-    ///Spawns a new decision-node/[γ-Node](crate::node::GammaNode) in this region. . Returns the reference under which the gamma-nodes is created, as well as any
+    ///Spawns a new decision-node/[γ-Node](crate::nodes::GammaNode) in this region. . Returns the reference under which the gamma-nodes is created, as well as any
     /// result the `building` function produces.
     pub fn new_decission<R: 'static>(
         &mut self,
@@ -189,7 +189,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> RegionBuilder<'a, N, E> {
         (created, res)
     }
 
-    ///Allows you to spawn a new function-node/[λ-Node](crates::nodes::LambdaNode) in this region. . Returns the reference under which the function is created, as well as any
+    ///Allows you to spawn a new function-node/[λ-Node](crate::nodes::LambdaNode) in this region. . Returns the reference under which the function is created, as well as any
     /// result the `building` function produces.
     pub fn new_function<R: 'static>(
         &mut self,
@@ -203,7 +203,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> RegionBuilder<'a, N, E> {
         (created, res)
     }
 
-    ///Allows you to spawn a new recursive-node/[ϕ-Node](crates::nodes::PhiNode) in this region. . Returns the reference under which the phi-node is created, as well as any
+    ///Allows you to spawn a new recursive-node/[ϕ-Node](crate::nodes::PhiNode) in this region. . Returns the reference under which the phi-node is created, as well as any
     /// result the `building` function produces.
     pub fn new_recursive_region<R: 'static>(
         &mut self,
@@ -217,7 +217,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> RegionBuilder<'a, N, E> {
         (created, res)
     }
 
-    ///Allows you to spawn a new global-value/[δ-Node](crates::nodes::DeltaNode) in this region. Returns the reference under which the function is created.
+    ///Allows you to spawn a new global-value/[δ-Node](crate::nodes::DeltaNode) in this region. Returns the reference under which the function is created.
     pub fn new_global<R: 'static>(
         &mut self,
         building: impl FnOnce(&mut DeltaBuilder<N, E>) -> R,

@@ -216,4 +216,57 @@ impl<N: LangNode + StructuralClone + 'static, E: LangEdge + StructuralClone + 's
             self.connect(new_src, new_dst, tycpy).unwrap();
         }
     }
+
+    ///Deep copies all nodes of `region` into a new region, and hooks them up exactly the same way.
+    ///
+    /// NOTE that any region-result or region-argument connections are not carried over, since the `dst_region` might not
+    /// provide them correctly. Have a look at [deep_copy_region](Self::deep_copy_region), if you
+    /// are sure, that a 1:1 connection of results/arguments makes sense.
+    ///
+    /// Return the 1:1 mapping of a node `a` in `src_region` to `a'` in `dst_region`.
+    pub fn deep_copy_region_without_connection(
+        &mut self,
+        src_region: RegionLocation,
+        dst_region: RegionLocation,
+    ) -> AHashMap<NodeRef, NodeRef> {
+        let mut node_mapping = AHashMap::default();
+
+        let src_nodes = self.region(&src_region).unwrap().nodes.clone();
+
+        //first task is deep-copying all nodes over to the new region
+        for srcnode in src_nodes {
+            //copy the node, clear inputs and outputs, and possibly recurse if needed.
+            let dstnode = self.deep_copy_node(srcnode, dst_region);
+            //now add to the mapping
+            node_mapping.insert(srcnode, dstnode);
+        }
+
+        //After copying all nodes, hook up the edges as well
+        let src_edges = self.region(&src_region).unwrap().edges.clone();
+        for src_edge in src_edges {
+            //Rebuild all edges by replacing the src/dst node as described by the node mapping.
+            //
+            let (new_src, new_dst, tycpy) = {
+                let (mut original_src, mut original_dst, original_ty) = {
+                    let edg = self.edge(src_edge);
+                    (edg.src, edg.dst, edg.ty.structural_copy())
+                };
+
+                if !node_mapping.contains_key(&original_src.node)
+                    || !node_mapping.contains_key(&original_dst.node)
+                {
+                    //Skip nodes that are connected to unknown mapping. This includes the parent `src_region.node`.
+                    continue;
+                }
+                //replace src and dst
+                original_src.node = *node_mapping.get(&original_src.node).unwrap();
+                original_dst.node = *node_mapping.get(&original_dst.node).unwrap();
+                (original_src, original_dst, original_ty)
+            };
+
+            self.connect(new_src, new_dst, tycpy).unwrap();
+        }
+
+        node_mapping
+    }
 }

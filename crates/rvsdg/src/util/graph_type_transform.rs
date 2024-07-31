@@ -30,7 +30,7 @@ use super::copy::StructuralClone;
 /// ```ignore
 ///struct MyGraphTransformer;
 ///impl GraphTypeTransformer for MyGraphTransformer{
-/// //...    
+/// //...
 ///}
 /// ```
 ///
@@ -74,7 +74,7 @@ pub enum GraphTypeTransformerError {
     TopLevelResultMissmatch { src: usize, dst: usize },
 }
 
-///Collects the mapping information of one graph into another while doing the [Rvsdg::tranform_into] pass.
+///Collects the mapping information of one graph into another while doing the [Rvsdg::transform_into] pass.
 ///
 /// # Warning
 ///
@@ -205,7 +205,7 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
     }
 
     ///Helper that tranforms the whole `src_graph` into a new graph based on the transformator.
-    ///    
+    ///
     ///Returns the new graph `B` and the mapping from a node `A` in `self` to a node `B` in `dst_graph`.
     pub fn transform_new<DN: LangNode + 'static, DE: LangEdge + 'static>(
         &self,

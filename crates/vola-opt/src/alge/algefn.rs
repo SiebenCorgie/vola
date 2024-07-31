@@ -8,13 +8,18 @@
 
 use ahash::AHashMap;
 use rvsdg::{
-    edge::OutputType, region::RegionLocation, smallvec::{smallvec, SmallVec}, NodeRef
+    edge::OutputType,
+    region::RegionLocation,
+    smallvec::{smallvec, SmallVec},
+    NodeRef,
 };
 use vola_ast::common::Ident;
 use vola_common::{ariadne::Label, error::error_reporter, report, Span};
 
 use crate::{
-    alge::WkOp, ast::block_builder::{BlockBuilder, BlockBuilderConfig}, common::{LmdContext, Ty}, OptError, Optimizer
+    ast::block_builder::{BlockBuilder, BlockBuilderConfig},
+    common::{LmdContext, Ty},
+    OptError, OptNode, Optimizer,
 };
 
 #[derive(Clone)]
@@ -28,21 +33,23 @@ pub struct AlgeFn {
     pub lambda_region: RegionLocation,
 }
 
-
 impl Optimizer {
     pub fn add_alge_fn(&mut self, alge_fn: vola_ast::alge::AlgeFunc) -> Result<NodeRef, OptError> {
         //The alge fn is conceptually similar to the field def.
         //however, we only allow alge expressions and statements. No Eval can be used
         //and the return expression must statify the return-type constrains (at some point ^^).
 
-        if let Some(_special_node) = WkOp::try_parse(&alge_fn.name.0) {
-            let err = OptError::Any{ 
-                text: format!("Cannot use name \"{}\" for algebraic function, since a that would shadow a build-in function with the same name!", alge_fn.name.0), 
+        if let Some(_special_node) = OptNode::try_parse(&alge_fn.name.0) {
+            let err = OptError::Any{
+                text: format!("Cannot use name \"{}\" for algebraic function, since a that would shadow a build-in function with the same name!", alge_fn.name.0),
             };
 
             report(
                 error_reporter(err.clone(), alge_fn.span.clone())
-                    .with_label(Label::new(alge_fn.span.clone()).with_message("Consider renaming this function"))
+                    .with_label(
+                        Label::new(alge_fn.span.clone())
+                            .with_message("Consider renaming this function"),
+                    )
                     .finish(),
             );
             return Err(err);
@@ -54,8 +61,12 @@ impl Optimizer {
             };
             report(
                 error_reporter(err.clone(), alge_fn.span.clone())
-                    .with_label(Label::new(existing_key.span.clone()).with_message("fist defined here"))
-                    .with_label(Label::new(alge_fn.span.clone()).with_message("Tried to redefine here"))
+                    .with_label(
+                        Label::new(existing_key.span.clone()).with_message("fist defined here"),
+                    )
+                    .with_label(
+                        Label::new(alge_fn.span.clone()).with_message("Tried to redefine here"),
+                    )
                     .finish(),
             );
             return Err(err);
@@ -77,20 +88,20 @@ impl Optimizer {
         let lmd_ctx =
             LmdContext::new_for_alge_fn(&mut self.graph, &mut self.typemap, lambda, &alge_fn);
 
-        let mut block_builder = BlockBuilder{
+        let mut block_builder = BlockBuilder {
             config: BlockBuilderConfig::alge_fn(),
             span: alge_fn.span.clone(),
             csg_operands: AHashMap::with_capacity(0),
             return_type: smallvec![alge_fn.return_type.clone().into()],
             lmd_ctx,
             region: lambda_region,
-            opt: self
+            opt: self,
         };
 
         //build the block
         let output_port = block_builder.build_block(alge_fn.block)?;
         assert!(output_port.len() == 1);
-        
+
         let result_index = self
             .graph
             .node_mut(lambda)
@@ -108,17 +119,17 @@ impl Optimizer {
             })
             .unwrap();
 
-        if let Some(retty) = &output_port[0].0{
+        if let Some(retty) = &output_port[0].0 {
             let expected_ty: Ty = alge_fn.return_type.clone().into();
             assert!(&expected_ty == retty);
         }
-        
+
         //set the result edge with the known result_type of the alge_fn
         self.graph
             .edge_mut(result_edge)
             .ty
             .set_type(alge_fn.return_type.clone().into());
-        
+
         //After emitting, setup the AlgeFn description and return
         let algedef = AlgeFn {
             span: alge_fn.span.clone(),
@@ -133,7 +144,12 @@ impl Optimizer {
         self.names.set(algedef.lambda.into(), algename.clone());
         self.span_tags
             .set(algedef.lambda.into(), algedef.span.clone());
-        self.typemap.set(lambda.as_outport_location(OutputType::LambdaDeclaration).into(), Ty::Callable);
+        self.typemap.set(
+            lambda
+                .as_outport_location(OutputType::LambdaDeclaration)
+                .into(),
+            Ty::Callable,
+        );
         //TODO: set the out-edge type?
         assert!(self.alge_fn.insert(algename, algedef).is_none());
         Ok(lambda)

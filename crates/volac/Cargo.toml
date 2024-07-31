@@ -1,15 +1,15 @@
 [package]
 name = "volac"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 license = "MPL-2.0"
 
 [dependencies]
-vola-ast = {path = "../vola-ast"}
-vola-tree-sitter-parser = {path = "../vola-tree-sitter-parser"}
-vola-opt = {path = "../vola-opt"}
-vola-backend-spirv = {path = "../vola-backend-spirv"}
-vola-common = {path = "../vola-common"}
-rvsdg = {path = "../rvsdg"}
+vola-ast = { path = "../vola-ast" }
+vola-tree-sitter-parser = { path = "../vola-tree-sitter-parser" }
+vola-opt = { path = "../vola-opt" }
+vola-backend-spirv = { path = "../vola-backend-spirv" }
+vola-common = { path = "../vola-common" }
+rvsdg = { path = "../rvsdg" }
 bytemuck.workspace = true
 log.workspace = true

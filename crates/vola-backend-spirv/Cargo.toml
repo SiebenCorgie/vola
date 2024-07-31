@@ -1,6 +1,6 @@
 [package]
 name = "vola-backend-spirv"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 license = "MPL-2.0"
 
@@ -11,13 +11,13 @@ viewer = ["rvsdg-viewer"]
 dot = ["graphviz-rust"]
 
 [dependencies]
-vola-opt = {path = "../vola-opt"}
-vola-common = {path = "../vola-common"}
-rvsdg = {path = "../rvsdg"}
-rvsdg-viewer = {path = "../rvsdg-viewer", optional = true}
+vola-opt = { path = "../vola-opt" }
+vola-common = { path = "../vola-common" }
+rvsdg = { path = "../rvsdg" }
+rvsdg-viewer = { path = "../rvsdg-viewer", optional = true }
 rspirv.workspace = true
 ahash.workspace = true
-log = {workspace = true, optional = true}
-spirv-grammar-rules = {git = "https://gitlab.com/tendsinmende/spirv-grammar-rules.git"}
+log = { workspace = true, optional = true }
+spirv-grammar-rules = { git = "https://gitlab.com/tendsinmende/spirv-grammar-rules.git" }
 #spirv-grammar-rules = {path = "../../../spirv-grammar-rules/crates/spirv-grammar-rules"}
-graphviz-rust = {workspace = true, optional = true}
+graphviz-rust = { workspace = true, optional = true }

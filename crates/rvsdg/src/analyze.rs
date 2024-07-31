@@ -15,7 +15,7 @@ use std::collections::VecDeque;
 use ahash::{AHashMap, AHashSet};
 
 mod region_walker;
-pub use region_walker::RegionWalker;
+pub use region_walker::{RegionLocationWalker, RegionWalker};
 mod topo_ord;
 
 use crate::{
@@ -25,8 +25,6 @@ use crate::{
     util::Path,
     NodeRef, Rvsdg, SmallColl,
 };
-
-use self::region_walker::RegionLocationWalker;
 
 ///Utility that walks the predecessors of a node in breadth-first style.
 ///

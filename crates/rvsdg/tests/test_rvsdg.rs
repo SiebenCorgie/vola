@@ -2,7 +2,7 @@ use rvsdg::{
     common::VSEdge,
     nodes::LangNode,
     region::{Input, Output},
-    util::node_equality::NodeTypeEq,
+    util::{copy::StructuralClone, node_equality::NodeTypeEq},
     Rvsdg,
 };
 
@@ -18,6 +18,16 @@ pub struct LNode {
 impl NodeTypeEq for LNode {
     fn type_equal(&self, other: &Self) -> bool {
         self.name == other.name
+    }
+}
+
+impl StructuralClone for LNode {
+    fn structural_copy(&self) -> Self {
+        Self {
+            name: self.name.clone(),
+            inputs: vec![Input::default(); self.inputs.len()],
+            outputs: vec![Output::default(); self.outputs.len()],
+        }
     }
 }
 

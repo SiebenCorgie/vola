@@ -5,7 +5,17 @@
  *
  * 2024 Tendsin Mende
  */
-//! Liveness analysis.
+
+//! Implements _liveness_ analysis.
+//!
+//! See
+//!
+//! - [liveness](crate::Rvsdg::liveness)
+//! - [liveness_region](crate::Rvsdg::liveness_region)
+//!
+//! This is a analysis-only pass which builds a lookup table of all nodes (or nodes in a region). The lookup table flags all nodes that
+//! are considered live as `true`.
+//! All nodes that are dead are flagged `false` or not at all.
 
 use std::collections::VecDeque;
 
@@ -20,13 +30,13 @@ use crate::{
 };
 
 impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
-    ///Calculates the liveness of the whole graph. See [liveness_region] for more information.
+    ///Calculates the liveness of the whole graph. See [liveness_region](Self::liveness_region) for more information.
     pub fn liveness(&self) -> FlagStore<bool> {
         //just execute for the toplevel region.
         self.liveness_region(self.toplevel_region())
     }
 
-    ///Does liveness analysis on `region` and all sub-regions of it. Returns a [FlagStore](crate::attrib::FlagStore)
+    ///Does liveness analysis on `region` and all sub-regions of it. Returns a [FlagStore]
     ///That flags all known _live_ ports with `true`. All ports that are not flagged, or flagged `false` are dead.
     ///
     ///Since we are seeding with this function, all results of this `region` are considered _live_.

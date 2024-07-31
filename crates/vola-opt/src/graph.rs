@@ -11,12 +11,14 @@ use core::panic;
 use std::{any::Any, fmt::Debug};
 
 use crate::error::OptError;
+use crate::imm::ImmBool;
 use crate::{common::Ty, Optimizer};
 use ahash::AHashMap;
 use rvsdg::attrib::AttribLocation;
 use rvsdg::edge::OutportLocation;
 use rvsdg::nodes::NodeType;
 use rvsdg::region::RegionLocation;
+use rvsdg::util::cnf::ConstantFoldable;
 use rvsdg::util::node_equality::NodeTypeEq;
 use rvsdg::util::Path;
 use rvsdg::NodeRef;
@@ -60,6 +62,14 @@ pub trait DialectNode: LangNode + Any + View {
     ///Builds a structural copy of this node, where no inputs/outputs are connected.
     /// Needed to break up the `dyn` indirection in OptNode.
     fn structural_copy(&self, span: Span) -> OptNode;
+
+    ///Implements the try_constant_fold method of [ConstantFoldable].
+    fn try_constant_fold(
+        &self,
+        #[allow(unused_variables)] src_nodes: &[Option<&rvsdg::nodes::Node<OptNode>>],
+    ) -> Option<OptNode> {
+        None
+    }
 }
 
 ///Single optimizer node of some dialect.4
@@ -78,6 +88,11 @@ impl OptNode {
             span,
             node: Box::new(node),
         }
+    }
+
+    pub fn with_span(mut self, span: Span) -> Self {
+        self.span = span;
+        self
     }
 
     ///Tries to downcast the inner `node` to `T`.
@@ -114,6 +129,29 @@ impl NodeTypeEq for OptNode {
         }
 
         self.node.is_operation_equal(other)
+    }
+}
+
+impl ConstantFoldable<OptNode, OptEdge> for OptNode {
+    fn try_constant_fold(
+        &self,
+        src_nodes: &[Option<&rvsdg::nodes::Node<OptNode>>],
+    ) -> Option<OptNode> {
+        self.node.try_constant_fold(src_nodes)
+    }
+
+    fn constant_gamma_branch(&self) -> Option<usize> {
+        if self.node.dialect() == "Imm" {
+            if let Some(boolean) = self.try_downcast_ref::<ImmBool>() {
+                if boolean.lit {
+                    return Some(0);
+                } else {
+                    return Some(1);
+                }
+            }
+        }
+
+        None
     }
 }
 

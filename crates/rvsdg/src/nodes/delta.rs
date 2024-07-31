@@ -17,7 +17,7 @@ use crate::{
 
 use super::StructuralNode;
 
-/// δ-Nodes represents a global variable. It can have a set of inputs needed to define the variable. Similarly to [λ-Node](LambdaNode)s
+/// δ-Nodes represents a global variable. It can have a set of inputs needed to define the variable. Similarly to [λ-Node](crate::nodes::LambdaNode)s
 /// context-variables can import inner, dependent state, like λ-Nodes or other arguments.
 ///
 /// A δ-node must always provide a single output.

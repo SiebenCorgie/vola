@@ -7,6 +7,7 @@
  */
 use rvsdg::{
     edge::{InportLocation, InputType, LangEdge, OutportLocation, OutputType},
+    nodes::LangNode,
     region::{Input, RegionLocation},
     smallvec::smallvec,
     NodeRef, SmallColl,
@@ -18,9 +19,14 @@ use vola_ast::{
 use vola_common::{ariadne::Label, error::error_reporter, report, Span};
 
 use crate::{
-    alge::{CallOp, ConstantIndex, Construct, EvalNode, ImmNat, ImmScalar, WkOp},
+    alge::{
+        arithmetic::{BinaryArith, BinaryArithOp},
+        relational::{BinaryRel, BinaryRelOp},
+        ConstantIndex, Construct, EvalNode,
+    },
     ast::block_builder::BlockBuilderConfig,
     common::{FnImport, LmdContext, VarDef},
+    imm::{ImmNat, ImmScalar},
     OptEdge, OptError, OptNode,
 };
 
@@ -41,10 +47,7 @@ impl<'a> BlockBuilder<'a> {
                     .graph
                     .on_region(&self.region, |regbuilder| {
                         let (opnode, _) = regbuilder
-                            .connect_node(
-                                OptNode::new(CallOp::new(op.into()), expr_span),
-                                &[sub_output],
-                            )
+                            .connect_node(OptNode::from(op).with_span(expr_span), &[sub_output])
                             .unwrap();
                         //NOTE we _know_ that the node has only one output
                         opnode.output(0)
@@ -65,7 +68,7 @@ impl<'a> BlockBuilder<'a> {
                     .on_region(&self.region, |regbuilder| {
                         let (opnode, _) = regbuilder
                             .connect_node(
-                                OptNode::new(CallOp::new(op.into()), expr_span),
+                                OptNode::from(op).with_span(expr_span),
                                 &[left_out, right_out],
                             )
                             .unwrap();
@@ -596,7 +599,7 @@ impl<'a> BlockBuilder<'a> {
                     .connect_node(
                         OptNode {
                             span: Span::empty(),
-                            node: Box::new(CallOp::new(WkOp::Lt)),
+                            node: Box::new(BinaryRel::new(BinaryRelOp::Lt)),
                         },
                         &[bound_lower, bound_upper],
                     )
@@ -665,7 +668,10 @@ impl<'a> BlockBuilder<'a> {
                                         //3. routing of the upper bound
                                         let (ltcheck, _) = rg
                                             .connect_node(
-                                                OptNode::new(CallOp::new(WkOp::Lt), Span::empty()),
+                                                OptNode::new(
+                                                    BinaryRel::new(BinaryRelOp::Lt),
+                                                    Span::empty(),
+                                                ),
                                                 &[lv_arg_bound_lower, lv_arg_bound_higher],
                                             )
                                             .unwrap();
@@ -688,7 +694,10 @@ impl<'a> BlockBuilder<'a> {
                                         ));
                                         let (subone, _) = rg
                                             .connect_node(
-                                                OptNode::new(CallOp::new(WkOp::Add), Span::empty()),
+                                                OptNode::new(
+                                                    BinaryArith::new(BinaryArithOp::Add),
+                                                    Span::empty(),
+                                                ),
                                                 &[lv_arg_bound_lower, litone.output(0)],
                                             )
                                             .unwrap();
@@ -962,12 +971,14 @@ impl<'a> BlockBuilder<'a> {
             let arg = self.setup_alge_expr(arg)?;
             subargs.push(arg);
         }
-        if let Some(wknode) = WkOp::try_parse(&call.ident.0) {
-            if wknode.in_count() != subargs.len() {
+        if let Some(wknode) = OptNode::try_parse(&call.ident.0) {
+            //Ovewrite span, then check input count
+            let wknode = wknode.with_span(expr_span.clone());
+            if wknode.inputs().len() != subargs.len() {
                 let err = OptError::Any {
                     text: format!(
                         "build-in call \"{wknode:?}\" expects {} inputs, got {}",
-                        wknode.in_count(),
+                        wknode.inputs().len(),
                         subargs.len()
                     ),
                 };
@@ -985,10 +996,7 @@ impl<'a> BlockBuilder<'a> {
                 .opt
                 .graph
                 .on_region(&self.region, |regbuilder| {
-                    match regbuilder.connect_node(
-                        OptNode::new(CallOp::new(wknode), expr_span.clone()),
-                        &subargs,
-                    ) {
+                    match regbuilder.connect_node(wknode, &subargs) {
                         Ok(r) => Ok(r.0.output(0)),
                         Err(e) => {
                             let err = OptError::Any {

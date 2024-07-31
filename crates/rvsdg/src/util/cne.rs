@@ -6,6 +6,15 @@
  * 2024 Tendsin Mende
  */
 
+//! Implements _Common-Node-Elemination_. The pass effectively fuses nodes that are known to describe the same operation.
+//!
+//! See
+//!
+//! - [common_node_elemination](crate::Rvsdg::common_node_elemination)
+//! - [cne_region](crate::Rvsdg::cne_region)
+//!
+//! For the implemetation to become available, the node type `N` of `Rvsdg<N, E>` has to implement [NodeTypeEq]. This allows the pass
+//! to generically decide if two nodes describe the same operation.
 use std::fmt::Debug;
 
 use thiserror::Error;
@@ -223,12 +232,19 @@ impl<N: LangNode + NodeTypeEq + Debug + 'static, E: LangEdge + 'static> Rvsdg<N,
         let disconnected = self.remove_node(from)?;
 
         //NOTE for sanity, make sure they are still equal
-        assert!(disconnected.node_type.is_simple());
-        assert!(disconnected
-            .node_type
-            .unwrap_simple_ref()
-            .type_equal(self.node(to).node_type.unwrap_simple_ref()));
-
+        assert!(disconnected.node_type.is_simple() || disconnected.node_type.is_apply());
+        match &disconnected.node_type {
+            NodeType::Simple(s) => {
+                assert!(s.type_equal(self.node(to).node_type.unwrap_simple_ref()))
+            }
+            NodeType::Apply(_a) => {
+                //TODO: add a good check that is not _too expensive_ instead
+            }
+            _ => panic!(
+                "Expected unified node to be simple or apply, was {}",
+                disconnected.node_type
+            ),
+        }
         Ok(disconnected)
     }
 

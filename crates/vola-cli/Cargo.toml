@@ -1,11 +1,11 @@
 [package]
 name = "vola-cli"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 license = "MPL-2.0"
 
 [dependencies]
-clap = {workspace = true, features = ["derive"]}
-volac = {path = "../volac"}
-vola-common = {path = "../vola-common"}
+clap = { workspace = true, features = ["derive"] }
+volac = { path = "../volac" }
+vola-common = { path = "../vola-common" }
 pretty_env_logger.workspace = true

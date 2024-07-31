@@ -48,6 +48,7 @@ pub mod csg;
 mod error;
 pub use error::OptError;
 mod graph;
+pub mod imm;
 mod passes;
 mod util;
 
