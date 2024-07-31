@@ -15,10 +15,11 @@ For all Vola and RVSDG related crates.
 ### Changed
 
 - [PR36]https://gitlab.com/tendsinmende/vola/-/merge_requests/35): Refactor WkOp into several node types for easier partial implementations
-
+- Implemented topological-order based on khan's algorithm instead of reversing the reverse-topological order, which was a false assumption.
 ### Fixed
 
 - Fixes _most_ doc errors in the `rvsdg` crate.
+- Fixed bug where unifiying a apply node via unify_simple would panic
 
 ## [0.1]
 

@@ -173,6 +173,8 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
     /// - Assumes `to_be_replaced` to have a parent region.
     ///
     /// Note that `to_be_replaced` is not deleted from the graph, but compleatly unconnected in its region.
+    ///
+    /// Returns the Id under which `replacee` is inserted.
     pub fn replace_node(
         &mut self,
         to_be_replaced: NodeRef,

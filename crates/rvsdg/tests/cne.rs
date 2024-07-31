@@ -251,12 +251,14 @@ fn medium_complex_cne() {
         });
     });
 
+    //dump_graph_to_svg(&rvsdg, "BeforCne.svg");
     let removed = rvsdg.common_node_elemination().unwrap();
+    //dump_graph_to_svg(&rvsdg, "AfterCne.svg");
     //NOTE that the CNE only renders 2 nodes _dead_. The two multiplies
     //NOTE: Note as well, that we ignore the else branch, since it doesn't do anything in this case
     assert!(
         removed.len() == 2,
-        "expected o removed nodes from dead_node elemination after CNE, got {}",
+        "expected to removed nodes from dead_node elemination after CNE, got {}",
         removed.len()
     );
 

@@ -19,7 +19,9 @@ impl ConstantFoldable<LNode, VSEdge> for LNode {
                     src_nodes[1].map(|n| &n.node_type),
                 ) {
                     (Some(NodeType::Simple(a)), Some(NodeType::Simple(b))) => {
-                        if let (Some(c0), Some(c1)) = (a.constant_value(), b.constant_value()) {
+                        if let (Some(c0), Some(c1)) =
+                            (a.constant_gamma_branch(), b.constant_gamma_branch())
+                        {
                             let new_value = match self.name().as_str() {
                                 "+" => c0 + c1,
                                 "-" => c0 - c1,
@@ -43,7 +45,7 @@ impl ConstantFoldable<LNode, VSEdge> for LNode {
             _ => None,
         }
     }
-    fn constant_value(&self) -> Option<usize> {
+    fn constant_gamma_branch(&self) -> Option<usize> {
         if let Ok(val) = self.name.parse::<usize>() {
             Some(val)
         } else {

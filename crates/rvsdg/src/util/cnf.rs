@@ -15,6 +15,8 @@
 //! For the function to become available a node type `N` of
 //! `Rvsdg<N, E>` needs to implement [ConstantFoldable] for the chosen `N, E` of the graph.
 
+use std::collections::VecDeque;
+
 use thiserror::Error;
 
 use crate::{
@@ -71,9 +73,9 @@ impl<N: LangNode + StructuralClone + 'static> CnfCtx<N> {
         //NOTE: The idea is similar to how the common-node-elemination works. We traverse the region in topological order.
         //      For any node that _could_ be folded, we call the `try_constant_fold` implementation with all dependencies.
 
-        let topord = graph.topological_order_region(region);
+        let mut topord: VecDeque<_> = graph.topological_order_region(region).into();
 
-        for node in topord {
+        while let Some(node) = topord.pop_front() {
             match graph.node(node).into_abstract() {
                 AbstractNodeType::Simple => {
                     //NOTE: We move the _try_constant_fold_ part in a scope, so we can drop the borrows of all
@@ -122,11 +124,13 @@ impl<N: LangNode + StructuralClone + 'static> CnfCtx<N> {
                             graph.disconnect(edge)?;
                         }
 
-                        let _replace_id = graph.replace_node(node, new_node)?;
-
+                        let replace_id = graph.replace_node(node, new_node)?;
                         let replaced_node = graph.remove_node(node)?;
                         //and add folded node to collector
                         self.folded_nodes.push(replaced_node.node_type);
+                        //Now add the just created node to the topological-sort, since we have to visit that one immeditatly
+
+                        topord.push_front(replace_id);
                     } else {
                     }
                 }

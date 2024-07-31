@@ -232,12 +232,19 @@ impl<N: LangNode + NodeTypeEq + Debug + 'static, E: LangEdge + 'static> Rvsdg<N,
         let disconnected = self.remove_node(from)?;
 
         //NOTE for sanity, make sure they are still equal
-        assert!(disconnected.node_type.is_simple());
-        assert!(disconnected
-            .node_type
-            .unwrap_simple_ref()
-            .type_equal(self.node(to).node_type.unwrap_simple_ref()));
-
+        assert!(disconnected.node_type.is_simple() || disconnected.node_type.is_apply());
+        match &disconnected.node_type {
+            NodeType::Simple(s) => {
+                assert!(s.type_equal(self.node(to).node_type.unwrap_simple_ref()))
+            }
+            NodeType::Apply(_a) => {
+                //TODO: add a good check that is not _too expensive_ instead
+            }
+            _ => panic!(
+                "Expected unified node to be simple or apply, was {}",
+                disconnected.node_type
+            ),
+        }
         Ok(disconnected)
     }
 
