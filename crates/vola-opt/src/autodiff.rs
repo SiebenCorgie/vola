@@ -74,7 +74,7 @@ impl Default for AutoDiff {
     }
 }
 
-implViewAutoDiff!(AutoDiff, "∂");
+implViewAutoDiff!(AutoDiff, "AutoDiff");
 
 impl DialectNode for AutoDiff {
     fn dialect(&self) -> &'static str {
@@ -107,7 +107,7 @@ impl DialectNode for AutoDiff {
         };
 
         //Make sure the expression has either scalar or vector type
-        if !expr_type.is_scalar() || !expr_type.is_vector() {
+        if !expr_type.is_scalar() && !expr_type.is_vector() {
             return Err(OptError::TypeDeriveError { text: format!("diff() can only be applied to expressions of type Scalar or Vector, expression had {}", expr_type) });
         }
 
@@ -124,7 +124,7 @@ impl DialectNode for AutoDiff {
         };
 
         //Make sure the wrt has either scalar or vector type
-        if !wrt_type.is_scalar() || !wrt_type.is_vector() {
+        if !wrt_type.is_scalar() && !wrt_type.is_vector() {
             return Err(OptError::TypeDeriveError { text: format!("diff() can only be applied with respect to either Scalar or Vector, wrt-argument was {}", wrt_type) });
         }
 

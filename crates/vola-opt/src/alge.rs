@@ -28,6 +28,7 @@ use vola_ast::csg::{CSGConcept, CSGNodeDef};
 use vola_common::Span;
 
 use crate::{
+    autodiff::AutoDiff,
     common::Ty,
     error::OptError,
     imm::{ImmMatrix, ImmScalar, ImmVector},
@@ -135,6 +136,7 @@ impl OptNode {
                 UnaryMatrix::new(UnaryMatrixOp::Invert),
                 Span::empty(),
             )),
+            "diff" => Some(OptNode::new(AutoDiff::default(), Span::empty())),
             _ => None,
         }
     }
