@@ -1,5 +1,3 @@
-use std::fmt::Display;
-
 /*
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
@@ -7,6 +5,7 @@ use std::fmt::Display;
  *
  * 2024 Tendsin Mende
  */
+
 use ahash::AHashMap;
 use rvsdg::{
     attrib::FlagStore,
@@ -14,6 +13,7 @@ use rvsdg::{
     smallvec::SmallVec,
     NodeRef, SmallColl,
 };
+use std::fmt::Display;
 use vola_ast::{
     alge::ImplBlock,
     csg::{CSGConcept, CSGNodeDef},
