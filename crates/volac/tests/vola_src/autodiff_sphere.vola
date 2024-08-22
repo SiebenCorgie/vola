@@ -12,7 +12,7 @@ operation MyAdOp();
 impl MyAdOp<sub> for Sdf(at){
     let sd = eval sub.Sdf(at);
 
-    diff(sd, at.x)
+    length(diff(sd, [at.x, at.y, at.z]))
 }
 
 export mysdf(at: vec3){

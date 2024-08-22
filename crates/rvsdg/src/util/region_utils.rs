@@ -11,6 +11,7 @@ use ahash::{AHashMap, AHashSet};
 use smallvec::SmallVec;
 
 use crate::{
+    attrib::AttribLocation,
     edge::{InportLocation, InputType, LangEdge, OutportLocation, OutputType},
     err::GraphError,
     nodes::{LangNode, NodeType, StructuralNode},
@@ -269,12 +270,14 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
         Ok(())
     }
 
-    ///Utility that collects all node, that are `live`, so connected to any result
-    ///in some way.
+    ///Utility that collects all node, that are `live`, so connected to any result,
+    ///in that region.
     ///
-    /// Note that there is also a liveness analysis that builds a liveness lookuptable
-    /// for all ports, which is more precise.
-    pub fn live_nodes(&self, region: RegionLocation) -> Vec<NodeRef> {
+    /// Note that there is also a [liveness](Rvsdg::liveness) analysis that builds a liveness lookuptable
+    /// for all ports, which is more precise an recursively traverses sub regions.
+    ///
+    /// For the recursive version see [live_nodes](Rvsdg::live_nodes).
+    pub fn live_nodes_in_region(&self, region: RegionLocation) -> Vec<NodeRef> {
         let mut live_variables = AHashSet::default();
 
         let region_content = self.region(&region).unwrap();
@@ -294,5 +297,30 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
         }
 
         live_variables.into_iter().collect()
+    }
+
+    ///Finds all nodes that are connected to any result of `region`. Recursively traverses any
+    ///sub-regions of nodes within that region.
+    ///
+    /// If you are only interested of live nodes _in this region_ see [live_nodes_in_region](Rvsdg::live_nodes_in_region).
+    /// For a port-wise analysis see [liveness](Rvsdg::liveness).
+    pub fn live_nodes(&self, region: RegionLocation) -> Vec<NodeRef> {
+        //NOTE: we can't take the nice shortcut of live_nodes_in_region, since we might _over-add_ nodes that are in a subregion
+        //      if we annotate all output ports _always_ as live. So we just use the standard liveness analysis, and filter for unique
+        //      nodes instead.
+        let live_ports = self.liveness_region(region);
+        let mut live_nodes = AHashSet::new();
+        for (attr, is_live) in live_ports.flags {
+            if is_live {
+                //NOTE: we only care about ports here
+                if let AttribLocation::InPort(InportLocation { node, .. })
+                | AttribLocation::OutPort(OutportLocation { node, .. }) = attr
+                {
+                    live_nodes.insert(node);
+                }
+            }
+        }
+
+        live_nodes.into_iter().collect()
     }
 }

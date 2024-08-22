@@ -54,7 +54,7 @@ impl Optimizer {
     fn fully_inline_region(&mut self, region: RegionLocation) -> Result<(), OptError> {
         //now recursively go through all sub regions (that are no λs, so gamma an theta for now)
         //and call the inliner in there as well
-        for node in self.graph.live_nodes(region) {
+        for node in self.graph.live_nodes_in_region(region) {
             if node == region.node || !self.graph.region(&region).unwrap().nodes.contains(&node) {
                 continue;
             }
@@ -83,7 +83,7 @@ impl Optimizer {
         // so that any inlined-apply node in this region is already
         // inlined as far as-possible.
 
-        for node in self.graph.live_nodes(region) {
+        for node in self.graph.live_nodes_in_region(region) {
             //If node is an apply node, inline its producer to this location
             if self.graph.node(node).node_type.is_apply() {
                 let apply_node_call_port = InportLocation {

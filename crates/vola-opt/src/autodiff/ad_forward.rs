@@ -53,9 +53,19 @@
 //! part being, that for any constant we can reuse parts of the original
 //! graph.
 
-use rvsdg::{NodeRef, SmallColl};
+use rvsdg::{
+    edge::{OutportLocation, OutputType},
+    NodeRef, SmallColl,
+};
+use vola_common::Span;
 
-use crate::{alge::Construct, autodiff::AutoDiff, common::Ty, OptError, Optimizer};
+use crate::{
+    alge::Construct,
+    autodiff::AutoDiff,
+    common::Ty,
+    imm::{ImmNat, ImmScalar},
+    OptEdge, OptError, OptNode, Optimizer, TypeState,
+};
 
 impl Optimizer {
     ///Executes forward-ad pass on `entrypoint`. Assumes that it is a `AutoDiff` node. If that is the case, the node will be replaced
@@ -113,10 +123,61 @@ impl Optimizer {
             wrt_args
         };
 
-        for wrt in &wrt_args {
-            println!("Wrt-Arg: {wrt:?}");
+        let mut derivatives = SmallColl::new();
+        for wrtarg in wrt_args {
+            derivatives.push(self.forward_diff(wrtarg, entrypoint)?);
         }
 
-        todo!()
+        //Now replace the autodiff node with a assembly node
+        let region = self.graph.node(entrypoint).parent.unwrap();
+        let constructor_output = if derivatives.len() > 1 {
+            self.graph
+                .on_region(&region, |reg| {
+                    let constructor = reg.insert_node(OptNode::new(
+                        Construct::new().with_inputs(derivatives.len()),
+                        Span::empty(),
+                    ));
+
+                    //now hookup all derivatives to the constructor
+                    for (idx, derivative_src) in derivatives.into_iter().enumerate() {
+                        let _new_edg = reg
+                            .ctx_mut()
+                            .connect(
+                                derivative_src,
+                                constructor.input(idx),
+                                OptEdge::Value {
+                                    ty: TypeState::Unset,
+                                },
+                            )
+                            .unwrap();
+                    }
+                    constructor.output(0)
+                })
+                .ok_or(OptError::Internal(format!(
+                    "Failed to replace derivative node with derivative constructor"
+                )))?
+        } else {
+            //for a single output, just forward the derivative result
+            derivatives[0]
+        };
+
+        self.graph
+            .replace_node_uses(entrypoint, constructor_output.node)?;
+
+        Ok(())
+    }
+
+    fn forward_diff(
+        &mut self,
+        arg: OutportLocation,
+        diffnode: NodeRef,
+    ) -> Result<OutportLocation, OptError> {
+        let region = self.graph.node(diffnode).parent.unwrap();
+        self.graph
+            .on_region(&region, |reg| {
+                reg.insert_node(OptNode::new(ImmScalar::new(42.0), Span::empty()))
+                    .output(0)
+            })
+            .ok_or(OptError::Internal(format!("Föck")))
     }
 }

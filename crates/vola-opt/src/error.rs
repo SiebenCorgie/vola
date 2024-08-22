@@ -17,7 +17,7 @@ use vola_common::{
     Reportable,
 };
 
-use crate::common::Ty;
+use crate::{autodiff::AutoDiffError, common::Ty};
 
 impl Reportable for OptError {}
 
@@ -69,6 +69,9 @@ pub enum OptError {
 
     #[error("Failed to generate identitiy-implementation: {0}")]
     AIIFailed(String),
+
+    #[error(transparent)]
+    AutoDiffError(#[from] AutoDiffError),
 }
 
 impl OptError {

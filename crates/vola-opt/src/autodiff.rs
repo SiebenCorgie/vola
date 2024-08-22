@@ -12,6 +12,7 @@
 //!
 //! The submoduls implement the actual autodiff pass as well a specific optimizations.
 
+mod ad_dispatch;
 mod ad_forward;
 mod ad_utils;
 
@@ -20,8 +21,12 @@ use rvsdg::{
     region::{Input, Output},
     rvsdg_derive_lang::LangNode,
 };
+use vola_common::thiserror::Error;
 
 use crate::{common::Ty, DialectNode, OptError, OptNode};
+
+#[derive(Debug, Error, Clone)]
+pub enum AutoDiffError {}
 
 //Macro that implements the "View" trait for the Autodiff
 macro_rules! implViewAutoDiff {

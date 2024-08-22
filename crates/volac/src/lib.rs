@@ -151,8 +151,9 @@ impl Target {
 ///     3.6 dispatch csg-trees
 ///     3.7 (optional) optimize specialized eval-λs
 ///     3.8 (optional) inline eval-λs
-///     3.9 (optional) iff 2.8 happened, do cross-λ-optimizations
-/// 4. Emit some format based on a configured backend.
+///     3.9 (optional) iff 3.8 happened, do cross-λ-optimizations
+/// 4. Automatic differentiation
+/// 5. Emit some format based on a configured backend.
 pub struct Pipeline {
     ///The format this pipeline compiles to
     pub target_format: Backend,
@@ -214,6 +215,10 @@ impl Pipeline {
             opt.cne_exports().expect("Failed to execute CNE");
         }
 
+        //dispatch autodiff nodes
+        opt.dispatch_autodiff()?;
+
+        //TODO possibly do this within the SPIR-V branch?
         if let Backend::Spirv = self.target_format {
             //In the case of the spirv-backend, we need to destruct all combined constant values into
             //_just_constant_ again.
