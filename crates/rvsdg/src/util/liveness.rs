@@ -63,6 +63,10 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
         //to make things a little easier on the big-O, we checkout _simple-nodes_ and apply-nodes only once,
         //which is also the vast majority of nodes usually.
 
+        //NOTE: that we do not explicitly cross the region boundary. Instead, whenever mapping an _outside_ port to a _inside_
+        //      port below, we enque a port that is _in another region_, which implicitly will cross the region boundary _at some point_
+        //      later in the iteration.
+
         //seed by using all initially alive ports.
         let mut waiting_ports = flags
             .flags

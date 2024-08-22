@@ -65,7 +65,6 @@ impl Optimizer {
         #[cfg(feature = "log")]
         log::info!("type derive");
 
-
         if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("DUMP_PRE_TYPE_DERIVE").is_ok() {
             self.push_debug_state("pre type derive");
         }
@@ -280,7 +279,9 @@ impl Optimizer {
                     };
                     report(
                         error_reporter(err.clone(), block.span.clone())
-                            .with_label(Label::new(block.span.clone()).with_message("in this region"))
+                            .with_label(
+                                Label::new(block.span.clone()).with_message("in this region"),
+                            )
                             .finish(),
                     );
                     Err(err)
@@ -296,12 +297,14 @@ impl Optimizer {
                             };
                             report(
                                 error_reporter(err.clone(), s.clone())
-                                    .with_label(Label::new(s.clone()).with_message("Tried to return this"))
+                                    .with_label(
+                                        Label::new(s.clone()).with_message("Tried to return this"),
+                                    )
                                     .finish(),
                             );
                             Err(err)
                         } else {
-                            let err = OptError::Any{
+                            let err = OptError::Any {
                                 text: format!(
                                     "ImplBlock's output was of type {:?} but expected {:?}",
                                     t, expected_result_type
@@ -309,7 +312,10 @@ impl Optimizer {
                             };
                             report(
                                 error_reporter(err.clone(), block.span.clone())
-                                    .with_label(Label::new(block.span.clone()).with_message("In this region"))
+                                    .with_label(
+                                        Label::new(block.span.clone())
+                                            .with_message("In this region"),
+                                    )
                                     .finish(),
                             );
                             Err(err)
@@ -346,7 +352,9 @@ impl Optimizer {
                     };
                     report(
                         error_reporter(err.clone(), fdef.span.clone())
-                            .with_label(Label::new(fdef.span.clone()).with_message("In this region"))
+                            .with_label(
+                                Label::new(fdef.span.clone()).with_message("In this region"),
+                            )
                             .finish(),
                     );
                     Err(err)
@@ -401,7 +409,9 @@ impl Optimizer {
                         };
                         report(
                             error_reporter(err.clone(), export.span.clone())
-                                .with_label(Label::new(export.span.clone()).with_message("In this region"))
+                                .with_label(
+                                    Label::new(export.span.clone()).with_message("In this region"),
+                                )
                                 .finish(),
                         );
                         return Err(err);
@@ -412,7 +422,9 @@ impl Optimizer {
                     };
                     report(
                         error_reporter(err.clone(), export.span.clone())
-                            .with_label(Label::new(export.span.clone()).with_message("In this region"))
+                            .with_label(
+                                Label::new(export.span.clone()).with_message("In this region"),
+                            )
                             .finish(),
                     );
                     return Err(err);
@@ -449,23 +461,29 @@ impl Optimizer {
                 if let Some(ty) = self.graph.edge(*arg_connected_edge).ty.get_type() {
                     //if the types do not match, bail as well
                     if ty != argty {
-                        let err = OptError::Any { 
-                            text: format!("Argument {argidx} is of typ \"{argty:?}\", but was used as \"{ty:?}\". This is a compiler bug!"), 
+                        let err = OptError::Any {
+                            text: format!("Argument {argidx} is of typ \"{argty:?}\", but was used as \"{ty:?}\". This is a compiler bug!"),
                         };
                         report(
                             error_reporter(err.clone(), algefn.span.clone())
-                                .with_label(Label::new(algefn.span.clone()).with_message(&format!("user of argument {argidx} in this region")))
+                                .with_label(Label::new(algefn.span.clone()).with_message(&format!(
+                                    "user of argument {argidx} in this region"
+                                )))
                                 .finish(),
                         );
                         return Err(err);
                     }
                 } else {
-                    let err = OptError::Any { 
-                        text: format!("Argument {argidx} is of type \"{argty:?}\", but connected edge was untyped. This is a compiler bug!"), 
+                    let err = OptError::Any {
+                        text: format!("Argument {argidx} is of type \"{argty:?}\", but connected edge was untyped. This is a compiler bug!"),
                     };
                     report(
                         error_reporter(err.clone(), algefn.span.clone())
-                            .with_label(Label::new(algefn.span.clone()).with_message(&format!("user of argument {argidx} in this region")))
+                            .with_label(
+                                Label::new(algefn.span.clone()).with_message(&format!(
+                                    "user of argument {argidx} in this region"
+                                )),
+                            )
                             .finish(),
                     );
                     return Err(err);
@@ -474,37 +492,57 @@ impl Optimizer {
         }
 
         //Check that the result is set correctly
-        if let Some(edg) = &self.graph.node(algefn.lambda).node_type.unwrap_lambda_ref().result(0).unwrap().edge{
-            if let Some(ty) = self.graph.edge(*edg).ty.get_type(){
-                if ty != &algefn.retty{
-                    let err = OptError::Any { 
-                        text: format!("Result type was \"{ty:?}\", but expected {:?}!", algefn.retty), 
+        if let Some(edg) = &self
+            .graph
+            .node(algefn.lambda)
+            .node_type
+            .unwrap_lambda_ref()
+            .result(0)
+            .unwrap()
+            .edge
+        {
+            if let Some(ty) = self.graph.edge(*edg).ty.get_type() {
+                if ty != &algefn.retty {
+                    let err = OptError::Any {
+                        text: format!(
+                            "Result type was \"{ty:?}\", but expected {:?}!",
+                            algefn.retty
+                        ),
                     };
                     report(
                         error_reporter(err.clone(), algefn.span.clone())
-                            .with_label(Label::new(algefn.span.clone()).with_message(&format!("result producer in this region should be {:?}", algefn.retty)))
+                            .with_label(Label::new(algefn.span.clone()).with_message(&format!(
+                                "result producer in this region should be {:?}",
+                                algefn.retty
+                            )))
                             .finish(),
                     );
                     return Err(err);
                 }
-            }else{
-                let err = OptError::Any { 
-                    text: format!("Result is of type \"{:?}\", but connected edge was untyped. This is a compiler bug!", algefn.retty), 
+            } else {
+                let err = OptError::Any {
+                    text: format!("Result is of type \"{:?}\", but connected edge was untyped. This is a compiler bug!", algefn.retty),
                 };
                 report(
                     error_reporter(err.clone(), algefn.span.clone())
-                        .with_label(Label::new(algefn.span.clone()).with_message("result producer in this region"))
+                        .with_label(
+                            Label::new(algefn.span.clone())
+                                .with_message("result producer in this region"),
+                        )
                         .finish(),
                 );
                 return Err(err);
             }
-        }else{
-            let err = OptError::Any { 
-                text: format!("Result is of type \"{:?}\", but there was no return value set. This is a compiler bug!", algefn.retty), 
+        } else {
+            let err = OptError::Any {
+                text: format!("Result is of type \"{:?}\", but there was no return value set. This is a compiler bug!", algefn.retty),
             };
             report(
                 error_reporter(err.clone(), algefn.span.clone())
-                    .with_label(Label::new(algefn.span.clone()).with_message("no result producer in this region"))
+                    .with_label(
+                        Label::new(algefn.span.clone())
+                            .with_message("no result producer in this region"),
+                    )
                     .finish(),
             );
             return Err(err);
@@ -519,10 +557,9 @@ impl Optimizer {
         apply: &ApplyNode,
         region_src_span: &Span,
     ) -> Result<Option<Ty>, OptError> {
-
         #[cfg(feature = "log")]
         log::info!("Type derive Apply node");
-        
+
         //for the apply node, we search for the src λ-Node, and call
         if let Some(calldecl_edge) = apply.get_callabel_decl().edge {
             let callable_src = self.graph.edge(calldecl_edge).src().clone();
@@ -546,8 +583,8 @@ impl Optimizer {
                     ) {
                         ty
                     } else {
-                        let err = OptError::Any { 
-                            text: "This call's src function output type was not set!".to_owned(), 
+                        let err = OptError::Any {
+                            text: "This call's src function output type was not set!".to_owned(),
                         };
                         report(
                             error_reporter(err.clone(), span.clone())
@@ -589,11 +626,11 @@ impl Optimizer {
                     let argcount = apply.get_call_arg_count();
                     for i in 0..argcount {
                         if let Some(edg) = apply.argument_input(i).unwrap().edge {
-                            let ty = if let Some(ty) = self.graph.edge(edg).ty.get_type(){
+                            let ty = if let Some(ty) = self.graph.edge(edg).ty.get_type() {
                                 ty
-                            }else{
+                            } else {
                                 //type of argument not yet derived
-                                return Ok(None);  
+                                return Ok(None);
                             };
                             apply_sig.push(ty.clone());
                         } else {
@@ -602,7 +639,10 @@ impl Optimizer {
                             };
                             report(
                                 error_reporter(err.clone(), region_src_span.clone())
-                                    .with_label(Label::new(region_src_span.clone()).with_message("In this region"))
+                                    .with_label(
+                                        Label::new(region_src_span.clone())
+                                            .with_message("In this region"),
+                                    )
                                     .finish(),
                             );
                             return Err(err);
@@ -625,7 +665,9 @@ impl Optimizer {
                         report(
                             error_reporter(err.clone(), span.clone())
                                 .with_label(Label::new(call_span).with_message("For this call"))
-                                .with_label(Label::new(span.clone()).with_message("of this function"))
+                                .with_label(
+                                    Label::new(span.clone()).with_message("of this function"),
+                                )
                                 .finish(),
                         );
                         return Err(err);
@@ -639,7 +681,9 @@ impl Optimizer {
                 };
                 report(
                     error_reporter(err.clone(), region_src_span.clone())
-                        .with_label(Label::new(region_src_span.clone()).with_message("In this region"))
+                        .with_label(
+                            Label::new(region_src_span.clone()).with_message("In this region"),
+                        )
                         .finish(),
                 );
                 Err(err)
@@ -657,71 +701,99 @@ impl Optimizer {
         }
     }
 
-    fn try_gamma_derive(&mut self, node: NodeRef) -> Result<Option<Ty>, OptError>{
+    fn try_gamma_derive(&mut self, node: NodeRef) -> Result<Option<Ty>, OptError> {
         //We just need to check two things:
-        // 1. that the conditional is a Boolean output, 
+        // 1. that the conditional is a Boolean output,
         // 2. That all branches emit the same type
 
         let conditional_type = {
-            if let Some(condty) = self.get_type_for_inport(InportLocation { node, input: InputType::GammaPredicate }){
+            if let Some(condty) = self.get_type_for_inport(InportLocation {
+                node,
+                input: InputType::GammaPredicate,
+            }) {
                 condty
-            }else{
+            } else {
                 //Was not yet resolved, return.
                 return Ok(None);
             }
         };
 
-        if !conditional_type.is_bool(){
+        if !conditional_type.is_bool() {
             let span = {
                 let condition_src = self.graph.node(node).input_src(&self.graph, 0).unwrap();
-                self.span_tags.get(&condition_src.into()).cloned().unwrap_or(Span::empty())
+                self.span_tags
+                    .get(&condition_src.into())
+                    .cloned()
+                    .unwrap_or(Span::empty())
             };
-            
+
             let err = OptError::Any {
-                text: format!("Condition must be an expression of type Bool, was {conditional_type}"),
+                text: format!(
+                    "Condition must be an expression of type Bool, was {conditional_type}"
+                ),
             };
             report(
                 error_reporter(err.clone(), span.clone())
-                    .with_label(Label::new(span.clone()).with_message("Consider changing this expression!"))
+                    .with_label(
+                        Label::new(span.clone()).with_message("Consider changing this expression!"),
+                    )
                     .finish(),
             );
             return Err(err);
         }
 
-        //find all input types. If we have them, propagate them _into_ 
-        //the regions. 
+        //find all input types. If we have them, propagate them _into_
+        //the regions.
         //Then recurse the region derive.
-        //Note that we only need the type on any 
+        //Note that we only need the type on any
         //EV that is acutally used by any of the branches.
-        
+
         let subregion_count = self.graph.node(node).regions().len();
         assert!(subregion_count > 0);
-        for input_type in self.graph.node(node).inport_types(){
-
-            
-            if let Some(ty) = self.find_type(&InportLocation{node, input: input_type}.into()).clone(){
-                for ridx in 0..subregion_count{
-                    if let Some(mapped_internally) = input_type.map_to_in_region(ridx){
-                        self.typemap.set(OutportLocation{node, output: mapped_internally}.into(), ty.clone());
+        for input_type in self.graph.node(node).inport_types() {
+            if let Some(ty) = self
+                .find_type(
+                    &InportLocation {
+                        node,
+                        input: input_type,
+                    }
+                    .into(),
+                )
+                .clone()
+            {
+                for ridx in 0..subregion_count {
+                    if let Some(mapped_internally) = input_type.map_to_in_region(ridx) {
+                        self.typemap.set(
+                            OutportLocation {
+                                node,
+                                output: mapped_internally,
+                            }
+                            .into(),
+                            ty.clone(),
+                        );
                     }
                 }
-            }else{
-                //NOTE: We check if the port is in use. If not, its okey if no type information was 
+            } else {
+                //NOTE: We check if the port is in use. If not, its okey if no type information was
                 //      found
                 let is_in_use = {
                     let mut is_in_use = false;
-                    for subreg in 0..subregion_count{
-                        if let Some(p) = self.graph.node(node).outport(&input_type.map_to_in_region(subreg).unwrap()){
-                             if p.edges.len() > 0 {
-                                 is_in_use = true;
-                                 break;
-                             }
+                    for subreg in 0..subregion_count {
+                        if let Some(p) = self
+                            .graph
+                            .node(node)
+                            .outport(&input_type.map_to_in_region(subreg).unwrap())
+                        {
+                            if p.edges.len() > 0 {
+                                is_in_use = true;
+                                break;
+                            }
                         }
                     }
                     is_in_use
                 };
 
-                if is_in_use{
+                if is_in_use {
                     //Port is in use, but input is untype, therfore try again later.
                     return Ok(None);
                 }
@@ -729,147 +801,298 @@ impl Optimizer {
         }
 
         //if we reached this, recurse!
-        for ridx in 0..subregion_count{
-            let regloc = RegionLocation{node, region_index: ridx};
-            let span = self.span_tags.get(&regloc.into()).cloned().unwrap_or(Span::empty());
+        for ridx in 0..subregion_count {
+            let regloc = RegionLocation {
+                node,
+                region_index: ridx,
+            };
+            let span = self
+                .span_tags
+                .get(&regloc.into())
+                .cloned()
+                .unwrap_or(Span::empty());
             self.derive_region(regloc, span)?;
         }
 
         //make sure that both regions return the same type.
         //now find the output type of both regions, and make sure they are the same. If so, we are good to go
-        let reg_if_ty = if let Some(t) = self.find_type(&InportLocation{node, input: InputType::ExitVariableResult { branch: 0, exit_variable: 0 }}.into()){
+        let reg_if_ty = if let Some(t) = self.find_type(
+            &InportLocation {
+                node,
+                input: InputType::ExitVariableResult {
+                    branch: 0,
+                    exit_variable: 0,
+                },
+            }
+            .into(),
+        ) {
             t
-        }else{
+        } else {
             panic!("Gamma-internal if-branch region should have been resolved!");
         };
-        let reg_else_ty = if let Some(t) = self.find_type(&InportLocation{node, input: InputType::ExitVariableResult { branch: 1, exit_variable: 0 }}.into()){
+        let reg_else_ty = if let Some(t) = self.find_type(
+            &InportLocation {
+                node,
+                input: InputType::ExitVariableResult {
+                    branch: 1,
+                    exit_variable: 0,
+                },
+            }
+            .into(),
+        ) {
             t
-        }else{
+        } else {
             panic!("Gamma-internal else-branch should have been resolved!");
         };
 
-        if reg_if_ty != reg_else_ty{
-            let if_branch_span = self.span_tags.get(&RegionLocation{node, region_index: 0}.into()).cloned().unwrap_or(Span::empty());     
-            let else_branch_span = self.span_tags.get(&RegionLocation{node, region_index: 1}.into()).cloned().unwrap_or(Span::empty());
+        if reg_if_ty != reg_else_ty {
+            let if_branch_span = self
+                .span_tags
+                .get(
+                    &RegionLocation {
+                        node,
+                        region_index: 0,
+                    }
+                    .into(),
+                )
+                .cloned()
+                .unwrap_or(Span::empty());
+            let else_branch_span = self
+                .span_tags
+                .get(
+                    &RegionLocation {
+                        node,
+                        region_index: 1,
+                    }
+                    .into(),
+                )
+                .cloned()
+                .unwrap_or(Span::empty());
 
-            let err = OptError::Any { text: format!("Return type conflict. If branch returns {}, but else branch returns {}", reg_if_ty, reg_else_ty) };
+            let err = OptError::Any {
+                text: format!(
+                    "Return type conflict. If branch returns {}, but else branch returns {}",
+                    reg_if_ty, reg_else_ty
+                ),
+            };
             report(
                 error_reporter(err.clone(), if_branch_span.clone())
-                    .with_label(Label::new(if_branch_span.clone()).with_message(format!("This returns {reg_if_ty}")))
-                    .with_label(Label::new(else_branch_span.clone()).with_message(format!("This returns {reg_else_ty}")))
+                    .with_label(
+                        Label::new(if_branch_span.clone())
+                            .with_message(format!("This returns {reg_if_ty}")),
+                    )
+                    .with_label(
+                        Label::new(else_branch_span.clone())
+                            .with_message(format!("This returns {reg_else_ty}")),
+                    )
                     .finish(),
             );
 
             Err(err)
-        }else{
+        } else {
             Ok(Some(reg_if_ty))
         }
-    } 
+    }
 
-    fn try_theta_derive(&mut self, node: NodeRef) -> Result<Option<Ty>, OptError>{
-
-        let loop_node_span = self.span_tags.get(&node.into()).cloned().unwrap_or(Span::empty());
+    fn try_theta_derive(&mut self, node: NodeRef) -> Result<Option<Ty>, OptError> {
+        let loop_node_span = self
+            .span_tags
+            .get(&node.into())
+            .cloned()
+            .unwrap_or(Span::empty());
         //check lower bound value
-        if let Some(ty) = self.find_type(&InportLocation{node, input: InputType::Input(0)}.into()){
-            if ty != Ty::Nat{
+        if let Some(ty) = self.find_type(
+            &InportLocation {
+                node,
+                input: InputType::Input(0),
+            }
+            .into(),
+        ) {
+            if ty != Ty::Nat {
                 let err = OptError::Any { text: format!("Loop bound conflict: Lower loop bound needs to be a natural number, but is {ty}") };
                 report(
                     error_reporter(err.clone(), loop_node_span.clone())
-                        .with_label(Label::new(loop_node_span.clone()).with_message(format!("in this loop")))
-                        .finish()
+                        .with_label(
+                            Label::new(loop_node_span.clone())
+                                .with_message(format!("in this loop")),
+                        )
+                        .finish(),
                 );
                 return Err(err);
             }
-        }else{
+        } else {
             //not yet resolved
             return Ok(None);
         }
         //check higher bound value
-        if let Some(ty) = self.find_type(&InportLocation{node, input: InputType::Input(1)}.into()){
-            if ty != Ty::Nat{
+        if let Some(ty) = self.find_type(
+            &InportLocation {
+                node,
+                input: InputType::Input(1),
+            }
+            .into(),
+        ) {
+            if ty != Ty::Nat {
                 let err = OptError::Any { text: format!("Loop bound conflict: Upper loop bound needs to be a natural number, but is {ty}") };
                 report(
                     error_reporter(err.clone(), loop_node_span.clone())
-                        .with_label(Label::new(loop_node_span.clone()).with_message(format!("in this loop")))
-                        .finish()
+                        .with_label(
+                            Label::new(loop_node_span.clone())
+                                .with_message(format!("in this loop")),
+                        )
+                        .finish(),
                 );
                 return Err(err);
             }
-        }else{
+        } else {
             //not yet resolved
             return Ok(None);
         }
 
-        //now checkout the type of the assigned result. This basically makes sure, that we can later on 
-        //identify type missmatches between the first assigned value, and the later-on assigned 
+        //now checkout the type of the assigned result. This basically makes sure, that we can later on
+        //identify type missmatches between the first assigned value, and the later-on assigned
         //value in the loop.
-        let initial_result_type = if let Some(ty) = self.find_type(&InportLocation{node, input: InputType::Input(2)}.into()){
+        let initial_result_type = if let Some(ty) = self.find_type(
+            &InportLocation {
+                node,
+                input: InputType::Input(2),
+            }
+            .into(),
+        ) {
             ty
-        }else{
+        } else {
             //not yet set
             return Ok(None);
         };
-        
+
         //the idea here is similar, we only start deriving the theta node, once we
         //could tag all lv-variables with a type.
         //however, in here, we can do all testing only _after_ finishing
-        for input_type in self.graph.node(node).inport_types(){
-            if let Some(ty) = self.find_type(&InportLocation{node, input: input_type}.into()).clone(){
-                if let Some(mapped_internally) = input_type.map_to_in_region(0){
-                    self.typemap.set(OutportLocation{node, output: mapped_internally}.into(), ty.clone());
-                }else{
-                    if input_type != InputType::ThetaPredicate{
+        for input_type in self.graph.node(node).inport_types() {
+            if let Some(ty) = self
+                .find_type(
+                    &InportLocation {
+                        node,
+                        input: input_type,
+                    }
+                    .into(),
+                )
+                .clone()
+            {
+                if let Some(mapped_internally) = input_type.map_to_in_region(0) {
+                    self.typemap.set(
+                        OutportLocation {
+                            node,
+                            output: mapped_internally,
+                        }
+                        .into(),
+                        ty.clone(),
+                    );
+                } else {
+                    if input_type != InputType::ThetaPredicate {
                         panic!("any non-theta-predicate type should be mapable, but {input_type:?} wasnt!");
                     }
                 }
-            }else{
+            } else {
                 //this one wasn't set, so return
                 return Ok(None);
             }
         }
 
         //now dispatch the loop-region
-        let regloc = RegionLocation{node, region_index: 0};
-        let span = self.span_tags.get(&regloc.into()).cloned().unwrap_or(Span::empty());
+        let regloc = RegionLocation {
+            node,
+            region_index: 0,
+        };
+        let span = self
+            .span_tags
+            .get(&regloc.into())
+            .cloned()
+            .unwrap_or(Span::empty());
         self.derive_region(regloc, span)?;
 
         //now do our semantic tests. which is:
         // - theta_predicate needs to be bool,
         // - there needs to be only one return value ..
         // - ...and that needs to be typed the same way as initial_result_type
-        if let Some(ty) = self.find_type(&InportLocation{node, input: InputType::ThetaPredicate}.into()){
-            if ty != Ty::Bool{
-                let err = OptError::Any { text: format!("Loop condition must be Bool, but was {ty}. This is a bug!") };
-                report(error_reporter(err.clone(), loop_node_span.clone()).with_label(Label::new(loop_node_span).with_message("here")).finish());
+        if let Some(ty) = self.find_type(
+            &InportLocation {
+                node,
+                input: InputType::ThetaPredicate,
+            }
+            .into(),
+        ) {
+            if ty != Ty::Bool {
+                let err = OptError::Any {
+                    text: format!("Loop condition must be Bool, but was {ty}. This is a bug!"),
+                };
+                report(
+                    error_reporter(err.clone(), loop_node_span.clone())
+                        .with_label(Label::new(loop_node_span).with_message("here"))
+                        .finish(),
+                );
                 return Err(err);
             }
-        }else{
-            //this is an error at this point, since the region derive has already returned 
-            let err = OptError::Any { text: format!("Could not derive a type for the loop's break condition. This is a bug!") };
-            report(error_reporter(err.clone(), loop_node_span.clone()).with_label(Label::new(loop_node_span).with_message("here")).finish());
+        } else {
+            //this is an error at this point, since the region derive has already returned
+            let err = OptError::Any {
+                text: format!(
+                    "Could not derive a type for the loop's break condition. This is a bug!"
+                ),
+            };
+            report(
+                error_reporter(err.clone(), loop_node_span.clone())
+                    .with_label(Label::new(loop_node_span).with_message("here"))
+                    .finish(),
+            );
             return Err(err);
         }
 
         //now do the lv of the loop-value
-        if let Some(ty) = self.find_type(&InportLocation{node, input: InputType::Result(2)}.into()){
-            if ty != initial_result_type{
-                let err = OptError::Any { text: format!("Loop value must be {initial_result_type}, but was {ty}.") };
+        if let Some(ty) = self.find_type(
+            &InportLocation {
+                node,
+                input: InputType::Result(2),
+            }
+            .into(),
+        ) {
+            if ty != initial_result_type {
+                let err = OptError::Any {
+                    text: format!("Loop value must be {initial_result_type}, but was {ty}."),
+                };
                 //TODO: find the right span?
                 let value_result_span = Span::empty();
-                report(error_reporter(err.clone(), loop_node_span.clone()).with_label(Label::new(loop_node_span.clone()).with_message("first defined here as {initial_result_type}")).with_label(Label::new(value_result_span).with_message("But than defined here as {ty}")).finish());
+                report(
+                    error_reporter(err.clone(), loop_node_span.clone())
+                        .with_label(
+                            Label::new(loop_node_span.clone())
+                                .with_message("first defined here as {initial_result_type}"),
+                        )
+                        .with_label(
+                            Label::new(value_result_span)
+                                .with_message("But than defined here as {ty}"),
+                        )
+                        .finish(),
+                );
                 return Err(err);
             }
-        }else{
-            //this is an error at this point, since the region derive has already returned 
-            let err = OptError::Any { text: format!("Could not derive a type for the loop-value. This is a bug!") };
-            report(error_reporter(err.clone(), loop_node_span.clone()).with_label(Label::new(loop_node_span).with_message("here")).finish());
+        } else {
+            //this is an error at this point, since the region derive has already returned
+            let err = OptError::Any {
+                text: format!("Could not derive a type for the loop-value. This is a bug!"),
+            };
+            report(
+                error_reporter(err.clone(), loop_node_span.clone())
+                    .with_label(Label::new(loop_node_span).with_message("here"))
+                    .finish(),
+            );
             return Err(err);
         }
 
         Ok(Some(initial_result_type))
     }
-    
-    fn derive_region(
+
+    pub(crate) fn derive_region(
         &mut self,
         reg: RegionLocation,
         region_src_span: Span,
@@ -877,28 +1100,41 @@ impl Optimizer {
         //First gather all nodes in the region
         let (mut build_stack, edges) = self
             .graph
-            .on_region(&reg, |reg| {
-                //The resolution stack
-                let build_stack: VecDeque<NodeRef> =
-                    reg.region().nodes.iter().map(|n| *n).collect();
-                let edges = reg.region().edges.iter().map(|e| *e).collect::<Vec<_>>();
+            .on_region(&reg, |builder| {
+                //The resolution stack. Note that we only do type resolution on _live_ nodes.
+                // dead nodes _might_ be garbage already.
+                let build_stack: VecDeque<NodeRef> = builder
+                    .ctx()
+                    .live_nodes_in_region(reg)
+                    .into_iter()
+                    .collect();
+                //For the edges we just use _all_, since we only carry over available information
+                let edges = builder
+                    .region()
+                    .edges
+                    .iter()
+                    .map(|e| *e)
+                    .collect::<Vec<_>>();
                 (build_stack, edges)
             })
             .expect("Failed to gather nodes in λ-Region");
 
-        //Preset all edges where we know the type already. For instance if the type map 
+        //Preset all edges where we know the type already. For instance if the type map
         //contains type info for any of the ports of an edge
         for edg in &edges {
             let src = self.graph.edge(*edg).src().clone();
             if let Some(ty) = self.find_type(&src.into()) {
                 if let Some(preset) = self.graph.edge(*edg).ty.get_type() {
                     if preset != &ty {
-                        let err = OptError::Any { 
-                            text: format!("Edge was already set to {:?}, but was about to be overwritten with an incompatible type {:?}", preset, ty), 
-                        };                        
+                        let err = OptError::Any {
+                            text: format!("Edge was already set to {:?}, but was about to be overwritten with an incompatible type {:?}", preset, ty),
+                        };
                         report(
                             error_reporter(err.clone(), region_src_span.clone())
-                                .with_label(Label::new(region_src_span.clone()).with_message("In this region"))
+                                .with_label(
+                                    Label::new(region_src_span.clone())
+                                        .with_message("In this region"),
+                                )
                                 .finish(),
                         );
                         return Err(err);
@@ -921,21 +1157,29 @@ impl Optimizer {
             for node in local_stack {
                 //gather all inputs and let the node try to resolve itself
                 let (type_resolve_try, resolved_port) = match &self.graph.node(node).node_type {
-                    NodeType::Simple(s) => {let ty = s.node.try_derive_type(
-                        &self.typemap,
-                        &self.graph,
-                        &self.concepts,
-                        &self.csg_node_defs,
-                    );
-                    
-                    (ty, node.output(0))},
-                    NodeType::Apply(a) => {let ty = self.try_apply_derive(node, a, &region_src_span); (ty, node.output(0))},
+                    NodeType::Simple(s) => {
+                        let ty = s.node.try_derive_type(
+                            &self.typemap,
+                            &self.graph,
+                            &self.concepts,
+                            &self.csg_node_defs,
+                        );
+
+                        (ty, node.output(0))
+                    }
+                    NodeType::Apply(a) => {
+                        let ty = self.try_apply_derive(node, a, &region_src_span);
+                        (ty, node.output(0))
+                    }
                     NodeType::Gamma(_g) => {
                         let ty = self.try_gamma_derive(node);
                         (ty, node.output(0))
-                    },
+                    }
                     //NOTE: by convention the θ-Node resolves to output 2
-                    NodeType::Theta(_t) => {let ty = self.try_theta_derive(node); (ty, node.output(2))},
+                    NodeType::Theta(_t) => {
+                        let ty = self.try_theta_derive(node);
+                        (ty, node.output(2))
+                    }
                     t => {
                         let err = OptError::Any {
                             text: format!(
@@ -944,7 +1188,10 @@ impl Optimizer {
                         };
                         report(
                             error_reporter(err.clone(), region_src_span.clone())
-                                .with_label(Label::new(region_src_span.clone()).with_message("In this region"))
+                                .with_label(
+                                    Label::new(region_src_span.clone())
+                                        .with_message("In this region"),
+                                )
                                 .finish(),
                         );
                         return Err(err);
@@ -957,10 +1204,7 @@ impl Optimizer {
                         resolved_any_node = true;
 
                         //now assign that type to the nodes's output.
-                        self.typemap.set(
-                            resolved_port.into(),
-                            ty.clone(),
-                        );
+                        self.typemap.set(resolved_port.into(), ty.clone());
 
                         //And propagate to all edges
                         for edg in self
@@ -972,18 +1216,23 @@ impl Optimizer {
                             .clone()
                             .iter()
                         {
-                            
-                            if let Err(e) = self.graph.edge_mut(*edg).ty.set_derived_state(ty.clone()){
-                                
-                                if let Some(span) = self.find_span(resolved_port.node.into()){
-                                    report(error_reporter(e.clone(), span.clone()).with_label(Label::new(span.clone()).with_message("On this node")).finish());
-                                    
-                                }else{
+                            if let Err(e) =
+                                self.graph.edge_mut(*edg).ty.set_derived_state(ty.clone())
+                            {
+                                if let Some(span) = self.find_span(resolved_port.node.into()) {
+                                    report(
+                                        error_reporter(e.clone(), span.clone())
+                                            .with_label(
+                                                Label::new(span.clone())
+                                                    .with_message("On this node"),
+                                            )
+                                            .finish(),
+                                    );
+                                } else {
                                     report(error_reporter(e.clone(), Span::empty()).finish());
                                 }
-                                
-                                return Err(e);
 
+                                return Err(e);
                             }
                         }
                     }
@@ -992,10 +1241,12 @@ impl Optimizer {
                         build_stack.push_front(node);
                     }
                     Err(e) => {
-                        let span = self.find_span(node.into()).unwrap_or(Span::empty()); 
+                        let span = self.find_span(node.into()).unwrap_or(Span::empty());
                         report(
                             error_reporter(e.clone(), span.clone())
-                                .with_label(Label::new(span.clone()).with_message("on this operation"))
+                                .with_label(
+                                    Label::new(span.clone()).with_message("on this operation"),
+                                )
                                 .finish(),
                         );
                         //Immediately abort, since we have no way of finishing.
@@ -1026,31 +1277,35 @@ impl Optimizer {
                     }
                     _ => None,
                 };
-                
+
                 let err = OptError::Any {
                     text: format!("Failed to derive a type"),
                 };
 
-                if let Some(span) = span{
+                if let Some(span) = span {
                     report(
                         error_reporter(err.clone(), span.clone())
                             .with_label(Label::new(span.clone()).with_message("for this"))
                             .finish(),
                     );
-                }else{
+                } else {
                     report(
                         error_reporter(err.clone(), Span::empty())
-                            .with_message(&format!("On note of type {} without span", &node.node_type)).finish()
+                            .with_message(&format!(
+                                "On note of type {} without span",
+                                &node.node_type
+                            ))
+                            .finish(),
                     );
                 }
-                
             }
 
-            
-            if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("DUMP_TYPE_DERIVE_FAILED").is_ok() {
+            if std::env::var("VOLA_DUMP_ALL").is_ok()
+                || std::env::var("DUMP_TYPE_DERIVE_FAILED").is_ok()
+            {
                 self.push_debug_state("type derive failed");
             }
-            
+
             return Err(OptError::TypeDeriveFailed {
                 errorcount: build_stack.len(),
             });
