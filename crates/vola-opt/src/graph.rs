@@ -524,4 +524,13 @@ impl Optimizer {
         }
         Ok(out)
     }
+
+    ///Returns true if `node` is of type `T`.
+    pub fn is_node_type<T: DialectNode + Send + Sync + 'static>(&self, node: NodeRef) -> bool {
+        if let NodeType::Simple(s) = &self.graph.node(node).node_type {
+            s.try_downcast_ref::<T>().is_some()
+        } else {
+            false
+        }
+    }
 }

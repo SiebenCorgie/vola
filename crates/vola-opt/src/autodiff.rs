@@ -12,7 +12,11 @@
 //!
 //! The submoduls implement the actual autodiff pass as well a specific optimizations.
 
+mod ad_forward;
+mod ad_utils;
+
 use rvsdg::{
+    edge::InputType,
     region::{Input, Output},
     rvsdg_derive_lang::LangNode,
 };
@@ -63,6 +67,15 @@ pub struct AutoDiff {
     ///Single output that collects / represents the derivative(s) of the first input-argument with respect to all elements of the second input.
     #[output]
     pub output: Output,
+}
+
+impl AutoDiff {
+    pub fn expr_input() -> InputType {
+        InputType::Input(0)
+    }
+    pub fn wrt_input() -> InputType {
+        InputType::Input(1)
+    }
 }
 
 impl Default for AutoDiff {
