@@ -12,6 +12,7 @@
 //!
 //! The submoduls implement the actual autodiff pass as well a specific optimizations.
 
+mod activity;
 mod ad_dispatch;
 mod ad_forward;
 mod ad_utils;
@@ -26,7 +27,10 @@ use vola_common::thiserror::Error;
 use crate::{common::Ty, DialectNode, OptError, OptNode};
 
 #[derive(Debug, Error, Clone)]
-pub enum AutoDiffError {}
+pub enum AutoDiffError {
+    #[error("The activity port is not in the same region as the entrypoint node")]
+    ActivityExplorationRegionError,
+}
 
 //Macro that implements the "View" trait for the Autodiff
 macro_rules! implViewAutoDiff {

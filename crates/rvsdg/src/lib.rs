@@ -504,4 +504,24 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
             None
         }
     }
+
+    ///Returns the connected dst-port(s) of `outport`.
+    ///
+    /// # Panic
+    ///
+    /// Panics if the ouport is invalid (either the node doesn't exist, or the port type).
+    pub fn outport_dsts(&self, outport: OutportLocation) -> SmallColl<InportLocation> {
+        let mut dsts = SmallColl::new();
+        for edg in &self
+            .node(outport.node)
+            .outport(&outport.output)
+            .unwrap()
+            .edges
+        {
+            let dst = self.edge(*edg).dst();
+            dsts.push(*dst);
+        }
+
+        dsts
+    }
 }
