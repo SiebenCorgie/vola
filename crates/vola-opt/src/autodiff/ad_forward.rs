@@ -54,6 +54,7 @@
 //! graph.
 
 use rvsdg::{
+    attrib::AttribLocation,
     edge::{InportLocation, OutportLocation, OutputType},
     smallvec::smallvec,
     NodeRef, SmallColl,
@@ -143,6 +144,18 @@ impl Optimizer {
                 input: AutoDiff::expr_input(),
             })
             .ok_or(OptError::from(AutoDiffError::EmptyExprArg))?;
+
+        //find all active nodes of this expression, then start doing the forward iteration,
+        //guided by the activity analysis.
+
+        let active = self.activity_explorer(diffnode)?;
+
+        println!("Active nodes:");
+        for v in active.flags.keys() {
+            if let AttribLocation::Node(n) = v {
+                println!("    {n}");
+            }
+        }
 
         let tmp_repl = self
             .graph
