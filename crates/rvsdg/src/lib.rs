@@ -38,6 +38,7 @@ pub mod builder;
 pub mod common;
 pub mod edge;
 pub mod err;
+mod indexing;
 pub mod nodes;
 pub mod region;
 pub mod util;
@@ -114,6 +115,9 @@ impl EdgeRef {
 /// However, you are free to represent any kind of other dependency.
 ///
 /// For ease of use you can always type N as `Box<dyn SomeNodeTrait + 'static>`.
+///
+/// To access nodes, edges, regions, or ports of nodes, use either [node](Rvsdg::node), [edge](Rvsdg::edge), etc, or the index implementation for the
+/// respective handle.
 pub struct Rvsdg<N: LangNode + 'static, E: LangEdge + 'static> {
     pub(crate) nodes: SlotMap<NodeRef, Node<N>>,
     pub(crate) edges: SlotMap<EdgeRef, Edge<E>>,

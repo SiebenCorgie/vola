@@ -217,7 +217,7 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
         Ok(replacee_ref)
     }
 
-    ///Replaces all uses of `replaced` with `replacee`. Contrary to [replace_node] this does not change inputs to `replacee`.
+    ///Replaces all uses of `replaced` with `replacee`. Contrary to [replace_node](Rvsdg::replace_node) this does not change inputs to `replacee`.
     /// Instead all _output-connected-edges_ of `replaced` are routed to `replacee`.
     ///
     /// Assumes that:
@@ -322,5 +322,134 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
         }
 
         live_nodes.into_iter().collect()
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use rvsdg_derive_lang::LangNode;
+
+    use crate::{self as rvsdg, EdgeRef, NodeRef};
+    use crate::{
+        common::VSEdge,
+        region::{Input, Output},
+        Rvsdg,
+    };
+
+    #[derive(LangNode)]
+    struct TestNode {
+        #[input]
+        inp: Input,
+        #[output]
+        out: Output,
+    }
+
+    impl Default for TestNode {
+        fn default() -> Self {
+            TestNode {
+                inp: Input::default(),
+                out: Output::default(),
+            }
+        }
+    }
+
+    fn setup_test_rvsdg() -> (Rvsdg<TestNode, VSEdge>, NodeRef, EdgeRef) {
+        let mut rvsdg: Rvsdg<TestNode, VSEdge> = Rvsdg::new();
+
+        let (testnode, test_edge) = rvsdg
+            .on_region(&rvsdg.toplevel_region(), |reg| {
+                let test_node = reg.insert_node(TestNode::default());
+                let test_node2 = reg.insert_node(TestNode::default());
+
+                let edg = reg
+                    .ctx_mut()
+                    .connect(test_node.output(0), test_node2.input(0), VSEdge::State)
+                    .unwrap();
+
+                (test_node, edg)
+            })
+            .unwrap();
+
+        (rvsdg, testnode, test_edge)
+    }
+    #[test]
+    fn index_valid() {
+        let (mut rvsdg, testnode, test_edge) = setup_test_rvsdg();
+
+        let t: &_ = &rvsdg[testnode];
+        let t: &mut _ = &mut rvsdg[testnode];
+
+        let e: &_ = &rvsdg[test_edge];
+        let e: &mut _ = &mut rvsdg[test_edge];
+
+        let tlreg = rvsdg.toplevel_region();
+        let r: &_ = &rvsdg[tlreg];
+        let r: &mut _ = &mut rvsdg[tlreg];
+
+        let ip: &_ = &rvsdg[testnode.input(0)];
+        let ip: &mut _ = &mut rvsdg[testnode.input(0)];
+
+        let op: &_ = &rvsdg[testnode.output(0)];
+        let op: &mut _ = &mut rvsdg[testnode.output(0)];
+    }
+
+    #[test]
+    #[should_panic]
+    fn index_invalid_node_imm() {
+        let (mut rvsdg, testnode, test_edge) = setup_test_rvsdg();
+        rvsdg.remove_node(testnode).unwrap();
+        let t: &_ = &rvsdg[testnode];
+    }
+    #[test]
+    #[should_panic]
+    fn index_invalid_node_mut() {
+        let (mut rvsdg, testnode, test_edge) = setup_test_rvsdg();
+        rvsdg.remove_node(testnode).unwrap();
+        let t: &mut _ = &mut rvsdg[testnode];
+    }
+
+    #[test]
+    #[should_panic]
+    fn index_invalid_edge_imm() {
+        let (mut rvsdg, testnode, test_edge) = setup_test_rvsdg();
+        rvsdg.remove_node(testnode).unwrap();
+        let t: &_ = &rvsdg[test_edge];
+    }
+    #[test]
+    #[should_panic]
+    fn index_invalid_edge_mut() {
+        let (mut rvsdg, testnode, test_edge) = setup_test_rvsdg();
+        rvsdg.remove_node(testnode).unwrap();
+        let t: &mut _ = &mut rvsdg[test_edge];
+    }
+
+    #[test]
+    #[should_panic]
+    fn index_invalid_inport_imm() {
+        let (mut rvsdg, testnode, test_edge) = setup_test_rvsdg();
+        rvsdg.remove_node(testnode).unwrap();
+        let t: &_ = &rvsdg[testnode.input(0)];
+    }
+    #[test]
+    #[should_panic]
+    fn index_invalid_inport_mut() {
+        let (mut rvsdg, testnode, test_edge) = setup_test_rvsdg();
+        rvsdg.remove_node(testnode).unwrap();
+        let t: &mut _ = &mut rvsdg[testnode.input(0)];
+    }
+
+    #[test]
+    #[should_panic]
+    fn index_invalid_outport_imm() {
+        let (mut rvsdg, testnode, test_edge) = setup_test_rvsdg();
+        rvsdg.remove_node(testnode).unwrap();
+        let t: &_ = &rvsdg[testnode.output(0)];
+    }
+    #[test]
+    #[should_panic]
+    fn index_invalid_outport_mut() {
+        let (mut rvsdg, testnode, test_edge) = setup_test_rvsdg();
+        rvsdg.remove_node(testnode).unwrap();
+        let t: &mut _ = &mut rvsdg[testnode.output(0)];
     }
 }
