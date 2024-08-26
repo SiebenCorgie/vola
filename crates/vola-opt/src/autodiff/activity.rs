@@ -28,7 +28,7 @@ impl Optimizer {
     pub fn activity_explorer(
         &self,
         entrypoint: NodeRef,
-        active_value: OutportLocation,
+        active_values: &[OutportLocation],
     ) -> Result<FlagStore<bool>, OptError> {
         //The strategy is to collect active_value's successors until we find `entry_point`, or exist the region.
         //
@@ -37,32 +37,33 @@ impl Optimizer {
         // - propagate _into_ regions (gamma/theta,context-variables)
         // - propagate _into_ λ/ϕ nodes (find the active argument(s) of apply node, pre_tag them in the region, then recurse the general tagger).
 
-        //NOTE: `active_value might be a input argument to the region, so its okay if its an _inside_port_ of `entrypoint's` parent region.
-
-        let active_value_region = if active_value.output.is_argument() {
-            let region_index = active_value
-                .output
-                .argument_region_index()
-                .expect("If is argument, expect argument index!");
-            RegionLocation {
-                node: active_value.node,
-                region_index,
-            }
-        } else {
-            self.graph.node(active_value.node).parent.unwrap()
-        };
+        //NOTE: `active_value` might be a input argument to the region, so its okay if its an _inside_port_ of `entrypoint's` parent region.
 
         let entrypoint_region = self.graph.node(entrypoint).parent.unwrap();
 
-        //Test that both are in the same region.
-        if active_value_region != entrypoint_region {
-            return Err(OptError::from(
-                AutoDiffError::ActivityExplorationRegionError,
-            ));
+        for active_value in active_values {
+            let active_value_region = if active_value.output.is_argument() {
+                let region_index = active_value
+                    .output
+                    .argument_region_index()
+                    .expect("If is argument, expect argument index!");
+                RegionLocation {
+                    node: active_value.node,
+                    region_index,
+                }
+            } else {
+                self.graph.node(active_value.node).parent.unwrap()
+            };
+
+            //Test that both are in the same region.
+            if active_value_region != entrypoint_region {
+                return Err(OptError::from(
+                    AutoDiffError::ActivityExplorationRegionError,
+                ));
+            }
         }
 
-        let initial_successors =
-            self.active_element_successors(&[active_value], active_value_region);
+        let initial_successors = self.active_element_successors(active_values, entrypoint_region);
 
         //If there is no intersection of the initial successor list and the
         //entrypoint, this means that the entrypoint is independent from the active element.
@@ -76,8 +77,9 @@ impl Optimizer {
         //them and handle any sub-region nodes or apply nodes
 
         let mut active = FlagStore::new();
-
-        active.set(active_value.into(), true);
+        for av in active_values {
+            active.set(av.clone().into(), true);
+        }
 
         //Now start recursion for any node that _needs_ it
         for is in &initial_successors {
@@ -113,7 +115,7 @@ impl Optimizer {
 
             //push all connected nodes and push self
             successors.insert(next.node);
-            for succ in self.graph.node(next.node).succ(&self.graph) {
+            for succ in self.graph[next.node].succ(&self.graph) {
                 stack.push_back(succ);
             }
         }
@@ -127,7 +129,7 @@ impl Optimizer {
             AbstractNodeType::Simple => {
                 //set node and all outputs
                 flags.set(node.into(), true);
-                for output in self.graph.node(node).outport_types() {
+                for output in self.graph[node].outport_types() {
                     flags.set(OutportLocation { node, output }.into(), true);
                 }
 
@@ -172,7 +174,7 @@ impl Optimizer {
                         .edge
                     {
                         //get the src node and check if it is active
-                        let src = self.graph.edge(argedge).src();
+                        let src = self.graph[argedge].src();
                         if flags.is_set(&src.into()) {
                             //Set the internal argument in the λ as active
                             flags.set(

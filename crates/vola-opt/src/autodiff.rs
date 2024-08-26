@@ -30,6 +30,12 @@ use crate::{common::Ty, DialectNode, OptError, OptNode};
 pub enum AutoDiffError {
     #[error("The activity port is not in the same region as the entrypoint node")]
     ActivityExplorationRegionError,
+    #[error("Could not linearize AutoDiff entrypoint")]
+    LinearizeAdFailed,
+    #[error("WRT-Arg was empty")]
+    EmptyWrtArg,
+    #[error("Expr-Arg was empty")]
+    EmptyExprArg,
 }
 
 //Macro that implements the "View" trait for the Autodiff

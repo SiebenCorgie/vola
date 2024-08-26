@@ -261,6 +261,13 @@ impl OptEdge {
         }
     }
 
+    ///Creates a new ValueEdge with unset type state
+    pub fn value_edge_unset() -> Self {
+        Self::Value {
+            ty: TypeState::Unset,
+        }
+    }
+
     pub fn with_type(mut self, ty: Ty) -> Self {
         self.set_type(ty);
         self
