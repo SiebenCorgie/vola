@@ -34,6 +34,7 @@ use vola_common::Span;
 use crate::OptGraph;
 
 pub(crate) mod impl_utils;
+pub(crate) mod splat_ty;
 
 ///A node of some dialect
 pub trait DialectNode: LangNode + Any + View {

@@ -21,6 +21,8 @@ use rvsdg::{
     edge::InputType,
     region::{Input, Output},
     rvsdg_derive_lang::LangNode,
+    util::abstract_node_type::AbstractNodeType,
+    NodeRef,
 };
 use vola_common::thiserror::Error;
 
@@ -36,6 +38,12 @@ pub enum AutoDiffError {
     EmptyWrtArg,
     #[error("Expr-Arg was empty")]
     EmptyExprArg,
+    #[error("Forward AutoDiff traversal encountered unexpected node type: {0:?}")]
+    FwadUnexpectedNodeType(AbstractNodeType),
+    #[error("Forward AutoDiff traversal had no implementation for node: {0:?}")]
+    FwadNoImpl(NodeRef),
+    #[error("Encountered AutoDiff node while building derivative.")]
+    UnexpectedAutoDiffNode,
 }
 
 //Macro that implements the "View" trait for the Autodiff

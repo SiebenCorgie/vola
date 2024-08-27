@@ -13,6 +13,7 @@
 use rvsdg::{
     attrib::{AttribLocation, FlagStore},
     edge::{InportLocation, InputType, OutportLocation, OutputType},
+    region::RegionLocation,
     NodeRef, SmallColl,
 };
 use vola_common::Span;
@@ -25,10 +26,25 @@ use crate::{
     },
     autodiff::{AutoDiff, AutoDiffError},
     common::Ty,
+    imm::ImmScalar,
     OptEdge, OptError, OptNode, Optimizer,
 };
 
 impl Optimizer {
+    ///Builds a _zero-value-node_ for the given node's output type. This means checking the output type, and
+    /// building that primitive set with just zero as value.
+    ///
+    /// Fails if the output of this node has no type.
+    pub fn emit_zero_for_node(&mut self, region: RegionLocation, node: NodeRef) -> OutportLocation {
+        assert!(self.graph[node].outputs().len() == 1);
+        if let Some(edg) = self.graph[node.output(0)].edges.get(0) {
+            let ty = self.graph[*edg].ty.get_type().unwrap();
+            self.splat_scalar(region, ImmScalar::new(0.0), ty.clone())
+        } else {
+            panic!("Node had no connections!");
+        }
+    }
+
     ///Transforms a entrypoint with multiple wrt-args into multiple AD-entrypoints with
     /// a single wrt arg.
     ///
@@ -124,7 +140,7 @@ impl Optimizer {
 
         let active = self.activity_explorer(entrypoint)?;
 
-        for v in active.flags.keys() {
+        for v in active.active.flags.keys() {
             if let AttribLocation::Node(n) = v {
                 self.handle_canon_node(*n)?;
             }

@@ -10,27 +10,42 @@ use std::collections::VecDeque;
 
 use ahash::AHashSet;
 use rvsdg::{
-    attrib::FlagStore,
-    edge::{InportLocation, InputType, OutportLocation, OutputType},
-    region::RegionLocation,
+    attrib::{AttribLocation, FlagStore},
+    edge::{InportLocation, OutportLocation},
     util::abstract_node_type::AbstractNodeType,
     NodeRef, SmallColl,
 };
 
-use crate::{
-    alge::{ConstantIndex, Construct},
-    autodiff::AutoDiffError,
-    DialectNode, OptError, Optimizer,
-};
+use crate::{alge::ConstantIndex, OptError, Optimizer};
 
 use super::AutoDiff;
+
+pub struct Activity {
+    ///All nodes that are _active_ for the given expression.
+    ///This is: All nodes that are reachable by any node in
+    /// `wrt_trace.
+    pub active: FlagStore<bool>,
+    ///All nodes and ports, connected to the entry_points's wrt-arg,
+    /// That are no value producers
+    pub wrt_trace: FlagStore<bool>,
+}
+
+impl Activity {
+    pub fn is_active(&self, attrib: impl Into<AttribLocation>) -> bool {
+        self.active.is_set(&attrib.into())
+    }
+
+    pub fn is_part_of_wrt(&self, attrib: impl Into<AttribLocation>) -> bool {
+        self.wrt_trace.is_set(&attrib.into())
+    }
+}
 
 impl Optimizer {
     ///Explores the `entrypoint`'s expression in relation to its wrt-argument.
     /// Taggs all nodes in the expression that are influenced by the wrt-argument.
     ///
     /// Also enters sub regions and called functions.
-    pub fn activity_explorer(&self, entrypoint: NodeRef) -> Result<FlagStore<bool>, OptError> {
+    pub fn activity_explorer(&self, entrypoint: NodeRef) -> Result<Activity, OptError> {
         // This is a three-stage process.
         // 1. Find the actual value producer that is _active_. The dialects permit none-transforming nodes like _index_
 
@@ -51,6 +66,7 @@ impl Optimizer {
             .unwrap();
 
         let activity_seed_nodes = self.trace_activity_seed(wrt_src);
+
         //Find all nodes that are somehow related to the expression.
         let mut preds = self
             .graph
@@ -66,6 +82,12 @@ impl Optimizer {
         //the simplest way is to trace all followers of `activity`, and only continue tracing followers, if a node
         //is in `preds`.
 
+        //Pre-collect the wrt-trace nodes
+        let mut wrt_trace = FlagStore::new();
+        for port in &activity_seed_nodes {
+            wrt_trace.set(port.node.into(), true);
+            wrt_trace.set(port.into(), true);
+        }
         let mut active = FlagStore::new();
         let mut stack: VecDeque<_> = activity_seed_nodes.into_iter().collect();
 
@@ -89,7 +111,7 @@ impl Optimizer {
             }
         }
 
-        Ok(active)
+        Ok(Activity { active, wrt_trace })
     }
 
     fn handel_active_node(
