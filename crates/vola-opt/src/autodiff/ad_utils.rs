@@ -12,14 +12,19 @@
 
 use rvsdg::{
     attrib::{AttribLocation, FlagStore},
-    edge::OutportLocation,
+    edge::{InportLocation, InputType, OutportLocation, OutputType},
     NodeRef, SmallColl,
 };
 use vola_common::Span;
 
 use crate::{
-    alge::Construct,
+    alge::{
+        arithmetic::{BinaryArith, BinaryArithOp},
+        buildin::{Buildin, BuildinOp},
+        ConstantIndex, Construct,
+    },
     autodiff::{AutoDiff, AutoDiffError},
+    common::Ty,
     OptEdge, OptError, OptNode, Optimizer,
 };
 
@@ -117,6 +122,14 @@ impl Optimizer {
             )));
         }
 
+        let active = self.activity_explorer(entrypoint)?;
+
+        for v in active.flags.keys() {
+            if let AttribLocation::Node(n) = v {
+                self.handle_canon_node(*n)?;
+            }
+        }
+
         Ok(())
     }
 
@@ -125,7 +138,121 @@ impl Optimizer {
     /// - Guarantees that the replaced node binds to all _formerly_ connected nodes
     /// - Does delete other nodes (but might add / remove connections)
     fn handle_canon_node(&mut self, node: NodeRef) -> Result<(), OptError> {
-        println!("Canon {node}");
+        if let Some(buildin_node) = self.try_unwrap_node::<Buildin>(node) {
+            let target_region = self.graph[node].parent.unwrap().clone();
+
+            match &buildin_node.op {
+                //Transform the buildin op to a square-root and multiplied parts
+                BuildinOp::Length => {
+                    let span = self.find_span(node.into()).unwrap_or(Span::empty());
+                    let src_value = self
+                        .graph
+                        .inport_src(InportLocation {
+                            node,
+                            input: InputType::Input(0),
+                        })
+                        .unwrap();
+                    let new_producer = self
+                        .graph
+                        .on_region(&target_region, |g| {
+                            //find the input type to the length node. We use that to
+                            //determin how often we need to index (and square)
+                            //the vector
+                            let index_count = {
+                                //sample first edge, must be connected at least once...
+                                let edg = g.ctx()[InportLocation {
+                                    node,
+                                    input: InputType::Input(0),
+                                }]
+                                .edge
+                                .unwrap();
+                                let ty = if let Some(t) = g.ctx()[edg].ty.get_type() {
+                                    t
+                                } else {
+                                    //TODO: do that better
+                                    panic!("Encountered untyped edge while canonicalizing");
+                                };
+
+                                if let Ty::Vector { width } = ty {
+                                    *width
+                                } else {
+                                    panic!("Was no vector, was {ty}");
+                                }
+                            };
+
+                            //Index into vector n-times
+                            let mut indices = SmallColl::new();
+                            for idx in 0..index_count {
+                                let (new_node, _edges) = g
+                                    .connect_node(
+                                        OptNode::new(ConstantIndex::new(idx), span.clone()),
+                                        &[src_value],
+                                    )
+                                    .unwrap();
+                                indices.push(new_node.output(0));
+                            }
+
+                            //square each
+                            let squared = indices
+                                .into_iter()
+                                .map(|indexed| {
+                                    let (node, _edg) = g
+                                        .connect_node(
+                                            OptNode::new(
+                                                BinaryArith::new(BinaryArithOp::Mul),
+                                                span.clone(),
+                                            ),
+                                            &[indexed, indexed],
+                                        )
+                                        .unwrap();
+
+                                    node.output(0)
+                                })
+                                .collect::<SmallColl<_>>();
+
+                            //Add all squared indices
+                            assert!(squared.len() >= 2);
+                            let (mut last_add, _) = g
+                                .connect_node(
+                                    OptNode::new(
+                                        BinaryArith::new(BinaryArithOp::Add),
+                                        span.clone(),
+                                    ),
+                                    &[squared[0], squared[1]],
+                                )
+                                .unwrap();
+                            //now build the _staggered_ add chain.
+                            for next_idx in 2..squared.len() {
+                                let (new_last, _) = g
+                                    .connect_node(
+                                        OptNode::new(
+                                            BinaryArith::new(BinaryArithOp::Add),
+                                            span.clone(),
+                                        ),
+                                        &[last_add.output(0), squared[next_idx]],
+                                    )
+                                    .unwrap();
+
+                                last_add = new_last;
+                            }
+
+                            let (sqrt, _) = g
+                                .connect_node(
+                                    OptNode::new(Buildin::new(BuildinOp::SquareRoot), span),
+                                    &[last_add.output(0)],
+                                )
+                                .unwrap();
+
+                            sqrt
+                        })
+                        .unwrap();
+
+                    self.graph.replace_node_uses(node, new_producer)?;
+                }
+                _ => {}
+            }
+        }
+
         Ok(())
     }
 }
