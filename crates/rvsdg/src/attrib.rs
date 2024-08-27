@@ -151,3 +151,14 @@ impl<F: 'static> FlagStore<F> {
         self.flags.insert(location, flag)
     }
 }
+
+impl FlagStore<bool> {
+    ///Returns true if the location is set, and the value is true.
+    pub fn is_set(&self, location: &AttribLocation) -> bool {
+        if let Some(val) = self.get(location) {
+            *val
+        } else {
+            false
+        }
+    }
+}

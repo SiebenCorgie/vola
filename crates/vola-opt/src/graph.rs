@@ -261,6 +261,13 @@ impl OptEdge {
         }
     }
 
+    ///Creates a new ValueEdge with unset type state
+    pub fn value_edge_unset() -> Self {
+        Self::Value {
+            ty: TypeState::Unset,
+        }
+    }
+
     pub fn with_type(mut self, ty: Ty) -> Self {
         self.set_type(ty);
         self
@@ -531,6 +538,31 @@ impl Optimizer {
             s.try_downcast_ref::<T>().is_some()
         } else {
             false
+        }
+    }
+
+    ///Tries to unwrap `node` into the given node type. Fails if `node` is either not a SimpleNode, or not of the
+    /// given type.
+    pub fn try_unwrap_node<T: DialectNode + Send + Sync + 'static>(
+        &self,
+        node: NodeRef,
+    ) -> Option<&T> {
+        if let NodeType::Simple(s) = &self.graph[node].node_type {
+            s.try_downcast_ref()
+        } else {
+            None
+        }
+    }
+    ///Tries to unwrap `node` into the given node type. Fails if `node` is either not a SimpleNode, or not of the
+    /// given type.
+    pub fn try_unwrap_node_mut<T: DialectNode + Send + Sync + 'static>(
+        &mut self,
+        node: NodeRef,
+    ) -> Option<&mut T> {
+        if let NodeType::Simple(s) = &mut self.graph[node].node_type {
+            s.try_downcast_mut()
+        } else {
+            None
         }
     }
 }

@@ -54,7 +54,9 @@
 //! graph.
 
 use rvsdg::{
-    edge::{OutportLocation, OutputType},
+    attrib::AttribLocation,
+    edge::{InportLocation, OutportLocation, OutputType},
+    smallvec::smallvec,
     NodeRef, SmallColl,
 };
 use vola_common::Span;
@@ -67,6 +69,8 @@ use crate::{
     OptEdge, OptError, OptNode, Optimizer, TypeState,
 };
 
+use super::AutoDiffError;
+
 impl Optimizer {
     ///Executes forward-ad pass on `entrypoint`. Assumes that it is a `AutoDiff` node. If that is the case, the node will be replaced
     /// with the differentiated value(s) after this pass (successfuly) ends.
@@ -77,107 +81,93 @@ impl Optimizer {
             )));
         }
 
-        //Canonicalize the subtree for our AD pass
-        self.canonicalize_for_ad(entrypoint)?;
-
         //now dispatch the sub-ad part for all wrt arguments
         let wrt_src = self
             .graph
             .inport_src(entrypoint.as_inport_location(AutoDiff::wrt_input()))
             .unwrap();
 
-        //If the src-node of the wrt-argument is a constructor,
-        // collect the constructor's inputs instead
-        let wrt_args = if self.is_node_type::<Construct>(wrt_src.node) {
-            let mut wrt_args = SmallColl::new();
-            for input in self.graph.node(wrt_src.node).inport_types() {
-                wrt_args.push(
-                    self.graph
-                        .inport_src(wrt_src.node.as_inport_location(input))
-                        .unwrap(),
-                );
-            }
-
-            //For sanity, make sure the wrt-arg is the expected
-            //vector type with the amount of wrt-constructors
-            assert!({
-                let wrt_arg_edge = self
-                    .graph
-                    .node(entrypoint)
-                    .inport(&AutoDiff::wrt_input())
-                    .unwrap()
-                    .edge
-                    .unwrap();
-
-                self.graph.edge(wrt_arg_edge).ty.get_type()
-                    == Some(&Ty::Vector {
-                        width: wrt_args.len(),
-                    })
-            });
-
-            wrt_args
+        //If the wrt-arg is a constructor, linearize the ad-entrypoint into
+        // multiple AD-Nodes with a single (scalar) WRT-Arg.
+        let entrypoints = if self.is_node_type::<Construct>(wrt_src.node) {
+            self.linearize_ad(entrypoint)?
         } else {
-            //just use the node as wrt-arg
-            let mut wrt_args = SmallColl::new();
-            wrt_args.push(wrt_src);
-            wrt_args
+            //If already linear, just wrap it
+            smallvec![entrypoint]
         };
 
-        let mut derivatives = SmallColl::new();
-        for wrtarg in wrt_args {
-            derivatives.push(self.forward_diff(wrtarg, entrypoint)?);
+        if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("DUMP_FWAD_LINEARIZED").is_ok() {
+            self.push_debug_state(&format!("fw-autodiff-{entrypoint}-linearized"));
         }
 
-        //Now replace the autodiff node with a assembly node
-        let region = self.graph.node(entrypoint).parent.unwrap();
-        let constructor_output = if derivatives.len() > 1 {
-            self.graph
-                .on_region(&region, |reg| {
-                    let constructor = reg.insert_node(OptNode::new(
-                        Construct::new().with_inputs(derivatives.len()),
-                        Span::empty(),
-                    ));
+        for entrypoint in &entrypoints {
+            self.canonicalize_for_ad(*entrypoint)?;
+        }
 
-                    //now hookup all derivatives to the constructor
-                    for (idx, derivative_src) in derivatives.into_iter().enumerate() {
-                        let _new_edg = reg
-                            .ctx_mut()
-                            .connect(
-                                derivative_src,
-                                constructor.input(idx),
-                                OptEdge::Value {
-                                    ty: TypeState::Unset,
-                                },
-                            )
-                            .unwrap();
-                    }
-                    constructor.output(0)
-                })
-                .ok_or(OptError::Internal(format!(
-                    "Failed to replace derivative node with derivative constructor"
-                )))?
-        } else {
-            //for a single output, just forward the derivative result
-            derivatives[0]
-        };
+        if std::env::var("VOLA_DUMP_ALL").is_ok()
+            || std::env::var("DUMP_FWAD_CANONICALIZED").is_ok()
+        {
+            self.push_debug_state(&format!("fw-autodiff-{entrypoint}-canonicalized"));
+        }
 
-        self.graph
-            .replace_node_uses(entrypoint, constructor_output.node)?;
+        //All entrypoints are with respect to a single scalar at this point,
+        //and hooked up to the vector-value_creator already (if-needed).
+        //
+        // canonicalization is also taken care of, so we can just dispatch the forward
+        // diff for all of them.
+        for entrypoint in entrypoints {
+            self.forward_diff(entrypoint)?;
+        }
 
         Ok(())
     }
 
-    fn forward_diff(
-        &mut self,
-        arg: OutportLocation,
-        diffnode: NodeRef,
-    ) -> Result<OutportLocation, OptError> {
+    ///The actual forward-autodiff implementation for a single, scalar
+    /// wrt-arg.
+    ///
+    /// Replaces the AutoDiff node with the differential value.
+    fn forward_diff(&mut self, diffnode: NodeRef) -> Result<(), OptError> {
         let region = self.graph.node(diffnode).parent.unwrap();
-        self.graph
+
+        let wrt_src = self
+            .graph
+            .inport_src(InportLocation {
+                node: diffnode,
+                input: AutoDiff::wrt_input(),
+            })
+            .ok_or(OptError::from(AutoDiffError::EmptyWrtArg))?;
+
+        let expr_src = self
+            .graph
+            .inport_src(InportLocation {
+                node: diffnode,
+                input: AutoDiff::expr_input(),
+            })
+            .ok_or(OptError::from(AutoDiffError::EmptyExprArg))?;
+
+        //find all active nodes of this expression, then start doing the forward iteration,
+        //guided by the activity analysis.
+
+        let active = self.activity_explorer(diffnode)?;
+
+        println!("Active nodes:");
+        for v in active.flags.keys() {
+            if let AttribLocation::Node(n) = v {
+                println!("    {n}");
+            }
+        }
+
+        let tmp_repl = self
+            .graph
             .on_region(&region, |reg| {
                 reg.insert_node(OptNode::new(ImmScalar::new(42.0), Span::empty()))
                     .output(0)
             })
-            .ok_or(OptError::Internal(format!("Föck")))
+            .ok_or(OptError::Internal(format!("Föck")))?;
+
+        //replace the differential_value and the autodiff node
+        self.graph.replace_node_uses(diffnode, tmp_repl.node)?;
+
+        Ok(())
     }
 }
