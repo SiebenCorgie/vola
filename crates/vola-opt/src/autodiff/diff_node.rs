@@ -142,8 +142,8 @@ impl Optimizer {
 
     fn build_diff_constant_construct(
         &mut self,
-        region: RegionLocation,
-        node: NodeRef,
+        _region: RegionLocation,
+        _node: NodeRef,
     ) -> Result<
         (
             OutportLocation,
@@ -303,8 +303,8 @@ impl Optimizer {
 
     fn build_diff_unary_arith(
         &mut self,
-        region: RegionLocation,
-        node: NodeRef,
+        _region: RegionLocation,
+        _node: NodeRef,
     ) -> Result<
         (
             OutportLocation,
@@ -317,8 +317,8 @@ impl Optimizer {
 
     fn build_diff_binary_logic(
         &mut self,
-        region: RegionLocation,
-        node: NodeRef,
+        _region: RegionLocation,
+        _node: NodeRef,
     ) -> Result<
         (
             OutportLocation,
@@ -331,8 +331,8 @@ impl Optimizer {
 
     fn build_diff_unary_logic(
         &mut self,
-        region: RegionLocation,
-        node: NodeRef,
+        _region: RegionLocation,
+        _node: NodeRef,
     ) -> Result<
         (
             OutportLocation,
@@ -345,8 +345,8 @@ impl Optimizer {
 
     fn build_diff_unary_matrix(
         &mut self,
-        region: RegionLocation,
-        node: NodeRef,
+        _region: RegionLocation,
+        _node: NodeRef,
     ) -> Result<
         (
             OutportLocation,
@@ -359,8 +359,8 @@ impl Optimizer {
 
     fn build_diff_trig(
         &mut self,
-        region: RegionLocation,
-        node: NodeRef,
+        _region: RegionLocation,
+        _node: NodeRef,
     ) -> Result<
         (
             OutportLocation,

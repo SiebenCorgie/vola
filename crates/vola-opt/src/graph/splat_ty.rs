@@ -77,7 +77,7 @@ impl Optimizer {
                         height: dim[0],
                     },
                 ),
-                other => {
+                _other => {
                     let poped_dim = dim.pop().unwrap();
                     let src = self.splat_scalar(region, value, Ty::Tensor { dim });
 

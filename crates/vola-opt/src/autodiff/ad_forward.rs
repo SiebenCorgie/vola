@@ -53,28 +53,17 @@
 //! part being, that for any constant we can reuse parts of the original
 //! graph.
 
-use std::any::TypeId;
-
 use rvsdg::{
-    attrib::{AttribLocation, FlagStore},
-    edge::{InportLocation, OutportLocation, OutputType},
+    edge::{InportLocation, OutportLocation},
     region::RegionLocation,
     smallvec::smallvec,
     util::abstract_node_type::AbstractNodeType,
-    NodeRef, SmallColl,
+    NodeRef,
 };
 use vola_common::{error::error_reporter, report, Span};
 
 use crate::{
-    alge::{
-        arithmetic::{BinaryArith, BinaryArithOp},
-        buildin::{Buildin, BuildinOp},
-        ConstantIndex, Construct,
-    },
-    autodiff::AutoDiff,
-    common::Ty,
-    imm::{ImmNat, ImmScalar},
-    OptEdge, OptError, OptNode, Optimizer, TypeState,
+    alge::Construct, autodiff::AutoDiff, common::Ty, imm::ImmScalar, OptEdge, OptError, Optimizer,
 };
 
 use super::{activity::Activity, AutoDiffError};
@@ -145,14 +134,6 @@ impl Optimizer {
     /// Replaces the AutoDiff node with the differential value.
     fn forward_diff(&mut self, diffnode: NodeRef) -> Result<(), OptError> {
         let region = self.graph.node(diffnode).parent.unwrap();
-
-        let wrt_src = self
-            .graph
-            .inport_src(InportLocation {
-                node: diffnode,
-                input: AutoDiff::wrt_input(),
-            })
-            .ok_or(OptError::from(AutoDiffError::EmptyWrtArg))?;
 
         let expr_src = self
             .graph
@@ -241,7 +222,7 @@ impl Optimizer {
                     }
                     "imm" => {
                         //an active immediate value will be splat to zero, since this will always
-                        //be equivalent to a constan
+                        //be equivalent to a constant.
                         Ok(self.emit_zero_for_node(region, node))
                     }
                     other => {

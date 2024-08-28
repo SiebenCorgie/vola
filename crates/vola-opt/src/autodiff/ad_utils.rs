@@ -11,8 +11,8 @@
 //! Implements utility passes for the auto-diff implementations
 
 use rvsdg::{
-    attrib::{AttribLocation, FlagStore},
-    edge::{InportLocation, InputType, OutportLocation, OutputType},
+    attrib::AttribLocation,
+    edge::{InportLocation, InputType, OutportLocation},
     region::RegionLocation,
     NodeRef, SmallColl,
 };
