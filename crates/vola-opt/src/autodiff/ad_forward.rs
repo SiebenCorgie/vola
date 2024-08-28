@@ -167,7 +167,6 @@ impl Optimizer {
 
         let activity = self.activity_explorer(diffnode)?;
 
-        println!("Start FWAD: ");
         let diffed_src = self.fwad_handle_node(region, expr_src.node, &activity)?;
 
         //replace the differential_value and the autodiff node
@@ -199,7 +198,6 @@ impl Optimizer {
         //Any node that is not active can be considered a _constant_
         //therfore the derivative is always zero.
         if !activity.is_active(node) {
-            println!("For {node:?}");
             let zero_node = self.emit_zero_for_node(region, node);
             return Ok(zero_node);
         }
@@ -341,7 +339,6 @@ impl Optimizer {
                             //product-rule: (left is f, right is g):
                             //(f(x)*g(x))' = f(x)' * g(x) + f(x) * g(x)'.
 
-                            println!("PR: Left: {left_src:?}, right: {right_src:?}");
                             let left_diff = self.fwad_handle_port(region, left_src, activity)?;
                             let right_diff = self.fwad_handle_port(region, right_src, activity)?;
 

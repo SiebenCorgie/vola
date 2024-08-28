@@ -16,6 +16,7 @@ mod activity;
 mod ad_dispatch;
 mod ad_forward;
 mod ad_utils;
+mod diff_node;
 
 use rvsdg::{
     edge::InputType,
