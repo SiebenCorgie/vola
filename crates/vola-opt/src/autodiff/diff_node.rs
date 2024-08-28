@@ -16,9 +16,12 @@ use vola_common::Span;
 
 use crate::{
     alge::{
-        arithmetic::{BinaryArith, BinaryArithOp},
+        arithmetic::{BinaryArith, BinaryArithOp, UnaryArith},
         buildin::{Buildin, BuildinOp},
-        ConstantIndex,
+        logical::{BinaryBool, UnaryBool},
+        matrix::UnaryMatrix,
+        trigonometric::Trig,
+        ConstantIndex, Construct,
     },
     imm::ImmScalar,
     OptEdge, OptNode, Optimizer,
@@ -41,7 +44,9 @@ impl Optimizer {
     /// In practice the differentiation handler just needs to differentiate that graph, and hook it up to the expected port.
     pub fn build_diff_value(
         &mut self,
+        region: RegionLocation,
         node: NodeRef,
+        activity: &Activity,
     ) -> Result<
         (
             OutportLocation,
@@ -59,7 +64,42 @@ impl Optimizer {
         //       takes longer. But using a dynamic-dispatched function in the DialectNode
         //       ain't it either, since this only concerns the alge-dialect.
 
-        todo!()
+        if self.is_node_type::<ConstantIndex>(node) {
+            return self.build_diff_constant_index(region, node);
+        }
+
+        if self.is_node_type::<Construct>(node) {
+            return self.build_diff_constant_construct(region, node);
+        }
+
+        if self.is_node_type::<BinaryArith>(node) {
+            return self.build_diff_binary_arith(region, node, activity);
+        }
+
+        if self.is_node_type::<UnaryArith>(node) {
+            return self.build_diff_unary_arith(region, node);
+        }
+
+        if self.is_node_type::<BinaryBool>(node) {
+            return self.build_diff_binary_logic(region, node);
+        }
+
+        if self.is_node_type::<UnaryBool>(node) {
+            return self.build_diff_unary_logic(region, node);
+        }
+
+        if self.is_node_type::<UnaryMatrix>(node) {
+            return self.build_diff_unary_matrix(region, node);
+        }
+
+        if self.is_node_type::<Trig>(node) {
+            return self.build_diff_trig(region, node);
+        }
+        if self.is_node_type::<Buildin>(node) {
+            return self.build_diff_buildin(region, node);
+        }
+
+        Err(AutoDiffError::ActivityExplorationRegionError)
     }
 
     fn build_diff_constant_index(
