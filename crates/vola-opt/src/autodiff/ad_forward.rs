@@ -148,6 +148,25 @@ impl Optimizer {
 
         let activity = self.activity_explorer(diffnode)?;
 
+        if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("DUMP_AD_ACTIVITY").is_ok() {
+            self.push_debug_state_with(&format!("fw-autodiff-{diffnode}-activity"), |builder| {
+                builder.with_flags("activity", &activity.active)
+            });
+        }
+        /*
+        println!("Active Nodes: ");
+        for active in activity.active.flags.keys() {
+            if let AttribLocation::Node(n) = active {
+                println!("    {n}");
+            }
+        }
+
+        println!("WRT-Outputs");
+        for o in &activity.wrt_producer {
+            println!("    {o:?}");
+        }
+        */
+
         let diffed_src = self.fwad_handle_node(region, expr_src.node, &activity)?;
 
         //replace the differential_value and the autodiff node
@@ -178,7 +197,7 @@ impl Optimizer {
     ) -> Result<OutportLocation, OptError> {
         //Any node that is not active can be considered a _constant_
         //therfore the derivative is always zero.
-        if !activity.is_active(node) {
+        if !activity.is_active(node).unwrap_or(false) {
             let zero_node = self.emit_zero_for_node(region, node);
             return Ok(zero_node);
         }
@@ -251,7 +270,7 @@ impl Optimizer {
         activity: &Activity,
     ) -> Result<OutportLocation, OptError> {
         //A port that is part of the respect_to chain always derives to 1.0
-        if activity.is_part_of_wrt(port) {
+        if activity.is_wrt_producer(&port) {
             //NOTE: _handling_ a wrt port means splatting it with 1.0
             //      Math wise this is handling a expression:
             //      f(x) = x;

@@ -204,8 +204,8 @@ impl Optimizer {
                 //- The product-rule (where both parts are _active_)
                 //- The constan-factor-rule (where only one is active).
                 match (
-                    activity.is_active(left_src.node),
-                    activity.is_active(right_src.node),
+                    activity.is_active(left_src.node).unwrap_or(false),
+                    activity.is_active(right_src.node).unwrap_or(false),
                 ) {
                     (true, true) => {
                         //product-rule: (left is f, right is g):
