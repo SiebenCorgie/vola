@@ -112,6 +112,15 @@ impl Optimizer {
             self.canonicalize_for_ad(*entrypoint)?;
         }
 
+        //do type derive and dead-node elemination in order to have
+        // a) clean DAG (faster / easier transformation)
+        // b) type information to emit correct zero-nodes
+
+        let region = self.graph[entrypoint].parent.unwrap();
+        self.graph.dne_region(region)?;
+        let span = self.find_span(region.into()).unwrap_or(Span::empty());
+        self.derive_region(region, span)?;
+
         if std::env::var("VOLA_DUMP_ALL").is_ok()
             || std::env::var("DUMP_FWAD_CANONICALIZED").is_ok()
         {
@@ -158,6 +167,7 @@ impl Optimizer {
 
         let activity = self.activity_explorer(diffnode)?;
 
+        println!("Start FWAD: ");
         let diffed_src = self.fwad_handle_node(region, expr_src.node, &activity)?;
 
         //replace the differential_value and the autodiff node
@@ -250,7 +260,18 @@ impl Optimizer {
         activity: &Activity,
     ) -> Result<OutportLocation, OptError> {
         if activity.is_part_of_wrt(port) {
-            return Ok(port);
+            //NOTE: _handling_ a wrt port means splatting it with 1.0
+            //      Math wise this is handling a expression:
+            //      f(x) = x;
+            //      where f'(x) = f'(x) = 1*x^0 = 1
+            let port_type = self.find_type(&port.into());
+            //FIXME: do not assume that, instead react accordingly
+            assert!(
+                port_type == Some(Ty::Scalar),
+                "expected scalar, was {port_type:?} for port {port:?}"
+            );
+            let splat = self.splat_scalar(region, ImmScalar::new(1.0), Ty::Scalar);
+            return Ok(splat);
         } else {
             self.fwad_handle_node(region, port.node, activity)
         }
@@ -301,7 +322,7 @@ impl Optimizer {
                                     &[left_diff, right_diff],
                                 )
                                 .unwrap();
-
+                            self.names.set(node.into(), "Sum/Diff-Rule".to_string());
                             node.output(0)
                         })
                         .unwrap();
@@ -320,6 +341,7 @@ impl Optimizer {
                             //product-rule: (left is f, right is g):
                             //(f(x)*g(x))' = f(x)' * g(x) + f(x) * g(x)'.
 
+                            println!("PR: Left: {left_src:?}, right: {right_src:?}");
                             let left_diff = self.fwad_handle_port(region, left_src, activity)?;
                             let right_diff = self.fwad_handle_port(region, right_src, activity)?;
 
@@ -335,7 +357,10 @@ impl Optimizer {
                                             &[left_diff, right_src],
                                         )
                                         .unwrap();
-
+                                    self.names.set(
+                                        mul_left.into(),
+                                        "ProductRule f'(x) + g(x)".to_string(),
+                                    );
                                     let (mul_right, _) = g
                                         .connect_node(
                                             OptNode::new(
@@ -346,6 +371,11 @@ impl Optimizer {
                                         )
                                         .unwrap();
 
+                                    self.names.set(
+                                        mul_right.into(),
+                                        "ProductRule f(x) + g'(x)".to_string(),
+                                    );
+
                                     let (added, _) = g
                                         .connect_node(
                                             OptNode::new(
@@ -355,6 +385,9 @@ impl Optimizer {
                                             &[mul_left.output(0), mul_right.output(0)],
                                         )
                                         .unwrap();
+
+                                    self.names
+                                        .set(added.into(), "ProductRule left + right".to_string());
 
                                     added.output(0)
                                 })
@@ -387,6 +420,8 @@ impl Optimizer {
                                         )
                                         .unwrap();
 
+                                    self.names
+                                        .set(node.into(), "ConstantFactorRule".to_string());
                                     node.output(0)
                                 })
                                 .unwrap();
@@ -466,6 +501,9 @@ impl Optimizer {
                             post_mul.output(0)
                         })
                         .unwrap();
+
+                    self.names
+                        .set(result.node.into(), "Sqrt_mul_rest".to_string());
 
                     return Ok(result);
                 }

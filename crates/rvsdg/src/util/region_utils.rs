@@ -283,6 +283,11 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
         let region_content = self.region(&region).unwrap();
         for resultidx in 0..region_content.results.len() {
             if let Some(src) = region_content.result_src(self, resultidx) {
+                //ignore if the result is connected directly to a argument
+                if src.node == region.node {
+                    continue;
+                }
+
                 //insert the seeding node. If this wasn't already in the map, walk the predecessors as well
                 if live_variables.insert(src.node) {
                     for pred in self.walk_predecessors_in_region(src.node) {

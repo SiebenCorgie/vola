@@ -31,7 +31,13 @@ impl Optimizer {
             }
         }
 
-        let mut touched_regions = AHashSet::new();
+        //pre-explore which regions we'll touch, and do dead-node elemination on those, since some
+        //exploration depends on those
+        let touched_regions = dispatch_nodes
+            .iter()
+            .map(|n| self.graph[*n].parent.unwrap())
+            .collect::<AHashSet<_>>();
+
         for node in dispatch_nodes {
             //TODO: Do heuristics to decide if we want forward / backward or hybrid
             //      AD.
@@ -51,8 +57,6 @@ impl Optimizer {
             if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("DUMP_POST_AD").is_ok() {
                 self.push_debug_state(&format!("post-autodiff-{node}"));
             }
-
-            touched_regions.insert(self.graph.node(node).parent.unwrap());
         }
 
         //before returning, re-derive types of all regions that we (might) have touched.
