@@ -215,19 +215,7 @@ impl Optimizer {
                     .node
                     .dialect()
                 {
-                    "alge" => {
-                        let (result, postdiffs) = self.build_diff_value(region, node, activity)?;
-                        for (post_diff_src, targets) in postdiffs {
-                            let diffvalue =
-                                self.fwad_handle_port(region, post_diff_src, activity)?;
-                            for t in targets {
-                                self.graph
-                                    .connect(diffvalue, t, OptEdge::value_edge_unset())?;
-                            }
-                        }
-
-                        Ok(result)
-                    }
+                    "alge" => self.fwd_handle_alge_node(region, node, activity),
                     "autodiff" => {
                         report(
                             error_reporter(
@@ -259,6 +247,24 @@ impl Optimizer {
             }
             other => return Err(AutoDiffError::FwadUnexpectedNodeType(other).into()),
         }
+    }
+
+    fn fwd_handle_alge_node(
+        &mut self,
+        region: RegionLocation,
+        node: NodeRef,
+        activity: &Activity,
+    ) -> Result<OutportLocation, OptError> {
+        let (result, postdiffs) = self.build_diff_value(region, node, activity)?;
+        for (post_diff_src, targets) in postdiffs {
+            let diffvalue = self.fwad_handle_port(region, post_diff_src, activity)?;
+            for t in targets {
+                self.graph
+                    .connect(diffvalue, t, OptEdge::value_edge_unset())?;
+            }
+        }
+
+        Ok(result)
     }
 
     //Small indirection that lets us catch active WRT-Ports. This is mostly used if

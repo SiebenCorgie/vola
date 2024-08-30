@@ -17,11 +17,11 @@ use vola_common::Span;
 
 use crate::{
     alge::{
-        arithmetic::{BinaryArith, BinaryArithOp, UnaryArith},
+        arithmetic::{BinaryArith, BinaryArithOp, UnaryArith, UnaryArithOp},
         buildin::{Buildin, BuildinOp},
         logical::{BinaryBool, UnaryBool},
         matrix::UnaryMatrix,
-        trigonometric::Trig,
+        trigonometric::{Trig, TrigOp},
         ConstantIndex, Construct,
     },
     imm::ImmScalar,
@@ -360,8 +360,8 @@ impl Optimizer {
 
     fn build_diff_trig(
         &mut self,
-        _region: RegionLocation,
-        _node: NodeRef,
+        region: RegionLocation,
+        node: NodeRef,
     ) -> Result<
         (
             OutportLocation,
@@ -369,7 +369,57 @@ impl Optimizer {
         ),
         AutoDiffError,
     > {
-        todo!()
+        let span = self.find_span(node.into()).unwrap_or(Span::empty());
+
+        let src = self.graph.inport_src(node.input(0)).unwrap();
+
+        match self.graph[node]
+            .node_type
+            .unwrap_simple_ref()
+            .try_downcast_ref::<Trig>()
+            .unwrap()
+            .op
+            .clone()
+        {
+            TrigOp::Sin => {
+                //sin' = cos
+                let cos_output = self
+                    .graph
+                    .on_region(&region, |g| {
+                        let (f_diff, _) = g
+                            .connect_node(OptNode::new(Trig::new(TrigOp::Cos), span), &[src])
+                            .unwrap();
+                        f_diff.output(0)
+                    })
+                    .unwrap();
+
+                Ok(self.build_chain_rule_for(&region, cos_output, src))
+            }
+            TrigOp::Cos => {
+                //cos' = -sin
+                let diffout = self
+                    .graph
+                    .on_region(&region, |g| {
+                        let (sinout, _) = g
+                            .connect_node(OptNode::new(Trig::new(TrigOp::Sin), span), &[src])
+                            .unwrap();
+                        let (negged, _) = g
+                            .connect_node(
+                                OptNode::new(UnaryArith::new(UnaryArithOp::Neg), span),
+                                &[sinout.output(0)],
+                            )
+                            .unwrap();
+                        negged.output(0)
+                    })
+                    .unwrap();
+                Ok(self.build_chain_rule_for(&region, diffout, src))
+            }
+            TrigOp::Tan => {
+                //See https://math.stackexchange.com/questions/1108131/what-is-cos%C2%B2x
+                todo!()
+            }
+            _ => todo!(),
+        }
     }
 
     fn build_diff_buildin(
@@ -384,7 +434,6 @@ impl Optimizer {
         AutoDiffError,
     > {
         let span = self.find_span(node.into()).unwrap_or(Span::empty());
-        let mut subdiffs = SmallColl::new();
         match self.graph[node]
             .node_type
             .unwrap_simple_ref()
@@ -400,7 +449,7 @@ impl Optimizer {
 
                 //TODO / FIXME: We _could_ reformulate as 0.5 * sqrt(x) * f'(x).
                 //      and checkout how much faster that is ...
-                let result = self
+                let div_result = self
                     .graph
                     .on_region(&region, |g| {
                         let imm_one =
@@ -423,25 +472,17 @@ impl Optimizer {
                             )
                             .unwrap();
 
-                        //now mul the post-part
-                        let (post_mul, _) = g
-                            .connect_node(
-                                OptNode::new(BinaryArith::new(BinaryArithOp::Mul), span.clone()),
-                                &[div_one.output(0)],
-                            )
-                            .unwrap();
-
-                        //add the second input deferred as derivative later on
-                        subdiffs.push((f_src, smallvec![post_mul.input(1)]));
-
-                        post_mul.output(0)
+                        div_one.output(0)
                     })
                     .unwrap();
+
+                //make chain rule
+                let (result, subdiff) = self.build_chain_rule_for(&region, div_result, f_src);
 
                 self.names
                     .set(result.node.into(), "Sqrt chain-rule right".to_string());
 
-                Ok((result, subdiffs))
+                Ok((result, subdiff))
             }
             _other => Err(AutoDiffError::NoAdImpl(
                 self.graph[node]
@@ -451,5 +492,36 @@ impl Optimizer {
                     .to_string(),
             )),
         }
+    }
+
+    //Small helper that makes chaining derivatives easier (building the chain rule).
+    //Basically for a given f(g(x)) you supply `f'(g(x))` (`diffed_output`), and tell it what the source of `g(x)` is (active_sub_src). It'll return the outport of `f'(g'(x)) * g'(x)` where `g'(x)` is enqued in the deferred list.
+    fn build_chain_rule_for(
+        &mut self,
+        region: &RegionLocation,
+        diffed_output: OutportLocation,
+        active_sub_src: OutportLocation,
+    ) -> (
+        OutportLocation,
+        SmallColl<(OutportLocation, SmallColl<InportLocation>)>,
+    ) {
+        let mut subdiff = SmallColl::new();
+        let mul_out = self
+            .graph
+            .on_region(region, |g| {
+                let (mul, _edg) = g
+                    .connect_node(
+                        OptNode::new(BinaryArith::new(BinaryArithOp::Mul), Span::empty()),
+                        &[diffed_output],
+                    )
+                    .unwrap();
+
+                //enque
+                subdiff.push((active_sub_src, smallvec![mul.input(1)]));
+                mul.output(0)
+            })
+            .unwrap();
+
+        (mul_out, subdiff)
     }
 }
