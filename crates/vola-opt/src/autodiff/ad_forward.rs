@@ -249,12 +249,20 @@ impl Optimizer {
         }
     }
 
+    ///Handles any _potentually_ differentiatable node
     fn fwd_handle_alge_node(
         &mut self,
         region: RegionLocation,
         node: NodeRef,
         activity: &Activity,
     ) -> Result<OutportLocation, OptError> {
+        //This is the point, where we handle the dispatch of the chain rule.
+        //
+        //Note that things like cross-product-rule, quotient-rule or dot-product-rule are
+        //handeled by the respective node.
+        //
+        //however, dispatching the chain-rule can / must be done
+
         let (result, postdiffs) = self.build_diff_value(region, node, activity)?;
         for (post_diff_src, targets) in postdiffs {
             let diffvalue = self.fwad_handle_port(region, post_diff_src, activity)?;
@@ -281,14 +289,10 @@ impl Optimizer {
             //      Math wise this is handling a expression:
             //      f(x) = x;
             //      where f'(x) = f'(x) = 1*x^0 = 1
-            let port_type = self.find_type(&port.into());
-            //FIXME: do not assume that, instead react accordingly
-            assert!(
-                port_type == Some(Ty::Scalar),
-                "expected scalar, was {port_type:?} for port {port:?}"
-            );
-            let splat = self.splat_scalar(region, ImmScalar::new(1.0), Ty::Scalar);
-            return Ok(splat);
+            //
+            //      For vectors this means initing _the-right_ index with one, same for matrix.
+            //      We have that information from the activity trace, which if why we'll use that.
+            Ok(activity.build_diff_init_value_for_wrt(self, region, port))
         } else {
             //Otherwise we need to recurse
             self.fwad_handle_node(region, port.node, activity)

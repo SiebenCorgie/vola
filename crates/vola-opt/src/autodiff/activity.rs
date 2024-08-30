@@ -12,11 +12,13 @@ use ahash::AHashSet;
 use rvsdg::{
     attrib::FlagStore,
     edge::{InportLocation, OutportLocation},
+    region::RegionLocation,
     util::abstract_node_type::AbstractNodeType,
     NodeRef, SmallColl,
 };
+use vola_common::Span;
 
-use crate::{alge::ConstantIndex, OptError, Optimizer};
+use crate::{alge::ConstantIndex, common::Ty, imm::ImmScalar, OptError, OptNode, Optimizer};
 
 use super::AutoDiff;
 
@@ -39,6 +41,35 @@ impl Activity {
             Some(*state)
         } else {
             None
+        }
+    }
+
+    ///Builds the init value for a wrt-producer.
+    ///
+    /// Lets something is differentiating for x, and this wrt-producer is a vector (a, x, c, d). Then,
+    /// the init value would be (0, 1, 0, 0)
+    ///
+    /// Panics if not actually wrt producer, or is the port has no type set.
+    pub fn build_diff_init_value_for_wrt(
+        &self,
+        opt: &mut Optimizer,
+        region: RegionLocation,
+        port: OutportLocation,
+    ) -> OutportLocation {
+        assert!(self.wrt_producer.contains(&port));
+        let ty = opt
+            .find_type(&port.into())
+            .expect("expected type information");
+
+        match ty {
+            Ty::Scalar => opt
+                .graph
+                .on_region(&region, |g| {
+                    g.insert_node(OptNode::new(ImmScalar::new(1.0), Span::empty()))
+                        .output(0)
+                })
+                .unwrap(),
+            _ => todo!(),
         }
     }
 
