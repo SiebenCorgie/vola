@@ -15,7 +15,7 @@
 
 use ahash::AHashSet;
 use rvsdg::SmallColl;
-use vola_common::{error::error_reporter, report, Span};
+use vola_common::{ariadne::Label, error::error_reporter, report, Span};
 
 use crate::{autodiff::AutoDiff, OptError, Optimizer};
 
@@ -52,7 +52,19 @@ impl Optimizer {
                 self.push_debug_state(&format!("pre-autodiff-{node}"));
             }
 
-            self.forward_ad(node)?;
+            let span = self.find_span(node.into()).unwrap_or(Span::empty());
+            if let Err(e) = self.forward_ad(node) {
+                report(
+                    error_reporter(e.clone(), span.clone())
+                        .with_label(
+                            Label::new(span)
+                                .with_message("While forward differentiating this node"),
+                        )
+                        .finish(),
+                );
+
+                return Err(e);
+            }
 
             if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("DUMP_POST_AD").is_ok() {
                 self.push_debug_state(&format!("post-autodiff-{node}"));

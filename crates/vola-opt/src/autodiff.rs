@@ -23,7 +23,6 @@ use rvsdg::{
     region::{Input, Output},
     rvsdg_derive_lang::LangNode,
     util::abstract_node_type::AbstractNodeType,
-    NodeRef,
 };
 use vola_common::thiserror::Error;
 
@@ -42,7 +41,7 @@ pub enum AutoDiffError {
     #[error("Forward AutoDiff traversal encountered unexpected node type: {0:?}")]
     FwadUnexpectedNodeType(AbstractNodeType),
     #[error("Forward AutoDiff traversal had no implementation for node: {0:?}")]
-    FwadNoImpl(NodeRef),
+    NoAdImpl(String),
     #[error("Encountered AutoDiff node while building derivative.")]
     UnexpectedAutoDiffNode,
 }

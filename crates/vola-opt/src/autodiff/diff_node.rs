@@ -12,6 +12,7 @@ use rvsdg::{
     smallvec::{smallvec, SmallVec},
     NodeRef, SmallColl,
 };
+use rvsdg_viewer::View;
 use vola_common::Span;
 
 use crate::{
@@ -442,7 +443,13 @@ impl Optimizer {
 
                 Ok((result, subdiffs))
             }
-            _other => Err(AutoDiffError::FwadNoImpl(node)),
+            _other => Err(AutoDiffError::NoAdImpl(
+                self.graph[node]
+                    .node_type
+                    .unwrap_simple_ref()
+                    .name()
+                    .to_string(),
+            )),
         }
     }
 }
