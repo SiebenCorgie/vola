@@ -53,6 +53,7 @@
 //! part being, that for any constant we can reuse parts of the original
 //! graph.
 
+use ahash::AHashMap;
 use rvsdg::{
     edge::{InportLocation, OutportLocation},
     region::RegionLocation,
@@ -67,6 +68,8 @@ use crate::{
 };
 
 use super::{activity::Activity, AutoDiffError};
+
+type DiffExprCache = AHashMap<OutportLocation, OutportLocation>;
 
 impl Optimizer {
     ///Executes forward-ad pass on `entrypoint`. Assumes that it is a `AutoDiff` node. If that is the case, the node will be replaced
@@ -167,7 +170,9 @@ impl Optimizer {
         }
         */
 
-        let diffed_src = self.fwad_handle_node(region, expr_src.node, &activity)?;
+        let mut expr_cache = DiffExprCache::new();
+        let diffed_src =
+            self.fwad_handle_node(region, expr_src.node, &activity, &mut expr_cache)?;
 
         //replace the differential_value and the autodiff node
         self.graph.replace_node_uses(diffnode, diffed_src.node)?;
@@ -194,6 +199,7 @@ impl Optimizer {
         region: RegionLocation,
         node: NodeRef,
         activity: &Activity,
+        expr_cache: &mut DiffExprCache,
     ) -> Result<OutportLocation, OptError> {
         //Any node that is not active can be considered a _constant_
         //therfore the derivative is always zero.
@@ -215,7 +221,7 @@ impl Optimizer {
                     .node
                     .dialect()
                 {
-                    "alge" => self.fwd_handle_alge_node(region, node, activity),
+                    "alge" => self.fwd_handle_alge_node(region, node, activity, expr_cache),
                     "autodiff" => {
                         report(
                             error_reporter(
@@ -255,6 +261,7 @@ impl Optimizer {
         region: RegionLocation,
         node: NodeRef,
         activity: &Activity,
+        expr_cache: &mut DiffExprCache,
     ) -> Result<OutportLocation, OptError> {
         //This is the point, where we handle the dispatch of the chain rule.
         //
@@ -265,10 +272,18 @@ impl Optimizer {
 
         let (result, postdiffs) = self.build_diff_value(region, node, activity)?;
         for (post_diff_src, targets) in postdiffs {
-            let diffvalue = self.fwad_handle_port(region, post_diff_src, activity)?;
+            //Try to reuse expr-cache, otherwise build new subexpression
+            let diff_expr_src = if let Some(cached) = expr_cache.get(&post_diff_src) {
+                *cached
+            } else {
+                let diffvalue =
+                    self.fwad_handle_port(region, post_diff_src, activity, expr_cache)?;
+                expr_cache.insert(post_diff_src, diffvalue);
+                diffvalue
+            };
             for t in targets {
                 self.graph
-                    .connect(diffvalue, t, OptEdge::value_edge_unset())?;
+                    .connect(diff_expr_src, t, OptEdge::value_edge_unset())?;
             }
         }
 
@@ -282,6 +297,7 @@ impl Optimizer {
         region: RegionLocation,
         port: OutportLocation,
         activity: &Activity,
+        expr_cache: &mut DiffExprCache,
     ) -> Result<OutportLocation, OptError> {
         //A port that is part of the respect_to chain always derives to 1.0
         if activity.is_wrt_producer(&port) {
@@ -292,11 +308,11 @@ impl Optimizer {
             //
             //      For vectors this means initing _the-right_ index with one, same for matrix.
             //      We have that information from the activity trace, which if why we'll use that.
-            println!("Getting {port:?} : {:?}", activity.wrt_producer.get(&port));
+            //println!("Getting {port:?} : {:?}", activity.wrt_producer.get(&port));
             Ok(activity.build_diff_init_value_for_wrt(self, region, port))
         } else {
             //Otherwise we need to recurse
-            self.fwad_handle_node(region, port.node, activity)
+            self.fwad_handle_node(region, port.node, activity, expr_cache)
         }
     }
 }

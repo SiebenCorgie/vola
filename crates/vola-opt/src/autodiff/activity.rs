@@ -56,6 +56,15 @@ impl Activity {
         }
     }
 
+    ///Gets the activity state of this port. Returns false if either inactive, or no activity state is set
+    pub fn get_outport_active(&self, outport: OutportLocation) -> bool {
+        if let Some(state) = self.active.get(&outport.into()) {
+            *state
+        } else {
+            false
+        }
+    }
+
     ///Builds the init value for a wrt-producer.
     ///
     /// Lets something is differentiating for x, and this wrt-producer is a vector (a, x, c, d). Then,

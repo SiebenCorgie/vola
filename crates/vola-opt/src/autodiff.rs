@@ -13,6 +13,7 @@
 //! The submoduls implement the actual autodiff pass as well a specific optimizations.
 
 mod activity;
+mod ad_canonicalize;
 mod ad_dispatch;
 mod ad_forward;
 mod ad_utils;
@@ -44,6 +45,8 @@ pub enum AutoDiffError {
     NoAdImpl(String),
     #[error("Encountered AutoDiff node while building derivative.")]
     UnexpectedAutoDiffNode,
+    #[error("\"{0:?}\" can not be differentiated")]
+    UndiffNode(String),
 }
 
 //Macro that implements the "View" trait for the Autodiff

@@ -17,6 +17,9 @@ pub struct ConfigAutoDiff {
     ///
     /// Otherwise AutoDiff will try _to make it work_ by applying transformations that _mostly_ keep semantics, but might change edge cases.
     pub abort_on_undiff: bool,
+
+    ///Configures `c` for the smooth, differentiatable approximation for abs: `f(x) -> sqrt(f(x)^2 + c)`.
+    pub smooth_abs_c: f64,
 }
 
 impl Default for ConfigAutoDiff {
@@ -24,6 +27,7 @@ impl Default for ConfigAutoDiff {
         ConfigAutoDiff {
             canonicalize_undiff: true,
             abort_on_undiff: false,
+            smooth_abs_c: 0.0001,
         }
     }
 }

@@ -232,8 +232,8 @@ impl Optimizer {
                 //- The product-rule (where both parts are _active_)
                 //- The constan-factor-rule (where only one is active).
                 match (
-                    activity.is_active(left_src.node).unwrap_or(false),
-                    activity.is_active(right_src.node).unwrap_or(false),
+                    activity.get_outport_active(left_src),
+                    activity.get_outport_active(right_src),
                 ) {
                     (true, true) => {
                         //product-rule: (left is f, right is g):
@@ -291,7 +291,7 @@ impl Optimizer {
 
                         return Ok((result, subdiff));
                     }
-                    (false, false) => panic!("Should not be active"),
+                    (false, false) => panic!("{node:?} should not be active"),
                     (is_left_diff, is_right_diff) => {
                         assert!(is_left_diff != is_right_diff);
                         //constant-factor-rule (only one is active).
@@ -321,7 +321,60 @@ impl Optimizer {
             }
             BinaryArithOp::Div => {
                 //Quotient rule
-                todo!()
+                let u_src = self.graph.inport_src(node.input(0)).unwrap();
+                let v_src = self.graph.inport_src(node.input(1)).unwrap();
+
+                let (pd_u, pd_v, output) = self
+                    .graph
+                    .on_region(&region, |g| {
+                        //the u' * v term, but post-diff u`
+                        let (mul_left, _) = g
+                            .connect_node(
+                                OptNode::new(BinaryArith::new(BinaryArithOp::Mul), span.clone()),
+                                &[v_src],
+                            )
+                            .unwrap();
+                        let pd_u = mul_left.input(1);
+
+                        let (mul_right, _) = g
+                            .connect_node(
+                                OptNode::new(BinaryArith::new(BinaryArithOp::Mul), span.clone()),
+                                &[u_src],
+                            )
+                            .unwrap();
+                        let pd_v = mul_right.input(1);
+
+                        //sub both
+                        let (sub, _) = g
+                            .connect_node(
+                                OptNode::new(BinaryArith::new(BinaryArithOp::Sub), span.clone()),
+                                &[mul_left.output(0), mul_right.output(0)],
+                            )
+                            .unwrap();
+
+                        let (v_pow_two, _) = g
+                            .connect_node(
+                                OptNode::new(BinaryArith::new(BinaryArithOp::Mul), span.clone()),
+                                &[v_src, v_src],
+                            )
+                            .unwrap();
+
+                        let (div, _) = g
+                            .connect_node(
+                                OptNode::new(BinaryArith::new(BinaryArithOp::Div), span.clone()),
+                                &[sub.output(0), v_pow_two.output(0)],
+                            )
+                            .unwrap();
+
+                        (pd_u, pd_v, div.output(0))
+                    })
+                    .unwrap();
+                //post div u and v
+
+                subdiff.push((u_src, smallvec![pd_u]));
+                subdiff.push((v_src, smallvec![pd_v]));
+
+                Ok((output, subdiff))
             }
             BinaryArithOp::Mod => {
                 todo!()
@@ -351,199 +404,49 @@ impl Optimizer {
             .clone()
         {
             UnaryArithOp::Abs => {
-                //For abs we currently do something similar to the min/max case.
-                //this time, do:
-                // f'(x)          (for x > 0)
-                // `-1.0 * f'(x)` (for x < 1)
-                // 0.0            (for x == 0)
+                //Abs can not be diffed for f(x) == 0, however, for all others
+                // |f(x)|' = (f(x) / |f(x)|) * f'(x) exists.
+                //
+                // for x == 0 this will naturally be Nan, since |f(x)| == 0 -> f(x) / 0.0 == Nan.
+                if self.config.autodiff.abort_on_undiff {
+                    return Err(AutoDiffError::UndiffNode(format!(
+                        "{}",
+                        self.graph[node].name()
+                    )));
+                }
 
-                let src = self.graph.inport_src(node.input(0)).unwrap();
-                let src_ty = self.find_type(&src.into()).unwrap();
-                let splatted_zero = self.splat_scalar(region, ImmScalar::new(1.0), src_ty);
-
-                let (gamma_node, value_output, diffinput) = self
+                let (subdiff_dst, output) = self
                     .graph
                     .on_region(&region, |g| {
-                        let (gammanode, (value_output, value_input, diffinput, zero_input)) = g
-                            .new_decission(|gb| {
-                                let (diff_input, _) = gb.add_entry_variable();
-                                let (value_input, _) = gb.add_entry_variable();
-                                let (zero_input, _) = gb.add_entry_variable();
-                                let (exid, value_output) = gb.add_exit_variable();
-
-                                //case x == 0
-                                gb.new_branch(|bb, bidx| {
-                                    //hookup for x == 0
-                                    bb.connect_to_result(
-                                        OutportLocation {
-                                            node: zero_input.node,
-                                            output: zero_input
-                                                .input
-                                                .map_to_in_region(bidx)
-                                                .unwrap(),
-                                        },
-                                        InputType::ExitVariableResult {
-                                            branch: bidx,
-                                            exit_variable: exid,
-                                        },
-                                    )
-                                    .unwrap();
-                                });
-
-                                //now build the x > 0 || x < 0 cases
-                                gb.new_branch(|bb, bidx| {
-                                    let (is_gt_zero, _) = bb
-                                        .connect_node(
-                                            OptNode::new(
-                                                BinaryRel::new(BinaryRelOp::Gt),
-                                                span.clone(),
-                                            ),
-                                            &[
-                                                OutportLocation {
-                                                    node: value_input.node,
-                                                    output: value_input
-                                                        .input
-                                                        .map_to_in_region(bidx)
-                                                        .unwrap(),
-                                                },
-                                                OutportLocation {
-                                                    node: zero_input.node,
-                                                    output: zero_input
-                                                        .input
-                                                        .map_to_in_region(bidx)
-                                                        .unwrap(),
-                                                },
-                                            ],
-                                        )
-                                        .unwrap();
-
-                                    //build both branches, that either route through the diff-value (true), or negate it and route through (false)
-
-                                    let (gt_gamma, (gt_result, gt_diff_input)) =
-                                        bb.new_decission(|gtbuilder| {
-                                            let (gt_diff_input, _) = gtbuilder.add_entry_variable();
-                                            let (gt_exid, gt_result) =
-                                                gtbuilder.add_exit_variable();
-
-                                            //the x > 0 => f'(x)
-                                            gtbuilder.new_branch(|bb, bidx| {
-                                                bb.connect_to_result(
-                                                    OutportLocation {
-                                                        node: gt_diff_input.node,
-                                                        output: gt_diff_input
-                                                            .input
-                                                            .map_to_in_region(bidx)
-                                                            .unwrap(),
-                                                    },
-                                                    InputType::ExitVariableResult {
-                                                        branch: bidx,
-                                                        exit_variable: gt_exid,
-                                                    },
-                                                )
-                                                .unwrap();
-                                            });
-
-                                            //the x < 0 => -f'(x)
-                                            //we use Neg for that
-
-                                            gtbuilder.new_branch(|bb, bidx| {
-                                                let (neg_diff, _) = bb
-                                                    .connect_node(
-                                                        OptNode::new(
-                                                            UnaryArith::new(UnaryArithOp::Neg),
-                                                            span.clone(),
-                                                        ),
-                                                        &[OutportLocation {
-                                                            node: gt_diff_input.node,
-                                                            output: gt_diff_input
-                                                                .input
-                                                                .map_to_in_region(bidx)
-                                                                .unwrap(),
-                                                        }],
-                                                    )
-                                                    .unwrap();
-
-                                                bb.connect_to_result(
-                                                    neg_diff.output(0),
-                                                    InputType::ExitVariableResult {
-                                                        branch: bidx,
-                                                        exit_variable: gt_exid,
-                                                    },
-                                                )
-                                                .unwrap();
-                                            });
-
-                                            (gt_result, gt_diff_input)
-                                        });
-
-                                    //hookup the criterion, the diff-value input, and route the result to the outer gamma's result
-                                    bb.ctx_mut()
-                                        .connect(
-                                            is_gt_zero.output(0),
-                                            gt_gamma.as_inport_location(InputType::GammaPredicate),
-                                            OptEdge::value_edge_unset(),
-                                        )
-                                        .unwrap();
-
-                                    bb.ctx_mut()
-                                        .connect(
-                                            OutportLocation {
-                                                node: diff_input.node,
-                                                output: diff_input
-                                                    .input
-                                                    .map_to_in_region(bidx)
-                                                    .unwrap(),
-                                            },
-                                            gt_diff_input,
-                                            OptEdge::value_edge_unset(),
-                                        )
-                                        .unwrap();
-
-                                    bb.connect_to_result(
-                                        gt_result,
-                                        InputType::ExitVariableResult {
-                                            branch: bidx,
-                                            exit_variable: exid,
-                                        },
-                                    )
-                                    .unwrap()
-                                });
-
-                                (value_output, value_input, diff_input, zero_input)
-                            });
-
-                        //build x == 0 criterion
-                        let (is_zero, _) = g
+                        let (abs_f, _) = g
                             .connect_node(
-                                OptNode::new(BinaryRel::new(BinaryRelOp::Eq), span),
-                                &[src, splatted_zero],
-                            )
-                            .unwrap();
-                        //hookup to gamma node
-                        g.ctx_mut()
-                            .connect(
-                                is_zero.output(0),
-                                gammanode.as_inport_location(InputType::GammaPredicate),
-                                OptEdge::value_edge_unset(),
+                                OptNode::new(UnaryArith::new(UnaryArithOp::Abs), span.clone()),
+                                &[src],
                             )
                             .unwrap();
 
-                        //hookup zero splat
-                        g.ctx_mut()
-                            .connect(splatted_zero, zero_input, OptEdge::value_edge_unset())
+                        let (f_div_abs_div, _) = g
+                            .connect_node(
+                                OptNode::new(BinaryArith::new(BinaryArithOp::Div), span.clone()),
+                                &[src, abs_f.output(0)],
+                            )
                             .unwrap();
 
-                        //feed the actual value and into the gamma node
-                        g.ctx_mut()
-                            .connect(src, value_input, OptEdge::value_edge_unset())
+                        let (mul, _) = g
+                            .connect_node(
+                                OptNode::new(BinaryArith::new(BinaryArithOp::Mul), span.clone()),
+                                &[f_div_abs_div.output(0)],
+                            )
                             .unwrap();
 
-                        (gammanode, value_output, diffinput)
+                        let subdiff_dst = mul.input(1);
+
+                        (subdiff_dst, mul.output(0))
                     })
                     .unwrap();
 
-                let subdiff = smallvec![(src, smallvec![diffinput])];
-                Ok((value_output, subdiff))
+                let subdiff = smallvec![(src, smallvec![subdiff_dst])];
+                Ok((output, subdiff))
             }
             other => Err(AutoDiffError::NoAdImpl(format!(
                 "UnaryArithOp {other:?} not implemented!"
@@ -682,21 +585,20 @@ impl Optimizer {
                 //apply chain rule:
                 // sqrt(f(x)) = [1.0 / (2.0 * sqrt(f(x)))] * f'(x)
                 let f_src = self.graph.inport_src(node.input(0)).unwrap();
+                let ty = self.find_type(&f_src.into()).unwrap();
+                let imm_one = self.splat_scalar(region, ImmScalar::new(1.0), ty.clone());
+                let imm_two = self.splat_scalar(region, ImmScalar::new(2.0), ty);
 
                 //TODO / FIXME: We _could_ reformulate as 0.5 * sqrt(x) * f'(x).
                 //      and checkout how much faster that is ...
                 let div_result = self
                     .graph
                     .on_region(&region, |g| {
-                        let imm_one =
-                            g.insert_node(OptNode::new(ImmScalar::new(1.0), span.clone()));
-                        let imm_two =
-                            g.insert_node(OptNode::new(ImmScalar::new(2.0), span.clone()));
                         // 2.0 * expr
                         let (mul_inner, _) = g
                             .connect_node(
                                 OptNode::new(BinaryArith::new(BinaryArithOp::Mul), span.clone()),
-                                &[imm_two.output(0), node.output(0)],
+                                &[imm_two, node.output(0)],
                             )
                             .unwrap();
 
@@ -704,7 +606,7 @@ impl Optimizer {
                         let (div_one, _) = g
                             .connect_node(
                                 OptNode::new(BinaryArith::new(BinaryArithOp::Div), span.clone()),
-                                &[imm_one.output(0), mul_inner.output(0)],
+                                &[imm_one, mul_inner.output(0)],
                             )
                             .unwrap();
 
@@ -721,6 +623,13 @@ impl Optimizer {
                 Ok((result, subdiff))
             }
             BuildinOp::Min | BuildinOp::Max => {
+                if self.config.autodiff.abort_on_undiff {
+                    return Err(AutoDiffError::UndiffNode(format!(
+                        "{}",
+                        self.graph[node].name()
+                    )));
+                }
+
                 //NOTE: not really diff-abel, but we use
                 //      this: https://math.stackexchange.com/questions/150960/derivative-of-the-fx-y-minx-y
                 //      for now.
