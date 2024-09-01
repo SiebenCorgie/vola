@@ -63,9 +63,7 @@ use rvsdg::{
 };
 use vola_common::{error::error_reporter, report, Span};
 
-use crate::{
-    alge::Construct, autodiff::AutoDiff, common::Ty, imm::ImmScalar, OptEdge, OptError, Optimizer,
-};
+use crate::{alge::Construct, autodiff::AutoDiff, OptEdge, OptError, Optimizer};
 
 use super::{activity::Activity, AutoDiffError};
 

@@ -358,6 +358,54 @@ impl Optimizer {
                     self.graph.replace_node_uses(node, new_result).unwrap();
                     Ok(())
                 }
+                BuildinOp::Clamp => {
+                    //clamp(x, minval, maxval)
+                    //canonicalize as min(max(x, minval), maxval);
+
+                    if !self.config.autodiff.canonicalize_undiff {
+                        //None AD, since a > 1 && a < 0 is undefined
+                        return Ok(());
+                    }
+                    let x_src = self.graph.inport_src(node.input(0)).unwrap();
+                    let expr_ty = self.find_type(&x_src.into()).unwrap();
+                    let min_src = self.graph.inport_src(node.input(1)).unwrap();
+                    let max_src = self.graph.inport_src(node.input(2)).unwrap();
+
+                    let (result, min, max) = self
+                        .graph
+                        .on_region(region, |g| {
+                            let (inner_max, max_edg) = g
+                                .connect_node(
+                                    OptNode::new(Buildin::new(BuildinOp::Max), span.clone()),
+                                    &[x_src, min_src],
+                                )
+                                .unwrap();
+                            let (inner_min, min_edg) = g
+                                .connect_node(
+                                    OptNode::new(Buildin::new(BuildinOp::Min), span.clone()),
+                                    &[inner_max.output(0), max_src],
+                                )
+                                .unwrap();
+
+                            for edg in max_edg.into_iter().chain(min_edg.into_iter()) {
+                                g.ctx_mut().edge_mut(edg).ty.set_type(expr_ty.clone());
+                            }
+
+                            (inner_min, inner_min, inner_max)
+                        })
+                        .unwrap();
+
+                    //type derive the min and max nodes before canonicalizing them
+                    self.type_derive_and_propagate(max)?;
+                    //sub_canonicalize min and max
+                    self.handle_canon_node(max)?;
+                    self.type_derive_and_propagate(min)?;
+                    self.handle_canon_node(min)?;
+
+                    //if succesful, replace
+                    self.graph.replace_node_uses(node, result).unwrap();
+                    Ok(())
+                }
                 //All other buildin nodes are canon
                 _ => Ok(()),
             }

@@ -11,21 +11,14 @@
 //! Implements utility passes for the auto-diff implementations
 
 use rvsdg::{
-    attrib::AttribLocation,
-    edge::{InportLocation, InputType, OutportLocation},
-    region::RegionLocation,
-    NodeRef, SmallColl,
+    attrib::AttribLocation, edge::OutportLocation, region::RegionLocation, NodeRef, SmallColl,
 };
+use rvsdg_viewer::View;
 use vola_common::Span;
 
 use crate::{
-    alge::{
-        arithmetic::{BinaryArith, BinaryArithOp, UnaryArith},
-        buildin::{Buildin, BuildinOp},
-        ConstantIndex, Construct,
-    },
+    alge::{arithmetic::UnaryArith, buildin::Buildin, Construct},
     autodiff::{AutoDiff, AutoDiffError},
-    common::Ty,
     imm::ImmScalar,
     OptEdge, OptError, OptNode, Optimizer,
 };
@@ -165,5 +158,26 @@ impl Optimizer {
         }
 
         Ok(())
+    }
+
+    ///Handles type derive and propagation of a node that is added while canonicalizing.
+    pub(crate) fn type_derive_and_propagate(&mut self, node: NodeRef) -> Result<(), OptError> {
+        match self.try_node_type_derive(node)? {
+            (Some(ty), outport) => {
+                self.typemap.set(outport.into(), ty.clone());
+                //push type on port into edges
+                for edg in self.graph[outport].edges.clone() {
+                    self.graph[edg].ty.set_type(ty.clone());
+                }
+
+                Ok(())
+            }
+            (None, _) => Err(OptError::Any {
+                text: format!(
+                    "Could not derive the type for canonicalized node \"{}\"",
+                    self.graph[node].name()
+                ),
+            }),
+        }
     }
 }

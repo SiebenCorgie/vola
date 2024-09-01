@@ -1092,6 +1092,49 @@ impl Optimizer {
         Ok(Some(initial_result_type))
     }
 
+    pub fn try_node_type_derive(
+        &mut self,
+        node: NodeRef,
+    ) -> Result<(Option<Ty>, OutportLocation), OptError> {
+        //gather all inputs and let the node try to resolve itself
+        let payload = match &self.graph.node(node).node_type {
+            NodeType::Simple(s) => {
+                let ty = s.node.try_derive_type(
+                    &self.typemap,
+                    &self.graph,
+                    &self.concepts,
+                    &self.csg_node_defs,
+                );
+
+                (ty?, node.output(0))
+            }
+            NodeType::Apply(a) => {
+                let region_span = self
+                    .find_span(self.graph[node].parent.unwrap().into())
+                    .unwrap_or(Span::empty());
+                let ty = self.try_apply_derive(node, a, &region_span);
+                (ty?, node.output(0))
+            }
+            NodeType::Gamma(_g) => {
+                let ty = self.try_gamma_derive(node);
+                (ty?, node.output(0))
+            }
+            //NOTE: by convention the θ-Node resolves to output 2
+            NodeType::Theta(_t) => {
+                let ty = self.try_theta_derive(node);
+                (ty?, node.output(2))
+            }
+            t => {
+                let err = OptError::Any {
+                    text: format!("Unexpected node type {t} in graph while doing type resolution."),
+                };
+                return Err(err);
+            }
+        };
+
+        Ok(payload)
+    }
+
     pub(crate) fn derive_region(
         &mut self,
         reg: RegionLocation,
@@ -1155,51 +1198,25 @@ impl Optimizer {
             let mut local_stack = VecDeque::new();
             std::mem::swap(&mut local_stack, &mut build_stack);
             for node in local_stack {
-                //gather all inputs and let the node try to resolve itself
-                let (type_resolve_try, resolved_port) = match &self.graph.node(node).node_type {
-                    NodeType::Simple(s) => {
-                        let ty = s.node.try_derive_type(
-                            &self.typemap,
-                            &self.graph,
-                            &self.concepts,
-                            &self.csg_node_defs,
-                        );
-
-                        (ty, node.output(0))
-                    }
-                    NodeType::Apply(a) => {
-                        let ty = self.try_apply_derive(node, a, &region_src_span);
-                        (ty, node.output(0))
-                    }
-                    NodeType::Gamma(_g) => {
-                        let ty = self.try_gamma_derive(node);
-                        (ty, node.output(0))
-                    }
-                    //NOTE: by convention the θ-Node resolves to output 2
-                    NodeType::Theta(_t) => {
-                        let ty = self.try_theta_derive(node);
-                        (ty, node.output(2))
-                    }
-                    t => {
-                        let err = OptError::Any {
-                            text: format!(
-                                "Unexpected node type {t} in graph while doing type resolution."
-                            ),
-                        };
+                let (type_resolve_try, resolved_port) = match self.try_node_type_derive(node) {
+                    Ok(t) => t,
+                    Err(e) => {
+                        let span = self.find_span(node.into()).unwrap_or(Span::empty());
                         report(
-                            error_reporter(err.clone(), region_src_span.clone())
+                            error_reporter(e.clone(), span.clone())
                                 .with_label(
-                                    Label::new(region_src_span.clone())
-                                        .with_message("In this region"),
+                                    Label::new(span.clone()).with_message("on this operation"),
                                 )
                                 .finish(),
                         );
-                        return Err(err);
+                        //Immediately abort, since we have no way of finishing.
+                        // TODO: We could also collect all error at this point...
+                        return Err(e);
                     }
                 };
 
                 match type_resolve_try {
-                    Ok(Some(ty)) => {
+                    Some(ty) => {
                         //flag change.
                         resolved_any_node = true;
 
@@ -1236,22 +1253,9 @@ impl Optimizer {
                             }
                         }
                     }
-                    Ok(None) => {
+                    None => {
                         //push back into build_stack
                         build_stack.push_front(node);
-                    }
-                    Err(e) => {
-                        let span = self.find_span(node.into()).unwrap_or(Span::empty());
-                        report(
-                            error_reporter(e.clone(), span.clone())
-                                .with_label(
-                                    Label::new(span.clone()).with_message("on this operation"),
-                                )
-                                .finish(),
-                        );
-                        //Immediately abort, since we have no way of finishing.
-                        // TODO: We could also collect all error at this point...
-                        return Err(e);
                     }
                 }
             }
