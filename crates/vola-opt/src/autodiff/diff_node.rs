@@ -448,6 +448,30 @@ impl Optimizer {
                 let subdiff = smallvec![(src, smallvec![subdiff_dst])];
                 Ok((output, subdiff))
             }
+            UnaryArithOp::Neg => {
+                //special case of (cf)' => c f' for c=constant
+                //in this case c = -1.
+                let f_src = self.graph.inport_src(node.input(0)).unwrap();
+                let f_ty = self.find_type(&f_src.into()).unwrap();
+                let negone = self.splat_scalar(region, ImmScalar::new(-1.0), f_ty);
+                let (diff_dst, result) = self
+                    .graph
+                    .on_region(&region, |g| {
+                        let (mul, _) = g
+                            .connect_node(
+                                OptNode::new(BinaryArith::new(BinaryArithOp::Mul), span.clone()),
+                                &[negone],
+                            )
+                            .unwrap();
+                        let diff_dst = mul.input(1);
+
+                        (diff_dst, mul)
+                    })
+                    .unwrap();
+
+                let subdiff = smallvec![(f_src, smallvec![diff_dst])];
+                Ok((result.output(0), subdiff))
+            }
             other => Err(AutoDiffError::NoAdImpl(format!(
                 "UnaryArithOp {other:?} not implemented!"
             ))),
