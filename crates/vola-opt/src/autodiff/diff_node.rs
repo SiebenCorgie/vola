@@ -98,7 +98,7 @@ impl Optimizer {
             return self.build_diff_trig(region, node);
         }
         if self.is_node_type::<Buildin>(node) {
-            return self.build_diff_buildin(region, node);
+            return self.build_diff_buildin(region, node, activity);
         }
 
         Err(AutoDiffError::ActivityExplorationRegionError)
@@ -237,6 +237,7 @@ impl Optimizer {
                     (true, true) => {
                         //product-rule: (left is f, right is g):
                         //(f(x)*g(x))' = f'(x) * g(x) + f(x) * g'(x).
+                        //turns to vector-product rule for vectorns
 
                         let result = self
                             .graph
@@ -564,6 +565,7 @@ impl Optimizer {
         &mut self,
         region: RegionLocation,
         node: NodeRef,
+        activity: &Activity,
     ) -> Result<
         (
             OutportLocation,
@@ -806,6 +808,71 @@ impl Optimizer {
                     //gamma-node
                     smallvec![(feed_through_src, smallvec![value_input])],
                 ))
+            }
+            BuildinOp::Exp => {
+                //e^x == e^x
+                Ok(self.build_chain_rule_for(
+                    &region,
+                    node.output(0),
+                    self.graph.inport_src(node.input(0)).unwrap(),
+                ))
+            }
+            BuildinOp::Pow => {
+                //We have two cases here.
+                //One is where the exponent is not active:
+                //x^n => nx^(n-1)
+                //One where the exponent is active
+                //x^x => x^x * (1 + ln x).
+                let x_src = self.graph.inport_src(node.input(0)).unwrap();
+                let n_src = self.graph.inport_src(node.input(1)).unwrap();
+
+                if activity.get_outport_active(n_src) {
+                    //the x^x case
+                    return Err(AutoDiffError::NoAdImpl(format!(
+                        "No AD impl for x^x (where the exponent is part of the derivative)"
+                    )));
+                } else {
+                    //the x^n case
+
+                    let nty = self.find_type(&n_src.into()).unwrap();
+                    let one = self.splat_scalar(region, ImmScalar::new(1.0), nty);
+                    let diffed_output = self
+                        .graph
+                        .on_region(&region, |g| {
+                            //n-1
+                            let (n_minus_one, _) = g
+                                .connect_node(
+                                    OptNode::new(
+                                        BinaryArith::new(BinaryArithOp::Sub),
+                                        span.clone(),
+                                    ),
+                                    &[n_src, one],
+                                )
+                                .unwrap();
+                            //into exponent
+                            let (x_times, _) = g
+                                .connect_node(
+                                    OptNode::new(Buildin::new(BuildinOp::Pow), span.clone()),
+                                    &[x_src, n_minus_one.output(0)],
+                                )
+                                .unwrap();
+                            //mul n
+                            let (result, _) = g
+                                .connect_node(
+                                    OptNode::new(
+                                        BinaryArith::new(BinaryArithOp::Mul),
+                                        span.clone(),
+                                    ),
+                                    &[n_src, x_times.output(0)],
+                                )
+                                .unwrap();
+
+                            result.output(0)
+                        })
+                        .unwrap();
+
+                    Ok(self.build_chain_rule_for(&region, diffed_output, x_src))
+                }
             }
             _other => Err(AutoDiffError::NoAdImpl(
                 self.graph[node]
