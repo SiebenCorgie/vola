@@ -296,6 +296,68 @@ impl Optimizer {
                     self.graph.replace_node_uses(node, output)?;
                     Ok(())
                 }
+                BuildinOp::Mix => {
+                    //we canonicalize this to
+                    //mix(x,y,a) => x*(1-a) + y*a
+
+                    if !self.config.autodiff.canonicalize_undiff {
+                        //None AD, since a > 1 && a < 0 is undefined
+                        return Ok(());
+                    }
+                    let x_src = self.graph.inport_src(node.input(0)).unwrap();
+                    let y_src = self.graph.inport_src(node.input(1)).unwrap();
+                    let a_src = self.graph.inport_src(node.input(2)).unwrap();
+
+                    let a_ty = self.find_type(&a_src.into()).unwrap();
+                    let one = self.splat_scalar(*region, ImmScalar::new(1.0), a_ty);
+                    let new_result = self
+                        .graph
+                        .on_region(&region, |g| {
+                            let (one_minus, _) = g
+                                .connect_node(
+                                    OptNode::new(
+                                        BinaryArith::new(BinaryArithOp::Sub),
+                                        span.clone(),
+                                    ),
+                                    &[one, a_src],
+                                )
+                                .unwrap();
+
+                            let (x_times, _) = g
+                                .connect_node(
+                                    OptNode::new(
+                                        BinaryArith::new(BinaryArithOp::Mul),
+                                        span.clone(),
+                                    ),
+                                    &[x_src, one_minus.output(0)],
+                                )
+                                .unwrap();
+                            let (y_times, _) = g
+                                .connect_node(
+                                    OptNode::new(
+                                        BinaryArith::new(BinaryArithOp::Mul),
+                                        span.clone(),
+                                    ),
+                                    &[y_src, a_src],
+                                )
+                                .unwrap();
+
+                            let (result, _) = g
+                                .connect_node(
+                                    OptNode::new(
+                                        BinaryArith::new(BinaryArithOp::Add),
+                                        span.clone(),
+                                    ),
+                                    &[x_times.output(0), y_times.output(0)],
+                                )
+                                .unwrap();
+                            result
+                        })
+                        .unwrap();
+
+                    self.graph.replace_node_uses(node, new_result).unwrap();
+                    Ok(())
+                }
                 //All other buildin nodes are canon
                 _ => Ok(()),
             }
