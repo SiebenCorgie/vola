@@ -7,7 +7,7 @@
  */
 
 use rvsdg::{
-    edge::{InportLocation, InputType, OutportLocation, OutputType},
+    edge::{InportLocation, InputType, OutportLocation},
     region::RegionLocation,
     smallvec::{smallvec, SmallVec},
     NodeRef, SmallColl,
@@ -155,7 +155,6 @@ impl Optimizer {
     > {
         //Just build a vector of all derivatives
         let span = self.find_span(node.into()).unwrap_or(Span::empty());
-        let sub_src = self.graph.inport_src(node.input(0)).unwrap();
 
         let srcs = self.graph[node].input_srcs(&self.graph);
         let const_width = srcs.len();
@@ -581,6 +580,53 @@ impl Optimizer {
             .op
             .clone();
         match op {
+            BuildinOp::Dot | BuildinOp::Cross => {
+                //Both can be diffed according to the product rule
+                let u_src = self.graph.inport_src(node.input(0)).unwrap();
+                let v_src = self.graph.inport_src(node.input(1)).unwrap();
+
+                let (u_diff_dst, v_diff_dst, result) = self
+                    .graph
+                    .on_region(&region, |g| {
+                        //NOTE is not commutative, so we have to pay attention to the order here
+                        let udiff_op_v =
+                            g.insert_node(OptNode::new(Buildin::new(op.clone()), span.clone()));
+                        //preconnect u to v` x u
+                        g.ctx_mut()
+                            .connect(v_src, udiff_op_v.input(1), OptEdge::value_edge_unset())
+                            .unwrap();
+                        let u_diff_dst = udiff_op_v.input(0);
+
+                        let u_op_diffv =
+                            g.insert_node(OptNode::new(Buildin::new(op.clone()), span.clone()));
+                        //preconnect v to v x u'
+                        g.ctx_mut()
+                            .connect(u_src, u_op_diffv.input(0), OptEdge::value_edge_unset())
+                            .unwrap();
+                        let v_diff_dst = u_op_diffv.input(0);
+
+                        //add both
+                        let (add, _) = g
+                            .connect_node(
+                                OptNode::new(BinaryArith::new(BinaryArithOp::Add), span.clone()),
+                                &[udiff_op_v.output(0), u_op_diffv.output(0)],
+                            )
+                            .unwrap();
+
+                        (u_diff_dst, v_diff_dst, add.output(0))
+                    })
+                    .unwrap();
+
+                //add both post-diffs and return
+
+                let mut subdiff = SmallColl::new();
+
+                subdiff.push((u_src, smallvec![u_diff_dst]));
+                subdiff.push((v_src, smallvec![v_diff_dst]));
+
+                Ok((result, subdiff))
+            }
+
             BuildinOp::SquareRoot => {
                 //apply chain rule:
                 // sqrt(f(x)) = [1.0 / (2.0 * sqrt(f(x)))] * f'(x)
