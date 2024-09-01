@@ -19,7 +19,7 @@ use crate::{
     alge::{
         arithmetic::{BinaryArith, BinaryArithOp, UnaryArith, UnaryArithOp},
         buildin::{Buildin, BuildinOp},
-        logical::{BinaryBool, BinaryBoolOp, UnaryBool},
+        logical::{BinaryBool, UnaryBool},
         matrix::UnaryMatrix,
         relational::{BinaryRel, BinaryRelOp},
         trigonometric::{Trig, TrigOp},
@@ -144,7 +144,7 @@ impl Optimizer {
 
     fn build_diff_constant_construct(
         &mut self,
-        _region: RegionLocation,
+        region: RegionLocation,
         node: NodeRef,
     ) -> Result<
         (
@@ -153,7 +153,33 @@ impl Optimizer {
         ),
         AutoDiffError,
     > {
-        Err(AutoDiffError::NoAdImpl(self.graph[node].name().to_string()))
+        //Just build a vector of all derivatives
+        let span = self.find_span(node.into()).unwrap_or(Span::empty());
+        let sub_src = self.graph.inport_src(node.input(0)).unwrap();
+
+        let srcs = self.graph[node].input_srcs(&self.graph);
+        let const_width = srcs.len();
+
+        let mut subdiffs = SmallVec::new();
+        let result = self
+            .graph
+            .on_region(&region, |g| {
+                let index_diff = g.insert_node(OptNode::new(
+                    Construct::new().with_inputs(const_width),
+                    span,
+                ));
+
+                index_diff
+            })
+            .unwrap();
+
+        for (inidx, src) in srcs.into_iter().enumerate() {
+            if let Some(src) = src {
+                subdiffs.push((src, smallvec![result.input(inidx)]));
+            }
+        }
+
+        Ok((result.output(0), subdiffs))
     }
 
     fn build_diff_binary_arith(

@@ -31,6 +31,7 @@ use alge::{
     implblock::{ConceptImpl, ConceptImplKey},
 };
 use common::Ty;
+use config::Config;
 use csg::{exportfn::ExportFn, fielddef::FieldDef};
 use rvsdg::{attrib::FlagStore, Rvsdg};
 
@@ -48,6 +49,7 @@ pub mod csg;
 mod error;
 pub use error::OptError;
 mod autodiff;
+pub mod config;
 mod graph;
 pub mod imm;
 mod passes;
@@ -101,6 +103,8 @@ pub struct Optimizer {
 
     #[cfg(feature = "viewer")]
     pub viewer_state: rvsdg_viewer::ViewerState,
+
+    pub config: Config,
 }
 
 impl Optimizer {
@@ -119,6 +123,7 @@ impl Optimizer {
             var_producer: FlagStore::new(),
             #[cfg(feature = "viewer")]
             viewer_state: rvsdg_viewer::ViewerState::new(),
+            config: Config::default(),
         }
     }
 

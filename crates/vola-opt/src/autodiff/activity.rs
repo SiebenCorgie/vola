@@ -8,20 +8,27 @@
 
 use std::collections::VecDeque;
 
-use ahash::AHashSet;
+use ahash::{AHashMap, AHashSet};
 use rvsdg::{
     attrib::FlagStore,
     edge::{InportLocation, OutportLocation},
     region::RegionLocation,
+    smallvec::{smallvec, SmallVec},
     util::abstract_node_type::AbstractNodeType,
     NodeRef, SmallColl,
 };
 use vola_common::Span;
 
-use crate::{alge::ConstantIndex, common::Ty, imm::ImmScalar, OptError, OptNode, Optimizer};
+use crate::{
+    alge::ConstantIndex,
+    common::Ty,
+    imm::{ImmScalar, ImmVector},
+    OptError, OptNode, Optimizer,
+};
 
 use super::AutoDiff;
 
+type WrtProdMap = AHashMap<OutportLocation, SmallVec<[usize; 4]>>;
 pub struct Activity {
     ///All nodes or ports from which we _know_ the activity state.
     pub active: FlagStore<bool>,
@@ -30,7 +37,12 @@ pub struct Activity {
     ///
     /// Example: If the wrt argument is `a.x.y`, then this are all
     /// nodes that produce `a.x.y` in this region.
-    pub wrt_producer: SmallColl<OutportLocation>,
+    ///
+    /// For each case, we also track the actual chain of indices
+    /// So if OutportLocation is a vector, then the vec will hold one index (which element of the vector is the active one).
+    ///    if OutportLocation is a matrix, then the vec will hold the row-index (0) and the column-element (1) for the active element.
+    ///    same goes for tensors
+    pub wrt_producer: WrtProdMap,
 }
 
 impl Activity {
@@ -56,19 +68,42 @@ impl Activity {
         region: RegionLocation,
         port: OutportLocation,
     ) -> OutportLocation {
-        assert!(self.wrt_producer.contains(&port));
+        let wrt_to_scalar_chain = self
+            .wrt_producer
+            .get(&port.into())
+            .expect("Expected scalar chain");
         let ty = opt
             .find_type(&port.into())
             .expect("expected type information");
 
         match ty {
-            Ty::Scalar => opt
-                .graph
-                .on_region(&region, |g| {
-                    g.insert_node(OptNode::new(ImmScalar::new(1.0), Span::empty()))
-                        .output(0)
-                })
-                .unwrap(),
+            Ty::Scalar => {
+                assert!(wrt_to_scalar_chain.len() == 0);
+                opt.graph
+                    .on_region(&region, |g| {
+                        g.insert_node(OptNode::new(ImmScalar::new(1.0), Span::empty()))
+                            .output(0)
+                    })
+                    .unwrap()
+            }
+            Ty::Vector { width } => {
+                assert!(
+                    wrt_to_scalar_chain.len() == 1,
+                    "expected 1 == {}",
+                    wrt_to_scalar_chain.len()
+                );
+                assert!(wrt_to_scalar_chain[0] < width);
+
+                //build a vector that has the 1 set at the given index
+                opt.graph
+                    .on_region(&region, |g| {
+                        let mut vector: SmallColl<f64> = smallvec![0.0f64; width];
+                        vector[wrt_to_scalar_chain[0]] = 1.0;
+                        g.insert_node(OptNode::new(ImmVector::new(&vector), Span::empty()))
+                            .output(0)
+                    })
+                    .unwrap()
+            }
             _ => todo!(),
         }
     }
@@ -76,7 +111,7 @@ impl Activity {
     ///Returns true, if this `port` produces the specific wrt-value, or an aggregate type that contains
     /// the wrt value
     pub fn is_wrt_producer(&self, port: &OutportLocation) -> bool {
-        self.wrt_producer.contains(port)
+        self.wrt_producer.contains_key(port)
     }
 
     //Tries to recover the activity state of this port, and if it can't, traces it
@@ -131,7 +166,7 @@ impl Activity {
                         .set(OutportLocation { node, output }.into(), any_active);
                 }
             }
-            _ => panic!("unhandled activity"),
+            ty => panic!("unhandled activity for node type {ty:?}"),
         }
 
         any_active
@@ -204,10 +239,7 @@ impl Optimizer {
 
     ///Traces all nodes that are connected to `wrt` _backwards_, till it ends at either a
     /// Value producing node, or a region-argument
-    fn trace_activity_seed(
-        &self,
-        wrt: OutportLocation,
-    ) -> (FlagStore<bool>, SmallColl<OutportLocation>) {
+    fn trace_activity_seed(&self, wrt: OutportLocation) -> (FlagStore<bool>, WrtProdMap) {
         let mut seeds = SmallColl::new();
         let mut seen_nodes = AHashSet::new();
         let mut stack = VecDeque::new();
@@ -256,11 +288,12 @@ impl Optimizer {
     fn propagate_activity_seed(
         &self,
         seed_trace: SmallColl<OutportLocation>,
-    ) -> (FlagStore<bool>, SmallColl<OutportLocation>) {
+    ) -> (FlagStore<bool>, WrtProdMap) {
         let mut wrt_related = FlagStore::new();
-        let mut end_ports = SmallColl::new();
+        let mut end_ports = WrtProdMap::new();
 
-        //trace from the start
+        //trace from the start (which is _some_ value producing port)
+        //if the trace is only 1 long, we can just use that and do no work
         let start = seed_trace[0];
         //build the index list we have to follow for valid producer-index-ops.
         let index_path = seed_trace[1..]
@@ -275,7 +308,7 @@ impl Optimizer {
             .collect::<SmallColl<_>>();
         //shortcut that needs no tracing, if there is no indexing at all.
         if seed_trace.len() == 1 {
-            end_ports.push(start);
+            end_ports.insert(start, SmallVec::from_slice(&index_path));
             wrt_related.set(start.into(), true);
             return (wrt_related, end_ports);
         } else {
@@ -283,7 +316,7 @@ impl Optimizer {
             //value itself to wrt-related regardless, and add it, if there is any non-indexing
             //node connected
             wrt_related.set(start.into(), true);
-            end_ports.push(start);
+            end_ports.insert(start, SmallVec::from_slice(&index_path));
 
             for connected in self.graph.outport_dsts(start) {
                 if self.is_node_type::<ConstantIndex>(connected.node) {
@@ -306,7 +339,7 @@ impl Optimizer {
         node: NodeRef,
         index_list: &[usize],
         wrt_related: &mut FlagStore<bool>,
-        end_ports: &mut SmallColl<OutportLocation>,
+        end_ports: &mut WrtProdMap,
     ) {
         assert!(self.graph[node].outputs().len() == 1);
         let this_index = if let Some(n) = self.try_unwrap_node::<ConstantIndex>(node) {
@@ -350,7 +383,7 @@ impl Optimizer {
         }
 
         if is_end_port {
-            end_ports.push(node.output(0));
+            end_ports.insert(node.output(0), SmallVec::from_slice(&index_list[1..]));
         }
     }
 

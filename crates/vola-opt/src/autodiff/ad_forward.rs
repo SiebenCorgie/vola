@@ -292,6 +292,7 @@ impl Optimizer {
             //
             //      For vectors this means initing _the-right_ index with one, same for matrix.
             //      We have that information from the activity trace, which if why we'll use that.
+            println!("Getting {port:?} : {:?}", activity.wrt_producer.get(&port));
             Ok(activity.build_diff_init_value_for_wrt(self, region, port))
         } else {
             //Otherwise we need to recurse
