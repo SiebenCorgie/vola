@@ -503,9 +503,27 @@ impl Optimizer {
                 let subdiff = smallvec![(f_src, smallvec![diff_dst])];
                 Ok((result.output(0), subdiff))
             }
-            other => Err(AutoDiffError::NoAdImpl(format!(
-                "UnaryArithOp {other:?} not implemented!"
-            ))),
+            UnaryArithOp::Ceil
+            | UnaryArithOp::Floor
+            | UnaryArithOp::Round
+            | UnaryArithOp::Fract => {
+                //Emit as zero (and do not subdiff chain rule, since that will always be zero)
+                //see: https://math.stackexchange.com/questions/305949/derivative-of-floor-function
+                //
+                //Abort if the exact thing is needed
+                if self.config.autodiff.abort_on_undiff {
+                    return Err(AutoDiffError::UndiffNode(format!(
+                        "{}",
+                        self.graph[node].name()
+                    )));
+                }
+
+                let x_src = self.graph.inport_src(node.input(0)).unwrap();
+                let x_ty = self.find_type(&x_src.into()).unwrap();
+                let zero = self.splat_scalar(region, ImmScalar::new(0.0), x_ty);
+
+                Ok((zero, SmallColl::new()))
+            }
         }
     }
 
@@ -660,7 +678,7 @@ impl Optimizer {
                         g.ctx_mut()
                             .connect(u_src, u_op_diffv.input(0), OptEdge::value_edge_unset())
                             .unwrap();
-                        let v_diff_dst = u_op_diffv.input(0);
+                        let v_diff_dst = u_op_diffv.input(1);
 
                         //add both
                         let (add, _) = g
