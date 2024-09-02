@@ -11,14 +11,16 @@
 //! Implements utility passes for the auto-diff implementations
 
 use rvsdg::{
-    attrib::AttribLocation, edge::OutportLocation, region::RegionLocation, NodeRef, SmallColl,
+    attrib::AttribLocation, edge::OutportLocation, region::RegionLocation, smallvec::smallvec,
+    util::abstract_node_type::AbstractNodeType, NodeRef, SmallColl,
 };
 use rvsdg_viewer::View;
 use vola_common::Span;
 
 use crate::{
-    alge::{arithmetic::UnaryArith, buildin::Buildin, Construct},
+    alge::{arithmetic::UnaryArith, buildin::Buildin, ConstantIndex, Construct},
     autodiff::{AutoDiff, AutoDiffError},
+    common::Ty,
     imm::ImmScalar,
     OptEdge, OptError, OptNode, Optimizer,
 };
@@ -30,12 +32,23 @@ impl Optimizer {
     /// Fails if the output of this node has no type.
     pub fn emit_zero_for_node(&mut self, region: RegionLocation, node: NodeRef) -> OutportLocation {
         assert!(self.graph[node].outputs().len() == 1);
-        if let Some(edg) = self.graph[node.output(0)].edges.get(0) {
-            let ty = self.graph[*edg].ty.get_type().unwrap();
-            self.splat_scalar(region, ImmScalar::new(0.0), ty.clone())
-        } else {
-            panic!("Node had no connections!");
-        }
+        assert!(self.graph[node].into_abstract() == AbstractNodeType::Simple);
+        self.emit_zero_for_port(region, node.output(0))
+    }
+
+    ///Builds a _zero-value-node_ for the given ports output type. This means checking the output type, and
+    /// building that primitive set with just zero as value.
+    ///
+    /// Fails if the output of this node has no type.
+    pub fn emit_zero_for_port(
+        &mut self,
+        region: RegionLocation,
+        port: OutportLocation,
+    ) -> OutportLocation {
+        let ty = self
+            .find_type(&port.into())
+            .expect("Expected port's output to be set");
+        self.splat_scalar(region, ImmScalar::new(0.0), ty)
     }
 
     ///Transforms a entrypoint with multiple wrt-args into multiple AD-entrypoints with
@@ -46,81 +59,76 @@ impl Optimizer {
     pub fn linearize_ad(&mut self, entrypoint: NodeRef) -> Result<SmallColl<NodeRef>, OptError> {
         let wrt_src = self.graph[entrypoint].input_src(&self.graph, 1).unwrap();
 
-        //FIXME: We currently rely on the constructor being there _once._.
-        //       Whenever we decide to do derivatives of matrices or _other-stuff_
-        //       We'd have to handle that in the linearization here.
-        if !self.is_node_type::<Construct>(wrt_src.node) {
-            return Err(AutoDiffError::LinearizeAdFailed.into());
-        }
-
-        //Now build a construction node, where the input is a similar AD node, but with
-        //just one wrt-arg.
-
+        let wrt_ty = self.find_type(&wrt_src.into()).unwrap();
         let region = self.graph[entrypoint].parent.unwrap().clone();
         let autodiff_src = self.graph[entrypoint].input_src(&self.graph, 0).unwrap();
-        let wrt_args = self.graph[wrt_src.node].input_srcs(&self.graph);
-        let autodiff_constructor = self
-            .graph
-            .on_region(&region, |g| {
-                let constr = g.insert_node(OptNode::new(
-                    Construct::new().with_inputs(wrt_args.len()),
-                    Span::empty(),
-                ));
+        let span = self.find_span(entrypoint.into()).unwrap_or(Span::empty());
 
-                constr
-            })
-            .unwrap();
-
-        let mut new_ad_entrypoints = SmallColl::new();
-        for (wrt_idx, arg) in wrt_args.into_iter().enumerate() {
-            if let Some(arg) = arg {
-                let new_ad_node = self
+        match wrt_ty {
+            //is already linear
+            Ty::Scalar => Ok(smallvec![entrypoint]),
+            Ty::Vector { width } => {
+                let autodiff_constructor = self
                     .graph
                     .on_region(&region, |g| {
-                        let new_ad_node =
-                            g.insert_node(OptNode::new(AutoDiff::default(), Span::empty()));
+                        let constr = g.insert_node(OptNode::new(
+                            Construct::new().with_inputs(width),
+                            Span::empty(),
+                        ));
 
-                        //Connect the expression
-                        let _edg = g
-                            .ctx_mut()
-                            .connect(
-                                autodiff_src,
-                                new_ad_node.input(0),
-                                OptEdge::value_edge_unset(),
-                            )
-                            .unwrap();
-
-                        //and this node's wrt-arg
-                        let _edg = g
-                            .ctx_mut()
-                            .connect(arg, new_ad_node.input(1), OptEdge::value_edge_unset())
-                            .unwrap();
-
-                        //finally connect the node to the new constructor
-                        let _edg = g
-                            .ctx_mut()
-                            .connect(
-                                new_ad_node.output(0),
-                                autodiff_constructor.input(wrt_idx),
-                                OptEdge::value_edge_unset(),
-                            )
-                            .unwrap();
-                        new_ad_node
+                        constr
                     })
                     .unwrap();
 
-                new_ad_entrypoints.push(new_ad_node);
-            } else {
-                return Err(AutoDiffError::EmptyWrtArg.into());
+                let mut new_ad_entrypoints = SmallColl::new();
+                for wrt_idx in 0..width {
+                    //Now build a construction node, where the input is a similar AD node, but with
+                    //just one wrt-arg.
+                    let new_ad_node = self
+                        .graph
+                        .on_region(&region, |g| {
+                            let (wrt_index, _) = g
+                                .connect_node(
+                                    OptNode::new(ConstantIndex::new(wrt_idx), span.clone()),
+                                    &[wrt_src],
+                                )
+                                .unwrap();
+
+                            let (new_ad_node, _) = g
+                                .connect_node(
+                                    OptNode::new(AutoDiff::default(), Span::empty()),
+                                    &[autodiff_src, wrt_index.output(0)],
+                                )
+                                .unwrap();
+
+                            //connect to the construct node as well
+                            g.ctx_mut()
+                                .connect(
+                                    new_ad_node.output(0),
+                                    autodiff_constructor.input(wrt_idx),
+                                    OptEdge::value_edge_unset(),
+                                )
+                                .unwrap();
+
+                            new_ad_node
+                        })
+                        .unwrap();
+
+                    new_ad_entrypoints.push(new_ad_node);
+                }
+
+                //before returning, replace the current entrypoint with the constructor's
+                //output
+                self.graph
+                    .replace_node_uses(entrypoint, autodiff_constructor)?;
+
+                Ok(new_ad_entrypoints)
             }
+            Ty::Matrix { width, height } => {
+                todo!("Implement matrix-diff linearization!")
+            }
+            _ => return Err(AutoDiffError::LinearizeAdFailed.into()),
         }
-
-        //before returning, replace the current entrypoint with the constructor's
-        //output
-        self.graph
-            .replace_node_uses(entrypoint, autodiff_constructor)?;
-
-        Ok(new_ad_entrypoints)
     }
 
     ///Tries to canonicalize the AD `entrypoint` into only nodes that are differentiatable.

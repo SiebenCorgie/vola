@@ -26,15 +26,15 @@ enum Format {
 #[command(version, about, long_about = "Vola's CLI interface!")]
 struct Args {
     ///disables optimizations
-    #[arg(short, long, default_value_t = false)]
+    #[arg(long, default_value_t = false)]
     no_opt: bool,
 
     ///Disables only the constant-node-folding passes
-    #[arg(short, long, default_value_t = false)]
+    #[arg(long, default_value_t = false)]
     no_cnf: bool,
 
     ///Disables only the common-node-elemination passes
-    #[arg(short, long, default_value_t = false)]
+    #[arg(long, default_value_t = false)]
     no_cne: bool,
 
     ///Specifies the emitted format.

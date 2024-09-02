@@ -43,6 +43,8 @@ pub struct Activity {
     ///    if OutportLocation is a matrix, then the vec will hold the row-index (0) and the column-element (1) for the active element.
     ///    same goes for tensors
     pub wrt_producer: WrtProdMap,
+
+    pub host_region: RegionLocation,
 }
 
 impl Activity {
@@ -128,6 +130,15 @@ impl Activity {
         if let Some(state) = self.active.get(&port.into()) {
             *state
         } else {
+            //If the port is an argument to the host region (and not already tagged as active by the seeding)
+            //procedure,
+            //set it as inactive
+            if port.output.is_argument() && port.node == self.host_region.node {
+                println!("Setting {:?} as inactive", port);
+                self.active.set(port.into(), false);
+                return false;
+            }
+
             //NOTE: Trace the port's node, and overwrite the querried node afterwards
             let port_active = self.is_node_active(opt, port.node);
             self.active.set(port.into(), port_active);
@@ -191,6 +202,7 @@ impl Optimizer {
         // This is a three-stage process.
         // 1. Find the actual value producer that is _active_. The dialects permit none-transforming nodes like _index_
 
+        let region = self.graph[entrypoint].parent.unwrap();
         let wrt_src = self
             .graph
             .inport_src(InportLocation {
@@ -231,6 +243,7 @@ impl Optimizer {
         let mut activity = Activity {
             active: activity_seed_nodes,
             wrt_producer,
+            host_region: region,
         };
 
         //Now just querry the _activity_ state once for each output, which lets the helper
