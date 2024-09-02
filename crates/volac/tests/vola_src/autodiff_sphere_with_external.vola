@@ -1,0 +1,21 @@
+
+
+entity Sphere(rad: s);
+concept Sdf: vec3 -> s;
+
+impl Sphere for Sdf(at){
+    length(at) - rad
+}
+
+operation MyAdOp();
+
+impl MyAdOp<sub> for Sdf(at){
+    let sd = eval sub.Sdf(at);
+
+    length([diff(sd, at.x); 3])
+}
+
+export mysdf(at: vec3, time: s){
+    csg sphere = MyAdOp(){Sphere(time)};
+    eval sphere.Sdf(at)
+}
