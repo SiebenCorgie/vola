@@ -377,7 +377,38 @@ impl Optimizer {
                 Ok((output, subdiff))
             }
             BinaryArithOp::Mod => {
-                todo!()
+                //If allowed diff |x| => x / |x|
+                //NOTE that this is undefined on x == 0
+                if self.config.autodiff.abort_on_undiff {
+                    return Err(AutoDiffError::UndiffNode(format!(
+                        "{}",
+                        self.graph[node].name()
+                    )));
+                }
+
+                let x_src = self.graph.inport_src(node.input(0)).unwrap();
+                let result = self
+                    .graph
+                    .on_region(&region, |g| {
+                        let (x_abs, _) = g
+                            .connect_node(
+                                OptNode::new(UnaryArith::new(UnaryArithOp::Abs), span.clone()),
+                                &[x_src],
+                            )
+                            .unwrap();
+
+                        let (div_out, _) = g
+                            .connect_node(
+                                OptNode::new(BinaryArith::new(BinaryArithOp::Div), span),
+                                &[x_src, x_abs.output(0)],
+                            )
+                            .unwrap();
+
+                        div_out
+                    })
+                    .unwrap();
+
+                Ok(self.build_chain_rule_for(&region, result.output(0), x_src))
             }
         }
     }
