@@ -6,21 +6,19 @@
  * 2024 Tendsin Mende
  */
 
-use std::collections::VecDeque;
-
-use ahash::{AHashMap, AHashSet};
+use ahash::AHashMap;
 use rvsdg::{
     attrib::FlagStore,
-    edge::{InportLocation, OutportLocation},
+    edge::{InportLocation, InputType, OutportLocation},
     region::RegionLocation,
-    smallvec::{smallvec, SmallVec},
+    smallvec::smallvec,
     util::abstract_node_type::AbstractNodeType,
     NodeRef, SmallColl,
 };
 use vola_common::Span;
 
 use crate::{
-    alge::ConstantIndex,
+    alge::{ConstantIndex, Construct},
     common::Ty,
     imm::{ImmScalar, ImmVector},
     OptError, OptNode, Optimizer,
@@ -28,7 +26,7 @@ use crate::{
 
 use super::AutoDiff;
 
-type WrtProdMap = AHashMap<OutportLocation, SmallVec<[usize; 4]>>;
+type WrtProdMap = AHashMap<OutportLocation, SmallColl<usize>>;
 pub struct Activity {
     ///All nodes or ports from which we _know_ the activity state.
     pub active: FlagStore<bool>,
@@ -221,14 +219,7 @@ impl Optimizer {
 
         let (activity_seed_nodes, wrt_producer) = self.trace_activity_seed(wrt_src);
 
-        //Preset the activity state with all active seed nodes
-        /*
-                println!("Seeding with: ");
-                for (k, s) in &activity_seed_nodes.flags {
-                    println!("    {k:?} : {s}");
-                }
-        */
-        //NOTE: right now we just build the activity for all nodes that are predecessors to thea expression
+        //NOTE: right now we just build the activity for all nodes that are predecessors to the expression
         //
         //TODO: We _could_ also build that thing lazyly. At least the Activity _thingy_ would permit that. But
         //      In that case we'd have to update all passes that _assume_ all active nodes set to querry instead.
@@ -259,159 +250,224 @@ impl Optimizer {
         Ok(activity)
     }
 
-    ///Traces all nodes that are connected to `wrt` _backwards_, till it ends at either a
-    /// Value producing node, or a region-argument
     fn trace_activity_seed(&self, wrt: OutportLocation) -> (FlagStore<bool>, WrtProdMap) {
-        let mut seeds = SmallColl::new();
-        let mut seen_nodes = AHashSet::new();
-        let mut stack = VecDeque::new();
-        stack.push_back(wrt);
+        //First build a path of indexes, that let us access the wrt-port's scalar value.
 
-        while let Some(next) = stack.pop_front() {
-            //add the port to the seed ports regardless
-            seeds.push(next);
+        let mut path = SmallColl::new();
+        self.build_prime_path(wrt, &mut path, 0);
 
-            //If this node was not yet inspected, check if
-            //its a producer, or if it needs to terminate this trace.
-            if seen_nodes.contains(&next.node) {
-                continue;
-            } else {
-                //add as seen
-                seen_nodes.insert(next.node);
+        //Pop the last element, which is the actual producer at  this point
+        let start = path.pop().unwrap();
+
+        let access_index_list = if path.len() > 0 {
+            //If there ist still a rest, unify that to indices
+            path.reverse();
+            self.unify_index_path(path)
+        } else {
+            //otherwise the start is already the scalar value wrt-arg,
+            //so no index list
+            SmallColl::new()
+        };
+
+        //Now explore all start-connected non-value-producer chains with regards to the access-index-list
+        //and tag all producers in the prod map, as well as all ports and nodes we see as active
+        self.explore_producer_trace(start, access_index_list)
+    }
+
+    //Small helper that iterates the path from the back to find the last ConstantIndex on that path.
+    fn last_n_index_on_path(&self, path: &[OutportLocation], n: usize) -> Option<usize> {
+        let mut n = n;
+        for port in path.iter().rev() {
+            if let Some(idx) = self.try_unwrap_node::<ConstantIndex>(port.node) {
+                if n == 0 {
+                    return Some(idx.access);
+                } else {
+                    n = n - 1;
+                }
             }
+        }
 
-            if !self.is_value_producer(next.node) {
-                //is not a value producer, so enqueue all predecessors
-                for inp in self.graph[next.node].input_srcs(&self.graph) {
-                    if let Some(src) = inp {
-                        stack.push_back(src);
+        None
+    }
+
+    //Recursive prime path construction. Builds the `path` to the initial value producing path
+    fn build_prime_path(
+        &self,
+        port: OutportLocation,
+        path: &mut SmallColl<OutportLocation>,
+        consecutive_construct_chain: usize,
+    ) {
+        path.push(port);
+        //Break on argument-port, or value producer.
+        if port.output.is_argument() || self.is_value_producer(port.node) {
+            return;
+        } else {
+            //if this is a consruction node, take the last known index
+            //else just recurse the producer
+            if self.is_node_type::<ConstantIndex>(port.node) {
+                let src = self.graph.inport_src(port.node.input(0)).unwrap();
+                //NOTE: remove one from construct chain (if needed)
+                self.build_prime_path(
+                    src,
+                    path,
+                    consecutive_construct_chain.checked_sub(1).unwrap_or(0),
+                )
+            } else {
+                if self.is_node_type::<Construct>(port.node) {
+                    //Find the n-last-index-element...
+                    //NOTE: lets say we have a chain `START->Construct[A]-Construct[B]-Index[C]-Index[D]`
+                    //      then CONSTRUCT[A] is indexed by Index[D], and Construct[B] is indexed by Index[C].
+                    //      so we keep track of _how-far-back_ we'd need to go for our index
+                    let last_index = self
+                        .last_n_index_on_path(path, consecutive_construct_chain)
+                        .expect("Expected any index on path!");
+                    //... so we know which construct to follow
+                    let index_src = self.graph.inport_src(port.node.input(last_index)).unwrap();
+                    self.build_prime_path(index_src, path, consecutive_construct_chain + 1)
+                } else {
+                    //Note should not happen, since self.is_value_producer() should be mutual
+                    //exclusive to the else branch...
+                    panic!("Unreachable reached!");
+                }
+            }
+        }
+    }
+
+    //Unify the index path by merging all `Construct->Index[N]` chains.
+    //So `Construct->Index[N]->Construct->Index[M]->Index[I]` becomes `Index[I]`.
+    fn unify_index_path(&self, mut prime_path: SmallColl<OutportLocation>) -> SmallColl<usize> {
+        //NOTE use a restart loop that searches Construct-Index pairs from the front till it can't find any
+        'restart: loop {
+            let mut construct_index = None;
+            for i in 0..prime_path.len() {
+                if let Some(construct_index) = construct_index {
+                    //searching for a index
+                    if self.is_node_type::<ConstantIndex>(prime_path[i].node) {
+                        //remove both from the prime path and restart
+                        assert!(construct_index < i);
+                        prime_path.remove(i);
+                        prime_path.remove(construct_index);
+                        continue 'restart;
+                    }
+                } else {
+                    //Searching for a construct
+                    if self.is_node_type::<Construct>(prime_path[i].node) {
+                        construct_index = Some(i);
                     }
                 }
             }
+            //If we came till here, the search didn't find anything, so break out of the restart loop
+            break;
         }
-        //turns the seed trace to _start_ at the origin, and end at the wrt-arg src.
-        seeds.reverse();
-        self.propagate_activity_seed(seeds)
-    }
 
-    ///Propagates the acivity trace and taggs all nodes that are
-    ///equal on a level. Returns flagstore that flags all nodes
-    /// and ports on that trace, as well as a list of all wrt-argument producing
-    /// nodes, ie. nodes that are equal to the wrt-argument-connected node.
-    ///
-    /// Example: using a wrt argument `a.x.y`, which indexes a matrix
-    /// `a`, for the first column, and that column's second value:
-    /// The `trace_activity_seed` will find the origin of `a`, as well as the `.y` and `.x` indexing operations.
-    ///
-    /// This propagation will tag all `.x` operations that are
-    /// directly connected to the `a` value, and then
-    /// tag all `.y` operations that are connected to a `a.y`
-    /// operation.
-    fn propagate_activity_seed(
-        &self,
-        seed_trace: SmallColl<OutportLocation>,
-    ) -> (FlagStore<bool>, WrtProdMap) {
-        let mut wrt_related = FlagStore::new();
-        let mut end_ports = WrtProdMap::new();
-
-        //trace from the start (which is _some_ value producing port)
-        //if the trace is only 1 long, we can just use that and do no work
-        let start = seed_trace[0];
-        //build the index list we have to follow for valid producer-index-ops.
-        let index_path = seed_trace[1..]
-            .iter()
+        //Now unify the filtered prime path to a list of indices
+        prime_path
+            .into_iter()
             .map(|port| {
-                if let Some(node) = self.try_unwrap_node::<ConstantIndex>(port.node) {
-                    node.access
-                } else {
-                    panic!("None indexing node in index path!");
-                }
+                self.try_unwrap_node::<ConstantIndex>(port.node)
+                    .expect("Expected only index-nodes!")
+                    .access
             })
-            .collect::<SmallColl<_>>();
-        //shortcut that needs no tracing, if there is no indexing at all.
-        if seed_trace.len() == 1 {
-            end_ports.insert(start, SmallVec::from_slice(&index_path));
-            wrt_related.set(start.into(), true);
-            return (wrt_related, end_ports);
-        } else {
-            //seed the trace with all value-connected indexing operations, and add the
-            //value itself to wrt-related regardless, and add it, if there is any non-indexing
-            //node connected
-            wrt_related.set(start.into(), true);
-            end_ports.insert(start, SmallVec::from_slice(&index_path));
-
-            for connected in self.graph.outport_dsts(start) {
-                if self.is_node_type::<ConstantIndex>(connected.node) {
-                    //trace _the rest_ from the origin part
-                    self.trace_for_index_path(
-                        connected.node,
-                        &index_path,
-                        &mut wrt_related,
-                        &mut end_ports,
-                    );
-                }
-            }
-        }
-
-        (wrt_related, end_ports)
+            .collect()
     }
 
-    fn trace_for_index_path(
+    fn explore_producer_trace(
         &self,
-        node: NodeRef,
-        index_list: &[usize],
-        wrt_related: &mut FlagStore<bool>,
-        end_ports: &mut WrtProdMap,
-    ) {
-        assert!(self.graph[node].outputs().len() == 1);
-        let this_index = if let Some(n) = self.try_unwrap_node::<ConstantIndex>(node) {
-            n.access
-        } else {
-            panic!("non indexing in index trace")
-        };
+        prod: OutportLocation,
+        index_path: SmallColl<usize>,
+    ) -> (FlagStore<bool>, WrtProdMap) {
+        let mut activity = FlagStore::new();
+        let mut prodmap = WrtProdMap::new();
 
-        //check if this is a valid index, if not, return without doing anything
-        if this_index != index_list[0] {
-            //blacklist this index
-            wrt_related.set(node.into(), false);
-            //and all its outputs
-            for output in self.graph[node].outport_types() {
-                wrt_related.set(OutportLocation { node, output }.into(), false);
-            }
-            return;
+        //Pre insert the producer
+        prodmap.insert(prod, index_path.clone());
+        activity.set(prod.into(), true);
+
+        //Now explore all succ to the producer, stopping at value-producing nodes (and result-ports)
+        for succ in self.graph[prod].edges.clone() {
+            let dst = *self.graph[succ].dst();
+            self.explore_inport(&mut activity, &mut prodmap, dst, index_path.clone());
         }
-        //otherwise, recurse for all connected index nodes, and add this value to end-ports
-        //if any non-indexing nodes are connected.
-        //add to wrt-related regardless
-        wrt_related.set(node.into(), true);
-        wrt_related.set(node.output(0).into(), true);
 
-        let mut is_end_port = false;
-        for connected in self.graph.outport_dsts(node.output(0)) {
-            if self.is_node_type::<ConstantIndex>(connected.node) {
-                //recurse, but only if indices are left
-                if index_list.len() > 1 {
-                    self.trace_for_index_path(
-                        connected.node,
-                        &index_list[1..],
-                        wrt_related,
-                        end_ports,
-                    );
+        (activity, prodmap)
+    }
+
+    fn explore_inport(
+        &self,
+        activity: &mut FlagStore<bool>,
+        prodmap: &mut WrtProdMap,
+        port: InportLocation,
+        mut index_path: SmallColl<usize>,
+    ) {
+        //Only recurse for non producers
+        if !self.is_value_producer(port.node) {
+            //for constructs, checkout _from where_ we come, and add that index
+            //to the list, for ConstantIndex, check if we are indexing _the correct_
+            //value.
+
+            if let Some(constant_index) = self.try_unwrap_node::<ConstantIndex>(port.node) {
+                assert!(
+                    index_path.len() > 0,
+                    "Expected non empty index path at ConstantIndex, this is probably a bug!"
+                );
+                let expected = index_path.remove(0);
+                if expected == constant_index.access {
+                    //is the correct one, add this node to the producer list, and to the active list
+                    prodmap.insert(port.node.output(0), index_path.clone());
+                    activity.set(port.node.into(), true);
+                    activity.set(port.node.output(0).into(), true);
+                    //and finally recurse
+                    for dst in self.graph.outport_dsts(port.node.output(0)) {
+                        self.explore_inport(activity, prodmap, dst, index_path.clone());
+                    }
+                } else {
+                    //is not the correct index, break recursion
+                    return;
                 }
             } else {
-                //tag as endport
-                is_end_port = true;
-            }
-        }
+                if self.is_node_type::<Construct>(port.node) {
+                    let const_index = if let InputType::Input(n) = port.input {
+                        n
+                    } else {
+                        panic!("Unexpected inport-type on construct: {:?}", port);
+                    };
+                    //Push to front, since we need to index that, to arrive back at the old path
+                    index_path.insert(0, const_index);
 
-        if is_end_port {
-            end_ports.insert(node.output(0), SmallVec::from_slice(&index_list[1..]));
+                    //add node to active and producer list
+                    activity.set(port.node.into(), true);
+                    activity.set(port.node.output(0).into(), true);
+                    //NOTE: Add to prod map with _new_ index_path
+                    prodmap.insert(port.node.output(0), index_path.clone());
+
+                    //now recurs
+                    for dst in self.graph.outport_dsts(port.node.output(0)) {
+                        self.explore_inport(activity, prodmap, dst, index_path.clone());
+                    }
+                }
+            }
+        } else {
+            //In case of producer, tag the node and all outports as active, but not as producers
+            //but only if port is part of a simple node
+            if self.graph[port.node].node_type.is_simple() {
+                activity.set(port.node.into(), true);
+                for output in self.graph[port.node].outport_types() {
+                    activity.set(
+                        OutportLocation {
+                            node: port.node,
+                            output,
+                        }
+                        .into(),
+                        true,
+                    );
+                }
+            }
         }
     }
 
     fn is_value_producer(&self, node: NodeRef) -> bool {
         //FIXME: While currently correct, this is a _really_ bad way of finding that out :((
-        if self.is_node_type::<ConstantIndex>(node) {
+        if self.is_node_type::<ConstantIndex>(node) || self.is_node_type::<Construct>(node) {
             false
         } else {
             true

@@ -57,13 +57,12 @@ use ahash::AHashMap;
 use rvsdg::{
     edge::{InportLocation, OutportLocation},
     region::RegionLocation,
-    smallvec::smallvec,
     util::abstract_node_type::AbstractNodeType,
     NodeRef,
 };
 use vola_common::{error::error_reporter, report, Span};
 
-use crate::{alge::Construct, autodiff::AutoDiff, OptEdge, OptError, Optimizer};
+use crate::{autodiff::AutoDiff, OptEdge, OptError, Optimizer};
 
 use super::{activity::Activity, AutoDiffError};
 
@@ -78,12 +77,6 @@ impl Optimizer {
                 "AD Entrypoint was not of type AutoDiff"
             )));
         }
-
-        //now dispatch the sub-ad part for all wrt arguments
-        let wrt_src = self
-            .graph
-            .inport_src(entrypoint.as_inport_location(AutoDiff::wrt_input()))
-            .unwrap();
 
         //If the wrt-arg is a constructor, linearize the ad-entrypoint into
         // multiple AD-Nodes with a single (scalar) WRT-Arg.

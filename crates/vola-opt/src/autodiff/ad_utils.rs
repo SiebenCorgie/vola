@@ -124,7 +124,10 @@ impl Optimizer {
 
                 Ok(new_ad_entrypoints)
             }
-            Ty::Matrix { width, height } => {
+            Ty::Matrix {
+                width: _,
+                height: _,
+            } => {
                 todo!("Implement matrix-diff linearization!")
             }
             _ => return Err(AutoDiffError::LinearizeAdFailed.into()),

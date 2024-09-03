@@ -1,0 +1,14 @@
+module std;
+
+operation MyAdOp();
+
+impl MyAdOp<sub> for SDF3D(at){
+    let sd = eval sub.SDF3D(at);
+    let matad = [at, [0.0; 3], [0.0; 3]];
+    length([diff(sd, matad.x.x); 3])
+}
+
+export mysdf(at: vec3){
+    csg sphere = MyAdOp(){Box([1.0; 3])};
+    eval sphere.SDF3D(at)
+}
