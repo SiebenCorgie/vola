@@ -520,11 +520,11 @@ impl<N: LangNode + 'static> Node<N> {
 
     ///Returns the input port's connected edges. This is guranteed to have the length
     /// (and order) of [Self::inputs].
-    pub fn input_edges(&self) -> SmallVec<[Option<EdgeRef>; 3]> {
+    pub fn input_edges(&self) -> SmallColl<Option<EdgeRef>> {
         self.inputs().iter().map(|inp| inp.edge.clone()).collect()
     }
 
-    pub fn output_edges(&self) -> SmallVec<[SmallVec<[EdgeRef; 3]>; 3]> {
+    pub fn output_edges(&self) -> SmallColl<SmallColl<EdgeRef>> {
         self.outputs().iter().map(|op| op.edges.clone()).collect()
     }
 

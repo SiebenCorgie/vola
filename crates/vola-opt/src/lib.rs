@@ -31,6 +31,7 @@ use alge::{
     implblock::{ConceptImpl, ConceptImplKey},
 };
 use common::Ty;
+use config::Config;
 use csg::{exportfn::ExportFn, fielddef::FieldDef};
 use rvsdg::{attrib::FlagStore, Rvsdg};
 
@@ -48,6 +49,7 @@ pub mod csg;
 mod error;
 pub use error::OptError;
 mod autodiff;
+pub mod config;
 mod graph;
 pub mod imm;
 mod passes;
@@ -101,6 +103,8 @@ pub struct Optimizer {
 
     #[cfg(feature = "viewer")]
     pub viewer_state: rvsdg_viewer::ViewerState,
+
+    pub config: Config,
 }
 
 impl Optimizer {
@@ -119,6 +123,7 @@ impl Optimizer {
             var_producer: FlagStore::new(),
             #[cfg(feature = "viewer")]
             viewer_state: rvsdg_viewer::ViewerState::new(),
+            config: Config::default(),
         }
     }
 
@@ -249,7 +254,16 @@ impl Optimizer {
     ///Pushes the current graph state under the given name.
     #[cfg(feature = "viewer")]
     pub fn push_debug_state(&mut self, name: &str) {
+        self.push_debug_state_with(name, |t| t)
+    }
+
+    #[cfg(feature = "viewer")]
+    pub fn push_debug_state_with<F>(&mut self, name: &str, with: F)
+    where
+        F: FnOnce(rvsdg_viewer::GraphStateBuilder) -> rvsdg_viewer::GraphStateBuilder,
+    {
         //NOTE propbably do not rebuild this each time?
+
         let mut typemap = self.typemap.clone();
         for edge in self.graph.edges() {
             if let Some(ty) = self.graph.edge(edge).ty.get_type() {
@@ -262,14 +276,17 @@ impl Optimizer {
             ..Default::default()
         };
 
-        self.viewer_state
-            .new_state_builder(name, &self.graph, &layout_config)
-            .with_flags("Type", &typemap)
-            .with_flags("Span", &self.span_tags)
-            .with_flags("Name", &self.names)
-            .with_flags("Variable Producer", &self.var_producer)
-            .build();
+        {
+            let builder = self
+                .viewer_state
+                .new_state_builder(name, &self.graph, &layout_config)
+                .with_flags("Type", &typemap)
+                .with_flags("Span", &self.span_tags)
+                .with_flags("Name", &self.names)
+                .with_flags("Variable Producer", &self.var_producer);
 
+            with(builder).build();
+        }
         if std::env::var("VOLA_ALWAYS_WRITE_DUMP").is_ok() {
             self.dump_debug_state(&format!("{name}.bin"));
         }

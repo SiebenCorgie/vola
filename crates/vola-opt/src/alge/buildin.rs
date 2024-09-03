@@ -344,19 +344,17 @@ impl BuildinOp {
                     });
                 }
                 match &sig[0] {
-                    Ty::Scalar => {}
+                    Ty::Scalar => Ok(Some(Ty::Scalar)),
+                    Ty::Vector { width } => Ok(Some(Ty::Vector { width: *width })),
                     _ => {
                         return Err(OptError::Any {
                             text: format!(
-                                "SquareRoot expects operand of type scalar, got {:?}",
+                                "SquareRoot expects operand of type scalar, or vector got {:?}",
                                 sig[0]
                             ),
                         })
                     }
                 }
-
-                //seems to be alright, return scalar
-                Ok(Some(Ty::Scalar))
             }
             Self::Exp => {
                 if sig.len() != 1 {
@@ -365,16 +363,14 @@ impl BuildinOp {
                     });
                 }
                 match &sig[0] {
-                    Ty::Scalar => {}
+                    Ty::Scalar => Ok(Some(Ty::Scalar)),
+                    Ty::Vector { width } => Ok(Some(Ty::Vector { width: *width })),
                     _ => {
                         return Err(OptError::Any {
                             text: format!("Exp expects operands of type scalar, got {:?}", sig[0]),
                         })
                     }
                 }
-
-                //seems to be alright, return scalar
-                Ok(Some(Ty::Scalar))
             }
             Self::Pow => {
                 if sig.len() != 2 {

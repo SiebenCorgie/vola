@@ -53,23 +53,21 @@
 //! part being, that for any constant we can reuse parts of the original
 //! graph.
 
+use ahash::AHashMap;
 use rvsdg::{
-    attrib::AttribLocation,
-    edge::{InportLocation, OutportLocation, OutputType},
+    edge::{InportLocation, OutportLocation},
+    region::RegionLocation,
     smallvec::smallvec,
-    NodeRef, SmallColl,
+    util::abstract_node_type::AbstractNodeType,
+    NodeRef,
 };
-use vola_common::Span;
+use vola_common::{error::error_reporter, report, Span};
 
-use crate::{
-    alge::Construct,
-    autodiff::AutoDiff,
-    common::Ty,
-    imm::{ImmNat, ImmScalar},
-    OptEdge, OptError, OptNode, Optimizer, TypeState,
-};
+use crate::{alge::Construct, autodiff::AutoDiff, OptEdge, OptError, Optimizer};
 
-use super::AutoDiffError;
+use super::{activity::Activity, AutoDiffError};
+
+type DiffExprCache = AHashMap<OutportLocation, OutportLocation>;
 
 impl Optimizer {
     ///Executes forward-ad pass on `entrypoint`. Assumes that it is a `AutoDiff` node. If that is the case, the node will be replaced
@@ -104,6 +102,15 @@ impl Optimizer {
             self.canonicalize_for_ad(*entrypoint)?;
         }
 
+        //do type derive and dead-node elemination in order to have
+        // a) clean DAG (faster / easier transformation)
+        // b) type information to emit correct zero-nodes
+
+        let region = self.graph[entrypoint].parent.unwrap();
+        self.graph.dne_region(region)?;
+        let span = self.find_span(region.into()).unwrap_or(Span::empty());
+        self.derive_region(region, span)?;
+
         if std::env::var("VOLA_DUMP_ALL").is_ok()
             || std::env::var("DUMP_FWAD_CANONICALIZED").is_ok()
         {
@@ -129,14 +136,6 @@ impl Optimizer {
     fn forward_diff(&mut self, diffnode: NodeRef) -> Result<(), OptError> {
         let region = self.graph.node(diffnode).parent.unwrap();
 
-        let wrt_src = self
-            .graph
-            .inport_src(InportLocation {
-                node: diffnode,
-                input: AutoDiff::wrt_input(),
-            })
-            .ok_or(OptError::from(AutoDiffError::EmptyWrtArg))?;
-
         let expr_src = self
             .graph
             .inport_src(InportLocation {
@@ -148,26 +147,170 @@ impl Optimizer {
         //find all active nodes of this expression, then start doing the forward iteration,
         //guided by the activity analysis.
 
-        let active = self.activity_explorer(diffnode)?;
+        let activity = self.activity_explorer(diffnode)?;
 
-        println!("Active nodes:");
-        for v in active.flags.keys() {
-            if let AttribLocation::Node(n) = v {
+        if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("DUMP_AD_ACTIVITY").is_ok() {
+            self.push_debug_state_with(&format!("fw-autodiff-{diffnode}-activity"), |builder| {
+                builder.with_flags("activity", &activity.active)
+            });
+        }
+        /*
+        println!("Active Nodes: ");
+        for active in activity.active.flags.keys() {
+            if let AttribLocation::Node(n) = active {
                 println!("    {n}");
             }
         }
 
-        let tmp_repl = self
-            .graph
-            .on_region(&region, |reg| {
-                reg.insert_node(OptNode::new(ImmScalar::new(42.0), Span::empty()))
-                    .output(0)
-            })
-            .ok_or(OptError::Internal(format!("Föck")))?;
+        println!("WRT-Outputs");
+        for o in &activity.wrt_producer {
+            println!("    {o:?}");
+        }
+        */
+
+        let mut expr_cache = DiffExprCache::new();
+        let diffed_src =
+            self.fwad_handle_node(region, expr_src.node, &activity, &mut expr_cache)?;
 
         //replace the differential_value and the autodiff node
-        self.graph.replace_node_uses(diffnode, tmp_repl.node)?;
+        self.graph.replace_node_uses(diffnode, diffed_src.node)?;
 
         Ok(())
+    }
+
+    ///The push-forward recursive differentiation handler.
+    ///The idea is to apply all auto-diff rules _simply_ recursively.
+    ///
+    /// On paper this might generate a lot of redundant code/nodes. In practice
+    /// a common-node-elemination pass can take care of that.
+    ///
+    ///
+    /// The _nice_ part about the recursive pattern is, that we can apply all
+    /// rules simply by traversing the dependecy DAG of a node an rewriting said node
+    /// according to the rules.
+    ///
+    /// So given a node N = f(g(x)), that needs to apply the chain rule, we can simply
+    /// split the tree into f'(g(x)) (where g(x) is the original _rest_ of the DAG), and
+    /// g'(x), where we just call fwad_handle_node(g) to recursively process _the rest_.
+    fn fwad_handle_node(
+        &mut self,
+        region: RegionLocation,
+        node: NodeRef,
+        activity: &Activity,
+        expr_cache: &mut DiffExprCache,
+    ) -> Result<OutportLocation, OptError> {
+        //Any node that is not active can be considered a _constant_
+        //therfore the derivative is always zero.
+        if !activity.is_active(node).unwrap_or(false) {
+            let zero_node = self.emit_zero_for_node(region, node);
+            return Ok(zero_node);
+        }
+
+        match self.graph[node].into_abstract() {
+            AbstractNodeType::Simple => {
+                //active simple nodes are our _main_ working point.
+                // We can skip all non-alge-dialect, nodes by simply recursing.
+                // The alge dialect nodes are then handled in a seperate dispatch
+                // handler.
+
+                match self.graph[node]
+                    .node_type
+                    .unwrap_simple_ref()
+                    .node
+                    .dialect()
+                {
+                    "alge" => self.fwd_handle_alge_node(region, node, activity, expr_cache),
+                    "autodiff" => {
+                        report(
+                            error_reporter(
+                                OptError::from(AutoDiffError::UnexpectedAutoDiffNode),
+                                Span::empty(),
+                            )
+                            .finish(),
+                        );
+
+                        return Err(AutoDiffError::UnexpectedAutoDiffNode.into());
+                    }
+                    "imm" => {
+                        //an active immediate value will be splat to zero, since this will always
+                        //be equivalent to a constant.
+                        Ok(self.emit_zero_for_node(region, node))
+                    }
+                    other => {
+                        //Right now we panic for all unknown nodes.
+                        //
+                        // The _right_ thing to do would be to find out if this node
+                        // is relevant to AD, if not, overstep, otherwise let it AD
+                        // itself.
+                        panic!("Unexpected dialect {other}");
+                    }
+                }
+            }
+            AbstractNodeType::Apply => {
+                todo!("Function calls not yet implemented!")
+            }
+            other => return Err(AutoDiffError::FwadUnexpectedNodeType(other).into()),
+        }
+    }
+
+    ///Handles any _potentually_ differentiatable node
+    fn fwd_handle_alge_node(
+        &mut self,
+        region: RegionLocation,
+        node: NodeRef,
+        activity: &Activity,
+        expr_cache: &mut DiffExprCache,
+    ) -> Result<OutportLocation, OptError> {
+        //This is the point, where we handle the dispatch of the chain rule.
+        //
+        //Note that things like cross-product-rule, quotient-rule or dot-product-rule are
+        //handeled by the respective node.
+        //
+        //however, dispatching the chain-rule can / must be done
+
+        let (result, postdiffs) = self.build_diff_value(region, node, activity)?;
+        for (post_diff_src, targets) in postdiffs {
+            //Try to reuse expr-cache, otherwise build new subexpression
+            let diff_expr_src = if let Some(cached) = expr_cache.get(&post_diff_src) {
+                *cached
+            } else {
+                let diffvalue =
+                    self.fwad_handle_port(region, post_diff_src, activity, expr_cache)?;
+                expr_cache.insert(post_diff_src, diffvalue);
+                diffvalue
+            };
+            for t in targets {
+                self.graph
+                    .connect(diff_expr_src, t, OptEdge::value_edge_unset())?;
+            }
+        }
+
+        Ok(result)
+    }
+
+    //Small indirection that lets us catch active WRT-Ports. This is mostly used if
+    //a region-argument is also a wrt-argument, to end the recursion
+    fn fwad_handle_port(
+        &mut self,
+        region: RegionLocation,
+        port: OutportLocation,
+        activity: &Activity,
+        expr_cache: &mut DiffExprCache,
+    ) -> Result<OutportLocation, OptError> {
+        //A port that is part of the respect_to chain always derives to 1.0
+        if activity.is_wrt_producer(&port) {
+            //NOTE: _handling_ a wrt port means splatting it with 1.0
+            //      Math wise this is handling a expression:
+            //      f(x) = x;
+            //      where f'(x) = f'(x) = 1*x^0 = 1
+            //
+            //      For vectors this means initing _the-right_ index with one, same for matrix.
+            //      We have that information from the activity trace, which if why we'll use that.
+            //println!("Getting {port:?} : {:?}", activity.wrt_producer.get(&port));
+            Ok(activity.build_diff_init_value_for_wrt(self, region, port))
+        } else {
+            //Otherwise we need to recurse
+            self.fwad_handle_node(region, port.node, activity, expr_cache)
+        }
     }
 }

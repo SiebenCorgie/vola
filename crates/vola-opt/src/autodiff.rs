@@ -13,14 +13,17 @@
 //! The submoduls implement the actual autodiff pass as well a specific optimizations.
 
 mod activity;
+mod ad_canonicalize;
 mod ad_dispatch;
 mod ad_forward;
 mod ad_utils;
+mod diff_node;
 
 use rvsdg::{
     edge::InputType,
     region::{Input, Output},
     rvsdg_derive_lang::LangNode,
+    util::abstract_node_type::AbstractNodeType,
 };
 use vola_common::thiserror::Error;
 
@@ -36,6 +39,14 @@ pub enum AutoDiffError {
     EmptyWrtArg,
     #[error("Expr-Arg was empty")]
     EmptyExprArg,
+    #[error("Forward AutoDiff traversal encountered unexpected node type: {0:?}")]
+    FwadUnexpectedNodeType(AbstractNodeType),
+    #[error("Forward AutoDiff traversal had no implementation for node: {0:?}")]
+    NoAdImpl(String),
+    #[error("Encountered AutoDiff node while building derivative.")]
+    UnexpectedAutoDiffNode,
+    #[error("\"{0:?}\" can not be differentiated")]
+    UndiffNode(String),
 }
 
 //Macro that implements the "View" trait for the Autodiff

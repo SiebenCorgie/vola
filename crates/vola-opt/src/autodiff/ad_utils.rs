@@ -11,24 +11,33 @@
 //! Implements utility passes for the auto-diff implementations
 
 use rvsdg::{
-    attrib::{AttribLocation, FlagStore},
-    edge::{InportLocation, InputType, OutportLocation, OutputType},
-    NodeRef, SmallColl,
+    attrib::AttribLocation, edge::OutportLocation, region::RegionLocation, NodeRef, SmallColl,
 };
+use rvsdg_viewer::View;
 use vola_common::Span;
 
 use crate::{
-    alge::{
-        arithmetic::{BinaryArith, BinaryArithOp},
-        buildin::{Buildin, BuildinOp},
-        ConstantIndex, Construct,
-    },
+    alge::{arithmetic::UnaryArith, buildin::Buildin, Construct},
     autodiff::{AutoDiff, AutoDiffError},
-    common::Ty,
+    imm::ImmScalar,
     OptEdge, OptError, OptNode, Optimizer,
 };
 
 impl Optimizer {
+    ///Builds a _zero-value-node_ for the given node's output type. This means checking the output type, and
+    /// building that primitive set with just zero as value.
+    ///
+    /// Fails if the output of this node has no type.
+    pub fn emit_zero_for_node(&mut self, region: RegionLocation, node: NodeRef) -> OutportLocation {
+        assert!(self.graph[node].outputs().len() == 1);
+        if let Some(edg) = self.graph[node.output(0)].edges.get(0) {
+            let ty = self.graph[*edg].ty.get_type().unwrap();
+            self.splat_scalar(region, ImmScalar::new(0.0), ty.clone())
+        } else {
+            panic!("Node had no connections!");
+        }
+    }
+
     ///Transforms a entrypoint with multiple wrt-args into multiple AD-entrypoints with
     /// a single wrt arg.
     ///
@@ -124,7 +133,7 @@ impl Optimizer {
 
         let active = self.activity_explorer(entrypoint)?;
 
-        for v in active.flags.keys() {
+        for v in active.active.flags.keys() {
             if let AttribLocation::Node(n) = v {
                 self.handle_canon_node(*n)?;
             }
@@ -136,123 +145,39 @@ impl Optimizer {
     ///Canonicalizes `node` for ad.
     ///
     /// - Guarantees that the replaced node binds to all _formerly_ connected nodes
-    /// - Does delete other nodes (but might add / remove connections)
-    fn handle_canon_node(&mut self, node: NodeRef) -> Result<(), OptError> {
-        if let Some(buildin_node) = self.try_unwrap_node::<Buildin>(node) {
-            let target_region = self.graph[node].parent.unwrap().clone();
+    /// - Does not delete other nodes (but might add / remove connections)
+    pub(crate) fn handle_canon_node(&mut self, node: NodeRef) -> Result<(), OptError> {
+        let target_region = self.graph[node].parent.unwrap().clone();
 
-            match &buildin_node.op {
-                //Transform the buildin op to a square-root and multiplied parts
-                BuildinOp::Length => {
-                    let span = self.find_span(node.into()).unwrap_or(Span::empty());
-                    let src_value = self
-                        .graph
-                        .inport_src(InportLocation {
-                            node,
-                            input: InputType::Input(0),
-                        })
-                        .unwrap();
-                    let new_producer = self
-                        .graph
-                        .on_region(&target_region, |g| {
-                            //find the input type to the length node. We use that to
-                            //determin how often we need to index (and square)
-                            //the vector
-                            let index_count = {
-                                //sample first edge, must be connected at least once...
-                                let edg = g.ctx()[InportLocation {
-                                    node,
-                                    input: InputType::Input(0),
-                                }]
-                                .edge
-                                .unwrap();
-                                let ty = if let Some(t) = g.ctx()[edg].ty.get_type() {
-                                    t
-                                } else {
-                                    //TODO: do that better
-                                    panic!("Encountered untyped edge while canonicalizing");
-                                };
+        if self.is_node_type::<Buildin>(node) {
+            return self.handle_canon_buildin(&target_region, node);
+        }
 
-                                if let Ty::Vector { width } = ty {
-                                    *width
-                                } else {
-                                    panic!("Was no vector, was {ty}");
-                                }
-                            };
-
-                            //Index into vector n-times
-                            let mut indices = SmallColl::new();
-                            for idx in 0..index_count {
-                                let (new_node, _edges) = g
-                                    .connect_node(
-                                        OptNode::new(ConstantIndex::new(idx), span.clone()),
-                                        &[src_value],
-                                    )
-                                    .unwrap();
-                                indices.push(new_node.output(0));
-                            }
-
-                            //square each
-                            let squared = indices
-                                .into_iter()
-                                .map(|indexed| {
-                                    let (node, _edg) = g
-                                        .connect_node(
-                                            OptNode::new(
-                                                BinaryArith::new(BinaryArithOp::Mul),
-                                                span.clone(),
-                                            ),
-                                            &[indexed, indexed],
-                                        )
-                                        .unwrap();
-
-                                    node.output(0)
-                                })
-                                .collect::<SmallColl<_>>();
-
-                            //Add all squared indices
-                            assert!(squared.len() >= 2);
-                            let (mut last_add, _) = g
-                                .connect_node(
-                                    OptNode::new(
-                                        BinaryArith::new(BinaryArithOp::Add),
-                                        span.clone(),
-                                    ),
-                                    &[squared[0], squared[1]],
-                                )
-                                .unwrap();
-                            //now build the _staggered_ add chain.
-                            for next_idx in 2..squared.len() {
-                                let (new_last, _) = g
-                                    .connect_node(
-                                        OptNode::new(
-                                            BinaryArith::new(BinaryArithOp::Add),
-                                            span.clone(),
-                                        ),
-                                        &[last_add.output(0), squared[next_idx]],
-                                    )
-                                    .unwrap();
-
-                                last_add = new_last;
-                            }
-
-                            let (sqrt, _) = g
-                                .connect_node(
-                                    OptNode::new(Buildin::new(BuildinOp::SquareRoot), span),
-                                    &[last_add.output(0)],
-                                )
-                                .unwrap();
-
-                            sqrt
-                        })
-                        .unwrap();
-
-                    self.graph.replace_node_uses(node, new_producer)?;
-                }
-                _ => {}
-            }
+        if self.is_node_type::<UnaryArith>(node) {
+            return self.handle_canon_unary(&target_region, node);
         }
 
         Ok(())
+    }
+
+    ///Handles type derive and propagation of a node that is added while canonicalizing.
+    pub(crate) fn type_derive_and_propagate(&mut self, node: NodeRef) -> Result<(), OptError> {
+        match self.try_node_type_derive(node)? {
+            (Some(ty), outport) => {
+                self.typemap.set(outport.into(), ty.clone());
+                //push type on port into edges
+                for edg in self.graph[outport].edges.clone() {
+                    self.graph[edg].ty.set_type(ty.clone());
+                }
+
+                Ok(())
+            }
+            (None, _) => Err(OptError::Any {
+                text: format!(
+                    "Could not derive the type for canonicalized node \"{}\"",
+                    self.graph[node].name()
+                ),
+            }),
+        }
     }
 }
