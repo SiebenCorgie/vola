@@ -57,13 +57,12 @@ use ahash::AHashMap;
 use rvsdg::{
     edge::{InportLocation, OutportLocation},
     region::RegionLocation,
-    smallvec::smallvec,
     util::abstract_node_type::AbstractNodeType,
     NodeRef,
 };
 use vola_common::{error::error_reporter, report, Span};
 
-use crate::{alge::Construct, autodiff::AutoDiff, OptEdge, OptError, Optimizer};
+use crate::{autodiff::AutoDiff, OptEdge, OptError, Optimizer};
 
 use super::{activity::Activity, AutoDiffError};
 
@@ -79,20 +78,9 @@ impl Optimizer {
             )));
         }
 
-        //now dispatch the sub-ad part for all wrt arguments
-        let wrt_src = self
-            .graph
-            .inport_src(entrypoint.as_inport_location(AutoDiff::wrt_input()))
-            .unwrap();
-
         //If the wrt-arg is a constructor, linearize the ad-entrypoint into
         // multiple AD-Nodes with a single (scalar) WRT-Arg.
-        let entrypoints = if self.is_node_type::<Construct>(wrt_src.node) {
-            self.linearize_ad(entrypoint)?
-        } else {
-            //If already linear, just wrap it
-            smallvec![entrypoint]
-        };
+        let entrypoints = self.linearize_ad(entrypoint)?;
 
         if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("DUMP_FWAD_LINEARIZED").is_ok() {
             self.push_debug_state(&format!("fw-autodiff-{entrypoint}-linearized"));
@@ -288,8 +276,9 @@ impl Optimizer {
         Ok(result)
     }
 
-    //Small indirection that lets us catch active WRT-Ports. This is mostly used if
-    //a region-argument is also a wrt-argument, to end the recursion
+    //Small indirection that lets us catch active & WRT-Ports. This is mostly used if
+    //a region-argument is also a wrt-argument, to end the recursion, or emit zero if a region's non active
+    //argument is used.
     fn fwad_handle_port(
         &mut self,
         region: RegionLocation,
@@ -309,8 +298,12 @@ impl Optimizer {
             //println!("Getting {port:?} : {:?}", activity.wrt_producer.get(&port));
             Ok(activity.build_diff_init_value_for_wrt(self, region, port))
         } else {
-            //Otherwise we need to recurse
-            self.fwad_handle_node(region, port.node, activity, expr_cache)
+            if port.output.is_argument() && !activity.get_outport_active(port) {
+                Ok(self.emit_zero_for_port(region, port))
+            } else {
+                //Otherwise we need to recurse
+                self.fwad_handle_node(region, port.node, activity, expr_cache)
+            }
         }
     }
 }
