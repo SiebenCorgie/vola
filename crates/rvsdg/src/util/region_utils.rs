@@ -16,6 +16,7 @@ use crate::{
     err::GraphError,
     nodes::{LangNode, NodeType, StructuralNode},
     region::RegionLocation,
+    util::abstract_node_type::AbstractNodeType,
     NodeRef, Rvsdg, SmallColl,
 };
 
@@ -217,6 +218,23 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
         Ok(replacee_ref)
     }
 
+    ///Replaces all connections from `replaced` to any input with connections from `replacee`.
+    ///
+    ///Also takes care of carrying over the edge-types
+    pub fn replace_outport_uses(
+        &mut self,
+        replaced: OutportLocation,
+        replacee: OutportLocation,
+    ) -> Result<(), GraphError> {
+        for edge in self[replaced].edges.clone() {
+            let dst = *self[edge].dst();
+            let ty = self.disconnect(edge)?;
+            self.connect(replacee, dst, ty)?;
+        }
+
+        Ok(())
+    }
+
     ///Replaces all uses of `replaced` with `replacee`. Contrary to [replace_node](Rvsdg::replace_node) this does not change inputs to `replacee`.
     /// Instead all _output-connected-edges_ of `replaced` are routed to `replacee`.
     ///
@@ -230,10 +248,16 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
         replacee: NodeRef,
     ) -> Result<(), GraphError> {
         if !self.node(replaced).node_type.is_simple() {
-            return Err(GraphError::InvalidNode(replaced));
+            return Err(GraphError::UnexpectedNodeType(
+                AbstractNodeType::Simple,
+                self[replaced].into_abstract(),
+            ));
         }
         if !self.node(replacee).node_type.is_simple() {
-            return Err(GraphError::InvalidNode(replacee));
+            return Err(GraphError::UnexpectedNodeType(
+                AbstractNodeType::Simple,
+                self[replacee].into_abstract(),
+            ));
         }
 
         let reg_a = self.node(replaced).parent.clone();

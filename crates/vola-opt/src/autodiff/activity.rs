@@ -6,10 +6,12 @@
  * 2024 Tendsin Mende
  */
 
+use core::panic;
+
 use ahash::AHashMap;
 use rvsdg::{
     attrib::FlagStore,
-    edge::{InportLocation, InputType, OutportLocation},
+    edge::{InportLocation, InputType, OutportLocation, OutputType},
     region::RegionLocation,
     smallvec::smallvec,
     util::abstract_node_type::AbstractNodeType,
@@ -48,7 +50,7 @@ pub struct Activity {
 impl Activity {
     ///Tries to read the activity state of `node`. Returns None if the node does not
     /// appear in the activity list.
-    pub fn is_active(&self, node: NodeRef) -> Option<bool> {
+    fn is_active(&self, node: NodeRef) -> Option<bool> {
         if let Some(state) = self.active.get(&node.into()) {
             Some(*state)
         } else {
@@ -57,7 +59,7 @@ impl Activity {
     }
 
     ///Gets the activity state of this port. Returns false if either inactive, or no activity state is set
-    pub fn get_outport_active(&self, outport: OutportLocation) -> bool {
+    fn get_outport_active(&self, outport: OutportLocation) -> bool {
         if let Some(state) = self.active.get(&outport.into()) {
             *state
         } else {
@@ -128,19 +130,19 @@ impl Activity {
         if let Some(state) = self.active.get(&port.into()) {
             *state
         } else {
-            //If the port is an argument to the host region (and not already tagged as active by the seeding)
-            //procedure,
-            //set it as inactive
-            if port.output.is_argument() && port.node == self.host_region.node {
-                println!("Setting {:?} as inactive", port);
-                self.active.set(port.into(), false);
-                return false;
+            //If the port is an argument to a region, assume that the state already exists.
+            //otherwise either the `trace_activity_seed()` is buggy, or one of the
+            // sub-region handlers in `trace_node_activity()` for non simple nodes.
+            if port.output.is_argument() {
+                panic!("Argument-like port must already be set!");
             }
 
             //NOTE: Trace the port's node, and overwrite the querried node afterwards
-            let port_active = self.is_node_active(opt, port.node);
-            self.active.set(port.into(), port_active);
-            port_active
+            let _port_active = self.is_node_active(opt, port.node);
+            *self
+                .active
+                .get(&port.into())
+                .expect("Expected port activity to be set after tracing node!")
         }
     }
 
@@ -156,38 +158,125 @@ impl Activity {
     // 1. Finding cached value for node.
     // 2. at wrt-producer (and recursively taggs predecessors all as _active_)
     // 3. at region argument
-    fn trace_node_activity(&mut self, opt: &Optimizer, node: NodeRef) -> bool {
+    pub(crate) fn trace_node_activity(&mut self, opt: &Optimizer, node: NodeRef) -> bool {
         //TODO: Handle nodes with sub regions, Gamma&Theta nodes mostly...
 
-        //by definition, this node is active, if any of its predecessors is active
-        let mut any_active = false;
-        for pred in opt.graph[node].pred(&opt.graph) {
-            if self.is_active_port(opt, pred) {
-                any_active = true;
-            }
-        }
-
-        //now handle the activity by node type.
+        //handle the activity by node type.
         //
         //For simple nodes, we can just mark all outputs
         //for apply nodes, we can tag all active argument ports of the apply node's active inputs
         //in the λ-region.
         //
         //for Gamma/Theta nodes, we do this: https://arxiv.org/abs/1810.07951
-
-        //Overwrite this node, and all ports
-        self.active.set(node.into(), any_active);
         match opt.graph[node].into_abstract() {
             AbstractNodeType::Simple => {
+                //by definition, this node is active, if any of its predecessors is active
+                let mut any_active = false;
+                for pred in opt.graph[node].pred(&opt.graph) {
+                    if self.is_active_port(opt, pred) {
+                        any_active = true;
+                    }
+                }
+
+                //Overwrite this node, and all ports
+                self.active.set(node.into(), any_active);
                 for output in opt.graph[node].outport_types() {
                     self.active
                         .set(OutportLocation { node, output }.into(), any_active);
                 }
+
+                any_active
+            }
+            AbstractNodeType::Gamma => {
+                //By definition, gamma has only one output, exit_variable(0)
+                //however, to be future proof, assert that
+                assert!(
+                    opt.graph[node]
+                        .node_type
+                        .unwrap_gamma_ref()
+                        .exit_var_count()
+                        == 1
+                );
+
+                //Now map recurse all entry variables, and map their state into the gamma-region's branches.
+                //after that, call
+                for input in opt.graph[node].inport_types() {
+                    let src = opt
+                        .graph
+                        .inport_src(InportLocation { node, input }.into())
+                        .unwrap();
+                    let is_active = self.is_active_port(opt, src);
+
+                    let wrt_index_chain = self.wrt_producer.get(&src).cloned();
+
+                    for regidx in 0..opt.graph[node].regions().len() {
+                        //Try to map that active or inactive port into the region
+                        if let Some(in_region_outport) = input.map_to_in_region(regidx) {
+                            let in_region_port = OutportLocation {
+                                node,
+                                output: in_region_outport,
+                            };
+                            //if that port hat a wrt_index chain, push that forward into the region
+                            if let Some(wrt_indices) = wrt_index_chain.clone() {
+                                let (seeds, new_prod_map) =
+                                    opt.explore_producer_trace(in_region_port, wrt_indices);
+                                //and appply to this activity map
+                                for (k, v) in seeds.flags {
+                                    self.active.flags.insert(k, v);
+                                }
+                                for (k, v) in new_prod_map {
+                                    self.wrt_producer.insert(k, v);
+                                }
+                            } else {
+                                //set active
+                                self.active.set(in_region_port.into(), is_active);
+                            }
+                        }
+                    }
+                }
+
+                //since all in-gamma ports are mapped now, trace all result ports of each gamma region
+                for subreg in 0..opt.graph[node].regions().len() {
+                    for result in opt.graph[node].result_types(subreg) {
+                        let result_port = InportLocation {
+                            node,
+                            input: result,
+                        };
+                        let src = opt.graph.inport_src(result_port).unwrap();
+                        let is_src_active = self.is_active_port(opt, src);
+                        //now set the result and map that _out_of_region_
+                        //NOTE: we prefer the _is_active_ state. So if one region outputs an inactive result, and the other outputs
+                        //      a active, we set the port as active
+                        self.active.set(result_port.into(), is_src_active);
+                        let output = result.map_out_of_region().unwrap();
+                        let output_port = OutportLocation { node, output };
+                        if let Some(activity) = self.active.get_mut(&output_port.into()) {
+                            //only overwrite if currently not active, and we are active
+                            if !*activity && is_src_active {
+                                *activity = true;
+                            }
+                        } else {
+                            //no state set, always overwrite
+                            self.active.set(output_port.into(), is_src_active);
+                        }
+                    }
+                }
+                //finally return the result outport state
+                let is_result_active = *self
+                    .active
+                    .get(
+                        &OutportLocation {
+                            node,
+                            output: OutputType::ExitVariableOutput(0),
+                        }
+                        .into(),
+                    )
+                    .unwrap();
+                self.active.set(node.into(), is_result_active);
+                is_result_active
             }
             ty => panic!("unhandled activity for node type {ty:?}"),
         }
-
-        any_active
     }
 }
 
@@ -236,6 +325,18 @@ impl Optimizer {
             wrt_producer,
             host_region: region,
         };
+
+        //Set all argument ports to this region, that are not already active as inactive. This is needed
+        //later on in the `Activity::is_active_port()` to handle inactive-arguments correctly
+        for argument in self.graph[region.node].argument_types(region.region_index) {
+            let port_loc = OutportLocation {
+                node: region.node,
+                output: argument,
+            };
+            if activity.active.get(&port_loc.into()).is_none() {
+                activity.active.set(port_loc.into(), false);
+            }
+        }
 
         //Now just querry the _activity_ state once for each output, which lets the helper
         //build that state.
@@ -421,6 +522,8 @@ impl Optimizer {
                         self.explore_inport(activity, prodmap, dst, index_path.clone());
                     }
                 } else {
+                    activity.set(port.node.into(), false);
+                    activity.set(port.node.output(0).into(), false);
                     //is not the correct index, break recursion
                     return;
                 }
@@ -447,20 +550,59 @@ impl Optimizer {
                 }
             }
         } else {
-            //In case of producer, tag the node and all outports as active, but not as producers
-            //but only if port is part of a simple node
-            if self.graph[port.node].node_type.is_simple() {
-                activity.set(port.node.into(), true);
-                for output in self.graph[port.node].outport_types() {
-                    activity.set(
-                        OutportLocation {
+            //In case of a non producer, checkout what case we have.
+            match self.graph[port.node].into_abstract() {
+                AbstractNodeType::Simple => {
+                    //For simple nodes, this declares a _use_ of the active node,
+                    //therefore set node itself as active, and all outputs as well, then break the recursion
+                    activity.set(port.node.into(), true);
+                    for output in self.graph[port.node].outport_types() {
+                        activity.set(
+                            OutportLocation {
+                                node: port.node,
+                                output,
+                            }
+                            .into(),
+                            true,
+                        );
+                    }
+                }
+                AbstractNodeType::Gamma => {
+                    //For gamma node, bridge into regions if its an entry argument
+                    if let InputType::EntryVariableInput(_) = port.input {
+                        for subreg in 0..self.graph[port.node].regions().len() {
+                            let output = port.input.map_to_in_region(subreg).unwrap();
+                            let cvarg = OutportLocation {
+                                node: port.node,
+                                output,
+                            };
+                            for inport in self.graph.outport_dsts(cvarg) {
+                                self.explore_inport(activity, prodmap, inport, index_path.clone());
+                            }
+                        }
+                    } else {
+                        panic!("Unhandeled Gamma Input {:?}", port.input);
+                    }
+                }
+                AbstractNodeType::Lambda => {
+                    if let InputType::ContextVariableInput(_cv) = port.input {
+                        //For context variables, just bridge into the region and continue
+                        let output = port.input.map_to_in_region(0).unwrap();
+                        let cvarg = OutportLocation {
                             node: port.node,
                             output,
+                        };
+                        for inport in self.graph.outport_dsts(cvarg) {
+                            self.explore_inport(activity, prodmap, inport, index_path.clone());
                         }
-                        .into(),
-                        true,
-                    );
+                    } else {
+                        panic!("Unhandeled λ-none-context-variable input")
+                    }
                 }
+                other => panic!(
+                    "encountered unhhandeled node type in producer exploration: {:?}",
+                    other
+                ),
             }
         }
     }

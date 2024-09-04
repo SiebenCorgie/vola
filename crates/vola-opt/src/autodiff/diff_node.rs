@@ -48,7 +48,7 @@ impl Optimizer {
         &mut self,
         region: RegionLocation,
         node: NodeRef,
-        activity: &Activity,
+        activity: &mut Activity,
     ) -> Result<
         (
             OutportLocation,
@@ -185,7 +185,7 @@ impl Optimizer {
         &mut self,
         region: RegionLocation,
         node: NodeRef,
-        activity: &Activity,
+        activity: &mut Activity,
     ) -> Result<
         (
             OutportLocation,
@@ -231,8 +231,8 @@ impl Optimizer {
                 //- The product-rule (where both parts are _active_)
                 //- The constan-factor-rule (where only one is active).
                 match (
-                    activity.get_outport_active(left_src),
-                    activity.get_outport_active(right_src),
+                    activity.is_active_port(self, left_src),
+                    activity.is_active_port(self, right_src),
                 ) {
                     (true, true) => {
                         //product-rule: (left is f, right is g):
@@ -638,7 +638,7 @@ impl Optimizer {
         &mut self,
         region: RegionLocation,
         node: NodeRef,
-        activity: &Activity,
+        activity: &mut Activity,
     ) -> Result<
         (
             OutportLocation,
@@ -899,7 +899,7 @@ impl Optimizer {
                 let x_src = self.graph.inport_src(node.input(0)).unwrap();
                 let n_src = self.graph.inport_src(node.input(1)).unwrap();
 
-                if activity.get_outport_active(n_src) {
+                if activity.is_active_port(self, n_src) {
                     //the x^x case
                     return Err(AutoDiffError::NoAdImpl(format!(
                         "No AD impl for x^x (where the exponent is part of the derivative)"

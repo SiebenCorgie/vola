@@ -61,3 +61,12 @@ fn ad_nontrivial_activity() {
         .unwrap();
     target.try_verify().unwrap();
 }
+
+#[test]
+fn ad_with_gamma() {
+    let pipeline = volac::Pipeline::new_in_memory();
+    let target = pipeline
+        .execute_on_file(&"tests/vola_src/autodiff_with_gamma.vola")
+        .unwrap();
+    target.try_verify().unwrap();
+}

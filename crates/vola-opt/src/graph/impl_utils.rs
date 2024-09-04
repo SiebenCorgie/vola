@@ -9,7 +9,7 @@
 use ahash::AHashMap;
 use rvsdg::{
     edge::{InportLocation, InputType, LangEdge, OutportLocation, OutputType},
-    SmallColl,
+    NodeRef, SmallColl,
 };
 use vola_ast::{
     common::Ident,
@@ -235,5 +235,28 @@ impl Optimizer {
         assert!(old.is_none());
 
         Ok(())
+    }
+
+    ///Copies all input connections of `src` to `dst`. This means
+    /// for any input `I` of node `src` with an edge `E` from `src`'s output `O` an new connection from `src`'s output `O` to `dst`'s input `I` of the same type as `E` is made.
+    ///
+    /// Panics if the input signature of `src` is not a subset of `dst`.
+    ///
+    /// Panics if the node-type of both nodes does not match
+    ///
+    /// Meaning if src is a SimpleNode with 3 inputs, and dst a SimpleNode with 4 inputs, this works, but not the other way around.
+    pub fn copy_input_connections(&mut self, src: NodeRef, dst: NodeRef) {
+        assert!(self.graph[src].into_abstract() == self.graph[dst].into_abstract());
+
+        for input in self.graph[src].inport_types() {
+            if let Some(edg) = self.graph[InportLocation { node: src, input }].edge.clone() {
+                let ty = self.graph[edg].ty.clone();
+                let src = self.graph[edg].src().clone();
+
+                self.graph
+                    .connect(src, InportLocation { node: dst, input }, ty)
+                    .unwrap();
+            }
+        }
     }
 }
