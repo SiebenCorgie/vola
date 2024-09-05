@@ -599,6 +599,9 @@ impl Optimizer {
                         panic!("Unhandeled λ-none-context-variable input")
                     }
                 }
+                AbstractNodeType::Theta => {
+                    panic!("Theta node should have been handeled by the canonicalization pass");
+                }
                 other => panic!(
                     "encountered unhhandeled node type in producer exploration: {:?}",
                     other

@@ -32,6 +32,7 @@ pub mod inline;
 pub mod liveness;
 pub mod node_equality;
 pub mod region_utils;
+pub mod unroll;
 
 ///Path of multiple edges from `start` to `end`.
 pub struct Path {
