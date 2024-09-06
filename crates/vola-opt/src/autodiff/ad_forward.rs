@@ -95,18 +95,18 @@ impl Optimizer {
             self.canonicalize_for_ad(*entrypoint)?;
         }
 
+        if std::env::var("VOLA_DUMP_ALL").is_ok()
+            || std::env::var("DUMP_FWAD_CANONICALIZED").is_ok()
+        {
+            self.push_debug_state(&format!("fw-autodiff-{entrypoint}-canonicalized"));
+        }
+
         //do type derive and dead-node elemination in order to have
         // a) clean DAG (faster / easier transformation)
         // b) type information to emit correct zero-nodes
         self.graph.dne_region(region)?;
         let span = self.find_span(region.into()).unwrap_or(Span::empty());
         self.derive_region(region, span)?;
-
-        if std::env::var("VOLA_DUMP_ALL").is_ok()
-            || std::env::var("DUMP_FWAD_CANONICALIZED").is_ok()
-        {
-            self.push_debug_state(&format!("fw-autodiff-{entrypoint}-canonicalized"));
-        }
 
         //All entrypoints are with respect to a single scalar at this point,
         //and hooked up to the vector-value_creator already (if-needed).
@@ -160,8 +160,7 @@ impl Optimizer {
         */
 
         let mut expr_cache = DiffExprCache::new();
-        let diffed_src =
-            self.fwad_handle_node(region, expr_src.node, &mut activity, &mut expr_cache)?;
+        let diffed_src = self.fwad_handle_port(region, expr_src, &mut activity, &mut expr_cache)?;
 
         //replace the differential_value and the autodiff node
         self.graph
@@ -191,12 +190,9 @@ impl Optimizer {
         activity: &mut Activity,
         expr_cache: &mut DiffExprCache,
     ) -> Result<OutportLocation, OptError> {
-        //Any node that is not active can be considered a _constant_
-        //therfore the derivative is always zero.
-        if !activity.is_node_active(&self, node) {
-            let zero_node = self.emit_zero_for_node(region, node);
-            return Ok(zero_node);
-        }
+        //we should end up here only for active nodes, otherwise the value would be zero already
+        // (by the port handler)
+        assert!(activity.is_node_active(&self, node));
 
         match self.graph[node].into_abstract() {
             AbstractNodeType::Simple => {
@@ -226,7 +222,7 @@ impl Optimizer {
                     "imm" => {
                         //an active immediate value will be splat to zero, since this will always
                         //be equivalent to a constant.
-                        Ok(self.emit_zero_for_node(region, node))
+                        Ok(self.emit_zero_for_port(region, node.output(0)))
                     }
                     other => {
                         //Right now we panic for all unknown nodes.
@@ -370,8 +366,16 @@ impl Optimizer {
                     Ok(self.emit_zero_for_port(region, port))
                 }
             } else {
-                //Otherwise we need to recurse
-                self.fwad_handle_node(region, port.node, activity, expr_cache)
+                //if is no argument, and no wrt producer, check if the port is active, if not
+                //it can be considered a _constant_
+                //therfore the derivative is always zero.
+                if !activity.is_active_port(&self, port) {
+                    let zero_node = self.emit_zero_for_port(region, port);
+                    Ok(zero_node)
+                } else {
+                    //Otherwise we need to recurse
+                    self.fwad_handle_node(region, port.node, activity, expr_cache)
+                }
             }
         }
     }

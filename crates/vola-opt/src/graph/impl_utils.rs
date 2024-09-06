@@ -9,9 +9,11 @@
 use ahash::AHashMap;
 use rvsdg::{
     edge::{InportLocation, InputType, LangEdge, OutportLocation, OutputType},
+    util::unroll::UnrollError,
     NodeRef, SmallColl,
 };
 use vola_ast::{
+    alge::BinaryOp,
     common::Ident,
     csg::{CSGNodeDef, CSGNodeTy},
 };
@@ -20,9 +22,11 @@ use vola_common::Span;
 use crate::{
     alge::{
         implblock::{ConceptImpl, ConceptImplKey},
+        relational::{BinaryRel, BinaryRelOp},
         EvalNode,
     },
     common::Ty,
+    imm::ImmNat,
     OptEdge, OptError, OptNode, Optimizer,
 };
 
@@ -258,5 +262,40 @@ impl Optimizer {
                     .unwrap();
             }
         }
+    }
+
+    ///Analyses the `theta` node loop bound. Returns an error if this is not a theta node.
+    pub fn loop_count(&self, theta: NodeRef) -> Result<usize, UnrollError> {
+        if !self.graph[theta].node_type.is_theta() {
+            return Err(UnrollError::NotThetaNode);
+        }
+        let criteria_src = self
+            .graph
+            .inport_src(theta.as_inport_location(InputType::ThetaPredicate))
+            .unwrap();
+
+        let (low_src, high_src) =
+            if let Some(lt_arg) = self.try_unwrap_node::<BinaryRel>(criteria_src.node) {
+                assert!(lt_arg.op == BinaryRelOp::Lt, "Expected lt as criterion!");
+                let low_src = self
+                    .graph
+                    .find_producer_inp(criteria_src.node.input(0))
+                    .expect("Expectede connected src");
+                let high_src = self
+                    .graph
+                    .find_producer_inp(criteria_src.node.input(1))
+                    .expect("Expectede connected src");
+                (low_src, high_src)
+            } else {
+                panic!("Theta predicate must be BinaryRel node!");
+            };
+
+        //println!("Loopcount for {theta} ended at: \n    {low_src:?}\n    {high_src:?}");
+        //now _assume_ both are nats
+        let lower = self.try_unwrap_node::<ImmNat>(low_src.node).unwrap().lit as usize;
+        let higher = self.try_unwrap_node::<ImmNat>(high_src.node).unwrap().lit as usize;
+        assert!(lower <= higher);
+
+        Ok(higher - lower)
     }
 }

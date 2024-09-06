@@ -775,7 +775,7 @@ impl Optimizer {
                 };
 
                 //Zero value that is typed _correctly_
-                let zero_splat = self.emit_zero_for_node(region, node);
+                let zero_splat = self.emit_zero_for_port(region, node.output(0));
 
                 //The idea now is that we either route through the derivative of left, right, depending on
                 //the test, and depending on the value of the rest expression.

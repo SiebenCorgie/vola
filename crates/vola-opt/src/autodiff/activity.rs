@@ -168,7 +168,8 @@ impl Activity {
         //in the λ-region.
         //
         //for Gamma/Theta nodes, we do this: https://arxiv.org/abs/1810.07951
-        match opt.graph[node].into_abstract() {
+        let nodetype = opt.graph[node].into_abstract();
+        match nodetype {
             AbstractNodeType::Simple => {
                 //by definition, this node is active, if any of its predecessors is active
                 let mut any_active = false;
@@ -187,24 +188,17 @@ impl Activity {
 
                 any_active
             }
-            AbstractNodeType::Gamma => {
-                //By definition, gamma has only one output, exit_variable(0)
-                //however, to be future proof, assert that
-                assert!(
-                    opt.graph[node]
-                        .node_type
-                        .unwrap_gamma_ref()
-                        .exit_var_count()
-                        == 1
-                );
-
-                //Now map recurse all entry variables, and map their state into the gamma-region's branches.
-                //after that, call
+            AbstractNodeType::Gamma | AbstractNodeType::Theta => {
+                //recurse all entry / input-variables, and map their state into the region's branches.
+                //after that, recurse.
                 for input in opt.graph[node].inport_types() {
-                    let src = opt
-                        .graph
-                        .inport_src(InportLocation { node, input }.into())
-                        .unwrap();
+                    let src = if let Some(src) =
+                        opt.graph.inport_src(InportLocation { node, input }.into())
+                    {
+                        src
+                    } else {
+                        continue;
+                    };
                     let is_active = self.is_active_port(opt, src);
 
                     let wrt_index_chain = self.wrt_producer.get(&src).cloned();
@@ -236,6 +230,7 @@ impl Activity {
                 }
 
                 //since all in-gamma ports are mapped now, trace all result ports of each gamma region
+                let mut any_output_active = false;
                 for subreg in 0..opt.graph[node].regions().len() {
                     for result in opt.graph[node].result_types(subreg) {
                         let result_port = InportLocation {
@@ -248,32 +243,31 @@ impl Activity {
                         //NOTE: we prefer the _is_active_ state. So if one region outputs an inactive result, and the other outputs
                         //      a active, we set the port as active
                         self.active.set(result_port.into(), is_src_active);
-                        let output = result.map_out_of_region().unwrap();
+                        let output = if let Some(output) = result.map_out_of_region() {
+                            output
+                        } else {
+                            continue;
+                        };
                         let output_port = OutportLocation { node, output };
                         if let Some(activity) = self.active.get_mut(&output_port.into()) {
                             //only overwrite if currently not active, and we are active
                             if !*activity && is_src_active {
+                                any_output_active = true;
                                 *activity = true;
                             }
                         } else {
                             //no state set, always overwrite
+                            if is_src_active {
+                                any_output_active = true;
+                            }
                             self.active.set(output_port.into(), is_src_active);
                         }
                     }
                 }
-                //finally return the result outport state
-                let is_result_active = *self
-                    .active
-                    .get(
-                        &OutportLocation {
-                            node,
-                            output: OutputType::ExitVariableOutput(0),
-                        }
-                        .into(),
-                    )
-                    .unwrap();
-                self.active.set(node.into(), is_result_active);
-                is_result_active
+
+                //Set the node activ, if any output is active and return.
+                self.active.set(node.into(), any_output_active);
+                any_output_active
             }
             ty => panic!("unhandled activity for node type {ty:?}"),
         }
@@ -600,7 +594,22 @@ impl Optimizer {
                     }
                 }
                 AbstractNodeType::Theta => {
-                    panic!("Theta node should have been handeled by the canonicalization pass");
+                    //NOTE: Handling theta-node activity is a little bit hard, since people can do strange stuff
+                    //      with activity indexing, which makes it hard to build the producer map correctly
+                    //      So for now we do the same thing as for the gamma-node, and just ignore that there are multiply iterations.
+                    //
+                    //      In practice the forward-pass (and backward probably too) will canonicalize the ThetaNodes by unrolling them.
+                    // TODO: Fix that by handling multiple per-iteration occurances of index / construct operations.
+                    if let InputType::Input(_) = port.input {
+                        let output = port.input.map_to_in_region(0).unwrap();
+                        let cvarg = OutportLocation {
+                            node: port.node,
+                            output,
+                        };
+                        for inport in self.graph.outport_dsts(cvarg) {
+                            self.explore_inport(activity, prodmap, inport, index_path.clone());
+                        }
+                    }
                 }
                 other => panic!(
                     "encountered unhhandeled node type in producer exploration: {:?}",

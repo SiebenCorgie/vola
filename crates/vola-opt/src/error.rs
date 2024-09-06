@@ -1,6 +1,6 @@
 use rvsdg::{
     err::GraphError,
-    util::{dead_node_elimination::DneError, inline::InlineError},
+    util::{dead_node_elimination::DneError, inline::InlineError, unroll::UnrollError},
 };
 /*
  * This Source Code Form is subject to the terms of the Mozilla Public
@@ -72,6 +72,9 @@ pub enum OptError {
 
     #[error(transparent)]
     AutoDiffError(#[from] AutoDiffError),
+
+    #[error(transparent)]
+    UnrollError(#[from] UnrollError),
 }
 
 impl OptError {

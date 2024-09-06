@@ -79,3 +79,12 @@ fn ad_with_theta() {
         .unwrap();
     target.try_verify().unwrap();
 }
+
+#[test]
+fn ad_with_theta_fractal() {
+    let pipeline = volac::Pipeline::new_in_memory();
+    let target = pipeline
+        .execute_on_file(&"tests/vola_src/autodiff_with_theta_fract.vola")
+        .unwrap();
+    target.try_verify().unwrap();
+}
