@@ -60,7 +60,6 @@ use rvsdg::{
     util::abstract_node_type::AbstractNodeType,
     NodeRef,
 };
-use rvsdg_viewer::View;
 use vola_common::{error::error_reporter, report, Span};
 
 use crate::{autodiff::AutoDiff, OptEdge, OptError, Optimizer};

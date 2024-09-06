@@ -13,7 +13,6 @@ use rvsdg::{
     NodeRef, SmallColl,
 };
 use vola_ast::{
-    alge::BinaryOp,
     common::Ident,
     csg::{CSGNodeDef, CSGNodeTy},
 };

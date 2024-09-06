@@ -11,7 +11,7 @@ use core::panic;
 use ahash::AHashMap;
 use rvsdg::{
     attrib::FlagStore,
-    edge::{InportLocation, InputType, OutportLocation, OutputType},
+    edge::{InportLocation, InputType, OutportLocation},
     region::RegionLocation,
     smallvec::smallvec,
     util::abstract_node_type::AbstractNodeType,
@@ -29,7 +29,7 @@ use crate::{
 use super::AutoDiff;
 
 type WrtProdMap = AHashMap<OutportLocation, SmallColl<usize>>;
-pub struct Activity {
+pub(crate) struct Activity {
     ///All nodes or ports from which we _know_ the activity state.
     pub active: FlagStore<bool>,
     ///All ports that are equivalent to the wrt-input of the
@@ -43,30 +43,9 @@ pub struct Activity {
     ///    if OutportLocation is a matrix, then the vec will hold the row-index (0) and the column-element (1) for the active element.
     ///    same goes for tensors
     pub wrt_producer: WrtProdMap,
-
-    pub host_region: RegionLocation,
 }
 
 impl Activity {
-    ///Tries to read the activity state of `node`. Returns None if the node does not
-    /// appear in the activity list.
-    fn is_active(&self, node: NodeRef) -> Option<bool> {
-        if let Some(state) = self.active.get(&node.into()) {
-            Some(*state)
-        } else {
-            None
-        }
-    }
-
-    ///Gets the activity state of this port. Returns false if either inactive, or no activity state is set
-    fn get_outport_active(&self, outport: OutportLocation) -> bool {
-        if let Some(state) = self.active.get(&outport.into()) {
-            *state
-        } else {
-            false
-        }
-    }
-
     ///Builds the init value for a wrt-producer.
     ///
     /// Lets something is differentiating for x, and this wrt-producer is a vector (a, x, c, d). Then,
@@ -279,7 +258,7 @@ impl Optimizer {
     /// Taggs all nodes in the expression that are influenced by the wrt-argument.
     ///
     /// Also enters sub regions and called functions.
-    pub fn activity_explorer(&self, entrypoint: NodeRef) -> Result<Activity, OptError> {
+    pub(crate) fn activity_explorer(&self, entrypoint: NodeRef) -> Result<Activity, OptError> {
         // This is a three-stage process.
         // 1. Find the actual value producer that is _active_. The dialects permit none-transforming nodes like _index_
 
@@ -317,7 +296,6 @@ impl Optimizer {
         let mut activity = Activity {
             active: activity_seed_nodes,
             wrt_producer,
-            host_region: region,
         };
 
         //Set all argument ports to this region, that are not already active as inactive. This is needed

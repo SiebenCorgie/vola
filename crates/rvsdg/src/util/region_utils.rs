@@ -405,36 +405,36 @@ mod test {
     fn index_valid() {
         let (mut rvsdg, testnode, test_edge) = setup_test_rvsdg();
 
-        let t: &_ = &rvsdg[testnode];
-        let t: &mut _ = &mut rvsdg[testnode];
+        let _t: &_ = &rvsdg[testnode];
+        let _t: &mut _ = &mut rvsdg[testnode];
 
-        let e: &_ = &rvsdg[test_edge];
-        let e: &mut _ = &mut rvsdg[test_edge];
+        let _e: &_ = &rvsdg[test_edge];
+        let _e: &mut _ = &mut rvsdg[test_edge];
 
         let tlreg = rvsdg.toplevel_region();
-        let r: &_ = &rvsdg[tlreg];
-        let r: &mut _ = &mut rvsdg[tlreg];
+        let _r: &_ = &rvsdg[tlreg];
+        let _r: &mut _ = &mut rvsdg[tlreg];
 
-        let ip: &_ = &rvsdg[testnode.input(0)];
-        let ip: &mut _ = &mut rvsdg[testnode.input(0)];
+        let _ip: &_ = &rvsdg[testnode.input(0)];
+        let _ip: &mut _ = &mut rvsdg[testnode.input(0)];
 
-        let op: &_ = &rvsdg[testnode.output(0)];
-        let op: &mut _ = &mut rvsdg[testnode.output(0)];
+        let _op: &_ = &rvsdg[testnode.output(0)];
+        let _op: &mut _ = &mut rvsdg[testnode.output(0)];
     }
 
     #[test]
     #[should_panic]
     fn index_invalid_node_imm() {
-        let (mut rvsdg, testnode, test_edge) = setup_test_rvsdg();
+        let (mut rvsdg, testnode, _test_edge) = setup_test_rvsdg();
         rvsdg.remove_node(testnode).unwrap();
-        let t: &_ = &rvsdg[testnode];
+        let _t: &_ = &rvsdg[testnode];
     }
     #[test]
     #[should_panic]
     fn index_invalid_node_mut() {
-        let (mut rvsdg, testnode, test_edge) = setup_test_rvsdg();
+        let (mut rvsdg, testnode, _test_edge) = setup_test_rvsdg();
         rvsdg.remove_node(testnode).unwrap();
-        let t: &mut _ = &mut rvsdg[testnode];
+        let _t: &mut _ = &mut rvsdg[testnode];
     }
 
     #[test]
@@ -442,43 +442,43 @@ mod test {
     fn index_invalid_edge_imm() {
         let (mut rvsdg, testnode, test_edge) = setup_test_rvsdg();
         rvsdg.remove_node(testnode).unwrap();
-        let t: &_ = &rvsdg[test_edge];
+        let _t: &_ = &rvsdg[test_edge];
     }
     #[test]
     #[should_panic]
     fn index_invalid_edge_mut() {
         let (mut rvsdg, testnode, test_edge) = setup_test_rvsdg();
         rvsdg.remove_node(testnode).unwrap();
-        let t: &mut _ = &mut rvsdg[test_edge];
+        let _t: &mut _ = &mut rvsdg[test_edge];
     }
 
     #[test]
     #[should_panic]
     fn index_invalid_inport_imm() {
-        let (mut rvsdg, testnode, test_edge) = setup_test_rvsdg();
+        let (mut rvsdg, testnode, _test_edge) = setup_test_rvsdg();
         rvsdg.remove_node(testnode).unwrap();
-        let t: &_ = &rvsdg[testnode.input(0)];
+        let _t: &_ = &rvsdg[testnode.input(0)];
     }
     #[test]
     #[should_panic]
     fn index_invalid_inport_mut() {
-        let (mut rvsdg, testnode, test_edge) = setup_test_rvsdg();
+        let (mut rvsdg, testnode, _test_edge) = setup_test_rvsdg();
         rvsdg.remove_node(testnode).unwrap();
-        let t: &mut _ = &mut rvsdg[testnode.input(0)];
+        let _t: &mut _ = &mut rvsdg[testnode.input(0)];
     }
 
     #[test]
     #[should_panic]
     fn index_invalid_outport_imm() {
-        let (mut rvsdg, testnode, test_edge) = setup_test_rvsdg();
+        let (mut rvsdg, testnode, _test_edge) = setup_test_rvsdg();
         rvsdg.remove_node(testnode).unwrap();
-        let t: &_ = &rvsdg[testnode.output(0)];
+        let _t: &_ = &rvsdg[testnode.output(0)];
     }
     #[test]
     #[should_panic]
     fn index_invalid_outport_mut() {
-        let (mut rvsdg, testnode, test_edge) = setup_test_rvsdg();
+        let (mut rvsdg, testnode, _test_edge) = setup_test_rvsdg();
         rvsdg.remove_node(testnode).unwrap();
-        let t: &mut _ = &mut rvsdg[testnode.output(0)];
+        let _t: &mut _ = &mut rvsdg[testnode.output(0)];
     }
 }

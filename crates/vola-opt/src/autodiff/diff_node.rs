@@ -44,7 +44,7 @@ impl Optimizer {
     /// the source of `subexpr` is returned.
     ///
     /// In practice the differentiation handler just needs to differentiate that graph, and hook it up to the expected port.
-    pub fn build_diff_value(
+    pub(crate) fn build_diff_value(
         &mut self,
         region: RegionLocation,
         node: NodeRef,

@@ -13,8 +13,6 @@
 //! - [unroll_theta](crate::Rvsdg::unroll_theta)
 //! - [unroll_replace_theta](crate::Rvsdg::unroll_replace_theta)
 
-use core::panic;
-
 use ahash::AHashMap;
 use thiserror::Error;
 
@@ -54,13 +52,10 @@ impl<N: LangNode + StructuralClone + 'static, E: LangEdge + StructuralClone + 's
             return Ok(());
         }
 
-        //For those, just do the normal unroll
-        for _ in 0..(unroll_count - 1) {
+        //Unroll fully
+        for _ in 0..unroll_count {
             let _ = self.unroll_theta_head(theta)?;
         }
-
-        //for the last unroll, keep the mapping, so we can fix up any dangling theta result
-        let last_mapping = self.unroll_theta_head(theta)?;
 
         //We simply connect any node that is connected to lv-input[n] to each lv-output[n] user.
         let lvcount = self[theta]
@@ -108,7 +103,7 @@ impl<N: LangNode + StructuralClone + 'static, E: LangEdge + StructuralClone + 's
     pub fn unroll_theta_tail(
         &mut self,
         theta: NodeRef,
-        unroll_count: usize,
+        _unroll_count: usize,
     ) -> Result<AHashMap<NodeRef, NodeRef>, UnrollError> {
         if !self[theta].node_type.is_theta() {
             return Err(UnrollError::NotThetaNode);
@@ -158,8 +153,6 @@ impl<N: LangNode + StructuralClone + 'static, E: LangEdge + StructuralClone + 's
         //For each input, record where the new input should come from (and the edge type, if any)
         for lv in 0..lvcount {
             let lvresult = theta.as_inport_location(InputType::Result(lv));
-            let lvarg = theta.as_outport_location(OutputType::Argument(lv));
-            let lvinput = theta.input(lv);
             let result_edg = if let Some(edg) = &self[lvresult].edge {
                 *edg
             } else {
@@ -262,7 +255,7 @@ impl<N: LangNode + StructuralClone + 'static, E: LangEdge + StructuralClone + 's
         }
 
         //now rewire all input mappings
-        for (lv, mapping) in output_remapping.into_iter().enumerate() {
+        for mapping in output_remapping {
             for (src, dst, edg) in mapping {
                 self.connect(src, dst, edg)?;
             }

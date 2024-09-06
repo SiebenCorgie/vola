@@ -12,8 +12,7 @@
 
 use ahash::AHashSet;
 use rvsdg::{
-    attrib::AttribLocation, edge::OutportLocation, region::RegionLocation, smallvec::smallvec,
-    util::abstract_node_type::AbstractNodeType, NodeRef, SmallColl,
+    edge::OutportLocation, region::RegionLocation, smallvec::smallvec, NodeRef, SmallColl,
 };
 use rvsdg_viewer::View;
 use vola_common::Span;
