@@ -10,6 +10,7 @@ use thiserror::Error;
 use crate::{
     edge::{InportLocation, InputType, OutportLocation, OutputType},
     region::RegionLocation,
+    util::abstract_node_type::AbstractNodeType,
     EdgeRef, NodeRef,
 };
 
@@ -45,8 +46,8 @@ pub enum GraphError {
     #[error("The region location {0:?} is invalid in this graph")]
     InvalidRegion(RegionLocation),
 
-    #[error("Unexpected node type")]
-    UnexpectedNodeType,
+    #[error("Unexpected node type, expected {0:?} got {1:?}")]
+    UnexpectedNodeType(AbstractNodeType, AbstractNodeType),
     #[error("Node {0} was not declared in a parent to region {1:?} or {1:?} itself")]
     NodeNotInParentRegion(NodeRef, RegionLocation),
 

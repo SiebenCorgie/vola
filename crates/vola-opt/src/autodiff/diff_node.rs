@@ -44,11 +44,11 @@ impl Optimizer {
     /// the source of `subexpr` is returned.
     ///
     /// In practice the differentiation handler just needs to differentiate that graph, and hook it up to the expected port.
-    pub fn build_diff_value(
+    pub(crate) fn build_diff_value(
         &mut self,
         region: RegionLocation,
         node: NodeRef,
-        activity: &Activity,
+        activity: &mut Activity,
     ) -> Result<
         (
             OutportLocation,
@@ -185,7 +185,7 @@ impl Optimizer {
         &mut self,
         region: RegionLocation,
         node: NodeRef,
-        activity: &Activity,
+        activity: &mut Activity,
     ) -> Result<
         (
             OutportLocation,
@@ -231,8 +231,8 @@ impl Optimizer {
                 //- The product-rule (where both parts are _active_)
                 //- The constan-factor-rule (where only one is active).
                 match (
-                    activity.get_outport_active(left_src),
-                    activity.get_outport_active(right_src),
+                    activity.is_active_port(self, left_src),
+                    activity.is_active_port(self, right_src),
                 ) {
                     (true, true) => {
                         //product-rule: (left is f, right is g):
@@ -638,7 +638,7 @@ impl Optimizer {
         &mut self,
         region: RegionLocation,
         node: NodeRef,
-        activity: &Activity,
+        activity: &mut Activity,
     ) -> Result<
         (
             OutportLocation,
@@ -775,7 +775,7 @@ impl Optimizer {
                 };
 
                 //Zero value that is typed _correctly_
-                let zero_splat = self.emit_zero_for_node(region, node);
+                let zero_splat = self.emit_zero_for_port(region, node.output(0));
 
                 //The idea now is that we either route through the derivative of left, right, depending on
                 //the test, and depending on the value of the rest expression.
@@ -899,7 +899,7 @@ impl Optimizer {
                 let x_src = self.graph.inport_src(node.input(0)).unwrap();
                 let n_src = self.graph.inport_src(node.input(1)).unwrap();
 
-                if activity.get_outport_active(n_src) {
+                if activity.is_active_port(self, n_src) {
                     //the x^x case
                     return Err(AutoDiffError::NoAdImpl(format!(
                         "No AD impl for x^x (where the exponent is part of the derivative)"

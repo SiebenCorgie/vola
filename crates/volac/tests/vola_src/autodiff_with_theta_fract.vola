@@ -1,0 +1,24 @@
+module std;
+
+entity ThetaFractal();
+impl ThetaFractal for SDF3D(at){
+    let p = for p = [at.x, at.y, at.z, 1.0] in 0..7{
+        let modded = mod([p.x, p.y, p.z] - [1.0, 1.0, 1.0], [2.0, 2.0, 2.0]) - [1.0, 1.0, 1.0];
+        p = [modded.x, modded.y, modded.z, p.w];
+        p = p * (1.4 / dot(modded, modded));
+    };
+
+    length([p.x, p.z] / [p.w, p.w]) * 0.25
+}
+
+
+operation MyAdOp();
+impl MyAdOp<sub> for SDF3D(at){
+    let sd = eval sub.SDF3D(at);
+    length(diff(sd, at))
+}
+
+export mysdf(at: vec3){
+    csg sphere = MyAdOp(){ThetaFractal()};
+    eval sphere.SDF3D(at)
+}

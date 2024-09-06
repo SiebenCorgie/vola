@@ -55,7 +55,7 @@
 
 use ahash::AHashMap;
 use rvsdg::{
-    edge::{InportLocation, OutportLocation},
+    edge::{InportLocation, OutportLocation, OutputType},
     region::RegionLocation,
     util::abstract_node_type::AbstractNodeType,
     NodeRef,
@@ -82,6 +82,10 @@ impl Optimizer {
         // multiple AD-Nodes with a single (scalar) WRT-Arg.
         let entrypoints = self.linearize_ad(entrypoint)?;
 
+        let region = self.graph[entrypoint].parent.unwrap();
+        //TODO: Can speed up thing, or make them slower, do heuristically
+        //self.graph.dne_region(region)?;
+
         if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("DUMP_FWAD_LINEARIZED").is_ok() {
             self.push_debug_state(&format!("fw-autodiff-{entrypoint}-linearized"));
         }
@@ -90,20 +94,18 @@ impl Optimizer {
             self.canonicalize_for_ad(*entrypoint)?;
         }
 
-        //do type derive and dead-node elemination in order to have
-        // a) clean DAG (faster / easier transformation)
-        // b) type information to emit correct zero-nodes
-
-        let region = self.graph[entrypoint].parent.unwrap();
-        self.graph.dne_region(region)?;
-        let span = self.find_span(region.into()).unwrap_or(Span::empty());
-        self.derive_region(region, span)?;
-
         if std::env::var("VOLA_DUMP_ALL").is_ok()
             || std::env::var("DUMP_FWAD_CANONICALIZED").is_ok()
         {
             self.push_debug_state(&format!("fw-autodiff-{entrypoint}-canonicalized"));
         }
+
+        //do type derive and dead-node elemination in order to have
+        // a) clean DAG (faster / easier transformation)
+        // b) type information to emit correct zero-nodes
+        self.graph.dne_region(region)?;
+        let span = self.find_span(region.into()).unwrap_or(Span::empty());
+        self.derive_region(region, span)?;
 
         //All entrypoints are with respect to a single scalar at this point,
         //and hooked up to the vector-value_creator already (if-needed).
@@ -135,7 +137,7 @@ impl Optimizer {
         //find all active nodes of this expression, then start doing the forward iteration,
         //guided by the activity analysis.
 
-        let activity = self.activity_explorer(diffnode)?;
+        let mut activity = self.activity_explorer(diffnode)?;
 
         if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("DUMP_AD_ACTIVITY").is_ok() {
             self.push_debug_state_with(&format!("fw-autodiff-{diffnode}-activity"), |builder| {
@@ -157,11 +159,11 @@ impl Optimizer {
         */
 
         let mut expr_cache = DiffExprCache::new();
-        let diffed_src =
-            self.fwad_handle_node(region, expr_src.node, &activity, &mut expr_cache)?;
+        let diffed_src = self.fwad_handle_port(region, expr_src, &mut activity, &mut expr_cache)?;
 
         //replace the differential_value and the autodiff node
-        self.graph.replace_node_uses(diffnode, diffed_src.node)?;
+        self.graph
+            .replace_outport_uses(diffnode.output(0), diffed_src)?;
 
         Ok(())
     }
@@ -184,15 +186,12 @@ impl Optimizer {
         &mut self,
         region: RegionLocation,
         node: NodeRef,
-        activity: &Activity,
+        activity: &mut Activity,
         expr_cache: &mut DiffExprCache,
     ) -> Result<OutportLocation, OptError> {
-        //Any node that is not active can be considered a _constant_
-        //therfore the derivative is always zero.
-        if !activity.is_active(node).unwrap_or(false) {
-            let zero_node = self.emit_zero_for_node(region, node);
-            return Ok(zero_node);
-        }
+        //we should end up here only for active nodes, otherwise the value would be zero already
+        // (by the port handler)
+        assert!(activity.is_node_active(&self, node));
 
         match self.graph[node].into_abstract() {
             AbstractNodeType::Simple => {
@@ -222,7 +221,7 @@ impl Optimizer {
                     "imm" => {
                         //an active immediate value will be splat to zero, since this will always
                         //be equivalent to a constant.
-                        Ok(self.emit_zero_for_node(region, node))
+                        Ok(self.emit_zero_for_port(region, node.output(0)))
                     }
                     other => {
                         //Right now we panic for all unknown nodes.
@@ -237,6 +236,64 @@ impl Optimizer {
             AbstractNodeType::Apply => {
                 todo!("Function calls not yet implemented!")
             }
+            AbstractNodeType::Gamma => {
+                //If the gamma output was already diffed, return that instead.
+                if let Some(cached_diff) =
+                    expr_cache.get(&node.as_outport_location(OutputType::ExitVariableOutput(0)))
+                {
+                    return Ok(cached_diff.clone());
+                }
+
+                //We handle active gamma nodes by deep-copying them, and then recursing the forward-mode
+                //within that region. Once that region returns,
+                //we return the gamma-node's result
+                let gamma_cpy = self.graph.deep_copy_node(node, region);
+                //Copy over connections
+                self.copy_input_connections(node, gamma_cpy);
+                //copy over activity attributes
+                for attrib in self.graph.iter_node_attribs(node) {
+                    let dst_attrib_loc = attrib.clone().change_node(gamma_cpy);
+                    let _ = activity.active.copy(&attrib, dst_attrib_loc);
+                }
+                //let it trace the activity.
+                //NOTE: This also pushes forward the producer states into the newly created
+                //      Region. Note that otherwise, when calling the activity-state first time from _within_
+                //      the node, this would get resolved _the wrong way_.
+                activity.trace_node_activity(self, gamma_cpy);
+                //Now with the activity and producer-state set,
+                //let the recursion handle all region's outputs.
+                for reg in 0..self.graph[gamma_cpy].regions().len() {
+                    let subregion = RegionLocation {
+                        node: gamma_cpy,
+                        region_index: reg,
+                    };
+                    for resultty in self.graph[gamma_cpy].result_types(reg) {
+                        let result_port = InportLocation {
+                            node: gamma_cpy,
+                            input: resultty,
+                        };
+                        if let Some(value_edge) = self.graph[result_port].edge {
+                            let src = *self.graph[value_edge].src();
+                            let output =
+                                self.fwad_handle_port(subregion, src, activity, expr_cache)?;
+                            //disconnect old edge, connect new edge
+                            let _old_value = self.graph.disconnect(value_edge).unwrap();
+                            //Don't know the type yet though
+                            self.graph
+                                .connect(output, result_port, OptEdge::value_edge_unset())?;
+                        }
+                    }
+                }
+
+                let result_port = gamma_cpy.as_outport_location(OutputType::ExitVariableOutput(0));
+                //register the diffed output in the cache for the gamma-nodes output.
+                expr_cache.insert(
+                    node.as_outport_location(OutputType::ExitVariableOutput(0)),
+                    result_port,
+                );
+                //finaly return the gamma's output as the diff value
+                Ok(result_port)
+            }
             other => return Err(AutoDiffError::FwadUnexpectedNodeType(other).into()),
         }
     }
@@ -246,7 +303,7 @@ impl Optimizer {
         &mut self,
         region: RegionLocation,
         node: NodeRef,
-        activity: &Activity,
+        activity: &mut Activity,
         expr_cache: &mut DiffExprCache,
     ) -> Result<OutportLocation, OptError> {
         //This is the point, where we handle the dispatch of the chain rule.
@@ -255,7 +312,6 @@ impl Optimizer {
         //handeled by the respective node.
         //
         //however, dispatching the chain-rule can / must be done
-
         let (result, postdiffs) = self.build_diff_value(region, node, activity)?;
         for (post_diff_src, targets) in postdiffs {
             //Try to reuse expr-cache, otherwise build new subexpression
@@ -283,7 +339,7 @@ impl Optimizer {
         &mut self,
         region: RegionLocation,
         port: OutportLocation,
-        activity: &Activity,
+        activity: &mut Activity,
         expr_cache: &mut DiffExprCache,
     ) -> Result<OutportLocation, OptError> {
         //A port that is part of the respect_to chain always derives to 1.0
@@ -298,11 +354,27 @@ impl Optimizer {
             //println!("Getting {port:?} : {:?}", activity.wrt_producer.get(&port));
             Ok(activity.build_diff_init_value_for_wrt(self, region, port))
         } else {
-            if port.output.is_argument() && !activity.get_outport_active(port) {
-                Ok(self.emit_zero_for_port(region, port))
+            if port.output.is_argument() {
+                //If the outport is active and an argument, but not a wrt-producer, this means that
+                //we get _supplied_ the diffed_value here, so just use that
+                //
+                //if however the port is not active, replace it with an apropriate zero
+                if activity.is_active_port(self, port) {
+                    Ok(port)
+                } else {
+                    Ok(self.emit_zero_for_port(region, port))
+                }
             } else {
-                //Otherwise we need to recurse
-                self.fwad_handle_node(region, port.node, activity, expr_cache)
+                //if is no argument, and no wrt producer, check if the port is active, if not
+                //it can be considered a _constant_
+                //therfore the derivative is always zero.
+                if !activity.is_active_port(&self, port) {
+                    let zero_node = self.emit_zero_for_port(region, port);
+                    Ok(zero_node)
+                } else {
+                    //Otherwise we need to recurse
+                    self.fwad_handle_node(region, port.node, activity, expr_cache)
+                }
             }
         }
     }
