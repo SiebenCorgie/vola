@@ -81,6 +81,17 @@ fn simple_gamma() {
         .unwrap();
     target.try_verify().unwrap()
 }
+
+#[test]
+fn gamma_unequal() {
+    let pipeline = volac::Pipeline::new_in_memory();
+
+    let target = pipeline
+        .execute_on_file(&"tests/vola_src/ifthenelse_unequal.vola")
+        .unwrap();
+    target.try_verify().unwrap()
+}
+
 #[test]
 fn gamma_local_variable() {
     let pipeline = volac::Pipeline::new_in_memory();
