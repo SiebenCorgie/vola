@@ -87,7 +87,7 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
         known
     }
 
-    ///Returns the order of all (live) nodes in the region in topological order. This means for any noden
+    ///Returns the order of all nodes in the region in topological order. This means for any node
     /// `n` which produces a value for node `m`, `n` will occure before `m`.
     pub fn topological_order_region(&self, region: RegionLocation) -> Vec<NodeRef> {
         //NOTE: we use Kahn's algorithm at the moment. If this ever bottlenecks, there are

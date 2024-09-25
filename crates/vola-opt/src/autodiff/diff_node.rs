@@ -582,14 +582,14 @@ impl Optimizer {
     > {
         let span = self.find_span(node.into()).unwrap_or(Span::empty());
         let src = self.graph.inport_src(node.input(0)).unwrap();
-        match self.graph[node]
+        let trigop = self.graph[node]
             .node_type
             .unwrap_simple_ref()
             .try_downcast_ref::<Trig>()
             .unwrap()
             .op
-            .clone()
-        {
+            .clone();
+        match trigop {
             TrigOp::Sin => {
                 //sin' = cos
                 let cos_output = self
@@ -628,9 +628,9 @@ impl Optimizer {
             }
             TrigOp::Tan => {
                 //See https://math.stackexchange.com/questions/1108131/what-is-cos%C2%B2x
-                todo!()
+                todo!("{trigop:?} not implemented")
             }
-            _ => todo!(),
+            _ => todo!("{trigop:?} not implemented"),
         }
     }
 

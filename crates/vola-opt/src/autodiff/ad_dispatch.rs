@@ -14,7 +14,7 @@
 //!       mode AD are decided. But right now that is not implemented.
 
 use ahash::AHashSet;
-use rvsdg::SmallColl;
+use rvsdg::{attrib::FlagStore, region::RegionLocation, NodeRef, SmallColl};
 use vola_common::{ariadne::Label, error::error_reporter, report, Span};
 
 use crate::{autodiff::AutoDiff, OptError, Optimizer};
@@ -22,17 +22,11 @@ use crate::{autodiff::AutoDiff, OptError, Optimizer};
 impl Optimizer {
     pub fn dispatch_autodiff(&mut self) -> Result<(), OptError> {
         let mut dispatch_nodes = SmallColl::new();
+        let liveness = self.graph.liveness();
+        //First top-down exploration of AD nodes.
+        self.enque_ad_nodes_region(self.graph.toplevel_region(), &liveness, &mut dispatch_nodes);
 
-        for noderef in self.graph.live_nodes(self.graph.toplevel_region()) {
-            if self.graph.node(noderef).node_type.is_simple() {
-                if self.is_node_type::<AutoDiff>(noderef) {
-                    dispatch_nodes.push(noderef);
-                }
-            }
-        }
-
-        //pre-explore which regions we'll touch, and do dead-node elemination on those, since some
-        //exploration depends on those
+        //Pre explore all touced regions.
         let touched_regions = dispatch_nodes
             .iter()
             .map(|n| self.graph[*n].parent.unwrap())
@@ -97,5 +91,42 @@ impl Optimizer {
         }
 
         Ok(())
+    }
+
+    //Recursive exploration of all sub region AD nodes.
+    fn enque_ad_nodes_region(
+        &self,
+        region: RegionLocation,
+        liveness: &FlagStore<bool>,
+        list: &mut SmallColl<NodeRef>,
+    ) {
+        for node in self.graph.topological_order_region(region) {
+            //Ignore un-alive nodes
+            if !liveness.is_set(&node.into()) {
+                continue;
+            }
+            let is_add = if self.is_node_type::<AutoDiff>(node) {
+                true
+            } else {
+                false
+            };
+
+            if self.graph[node].regions().len() > 0 {
+                for region in 0..self.graph[node].regions().len() {
+                    self.enque_ad_nodes_region(
+                        RegionLocation {
+                            node,
+                            region_index: region,
+                        },
+                        liveness,
+                        list,
+                    );
+                }
+            }
+
+            if is_add {
+                list.push(node);
+            }
+        }
     }
 }

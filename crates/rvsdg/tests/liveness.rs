@@ -1,4 +1,5 @@
 use rvsdg::{
+    attrib::AttribLocation,
     common::VSEdge,
     edge::{InportLocation, InputType, OutportLocation, OutputType},
     nodes::NodeType,
@@ -353,12 +354,19 @@ fn live_port_count() {
 
     let liveness_map = rvsdg.liveness();
 
+    let live_ports = liveness_map.flags.iter().fold(0, |i, (attr, val)| {
+        if let AttribLocation::InPort(_) | AttribLocation::OutPort(_) = attr {
+            if *val {
+                i + 1
+            } else {
+                i
+            }
+        } else {
+            i
+        }
+    });
     //found those by counting in the svg dump 🤝.
-    assert!(
-        liveness_map.flags.len() == 49,
-        "{} != 49",
-        liveness_map.flags.len()
-    );
+    assert!(live_ports == 49, "{} != 49", live_ports);
 }
 
 #[test]
