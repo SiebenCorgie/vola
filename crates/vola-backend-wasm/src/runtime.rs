@@ -8,4 +8,12 @@
 
 //! Handles loading of the wasm runtime
 
+use crate::error::WasmError;
+
 const RUNTIME_CODE: &'static [u8] = include_bytes!(env!("RUNTIME_DIR"));
+
+pub fn load_runtime_module() -> Result<walrus::Module, WasmError> {
+    let module = walrus::Module::from_buffer(RUNTIME_CODE).map_err(|e| WasmError::Any(e.into()))?;
+
+    Ok(module)
+}

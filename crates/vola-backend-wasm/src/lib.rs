@@ -14,11 +14,71 @@
 //!
 //! Under the hood the module loads [vola-wasm-runtime]() crate's wasm module as a runtime. The crate implements special functions like `length`, `cross` etc, and loads functions like `sqrt`, `sin` etc.
 
+use error::WasmError;
 use rvsdg::Rvsdg;
+#[cfg(feature = "viewer")]
+use rvsdg_viewer::ViewerState;
+use vola_opt::Optimizer;
+mod error;
 mod graph;
+mod passes;
 mod runtime;
 mod wasm;
 
 pub struct WasmBackend {
     graph: Rvsdg<graph::WasmNode, graph::WasmEdge>,
+    #[cfg(feature = "viewer")]
+    viewer: ViewerState,
+}
+
+impl WasmBackend {
+    pub fn new() -> Self {
+        WasmBackend {
+            graph: Rvsdg::new(),
+
+            #[cfg(feature = "viewer")]
+            viewer: ViewerState::new(),
+        }
+    }
+
+    pub fn intern_module(&mut self, optimizer: &Optimizer) -> Result<(), WasmError> {
+        self.intern_optimizer(optimizer)?;
+
+        if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("VOLA_DUMP_WASM_INTERN").is_ok()
+        {
+            self.push_debug_state("Optimizer interned into WASM");
+        }
+
+        Ok(())
+    }
+
+    #[cfg(not(feature = "viewer"))]
+    pub fn push_debug_state(&mut self, name: &str) {}
+
+    #[cfg(feature = "viewer")]
+    pub fn push_debug_state(&mut self, name: &str) {
+        use rvsdg_viewer::layout::LayoutConfig;
+
+        let layout_config = LayoutConfig {
+            ignore_dead_node: false,
+            ..Default::default()
+        };
+
+        self.viewer
+            .new_state_builder(name, &self.graph, &layout_config)
+            .build();
+
+        if std::env::var("VOLA_ALWAYS_WRITE_DUMP").is_ok() {
+            self.dump_debug_state(&format!("{name}.bin"));
+        }
+    }
+
+    #[cfg(not(feature = "viewer"))]
+    pub fn dump_debug_state(&self, path: &dyn AsRef<std::path::Path>) {}
+
+    #[cfg(feature = "viewer")]
+    pub fn dump_debug_state(&self, path: &dyn AsRef<std::path::Path>) {
+        println!("Dumping {:?}", path.as_ref());
+        self.viewer.write_to_file(path)
+    }
 }

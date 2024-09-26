@@ -6,5 +6,12 @@
  * 2024 Tendsin Mende
  */
 
-//! Scalarizer that transforms any non-extern defined op that does vector-element wise operations into a
-//! set of scalar operations.
+use vola_opt::Optimizer;
+
+use crate::{error::WasmError, WasmBackend};
+
+impl WasmBackend {
+    pub(crate) fn intern_optimizer(&mut self, optimizer: &Optimizer) -> Result<(), WasmError> {
+        todo!()
+    }
+}

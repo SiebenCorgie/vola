@@ -6,5 +6,5 @@
  * 2024 Tendsin Mende
  */
 
-//! Scalarizer that transforms any non-extern defined op that does vector-element wise operations into a
-//! set of scalar operations.
+mod intern_opt;
+mod scalarize;

@@ -14,16 +14,17 @@ use rvsdg::{
     SmallColl,
 };
 
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ExternOp {
     Cross,
     Dot,
 }
 
 #[derive(LangNode)]
-pub struct WasmExternOp {
+pub struct WasmRuntimeOp {
     #[inputs]
     inputs: SmallColl<Inport>,
-    op: ExternOp,
+    pub op: ExternOp,
     #[output]
     output: Output,
 }
@@ -32,7 +33,7 @@ pub struct WasmExternOp {
 pub struct WasmBinaryOp {
     #[inputs]
     inputs: [Inport; 2],
-    op: walrus::ir::UnaryOp,
+    pub op: walrus::ir::UnaryOp,
     #[output]
     output: Output,
 }
@@ -41,7 +42,7 @@ pub struct WasmBinaryOp {
 pub struct WasmUnaryOp {
     #[input]
     inputs: Inport,
-    op: walrus::ir::UnaryOp,
+    pub op: walrus::ir::UnaryOp,
     #[output]
     output: Output,
 }

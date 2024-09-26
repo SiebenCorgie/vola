@@ -135,6 +135,9 @@ impl SpirvBackend {
         rvsdg_viewer::into_svg_with_config(&self.graph, name, &conf)
     }
 
+    #[cfg(not(feature = "viewer"))]
+    pub fn push_debug_state(&mut self, name: &str) {}
+
     #[cfg(feature = "viewer")]
     pub fn push_debug_state(&mut self, name: &str) {
         use rvsdg_viewer::layout::LayoutConfig;
@@ -163,6 +166,9 @@ impl SpirvBackend {
             self.dump_debug_state(&format!("{name}.bin"));
         }
     }
+
+    #[cfg(not(feature = "viewer"))]
+    pub fn dump_debug_state(&self, path: &dyn AsRef<std::path::Path>) {}
     #[cfg(feature = "viewer")]
     pub fn dump_debug_state(&self, path: &dyn AsRef<std::path::Path>) {
         println!("Dumping {:?}", path.as_ref());
