@@ -8,3 +8,7 @@ vola-opt = { path = "../vola-opt" }
 vola-common = { path = "../vola-common" }
 rvsdg = { path = "../rvsdg" }
 rvsdg-viewer = { path = "../rvsdg-viewer", optional = true }
+walrus.workspace = true
+
+
+[dev-dependencies]
