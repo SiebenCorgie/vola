@@ -57,7 +57,7 @@ fn main() {
     let target_format = match args.format {
         Format::Spirv => Backend::Spirv,
         Format::X86 => Backend::Cranelift(CraneliftTarget::X86),
-        Format::WASM => Backend::Cranelift(CraneliftTarget::Wasm),
+        Format::WASM => Backend::Wasm,
     };
 
     //configure volac based on the args and execute

@@ -25,15 +25,18 @@ use vola_backend_spirv::{rspirv::binary::Assemble, SpirvConfig};
 use vola_common::reset_file_cache;
 use vola_opt::Optimizer;
 
+mod backends;
+
 #[derive(Debug, Clone, Copy)]
 pub enum CraneliftTarget {
     X86,
-    Wasm,
+    ARM,
 }
 
 #[derive(Debug, Clone, Copy)]
 pub enum Backend {
     Spirv,
+    Wasm,
     Cranelift(CraneliftTarget),
 }
 
@@ -41,8 +44,9 @@ impl Backend {
     pub fn suffix(&self) -> &str {
         match self {
             Backend::Spirv => "spv",
+            Backend::Wasm => "wasm",
             Backend::Cranelift(CraneliftTarget::X86) => "bin",
-            Backend::Cranelift(CraneliftTarget::Wasm) => "wasm",
+            Backend::Cranelift(CraneliftTarget::ARM) => "arm",
         }
     }
 }

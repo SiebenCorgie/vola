@@ -8,7 +8,9 @@
 
 use std::error::Error;
 
+use rvsdg::util::graph_type_transform::GraphTypeTransformerError;
 use vola_common::{thiserror::Error, Reportable};
+use vola_opt::common::Ty;
 
 impl Reportable for WasmError {}
 
@@ -18,4 +20,14 @@ pub enum WasmError {
     Any(Box<dyn Error + Sync + Send + 'static>),
     #[error(transparent)]
     WalrusError(walrus::ErrorKind),
+    #[error("Failed to intern optimizer state")]
+    InterningFailed,
+    #[error(transparent)]
+    GraphTransError(#[from] GraphTypeTransformerError),
+    #[error("Encountered unsupported optimizer node {0}")]
+    UnsupportedNode(String),
+    #[error("Encountered composite immediate value. Was \"ImmScalarize\" applied?")]
+    UnexpectedComposite,
+    #[error("Unexpected type {0:?}")]
+    UnexpectedType(Ty),
 }
