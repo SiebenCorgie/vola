@@ -12,7 +12,7 @@
 use std::path::PathBuf;
 
 use clap::{Parser, ValueEnum};
-use volac::{Backend, CraneliftTarget};
+use volac::{backends::Spirv, Target};
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug)]
 enum Format {
@@ -54,16 +54,15 @@ fn main() {
     pretty_env_logger::init();
     let args = Args::parse();
 
-    let target_format = match args.format {
-        Format::Spirv => Backend::Spirv,
-        Format::X86 => Backend::Cranelift(CraneliftTarget::X86),
-        Format::WASM => Backend::Wasm,
+    let backend = match args.format {
+        Format::Spirv => Box::new(Spirv::new(Target::file(&args.output_name))),
+        Format::X86 => unimplemented!(),
+        Format::WASM => unimplemented!(),
     };
 
     //configure volac based on the args and execute
-    let pipeline = volac::Pipeline {
-        target_format,
-        target: volac::Target::File(args.output_name),
+    let mut pipeline = volac::Pipeline {
+        backend,
         late_cne: !args.no_opt && !args.no_cne,
         late_cnf: !args.no_opt && !args.no_cnf,
         early_cnf: !args.no_opt && !args.no_cnf,

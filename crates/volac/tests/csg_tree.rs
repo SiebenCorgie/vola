@@ -16,7 +16,7 @@ use volac::PipelineError;
 /// Then we want that translated into our export. (Instead of bugs ^^).
 #[test]
 fn tree_cutoff() {
-    let pipeline = volac::Pipeline::new_in_memory();
+    let mut pipeline = volac::Pipeline::new_in_memory();
     let target = pipeline
         .execute_on_file(&"tests/vola_src/cutoff_tree.vola")
         .unwrap();
@@ -26,7 +26,7 @@ fn tree_cutoff() {
 #[test]
 fn std_compiles() {
     //pretty simple. This should _always_ work.
-    let pipeline = volac::Pipeline::new_in_memory();
+    let mut pipeline = volac::Pipeline::new_in_memory();
     let target = pipeline
         .execute_on_file(&"tests/vola_src/std.vola")
         .unwrap();
@@ -37,7 +37,7 @@ fn std_compiles() {
 fn multi_concept_impl() {
     //Tests the case that one entity implements multiple concepts,
     // and the _change_ from one concept into another on the tree
-    let pipeline = volac::Pipeline::new_in_memory();
+    let mut pipeline = volac::Pipeline::new_in_memory();
     let target = pipeline
         .execute_on_file(&"tests/vola_src/concept_change.vola")
         .unwrap();
@@ -48,7 +48,7 @@ fn multi_concept_impl() {
 fn unused_arg_define() {
     //Tests the case that one entity implements multiple concepts,
     // and the _change_ from one concept into another on the tree
-    let pipeline = volac::Pipeline::new_in_memory();
+    let mut pipeline = volac::Pipeline::new_in_memory();
     let target = pipeline
         .execute_on_file(&"tests/vola_src/unused_define_arg.vola")
         .unwrap();
@@ -57,7 +57,7 @@ fn unused_arg_define() {
 
 #[test]
 fn eval_in_fn() {
-    let pipeline = volac::Pipeline::new_in_memory();
+    let mut pipeline = volac::Pipeline::new_in_memory();
     match pipeline.execute_on_file(&"tests/vola_src/eval_in_fn.vola") {
         Err(PipelineError::OptError(vola_opt::OptError::ErrorsOccurred(1))) => {}
         Err(e) => panic!("Wrong kind of error, expected ErrorsOccurred(1), got {e:?}"),
@@ -66,7 +66,7 @@ fn eval_in_fn() {
 }
 #[test]
 fn eval_in_fdef() {
-    let pipeline = volac::Pipeline::new_in_memory();
+    let mut pipeline = volac::Pipeline::new_in_memory();
     match pipeline.execute_on_file(&"tests/vola_src/eval_in_fdef.vola") {
         Err(PipelineError::OptError(vola_opt::OptError::ErrorsOccurred(1))) => {}
         Err(e) => panic!("Wrong kind of error, expected ErrorsOccurred(1), got {e:?}"),
@@ -75,7 +75,7 @@ fn eval_in_fdef() {
 }
 #[test]
 fn eval_in_export() {
-    let pipeline = volac::Pipeline::new_in_memory();
+    let mut pipeline = volac::Pipeline::new_in_memory();
     match pipeline.execute_on_file(&"tests/vola_src/eval_in_export.vola") {
         Err(PipelineError::OptError(vola_opt::OptError::ErrorsOccurred(1))) => {}
         Err(e) => panic!("Wrong kind of error, expected ErrorsOccurred(1), got {e:?}"),
@@ -84,7 +84,7 @@ fn eval_in_export() {
 }
 #[test]
 fn eval_in_entity() {
-    let pipeline = volac::Pipeline::new_in_memory();
+    let mut pipeline = volac::Pipeline::new_in_memory();
     match pipeline.execute_on_file(&"tests/vola_src/eval_in_entity.vola") {
         Err(PipelineError::OptError(vola_opt::OptError::Any { text })) => {
             assert!(text == "Could not find implementation of \"SDF3D\" for \"InnerEntity\"")

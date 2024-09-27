@@ -1,7 +1,7 @@
 ///Simplest autodiff test that just applies AD once for a sphere definition
 #[test]
 fn ad_sphere() {
-    let pipeline = volac::Pipeline::new_in_memory();
+    let mut pipeline = volac::Pipeline::new_in_memory();
     let target = pipeline
         .execute_on_file(&"tests/vola_src/autodiff_sphere.vola")
         .unwrap();
@@ -10,7 +10,7 @@ fn ad_sphere() {
 
 #[test]
 fn ad_sphere_vec() {
-    let pipeline = volac::Pipeline::new_in_memory();
+    let mut pipeline = volac::Pipeline::new_in_memory();
     let target = pipeline
         .execute_on_file(&"tests/vola_src/autodiff_sphere_vec.vola")
         .unwrap();
@@ -19,7 +19,7 @@ fn ad_sphere_vec() {
 
 #[test]
 fn ad_sphere_with_external() {
-    let pipeline = volac::Pipeline::new_in_memory();
+    let mut pipeline = volac::Pipeline::new_in_memory();
     let target = pipeline
         .execute_on_file(&"tests/vola_src/autodiff_sphere_with_external.vola")
         .unwrap();
@@ -28,7 +28,7 @@ fn ad_sphere_with_external() {
 
 #[test]
 fn ad_sphere_with_external_vec() {
-    let pipeline = volac::Pipeline::new_in_memory();
+    let mut pipeline = volac::Pipeline::new_in_memory();
     let target = pipeline
         .execute_on_file(&"tests/vola_src/autodiff_sphere_with_external_vec.vola")
         .unwrap();
@@ -37,7 +37,7 @@ fn ad_sphere_with_external_vec() {
 
 #[test]
 fn ad_box() {
-    let pipeline = volac::Pipeline::new_in_memory();
+    let mut pipeline = volac::Pipeline::new_in_memory();
     let target = pipeline
         .execute_on_file(&"tests/vola_src/autodiff_box.vola")
         .unwrap();
@@ -46,7 +46,7 @@ fn ad_box() {
 
 #[test]
 fn ad_box_vec() {
-    let pipeline = volac::Pipeline::new_in_memory();
+    let mut pipeline = volac::Pipeline::new_in_memory();
     let target = pipeline
         .execute_on_file(&"tests/vola_src/autodiff_box.vola")
         .unwrap();
@@ -55,7 +55,7 @@ fn ad_box_vec() {
 
 #[test]
 fn ad_nontrivial_activity() {
-    let pipeline = volac::Pipeline::new_in_memory();
+    let mut pipeline = volac::Pipeline::new_in_memory();
     let target = pipeline
         .execute_on_file(&"tests/vola_src/autodiff_non_trivial_activity_trace.vola")
         .unwrap();
@@ -64,7 +64,7 @@ fn ad_nontrivial_activity() {
 
 #[test]
 fn ad_with_gamma() {
-    let pipeline = volac::Pipeline::new_in_memory();
+    let mut pipeline = volac::Pipeline::new_in_memory();
     let target = pipeline
         .execute_on_file(&"tests/vola_src/autodiff_with_gamma.vola")
         .unwrap();
@@ -73,7 +73,7 @@ fn ad_with_gamma() {
 
 #[test]
 fn ad_with_theta() {
-    let pipeline = volac::Pipeline::new_in_memory();
+    let mut pipeline = volac::Pipeline::new_in_memory();
     let target = pipeline
         .execute_on_file(&"tests/vola_src/autodiff_with_theta.vola")
         .unwrap();
@@ -82,7 +82,7 @@ fn ad_with_theta() {
 
 #[test]
 fn ad_with_theta_fractal() {
-    let pipeline = volac::Pipeline::new_in_memory();
+    let mut pipeline = volac::Pipeline::new_in_memory();
     let target = pipeline
         .execute_on_file(&"tests/vola_src/autodiff_with_theta_fract.vola")
         .unwrap();
@@ -91,7 +91,7 @@ fn ad_with_theta_fractal() {
 
 #[test]
 fn ad_higher_order_derivative() {
-    let pipeline = volac::Pipeline::new_in_memory();
+    let mut pipeline = volac::Pipeline::new_in_memory();
     let target = pipeline
         .execute_on_file(&"tests/vola_src/second_order_diff.vola")
         .unwrap();

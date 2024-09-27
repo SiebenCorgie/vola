@@ -1,4 +1,7 @@
-use rvsdg::{err::GraphError, util::cnf::CnfError};
+use rvsdg::{
+    err::GraphError,
+    util::{cne::CneError, cnf::CnfError},
+};
 use vola_common::{
     thiserror::{self, Error},
     Reportable,
@@ -25,4 +28,6 @@ pub enum PipelineError {
     AstError(#[from] vola_ast::AstError),
     #[error(transparent)]
     CnfError(#[from] CnfError),
+    #[error(transparent)]
+    CneError(#[from] CneError),
 }

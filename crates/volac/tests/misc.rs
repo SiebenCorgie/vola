@@ -2,7 +2,7 @@ use volac::PipelineError;
 
 #[test]
 fn use_external_function() {
-    let pipeline = volac::Pipeline::new_in_memory();
+    let mut pipeline = volac::Pipeline::new_in_memory();
     let target = pipeline
         .execute_on_file(&"tests/vola_src/custom_fn.vola")
         .unwrap();
@@ -11,7 +11,7 @@ fn use_external_function() {
 
 #[test]
 fn eval_in_entity() {
-    let pipeline = volac::Pipeline::new_in_memory();
+    let mut pipeline = volac::Pipeline::new_in_memory();
 
     let expected_error = PipelineError::OptError(vola_opt::OptError::Any {
         text: "Could not find implementation of \"SDF3D\" for \"InnerEntity\"".to_owned(),
@@ -28,7 +28,7 @@ fn eval_in_entity() {
 }
 #[test]
 fn recursive_function_simple() {
-    let pipeline = volac::Pipeline::new_in_memory();
+    let mut pipeline = volac::Pipeline::new_in_memory();
 
     let expected_error = PipelineError::OptError(vola_opt::OptError::ErrorsOccurred(2));
     match pipeline.execute_on_file(&"tests/vola_src/simple_recursive_call.vola") {
@@ -43,7 +43,7 @@ fn recursive_function_simple() {
 }
 #[test]
 fn recursive_function_cascading() {
-    let pipeline = volac::Pipeline::new_in_memory();
+    let mut pipeline = volac::Pipeline::new_in_memory();
 
     let expected_error = PipelineError::OptError(vola_opt::OptError::ErrorsOccurred(3));
     match pipeline.execute_on_file(&"tests/vola_src/cascaded_recursive_call.vola") {
@@ -58,7 +58,7 @@ fn recursive_function_cascading() {
 }
 #[test]
 fn unknown_subtree_reference() {
-    let pipeline = volac::Pipeline::new_in_memory();
+    let mut pipeline = volac::Pipeline::new_in_memory();
 
     let expected_error = PipelineError::OptError(vola_opt::OptError::ErrorsOccurred(1));
     match pipeline.execute_on_file(&"tests/vola_src/unknown_subtree_reference.vola") {
@@ -74,7 +74,7 @@ fn unknown_subtree_reference() {
 
 #[test]
 fn simple_gamma() {
-    let pipeline = volac::Pipeline::new_in_memory();
+    let mut pipeline = volac::Pipeline::new_in_memory();
 
     let target = pipeline
         .execute_on_file(&"tests/vola_src/ifthenelse.vola")
@@ -84,7 +84,7 @@ fn simple_gamma() {
 
 #[test]
 fn gamma_unequal() {
-    let pipeline = volac::Pipeline::new_in_memory();
+    let mut pipeline = volac::Pipeline::new_in_memory();
 
     let target = pipeline
         .execute_on_file(&"tests/vola_src/ifthenelse_unequal.vola")
@@ -94,7 +94,7 @@ fn gamma_unequal() {
 
 #[test]
 fn gamma_local_variable() {
-    let pipeline = volac::Pipeline::new_in_memory();
+    let mut pipeline = volac::Pipeline::new_in_memory();
 
     let target = pipeline
         .execute_on_file(&"tests/vola_src/gamma_local_variable.vola")
@@ -104,7 +104,7 @@ fn gamma_local_variable() {
 
 #[test]
 fn simple_theta() {
-    let pipeline = volac::Pipeline::new_in_memory();
+    let mut pipeline = volac::Pipeline::new_in_memory();
 
     let target = pipeline
         .execute_on_file(&"tests/vola_src/theta_assignment.vola")
@@ -113,7 +113,7 @@ fn simple_theta() {
 }
 #[test]
 fn theta_nested() {
-    let pipeline = volac::Pipeline::new_in_memory();
+    let mut pipeline = volac::Pipeline::new_in_memory();
 
     let target = pipeline
         .execute_on_file(&"tests/vola_src/theta_nested.vola")
@@ -122,7 +122,7 @@ fn theta_nested() {
 }
 #[test]
 fn theta_nested_simple() {
-    let pipeline = volac::Pipeline::new_in_memory();
+    let mut pipeline = volac::Pipeline::new_in_memory();
 
     let target = pipeline
         .execute_on_file(&"tests/vola_src/theta_nested_simple.vola")
@@ -131,7 +131,7 @@ fn theta_nested_simple() {
 }
 #[test]
 fn theta_simple_local_variable() {
-    let pipeline = volac::Pipeline::new_in_memory();
+    let mut pipeline = volac::Pipeline::new_in_memory();
 
     let target = pipeline
         .execute_on_file(&"tests/vola_src/theta_local_variable.vola")
@@ -141,7 +141,7 @@ fn theta_simple_local_variable() {
 
 #[test]
 fn in_loop_eval() {
-    let pipeline = volac::Pipeline::new_in_memory();
+    let mut pipeline = volac::Pipeline::new_in_memory();
     //NOTE: This tests both, in-gamma-eval, and in-loop-eval
     let target = pipeline
         .execute_on_file(&"tests/vola_src/in_loop_eval.vola")
@@ -151,7 +151,7 @@ fn in_loop_eval() {
 
 #[test]
 fn multi_concept_eval_in_loop_eval() {
-    let pipeline = volac::Pipeline::new_in_memory();
+    let mut pipeline = volac::Pipeline::new_in_memory();
     //NOTE: This tests both, in-gamma-eval, and in-loop-eval
     let target = pipeline
         .execute_on_file(&"tests/vola_src/subtree_multi_concept_eval.vola")
@@ -161,7 +161,7 @@ fn multi_concept_eval_in_loop_eval() {
 
 #[test]
 fn aii_impl() {
-    let pipeline = volac::Pipeline::new_in_memory();
+    let mut pipeline = volac::Pipeline::new_in_memory();
     //NOTE: Tests the automatic-identitiy-implementation metioned here
     //      https://gitlab.com/tendsinmende/vola/-/issues/16
     let target = pipeline
@@ -172,7 +172,7 @@ fn aii_impl() {
 
 #[test]
 fn splat_expr() {
-    let pipeline = volac::Pipeline::new_in_memory();
+    let mut pipeline = volac::Pipeline::new_in_memory();
     //Splat-expression implementation:
     // https://gitlab.com/tendsinmende/vola/-/merge_requests/33
     let target = pipeline
@@ -183,7 +183,7 @@ fn splat_expr() {
 
 #[test]
 fn csg_scope_local_variable() {
-    let pipeline = volac::Pipeline::new_in_memory();
+    let mut pipeline = volac::Pipeline::new_in_memory();
     let target = pipeline
         .execute_on_file(&"tests/vola_src/csg_scope_local_variable.vola")
         .unwrap();
