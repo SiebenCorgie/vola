@@ -1,0 +1,13 @@
+
+concept Sdf3d: vec3 -> s;
+entity Sphere(rad: s);
+
+impl Sphere for Sdf3d(at){
+    length(at) - rad
+}
+
+export myfield(at: vec3){
+    csg s = Sphere(1.0);
+
+    eval s.Sdf3d(at)
+}

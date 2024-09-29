@@ -9,6 +9,7 @@
 mod spriv;
 pub use spriv::Spirv;
 mod wasm;
+pub use wasm::Wasm;
 
 use vola_opt::Optimizer;
 

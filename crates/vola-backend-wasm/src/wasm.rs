@@ -32,6 +32,7 @@ use crate::graph::WasmNode;
 pub enum ExternOp {
     Cross,
     Dot,
+    Length,
     MatrixInverse,
     Sin,
     Mod,
@@ -78,6 +79,10 @@ impl From<&Buildin> for WasmNode {
             BuildinOp::Cross => WasmNode::Runtime(WasmRuntimeOp::new_with_signature(
                 value.inputs.len(),
                 ExternOp::Cross,
+            )),
+            BuildinOp::Length => WasmNode::Runtime(WasmRuntimeOp::new_with_signature(
+                value.inputs.len(),
+                ExternOp::Length,
             )),
             _ => panic!("Unsupported buildin op {:?}", value.op),
         }

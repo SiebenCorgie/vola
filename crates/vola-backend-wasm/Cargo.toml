@@ -17,5 +17,6 @@ rvsdg = { path = "../rvsdg" }
 rvsdg-viewer = { path = "../rvsdg-viewer", optional = true }
 walrus.workspace = true
 
-
-[dev-dependencies]
+[build-dependencies]
+#NOTE: this needs the -Z bindeps option at the moment. This is set in the .cargo/config.toml.
+wasm-runtime = { path = "../wasm-runtime", artifact = "cdylib", target = "wasm32-unknown-unknown" }

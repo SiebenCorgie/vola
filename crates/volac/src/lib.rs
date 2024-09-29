@@ -22,7 +22,6 @@ use vola_ast::VolaAst;
 
 mod error;
 pub use error::PipelineError;
-use vola_backend_spirv::{rspirv::binary::Assemble, SpirvConfig};
 use vola_common::reset_file_cache;
 use vola_opt::Optimizer;
 

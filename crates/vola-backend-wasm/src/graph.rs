@@ -6,13 +6,12 @@
  * 2024 Tendsin Mende
  */
 
-use std::{env::var_os, fmt::Display};
+use std::fmt::Display;
 
 use rvsdg::{
     edge::LangEdge,
     nodes::LangNode,
     region::{Inport, Input, Outport, Output},
-    rvsdg_derive_lang::LangNode,
     smallvec::smallvec,
     SmallColl,
 };

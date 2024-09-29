@@ -82,7 +82,7 @@ Working on automatic differentiation support.
 
 ## Building & Running
 
-To build ✨ _Just run `cargo build`_ ✨.
+Make sure that you are on rust-nightly (eg. `rustup default nightly`). Then just build ✨ `cargo build`_ ✨.
 
 ### vola-cli
 

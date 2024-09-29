@@ -6,7 +6,7 @@
  * 2024 Tendsin Mende
  */
 
-use rvsdg::util::graph_type_transform::GraphTypeTransformer;
+use rvsdg::util::graph_type_transform::{GraphMapping, GraphTypeTransformer};
 use vola_common::{error::error_reporter, report, Span};
 use vola_opt::{common::Ty, OptEdge, OptNode, Optimizer};
 
@@ -93,8 +93,20 @@ impl WasmBackend {
 
         self.graph = new_graph;
 
-        println!("TODO: carry over debug info!");
+        //transfer debug info
+        self.transfer_debug_info(&remapping, optimizer);
 
         Ok(())
+    }
+
+    fn transfer_debug_info(&mut self, remapping: &GraphMapping, opt: &Optimizer) {
+        for (src_node, dst_node) in remapping.node_mapping.iter() {
+            if let Some(name) = opt.names.get(&src_node.into()) {
+                self.names.set(dst_node.into(), name.clone());
+            }
+            if let Some(span) = opt.span_tags.get(&src_node.into()) {
+                self.spans.set(dst_node.into(), span.clone());
+            }
+        }
     }
 }

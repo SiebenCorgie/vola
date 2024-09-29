@@ -25,6 +25,8 @@ pub enum PipelineError {
     #[error(transparent)]
     SpirvError(#[from] vola_backend_spirv::BackendSpirvError),
     #[error(transparent)]
+    WasmError(#[from] vola_backend_wasm::WasmError),
+    #[error(transparent)]
     AstError(#[from] vola_ast::AstError),
     #[error(transparent)]
     CnfError(#[from] CnfError),

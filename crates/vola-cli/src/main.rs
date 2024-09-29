@@ -12,7 +12,10 @@
 use std::path::PathBuf;
 
 use clap::{Parser, ValueEnum};
-use volac::{backends::Spirv, Target};
+use volac::{
+    backends::{PipelineBackend, Spirv, Wasm},
+    Target,
+};
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug)]
 enum Format {
@@ -54,10 +57,10 @@ fn main() {
     pretty_env_logger::init();
     let args = Args::parse();
 
-    let backend = match args.format {
+    let backend: Box<dyn PipelineBackend> = match args.format {
         Format::Spirv => Box::new(Spirv::new(Target::file(&args.output_name))),
         Format::X86 => unimplemented!(),
-        Format::WASM => unimplemented!(),
+        Format::WASM => Box::new(Wasm::new(Target::file(&args.output_name))),
     };
 
     //configure volac based on the args and execute

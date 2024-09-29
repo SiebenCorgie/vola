@@ -14,12 +14,14 @@
 //!
 //! Under the hood the module loads [vola-wasm-runtime]() crate's wasm module as a runtime. The crate implements special functions like `length`, `cross` etc, and loads functions like `sqrt`, `sin` etc.
 
-use error::WasmError;
-use rvsdg::Rvsdg;
+use graph::{WasmEdge, WasmTy};
+use rvsdg::{attrib::FlagStore, Rvsdg};
 #[cfg(feature = "viewer")]
 use rvsdg_viewer::ViewerState;
+use vola_common::Span;
 use vola_opt::Optimizer;
 mod error;
+pub use error::WasmError;
 mod graph;
 mod passes;
 mod runtime;
@@ -27,6 +29,10 @@ mod wasm;
 
 pub struct WasmBackend {
     graph: Rvsdg<graph::WasmNode, graph::WasmEdge>,
+
+    spans: FlagStore<Span>,
+    names: FlagStore<String>,
+
     #[cfg(feature = "viewer")]
     viewer: ViewerState,
 }
@@ -35,6 +41,9 @@ impl WasmBackend {
     pub fn new() -> Self {
         WasmBackend {
             graph: Rvsdg::new(),
+
+            spans: FlagStore::new(),
+            names: FlagStore::new(),
 
             #[cfg(feature = "viewer")]
             viewer: ViewerState::new(),
@@ -57,7 +66,13 @@ impl WasmBackend {
 
     #[cfg(feature = "viewer")]
     pub fn push_debug_state(&mut self, name: &str) {
-        use rvsdg_viewer::layout::LayoutConfig;
+        use rvsdg_viewer::{layout::LayoutConfig, View};
+
+        let mut local_typemap = FlagStore::new();
+        for edg in self.graph.edges() {
+            let ident = self.graph.edge(edg).ty.name();
+            local_typemap.set(edg.into(), ident);
+        }
 
         let layout_config = LayoutConfig {
             ignore_dead_node: false,
@@ -66,6 +81,9 @@ impl WasmBackend {
 
         self.viewer
             .new_state_builder(name, &self.graph, &layout_config)
+            .with_flags("Name", &self.names)
+            .with_flags("Span", &self.spans)
+            .with_flags("Type", &local_typemap)
             .build();
 
         if std::env::var("VOLA_ALWAYS_WRITE_DUMP").is_ok() {
