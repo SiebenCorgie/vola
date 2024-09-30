@@ -8,3 +8,5 @@
 
 //! Scalarizer that transforms any non-extern defined op that does vector-element wise operations into a
 //! set of scalar operations.
+
+use crate::{WasmBackend, WasmError};

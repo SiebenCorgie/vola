@@ -16,12 +16,13 @@ use scfr::ScfrError;
 use slotmap::{new_key_type, Key, SlotMap};
 use smallvec::{smallvec, SmallVec};
 
-use crate::{edge::OutportLocation, NodeRef, SmallColl};
+use crate::{edge::OutportLocation, NodeRef};
 
 ///CFG recovery via the _naive_ StructuredControlFlowRecovery described in section 3.4 _Perfect Reconstructability of Control Flow from Demand Dependence Graphs_
 /// [here](https://dl.acm.org/doi/10.1145/2693261)
 pub mod scfr;
 
+#[derive(Debug)]
 pub enum CfgNode {
     //Header _into_ a Theta nodes body.
     LoopHeader {
@@ -189,7 +190,7 @@ impl Cfg {
                 let succpreds = self.nodes[succ].predecessors();
                 let mut seen_all = true;
                 for sp in succpreds {
-                    if !seen.contains(sp) {
+                    if !seen.contains(&sp) {
                         seen_all = false;
                         break;
                     }

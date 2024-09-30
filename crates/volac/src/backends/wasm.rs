@@ -30,6 +30,19 @@ impl PipelineBackend for Wasm {
         let mut backend = vola_backend_wasm::WasmBackend::new();
         backend.intern_module(&opt)?;
 
+        //This transforms the RVSDG into a WASM module
+        //By loading the runtime, and then adding all exported functions to that.
+        let mut module = backend.into_wasm_module()?;
+
+        //Depending on the target either write to file, or to buffer
+        match &mut self.target {
+            Target::Buffer(buffer) => {
+                let buf = module.emit_wasm();
+                *buffer = buf;
+            }
+            Target::File(path) => module.emit_wasm_file(path).unwrap(),
+        }
+
         Ok(self.target.clone())
     }
 }

@@ -42,17 +42,20 @@ impl GraphTypeTransformer for InterningTransformer {
         match src_edge {
             OptEdge::State => WasmEdge::State,
             OptEdge::Value { ty } => {
-                let (ty, shape) = if let Some(ty) = ty.get_type() {
+                let ty = if let Some(ty) = ty.get_type() {
                     match ty {
-                        Ty::Scalar => (WasmTy::F32, TyShape::Scalar),
-                        Ty::Nat => (WasmTy::I32, TyShape::Scalar),
-                        Ty::Bool => (WasmTy::I32, TyShape::Scalar),
-                        Ty::Vector { width } => (WasmTy::F32, TyShape::Vector { width }),
-                        Ty::Matrix { width, height } => {
-                            (WasmTy::F32, TyShape::Matrix { width, height })
+                        Ty::Scalar => WasmTy::new_with_shape(walrus::ValType::F32, TyShape::Scalar),
+                        Ty::Nat => WasmTy::new_with_shape(walrus::ValType::I32, TyShape::Scalar),
+                        Ty::Bool => WasmTy::new_with_shape(walrus::ValType::I32, TyShape::Scalar),
+                        Ty::Vector { width } => {
+                            WasmTy::new_with_shape(walrus::ValType::F32, TyShape::Vector { width })
                         }
-                        Ty::Tensor { dim } => (
-                            WasmTy::F32,
+                        Ty::Matrix { width, height } => WasmTy::new_with_shape(
+                            walrus::ValType::F32,
+                            TyShape::Matrix { width, height },
+                        ),
+                        Ty::Tensor { dim } => WasmTy::new_with_shape(
+                            walrus::ValType::F32,
                             TyShape::Tensor {
                                 dim: dim.iter().cloned().collect(),
                             },
@@ -62,14 +65,14 @@ impl GraphTypeTransformer for InterningTransformer {
                                 error_reporter(WasmError::UnexpectedType(other), Span::empty())
                                     .finish(),
                             );
-                            (WasmTy::Undefined, TyShape::Scalar)
+                            WasmTy::Undefined
                         }
                     }
                 } else {
-                    (WasmTy::Undefined, TyShape::Scalar)
+                    WasmTy::Undefined
                 };
 
-                WasmEdge::Value { ty, shape }
+                WasmEdge::Value(ty)
             }
         }
     }

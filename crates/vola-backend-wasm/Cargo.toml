@@ -16,6 +16,8 @@ vola-common = { path = "../vola-common" }
 rvsdg = { path = "../rvsdg" }
 rvsdg-viewer = { path = "../rvsdg-viewer", optional = true }
 walrus.workspace = true
+ahash.workspace = true
+
 
 [build-dependencies]
 #NOTE: this needs the -Z bindeps option at the moment. This is set in the .cargo/config.toml.

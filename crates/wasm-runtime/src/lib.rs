@@ -30,3 +30,8 @@ extern "C" fn do_stuff(x: i32, f: f32) -> f32 {
 extern "C" fn cross_vec3(a: Vec3, b: Vec3) -> Vec3 {
     glam::Vec3::cross(a.into(), b.into()).into()
 }
+
+#[no_mangle]
+extern "C" fn length_vec3(a: Vec3) -> f32 {
+    a.length()
+}

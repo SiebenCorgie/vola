@@ -23,7 +23,7 @@ pub mod dot;
 
 pub mod error;
 mod reporter;
-pub use reporter::{cache_file, report, reset_file_cache, Reportable};
+pub use reporter::{cache_file, report, reset_file_cache};
 
 pub type FileString = SmallString<[u8; 32]>;
 

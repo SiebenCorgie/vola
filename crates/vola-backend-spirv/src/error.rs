@@ -8,12 +8,7 @@
 
 use rvsdg::util::graph_type_transform::GraphTypeTransformerError;
 use spirv_grammar_rules::Rule;
-use vola_common::{
-    thiserror::{self, Error},
-    Reportable,
-};
-
-impl Reportable for BackendSpirvError {}
+use vola_common::thiserror::{self, Error};
 
 #[derive(Debug, Error, Clone)]
 pub enum BackendSpirvError {

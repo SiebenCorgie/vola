@@ -15,7 +15,10 @@
 //! Under the hood the module loads [vola-wasm-runtime]() crate's wasm module as a runtime. The crate implements special functions like `length`, `cross` etc, and loads functions like `sqrt`, `sin` etc.
 
 use graph::{WasmEdge, WasmTy};
-use rvsdg::{attrib::FlagStore, Rvsdg};
+use rvsdg::{
+    attrib::{AttribLocation, FlagStore},
+    Rvsdg,
+};
 #[cfg(feature = "viewer")]
 use rvsdg_viewer::ViewerState;
 use vola_common::Span;
@@ -98,5 +101,12 @@ impl WasmBackend {
     pub fn dump_debug_state(&self, path: &dyn AsRef<std::path::Path>) {
         println!("Dumping {:?}", path.as_ref());
         self.viewer.write_to_file(path)
+    }
+
+    pub fn span_or_empty(&self, attrib: impl Into<AttribLocation>) -> Span {
+        self.spans
+            .get(&attrib.into())
+            .cloned()
+            .unwrap_or(Span::empty())
     }
 }

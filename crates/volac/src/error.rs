@@ -2,13 +2,8 @@ use rvsdg::{
     err::GraphError,
     util::{cne::CneError, cnf::CnfError},
 };
-use vola_common::{
-    thiserror::{self, Error},
-    Reportable,
-};
+use vola_common::thiserror::{self, Error};
 use vola_opt::OptError;
-
-impl Reportable for PipelineError {}
 
 ///Error type collection that can happen at compile-time.
 ///Mostly transparent errors

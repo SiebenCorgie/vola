@@ -8,3 +8,4 @@
 
 mod intern_opt;
 mod scalarize;
+mod wasm_module;

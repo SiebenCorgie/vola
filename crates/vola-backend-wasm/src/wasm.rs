@@ -26,7 +26,10 @@ use vola_opt::{
     imm::{ImmNat, ImmScalar},
 };
 
-use crate::graph::WasmNode;
+use crate::{
+    graph::{WasmNode, WasmTy},
+    WasmError,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ExternOp {
@@ -37,6 +40,35 @@ pub enum ExternOp {
     Sin,
     Mod,
     Fract,
+}
+
+impl ExternOp {
+    pub fn get_static_symbol_name(&self, input_types: &[WasmTy]) -> Result<String, WasmError> {
+        match self {
+            Self::Length => {
+                if input_types.len() != 1 {
+                    return Err(WasmError::RuntimeIncompatibleSig(
+                        self.clone(),
+                        input_types.len(),
+                    ));
+                }
+
+                match (
+                    input_types[0].element_count(),
+                    input_types[0].unwarp_walrus_ty(),
+                ) {
+                    (3, walrus::ValType::F32) => Ok("length_vec3".to_string()),
+                    (_count, _ty) => Err(WasmError::RuntimeIncompatibleType(
+                        self.clone(),
+                        0,
+                        input_types[0].clone(),
+                    )),
+                }
+            }
+
+            _ => panic!("Extern Op {self:?} not implemented"),
+        }
+    }
 }
 
 #[derive(LangNode)]

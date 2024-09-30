@@ -34,6 +34,8 @@ use crate::{
     wasm::{self, WasmBinaryOp, WasmRuntimeOp, WasmUnaryOp, WasmValue},
 };
 
+mod utils;
+
 pub enum WasmNode {
     Unary(WasmUnaryOp),
     Binary(WasmBinaryOp),
@@ -167,13 +169,42 @@ impl View for WasmNode {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum WasmTy {
-    I32,
-    I64,
-    F32,
-    F64,
+    Defined { shape: TyShape, ty: walrus::ValType },
     Undefined,
+}
+
+impl WasmTy {
+    pub fn new_with_shape(ty: walrus::ValType, shape: TyShape) -> Self {
+        Self::Defined { shape, ty }
+    }
+
+    pub fn element_count(&self) -> usize {
+        match self {
+            Self::Defined { shape, ty } => shape.element_count(),
+            Self::Undefined => 0,
+        }
+    }
+
+    pub fn unwarp_walrus_ty(&self) -> walrus::ValType {
+        if let Self::Defined { shape: _, ty } = self {
+            ty.clone()
+        } else {
+            panic!("Type was undefined!")
+        }
+    }
+
+    pub fn append_elements_to_signature(&self, signature: &mut SmallColl<walrus::ValType>) {
+        match self {
+            Self::Undefined => {}
+            Self::Defined { shape, ty } => {
+                for _ in 0..shape.element_count() {
+                    signature.push(ty.clone());
+                }
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -182,6 +213,17 @@ pub enum TyShape {
     Vector { width: usize },
     Matrix { width: usize, height: usize },
     Tensor { dim: SmallColl<usize> },
+}
+
+impl TyShape {
+    pub fn element_count(&self) -> usize {
+        match self {
+            Self::Scalar => 1,
+            Self::Vector { width } => *width,
+            Self::Matrix { width, height } => width * height,
+            Self::Tensor { dim } => dim.iter().fold(1, |x, y| x * y),
+        }
+    }
 }
 
 impl Display for TyShape {
@@ -195,9 +237,19 @@ impl Display for TyShape {
     }
 }
 
+#[derive(Debug, Clone)]
 pub enum WasmEdge {
     State,
-    Value { ty: WasmTy, shape: TyShape },
+    Value(WasmTy),
+}
+
+impl WasmEdge {
+    pub fn type_or_undefined(&self) -> WasmTy {
+        match self {
+            Self::State => WasmTy::Undefined,
+            Self::Value(t) => t.clone(),
+        }
+    }
 }
 
 impl LangEdge for WasmEdge {
@@ -206,10 +258,7 @@ impl LangEdge for WasmEdge {
     }
 
     fn value_edge() -> Self {
-        Self::Value {
-            ty: WasmTy::Undefined,
-            shape: TyShape::Scalar,
-        }
+        Self::Value(WasmTy::Undefined)
     }
 
     fn is_state_edge(&self) -> bool {
@@ -234,7 +283,8 @@ impl View for WasmEdge {
     fn name(&self) -> String {
         match self {
             Self::State => format!("State"),
-            Self::Value { ty, shape } => format!("{shape}<{ty:?}>"),
+            Self::Value(WasmTy::Defined { shape, ty }) => format!("{shape}<{ty:?}>"),
+            Self::Value(WasmTy::Undefined) => format!("Undefined"),
         }
     }
 
