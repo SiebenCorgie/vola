@@ -11,9 +11,12 @@
 //!
 //! At the moment only the [scfr](crate::Rvsdg::region_to_cfg_scfr) algorithm is implemented.
 
+use ahash::AHashSet;
+use scfr::ScfrError;
 use slotmap::{new_key_type, Key, SlotMap};
+use smallvec::{smallvec, SmallVec};
 
-use crate::{edge::OutportLocation, NodeRef};
+use crate::{edge::OutportLocation, NodeRef, SmallColl};
 
 ///CFG recovery via the _naive_ StructuredControlFlowRecovery described in section 3.4 _Perfect Reconstructability of Control Flow from Demand Dependence Graphs_
 /// [here](https://dl.acm.org/doi/10.1145/2693261)
@@ -75,8 +78,45 @@ pub enum CfgNode {
     BasicBlock(BasicBlock),
 }
 
+impl CfgNode {
+    ///Returns all successors. Does not include the backedge from a LoopCtrlTail to the
+    /// LoopHead.
+    pub fn successors(&self) -> SmallVec<[CfgRef; 2]> {
+        match self {
+            Self::BasicBlock(BasicBlock { exit_node, .. }) => smallvec![*exit_node],
+            Self::BranchHeader {
+                true_branch,
+                false_branch,
+                ..
+            } => smallvec![*true_branch, *false_branch],
+            Self::BranchMerge { next, .. } => smallvec![*next],
+            Self::LoopHeader { loop_entry_bb, .. } => smallvec![*loop_entry_bb],
+            Self::LoopCtrlTail { post_loop_bb, .. } => smallvec![*post_loop_bb],
+            Self::Null => smallvec![],
+            Self::Root(next) => smallvec![*next],
+        }
+    }
+
+    pub fn predecessors(&self) -> SmallVec<[CfgRef; 2]> {
+        match self {
+            Self::BasicBlock(bb) => smallvec![bb.predecessor],
+            Self::BranchHeader { last_bb, .. } => smallvec![*last_bb],
+            Self::BranchMerge {
+                src_true,
+                src_false,
+                ..
+            } => smallvec![*src_true, *src_false],
+            Self::LoopCtrlTail { last_bb, .. } => smallvec![*last_bb],
+            Self::LoopHeader { pre_loop_bb, .. } => smallvec![*pre_loop_bb],
+            Self::Null => smallvec![],
+            Self::Root(_) => smallvec![],
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct BasicBlock {
+    pub predecessor: CfgRef,
     ///The nodes, in (needed) order of execution.
     pub nodes: Vec<NodeRef>,
     ///The node the BB branches to after reaching its end.
@@ -86,8 +126,9 @@ pub struct BasicBlock {
 impl BasicBlock {
     ///Creates a new BB where the exit is hooked up to the error node of the cfg
     /// and no incoming nodes are set
-    pub fn new(cfg: &mut Cfg) -> Self {
+    pub fn new(cfg: &mut Cfg, predecessor: CfgRef) -> Self {
         BasicBlock {
+            predecessor,
             nodes: Vec::new(),
             exit_node: cfg.error,
         }
@@ -128,7 +169,42 @@ impl Cfg {
     ///Builds a topological order of CfgRefs over the Cfg that
     /// touches all nodes in a way, that any dominator A of B is seen before
     /// B.
-    pub fn topological_order(&self) -> Vec<CfgRef> {
-        todo!()
+    pub fn topological_order(&self) -> Result<Vec<CfgRef>, ScfrError> {
+        //NOTE: this is basically Khan's algorithm on the
+        //      cfg graph.
+
+        let mut seen = AHashSet::with_capacity(self.nodes.len());
+        let mut l = Vec::with_capacity(self.nodes.len());
+        let mut s = Vec::new();
+        //NOTE: Khan's algorithm starts with _all nodes with no
+        //      incoming edges_. However, we always only
+        //      have the root node.
+        s.push(self.root);
+
+        while let Some(next) = s.pop() {
+            l.push(next);
+            seen.insert(next);
+
+            for succ in self.nodes[next].successors() {
+                let succpreds = self.nodes[succ].predecessors();
+                let mut seen_all = true;
+                for sp in succpreds {
+                    if !seen.contains(sp) {
+                        seen_all = false;
+                        break;
+                    }
+                }
+
+                if seen_all {
+                    s.push(succ);
+                }
+            }
+        }
+
+        if seen.len() != self.nodes.len() {
+            return Err(ScfrError::ContainedCycle);
+        } else {
+            Ok(l)
+        }
     }
 }

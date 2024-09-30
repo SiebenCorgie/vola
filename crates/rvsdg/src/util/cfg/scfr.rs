@@ -27,6 +27,8 @@ pub enum ScfrError {
     ResolverStuck(usize),
     #[error("The scfr currently only supports 2-region gamma-nodes (if-then-else). But gamma node had {0} sub-regions")]
     NoneBinaryGamma(usize),
+    #[error("CFG contained cycle. This should not happen, if the graph was generated from a RVSDG and was not changed.")]
+    ContainedCycle,
 }
 
 impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
@@ -35,7 +37,8 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
         let mut cfg = Cfg::new();
 
         let first_block_id = cfg.nodes.insert(CfgNode::Null);
-        let (entry, _exit) = self.scfr_region(region, &mut cfg, first_block_id)?;
+        let root_id = cfg.root.clone();
+        let (entry, _exit) = self.scfr_region(region, &mut cfg, first_block_id, root_id)?;
         //Update the root node to point to the first of the region's exit nodes
         *cfg.nodes.get_mut(cfg.root).unwrap() = CfgNode::Root(entry);
         Ok(cfg)
@@ -48,6 +51,7 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
         region: RegionLocation,
         cfg: &mut Cfg,
         entry_id: CfgRef,
+        predecessor_id: CfgRef,
     ) -> Result<(CfgRef, CfgRef), ScfrError> {
         //Serializing a region works by building the dependency
         //map of a region. By definition all args to that region are
@@ -88,7 +92,7 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
             unresolved.insert(*node, dedub_set.clone());
         }
 
-        let mut working_bb = BasicBlock::new(cfg);
+        let mut working_bb = BasicBlock::new(cfg, predecessor_id);
         //pre-insert the bb and overwrite it later
         let mut bb_id = entry_id;
 
@@ -136,7 +140,7 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
                                 loop_entry_bb: loop_entry_id,
                                 ctrl_tail: tail_ctrl_id,
                             });
-                            let mut post_merge_block = BasicBlock::new(cfg);
+                            let mut post_merge_block = BasicBlock::new(cfg, merge_block_id);
 
                             //set this condition-id to the exit reference of the current bb
                             working_bb.exit_node = loop_header;
@@ -192,6 +196,7 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
                             let _branch_merge_id = self.scfr_handle_gamma(
                                 cfg,
                                 node,
+                                branch_header,
                                 entry_true_id,
                                 entry_false_id,
                                 post_merge_id,
@@ -200,7 +205,7 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
 
                             //finaly swap out the working bb with the merge id
                             //and push both in_gamma_exit_node_ids to the new bb
-                            let mut merge_block = BasicBlock::new(cfg);
+                            let mut merge_block = BasicBlock::new(cfg, merge_node_id);
                             std::mem::swap(&mut working_bb, &mut merge_block);
                             //swap in the current bb
                             *cfg.nodes.get_mut(bb_id).unwrap() = CfgNode::BasicBlock(merge_block);
@@ -246,6 +251,7 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
             },
             cfg,
             entry_id,
+            header_id,
         )?;
 
         assert!(loop_entry == entry_id);
@@ -285,6 +291,7 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
         &self,
         cfg: &mut Cfg,
         gamma_node: NodeRef,
+        header_id: CfgRef,
         entry_branch_true: CfgRef,
         entry_branch_false: CfgRef,
         post_merge_block: CfgRef,
@@ -302,6 +309,7 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
             },
             cfg,
             entry_branch_true,
+            header_id,
         )?;
         assert!(entry_branch_true == true_entry_id);
 
@@ -312,6 +320,7 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
             },
             cfg,
             entry_branch_false,
+            header_id,
         )?;
         assert!(entry_branch_false == false_entry_id);
 
