@@ -40,6 +40,10 @@ struct Args {
     #[arg(long, default_value_t = false)]
     no_cne: bool,
 
+    ///Turns on validation of the output fragment. Note that spirv-tools or wasm-tools must be installed.
+    #[arg(long, default_value_t = false)]
+    validate: bool,
+
     ///Specifies the emitted format.
     #[arg(long, short, value_enum, default_value_t = Format::Spirv)]
     format: Format,
@@ -69,6 +73,7 @@ fn main() {
         late_cne: !args.no_opt && !args.no_cne,
         late_cnf: !args.no_opt && !args.no_cnf,
         early_cnf: !args.no_opt && !args.no_cnf,
+        validate_output: args.validate,
     };
 
     match pipeline.execute_on_file(&args.src_file) {

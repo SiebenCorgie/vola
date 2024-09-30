@@ -27,4 +27,6 @@ pub enum PipelineError {
     CnfError(#[from] CnfError),
     #[error(transparent)]
     CneError(#[from] CneError),
+    #[error("Failed to validate: {0}")]
+    ValidationFailed(String),
 }

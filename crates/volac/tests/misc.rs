@@ -2,11 +2,10 @@ use volac::PipelineError;
 
 #[test]
 fn use_external_function() {
-    let mut pipeline = volac::Pipeline::new_in_memory();
-    let target = pipeline
+    let mut pipeline = volac::Pipeline::new_in_memory().with_validation();
+    let _target = pipeline
         .execute_on_file(&"tests/vola_src/custom_fn.vola")
         .unwrap();
-    target.try_verify().unwrap();
 }
 
 #[test]
@@ -74,118 +73,103 @@ fn unknown_subtree_reference() {
 
 #[test]
 fn simple_gamma() {
-    let mut pipeline = volac::Pipeline::new_in_memory();
+    let mut pipeline = volac::Pipeline::new_in_memory().with_validation();
 
-    let target = pipeline
+    let _target = pipeline
         .execute_on_file(&"tests/vola_src/ifthenelse.vola")
         .unwrap();
-    target.try_verify().unwrap()
 }
 
 #[test]
 fn gamma_unequal() {
-    let mut pipeline = volac::Pipeline::new_in_memory();
+    let mut pipeline = volac::Pipeline::new_in_memory().with_validation();
 
-    let target = pipeline
+    let _target = pipeline
         .execute_on_file(&"tests/vola_src/ifthenelse_unequal.vola")
         .unwrap();
-    target.try_verify().unwrap()
 }
 
 #[test]
 fn gamma_local_variable() {
-    let mut pipeline = volac::Pipeline::new_in_memory();
+    let mut pipeline = volac::Pipeline::new_in_memory().with_validation();
 
-    let target = pipeline
+    let _target = pipeline
         .execute_on_file(&"tests/vola_src/gamma_local_variable.vola")
         .unwrap();
-    target.try_verify().unwrap()
 }
 
 #[test]
 fn simple_theta() {
-    let mut pipeline = volac::Pipeline::new_in_memory();
+    let mut pipeline = volac::Pipeline::new_in_memory().with_validation();
 
-    let target = pipeline
+    let _target = pipeline
         .execute_on_file(&"tests/vola_src/theta_assignment.vola")
         .unwrap();
-    target.try_verify().unwrap();
 }
 #[test]
 fn theta_nested() {
-    let mut pipeline = volac::Pipeline::new_in_memory();
-
-    let target = pipeline
+    let mut pipeline = volac::Pipeline::new_in_memory().with_validation();
+    let _target = pipeline
         .execute_on_file(&"tests/vola_src/theta_nested.vola")
         .unwrap();
-    target.try_verify().unwrap();
 }
 #[test]
 fn theta_nested_simple() {
-    let mut pipeline = volac::Pipeline::new_in_memory();
-
-    let target = pipeline
+    let mut pipeline = volac::Pipeline::new_in_memory().with_validation();
+    let _target = pipeline
         .execute_on_file(&"tests/vola_src/theta_nested_simple.vola")
         .unwrap();
-    target.try_verify().unwrap();
 }
 #[test]
 fn theta_simple_local_variable() {
-    let mut pipeline = volac::Pipeline::new_in_memory();
-
-    let target = pipeline
+    let mut pipeline = volac::Pipeline::new_in_memory().with_validation();
+    let _target = pipeline
         .execute_on_file(&"tests/vola_src/theta_local_variable.vola")
         .unwrap();
-    target.try_verify().unwrap();
 }
 
 #[test]
 fn in_loop_eval() {
-    let mut pipeline = volac::Pipeline::new_in_memory();
+    let mut pipeline = volac::Pipeline::new_in_memory().with_validation();
     //NOTE: This tests both, in-gamma-eval, and in-loop-eval
-    let target = pipeline
+    let _target = pipeline
         .execute_on_file(&"tests/vola_src/in_loop_eval.vola")
         .unwrap();
-    target.try_verify().unwrap();
 }
 
 #[test]
 fn multi_concept_eval_in_loop_eval() {
-    let mut pipeline = volac::Pipeline::new_in_memory();
+    let mut pipeline = volac::Pipeline::new_in_memory().with_validation();
     //NOTE: This tests both, in-gamma-eval, and in-loop-eval
-    let target = pipeline
+    let _target = pipeline
         .execute_on_file(&"tests/vola_src/subtree_multi_concept_eval.vola")
         .unwrap();
-    target.try_verify().unwrap();
 }
 
 #[test]
 fn aii_impl() {
-    let mut pipeline = volac::Pipeline::new_in_memory();
+    let mut pipeline = volac::Pipeline::new_in_memory().with_validation();
     //NOTE: Tests the automatic-identitiy-implementation metioned here
     //      https://gitlab.com/tendsinmende/vola/-/issues/16
-    let target = pipeline
+    let _target = pipeline
         .execute_on_file(&"tests/vola_src/aii.vola")
         .unwrap();
-    target.try_verify().unwrap();
 }
 
 #[test]
 fn splat_expr() {
-    let mut pipeline = volac::Pipeline::new_in_memory();
+    let mut pipeline = volac::Pipeline::new_in_memory().with_validation();
     //Splat-expression implementation:
     // https://gitlab.com/tendsinmende/vola/-/merge_requests/33
-    let target = pipeline
+    let _target = pipeline
         .execute_on_file(&"tests/vola_src/splatuse.vola")
         .unwrap();
-    target.try_verify().unwrap();
 }
 
 #[test]
 fn csg_scope_local_variable() {
-    let mut pipeline = volac::Pipeline::new_in_memory();
-    let target = pipeline
+    let mut pipeline = volac::Pipeline::new_in_memory().with_validation();
+    let _target = pipeline
         .execute_on_file(&"tests/vola_src/csg_scope_local_variable.vola")
         .unwrap();
-    target.try_verify().unwrap();
 }

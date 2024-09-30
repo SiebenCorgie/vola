@@ -13,11 +13,7 @@
 //!
 
 use backends::{PipelineBackend, Spirv};
-use std::{
-    io::Write,
-    path::{Path, PathBuf},
-    process::Stdio,
-};
+use std::path::{Path, PathBuf};
 use vola_ast::VolaAst;
 
 mod error;
@@ -70,52 +66,6 @@ impl Target {
             None
         }
     }
-
-    ///tries to use the `spirv-val` command (if installed) to verify the code
-    pub fn try_verify(&self) -> Result<(), String> {
-        match self {
-            //start the validator on the src
-            Self::File(path) => {
-                let output = std::process::Command::new("spirv-val")
-                    .arg(path)
-                    .output()
-                    .map_err(|e| e.to_string())?;
-                //push output stream
-                std::io::stdout().write_all(&output.stdout).unwrap();
-                std::io::stderr().write_all(&output.stderr).unwrap();
-                if !output.status.success() {
-                    Err(format!("Failed to validate module with: {}", output.status))
-                } else {
-                    Ok(())
-                }
-            }
-            //stream the buffer on stdin.
-            Self::Buffer(b) => {
-                let mut command = std::process::Command::new("spirv-val")
-                    .stdin(Stdio::piped())
-                    .spawn()
-                    .unwrap();
-                let buffcpy = b.clone();
-                let mut command_in = command.stdin.take().unwrap();
-                std::thread::spawn(move || {
-                    command_in
-                        .write_all(&buffcpy)
-                        .expect("Failed to write to stdin");
-                    command_in.flush().unwrap();
-                });
-                //now wait for it to end and output
-                let output = command.wait_with_output().map_err(|e| e.to_string())?;
-
-                std::io::stdout().write_all(&output.stdout).unwrap();
-                std::io::stderr().write_all(&output.stderr).unwrap();
-                if !output.status.success() {
-                    Err(format!("Failed to validate module with: {}", output.status))
-                } else {
-                    Ok(())
-                }
-            }
-        }
-    }
 }
 
 ///An executable compilation pipeline.
@@ -143,6 +93,8 @@ pub struct Pipeline {
     pub late_cnf: bool,
     //If the post-specializing cne is done
     pub late_cne: bool,
+
+    pub validate_output: bool,
 }
 
 impl Pipeline {
@@ -153,6 +105,7 @@ impl Pipeline {
             early_cnf: true,
             late_cnf: true,
             late_cne: true,
+            validate_output: false,
         }
     }
 
@@ -164,7 +117,13 @@ impl Pipeline {
             early_cnf: true,
             late_cnf: true,
             late_cne: true,
+            validate_output: false,
         }
+    }
+
+    pub fn with_validation(mut self) -> Self {
+        self.validate_output = true;
+        self
     }
 
     ///Takes an already prepared AST and tries to turn it into a compiled program / module.
@@ -207,7 +166,15 @@ impl Pipeline {
             opt.dump_debug_state(&"OptState.bin");
         }
 
-        self.backend.execute(opt)
+        let result = self.backend.execute(opt)?;
+
+        if self.validate_output {
+            self.backend
+                .try_verify()
+                .map_err(|e| PipelineError::ValidationFailed(e))?;
+        }
+
+        Ok(result)
     }
 
     ///Tries to interpret `data` as a string in vola's language

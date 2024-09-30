@@ -21,4 +21,9 @@ pub trait PipelineBackend {
 
     ///Moves ownership of the (finalized) optimizer to the backend. Returns the final binary (path or buffer)
     fn execute(&mut self, opt: Optimizer) -> Result<Target, PipelineError>;
+
+    ///If implemented tries to use installed tools to verify the emitted artifact.
+    fn try_verify(&self) -> Result<(), String> {
+        Ok(())
+    }
 }
