@@ -1,3 +1,7 @@
+//BEGIN-CONFIG
+//ERROR:At least 2 errors occurred while running optimizer.
+//END-CONFIG
+
 module std;
 
 

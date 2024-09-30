@@ -1,0 +1,8 @@
+//BEGIN-CONFIG
+//ERROR:At least 1 errors occurred while running optimizer.
+//END-CONFIG
+
+fn eval_in_alge(someattr: s) -> s{
+	let t = eval sub.Sdf3d([1.0, 1.0, 1.0]);
+	t
+}

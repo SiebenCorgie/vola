@@ -1,3 +1,7 @@
+//BEGIN-CONFIG
+//ERROR:Could not find implementation of "SDF3D" for "InnerEntity"
+//END-CONFIG
+
 module std;
 
 entity InnerEntity();

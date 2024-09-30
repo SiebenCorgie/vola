@@ -14,6 +14,7 @@ members = [
     "crates/vola-backend-spirv",
     "crates/vola-backend-wasm",
     "crates/wasm-runtime",
+    "tests/test-runner",
 ]
 
 resolver = "2"
@@ -42,3 +43,4 @@ bincode = "1.3.3"
 ariadne = "0.4.1"
 small-map = "0.1.3"
 walrus = "0.21"
+yansi = "1.0"

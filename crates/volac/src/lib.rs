@@ -121,6 +121,11 @@ impl Pipeline {
         }
     }
 
+    pub fn with_backend(mut self, backend: Box<dyn PipelineBackend + 'static>) -> Self {
+        self.backend = backend;
+        self
+    }
+
     pub fn with_validation(mut self) -> Self {
         self.validate_output = true;
         self

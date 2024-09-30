@@ -1,5 +1,8 @@
-module std;
+//BEGIN-CONFIG
+//ERROR:Type derivation did not end successfully!
+//END-CONFIG
 
+module std;
 
 export myField(at: vec3){
 	let t = [
