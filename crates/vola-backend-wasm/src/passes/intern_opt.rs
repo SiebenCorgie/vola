@@ -6,7 +6,10 @@
  * 2024 Tendsin Mende
  */
 
-use rvsdg::util::graph_type_transform::{GraphMapping, GraphTypeTransformer};
+use rvsdg::{
+    util::graph_type_transform::{GraphMapping, GraphTypeTransformer},
+    SmallColl,
+};
 use vola_common::{error::error_reporter, report, Span};
 use vola_opt::{common::Ty, OptEdge, OptNode, Optimizer};
 
@@ -16,18 +19,49 @@ use crate::{
     WasmBackend,
 };
 
-struct InterningTransformer {
+struct InterningTransformer<'a> {
+    opt: &'a Optimizer,
     has_failed_node: bool,
 }
 
-impl GraphTypeTransformer for InterningTransformer {
+impl<'a> GraphTypeTransformer for InterningTransformer<'a> {
     type SrcNode = OptNode;
     type SrcEdge = OptEdge;
     type DstNode = WasmNode;
     type DstEdge = WasmEdge;
 
     fn transform_simple_node(&mut self, src_node: &Self::SrcNode) -> Self::DstNode {
-        match WasmNode::try_from(src_node) {
+        //collect the nodes input signature to make an informed decission about the WASM node
+        //that is generated
+        let insig = src_node
+            .node
+            .inputs()
+            .iter()
+            .map(|port| {
+                if let Some(edg) = port.edge {
+                    self.opt.graph[edg].ty.get_type().cloned()
+                } else {
+                    None
+                }
+            })
+            .collect::<SmallColl<_>>();
+
+        let outsig = src_node
+            .node
+            .outputs()
+            .iter()
+            .map(|port| {
+                if let Some(first_edge) = port.edges.get(0) {
+                    let port = self.opt.graph[*first_edge].src().clone();
+                    self.opt.find_type(&port.into())
+                } else {
+                    //Has no connected edge, therfore no type
+                    None
+                }
+            })
+            .collect::<SmallColl<_>>();
+
+        match WasmNode::try_from_opt(src_node, &insig, &outsig) {
             Ok(n) => n,
             Err(e) => {
                 self.has_failed_node = true;
@@ -42,32 +76,8 @@ impl GraphTypeTransformer for InterningTransformer {
         match src_edge {
             OptEdge::State => WasmEdge::State,
             OptEdge::Value { ty } => {
-                let ty = if let Some(ty) = ty.get_type() {
-                    match ty {
-                        Ty::Scalar => WasmTy::new_with_shape(walrus::ValType::F32, TyShape::Scalar),
-                        Ty::Nat => WasmTy::new_with_shape(walrus::ValType::I32, TyShape::Scalar),
-                        Ty::Bool => WasmTy::new_with_shape(walrus::ValType::I32, TyShape::Scalar),
-                        Ty::Vector { width } => {
-                            WasmTy::new_with_shape(walrus::ValType::F32, TyShape::Vector { width })
-                        }
-                        Ty::Matrix { width, height } => WasmTy::new_with_shape(
-                            walrus::ValType::F32,
-                            TyShape::Matrix { width, height },
-                        ),
-                        Ty::Tensor { dim } => WasmTy::new_with_shape(
-                            walrus::ValType::F32,
-                            TyShape::Tensor {
-                                dim: dim.iter().cloned().collect(),
-                            },
-                        ),
-                        other => {
-                            report(
-                                error_reporter(WasmError::UnexpectedType(other), Span::empty())
-                                    .finish(),
-                            );
-                            WasmTy::Undefined
-                        }
-                    }
+                let ty = if let Some(t) = ty.get_type() {
+                    WasmTy::from(t)
                 } else {
                     WasmTy::Undefined
                 };
@@ -86,6 +96,7 @@ impl WasmBackend {
         //The following scalarize and legalization passes will take care of unfolding etc.
 
         let mut transformer = InterningTransformer {
+            opt: optimizer,
             has_failed_node: false,
         };
         let (new_graph, remapping) = optimizer.graph.transform_new(&mut transformer)?;

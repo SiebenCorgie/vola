@@ -13,7 +13,7 @@
 
 #![no_std]
 
-use glam::Vec3;
+use glam::{Vec2, Vec3, Vec4};
 /*
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
@@ -22,16 +22,22 @@ fn panic(info: &PanicInfo) -> ! {
 */
 
 #[no_mangle]
-extern "C" fn do_stuff(x: i32, f: f32) -> f32 {
-    x as f32 * f
-}
-
-#[no_mangle]
 extern "C" fn cross_vec3(a: Vec3, b: Vec3) -> Vec3 {
     glam::Vec3::cross(a.into(), b.into()).into()
 }
 
 #[no_mangle]
+extern "C" fn length_vec2(a: Vec2) -> f32 {
+    a.length()
+}
+
+#[no_mangle]
 extern "C" fn length_vec3(a: Vec3) -> f32 {
     a.length()
+}
+
+#[no_mangle]
+//NOTE: have to unwrap the vec4, since anything else is not ffi-stable :(
+extern "C" fn length_vec4(a: f32, b: f32, c: f32, d: f32) -> f32 {
+    Vec4::new(a, b, c, d).length()
 }

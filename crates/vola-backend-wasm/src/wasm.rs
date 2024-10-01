@@ -18,16 +18,17 @@ use vola_opt::{
     alge::{
         arithmetic::{BinaryArith, BinaryArithOp, UnaryArith, UnaryArithOp},
         buildin::{Buildin, BuildinOp},
-        logical::{BinaryBool, BinaryBoolOp, UnaryBool, UnaryBoolOp},
+        logical::{BinaryBool, BinaryBoolOp, UnaryBool},
         matrix::{UnaryMatrix, UnaryMatrixOp},
         relational::{BinaryRel, BinaryRelOp},
         trigonometric::{Trig, TrigOp},
     },
     imm::{ImmNat, ImmScalar},
 };
+use walrus::ValType;
 
 use crate::{
-    graph::{WasmNode, WasmTy},
+    graph::{TyShape, WasmNode, WasmTy},
     WasmError,
 };
 
@@ -37,37 +38,51 @@ pub enum ExternOp {
     Dot,
     Length,
     MatrixInverse,
+
     Sin,
+
     Mod,
+
     Fract,
+
+    //Emulation of piece wise vector ops
+    //Vec2
+    AddVec,
+    SubVec,
+    MulVec,
+    DivVec,
+    ModVec,
 }
 
 impl ExternOp {
     pub fn get_static_symbol_name(&self, input_types: &[WasmTy]) -> Result<String, WasmError> {
-        match self {
+        let (ty_suffix, symbol_name) = match self {
             Self::Length => {
-                if input_types.len() != 1 {
+                if input_types.len() != 1 || !input_types[0].is_vector() {
                     return Err(WasmError::RuntimeIncompatibleSig(
                         self.clone(),
                         input_types.len(),
                     ));
                 }
 
-                match (
-                    input_types[0].element_count(),
-                    input_types[0].unwarp_walrus_ty(),
-                ) {
-                    (3, walrus::ValType::F32) => Ok("length_vec3".to_string()),
-                    (_count, _ty) => Err(WasmError::RuntimeIncompatibleType(
+                let element_count = input_types[0].element_count();
+                let waltype = input_types[0].unwarp_walrus_ty();
+
+                if element_count > 4 || element_count == 1 || waltype != ValType::F32 {
+                    return Err(WasmError::RuntimeIncompatibleType(
                         self.clone(),
                         0,
                         input_types[0].clone(),
-                    )),
+                    ));
                 }
+
+                (format!("vec{}", element_count), "length")
             }
 
             _ => panic!("Extern Op {self:?} not implemented"),
-        }
+        };
+
+        Ok(format!("{}_{}", symbol_name, ty_suffix))
     }
 }
 
@@ -141,7 +156,7 @@ impl From<&ImmNat> for WasmNode {
     fn from(value: &ImmNat) -> Self {
         WasmNode::Value(WasmValue {
             //NOTE the u64 should not have the highest bit set...
-            op: walrus::ir::Value::I64(value.lit.try_into().unwrap()),
+            op: walrus::ir::Value::I32(value.lit.try_into().unwrap()),
             output: Outport::default(),
         })
     }
@@ -151,7 +166,7 @@ impl From<&ImmScalar> for WasmNode {
     fn from(value: &ImmScalar) -> Self {
         WasmNode::Value(WasmValue {
             //NOTE the u64 should not have the highest bit set...
-            op: walrus::ir::Value::F64(value.lit.try_into().unwrap()),
+            op: walrus::ir::Value::F32(value.lit as f32),
             output: Outport::default(),
         })
     }
@@ -176,16 +191,84 @@ impl WasmBinaryOp {
     }
 }
 
-impl From<&BinaryArith> for WasmNode {
-    fn from(value: &BinaryArith) -> Self {
-        match value.op {
-            BinaryArithOp::Add => WasmNode::Binary(WasmBinaryOp::new(walrus::ir::BinaryOp::F32Add)),
-            BinaryArithOp::Sub => WasmNode::Binary(WasmBinaryOp::new(walrus::ir::BinaryOp::F32Sub)),
-            BinaryArithOp::Mul => WasmNode::Binary(WasmBinaryOp::new(walrus::ir::BinaryOp::F32Mul)),
-            BinaryArithOp::Div => WasmNode::Binary(WasmBinaryOp::new(walrus::ir::BinaryOp::F32Div)),
-            BinaryArithOp::Mod => {
-                WasmNode::Runtime(WasmRuntimeOp::new_with_signature(2, ExternOp::Mod))
-            }
+impl WasmNode {
+    pub fn try_from_opt_binary(
+        value: &BinaryArith,
+        input_sig: [vola_opt::common::Ty; 2],
+        output_sig: vola_opt::common::Ty,
+    ) -> Self {
+        assert!(input_sig[0] == input_sig[1] && input_sig[0] == output_sig);
+
+        let wasm_inout_ty = WasmTy::from(input_sig[0].clone());
+
+        match wasm_inout_ty {
+            //Scalar binary ops
+            WasmTy::Defined {
+                shape: TyShape::Scalar,
+                ty,
+            } => match ty {
+                walrus::ValType::F32 => match value.op {
+                    BinaryArithOp::Add => {
+                        WasmNode::Binary(WasmBinaryOp::new(walrus::ir::BinaryOp::F32Add))
+                    }
+                    BinaryArithOp::Sub => {
+                        WasmNode::Binary(WasmBinaryOp::new(walrus::ir::BinaryOp::F32Sub))
+                    }
+                    BinaryArithOp::Mul => {
+                        WasmNode::Binary(WasmBinaryOp::new(walrus::ir::BinaryOp::F32Mul))
+                    }
+                    BinaryArithOp::Div => {
+                        WasmNode::Binary(WasmBinaryOp::new(walrus::ir::BinaryOp::F32Div))
+                    }
+                    BinaryArithOp::Mod => {
+                        WasmNode::Runtime(WasmRuntimeOp::new_with_signature(2, ExternOp::Mod))
+                    }
+                },
+                walrus::ValType::I32 => match value.op {
+                    BinaryArithOp::Add => {
+                        WasmNode::Binary(WasmBinaryOp::new(walrus::ir::BinaryOp::F32Add))
+                    }
+                    BinaryArithOp::Sub => {
+                        WasmNode::Binary(WasmBinaryOp::new(walrus::ir::BinaryOp::F32Sub))
+                    }
+                    BinaryArithOp::Mul => {
+                        WasmNode::Binary(WasmBinaryOp::new(walrus::ir::BinaryOp::F32Mul))
+                    }
+                    BinaryArithOp::Div => {
+                        WasmNode::Binary(WasmBinaryOp::new(walrus::ir::BinaryOp::F32Div))
+                    }
+                    BinaryArithOp::Mod => {
+                        WasmNode::Runtime(WasmRuntimeOp::new_with_signature(2, ExternOp::Mod))
+                    }
+                },
+                _ => WasmNode::error_for_sig(2, 1),
+            },
+            //Vector binary ops
+            WasmTy::Defined {
+                shape: TyShape::Vector { width: _ },
+                ty,
+            } => match ty {
+                walrus::ValType::F32 => match value.op {
+                    BinaryArithOp::Add => {
+                        WasmNode::Runtime(WasmRuntimeOp::new_with_signature(2, ExternOp::AddVec))
+                    }
+                    BinaryArithOp::Sub => {
+                        WasmNode::Runtime(WasmRuntimeOp::new_with_signature(2, ExternOp::SubVec))
+                    }
+                    BinaryArithOp::Mul => {
+                        WasmNode::Runtime(WasmRuntimeOp::new_with_signature(2, ExternOp::MulVec))
+                    }
+                    BinaryArithOp::Div => {
+                        WasmNode::Runtime(WasmRuntimeOp::new_with_signature(2, ExternOp::DivVec))
+                    }
+                    BinaryArithOp::Mod => {
+                        WasmNode::Runtime(WasmRuntimeOp::new_with_signature(2, ExternOp::Mod))
+                    }
+                },
+                _ => WasmNode::error_for_sig(2, 1),
+            },
+
+            _ => WasmNode::error_for_sig(2, 1),
         }
     }
 }

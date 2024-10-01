@@ -49,26 +49,48 @@ pub enum WasmNode {
 
 impl WasmNode {
     pub fn error_for_opt(opt: &OptNode) -> Self {
+        Self::error_for_sig(opt.inputs().len(), opt.outputs().len())
+    }
+
+    pub fn error_for_sig(inputs: usize, outputs: usize) -> Self {
         Self::Error {
-            inputs: smallvec![Inport::default(); opt.inputs().len()],
-            outputs: smallvec![Outport::default(); opt.outputs().len()],
+            inputs: smallvec![Inport::default(); inputs],
+            outputs: smallvec![Outport::default(); outputs],
         }
     }
-}
 
-impl TryFrom<&OptNode> for WasmNode {
-    type Error = WasmError;
-    fn try_from(value: &OptNode) -> Result<Self, WasmError> {
+    pub fn try_from_opt(
+        value: &OptNode,
+        input_sig: &[Option<vola_opt::common::Ty>],
+        output_sig: &[Option<vola_opt::common::Ty>],
+    ) -> Result<Self, WasmError> {
         //Our wasm backend supports the whole alge dialect, and all immediate values.
         if let Some(imm) = value.try_downcast_ref::<ImmNat>() {
+            assert!(input_sig.len() == 0);
+            assert!(output_sig.len() == 1);
+            assert!(output_sig[0] == Some(vola_opt::common::Ty::Nat));
             return Ok(WasmNode::from(imm));
         }
         if let Some(imm) = value.try_downcast_ref::<ImmScalar>() {
+            assert!(input_sig.len() == 0);
+            assert!(output_sig.len() == 1);
+            assert!(output_sig[0] == Some(vola_opt::common::Ty::Scalar));
             return Ok(WasmNode::from(imm));
         }
 
         if let Some(binop) = value.try_downcast_ref::<BinaryArith>() {
-            return Ok(WasmNode::from(binop));
+            assert!(input_sig.len() == 2);
+            assert!(input_sig[0].is_some() && input_sig[1].is_some());
+            assert!(output_sig.len() == 1);
+            assert!(output_sig[0].is_some());
+            return Ok(WasmNode::try_from_opt_binary(
+                binop,
+                [
+                    input_sig[0].as_ref().unwrap().clone(),
+                    input_sig[1].as_ref().unwrap().clone(),
+                ],
+                output_sig[0].as_ref().unwrap().clone(),
+            ));
         }
         if let Some(binop) = value.try_downcast_ref::<BinaryRel>() {
             return Ok(WasmNode::from(binop));
@@ -175,7 +197,43 @@ pub enum WasmTy {
     Undefined,
 }
 
+impl From<vola_opt::common::Ty> for WasmTy {
+    fn from(value: vola_opt::common::Ty) -> Self {
+        let (shape, ty) = match value {
+            vola_opt::common::Ty::Bool => (TyShape::Scalar, walrus::ValType::I32),
+            vola_opt::common::Ty::Nat => (TyShape::Scalar, walrus::ValType::I32),
+            vola_opt::common::Ty::Scalar => (TyShape::Scalar, walrus::ValType::F32),
+            vola_opt::common::Ty::Vector { width } => {
+                (TyShape::Vector { width }, walrus::ValType::F32)
+            }
+            vola_opt::common::Ty::Matrix { width, height } => {
+                (TyShape::Matrix { width, height }, walrus::ValType::F32)
+            }
+            vola_opt::common::Ty::Tensor { dim } => (
+                TyShape::Tensor {
+                    dim: dim.into_iter().collect(),
+                },
+                walrus::ValType::F32,
+            ),
+            _ => return WasmTy::Undefined,
+        };
+
+        WasmTy::Defined { shape, ty }
+    }
+}
+
 impl WasmTy {
+    pub fn is_vector(&self) -> bool {
+        if let Self::Defined {
+            shape: TyShape::Vector { .. },
+            ..
+        } = self
+        {
+            true
+        } else {
+            false
+        }
+    }
     pub fn new_with_shape(ty: walrus::ValType, shape: TyShape) -> Self {
         Self::Defined { shape, ty }
     }
