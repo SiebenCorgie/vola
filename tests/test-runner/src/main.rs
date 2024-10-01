@@ -10,8 +10,10 @@ use crawler::crawl_ui;
 use run::{run_file, TestResult};
 use yansi::Paint;
 
+mod config;
 mod crawler;
 mod run;
+mod wasm_executor;
 
 use clap::{Parser, ValueEnum};
 

@@ -1,143 +1,21 @@
 use std::{
     error::Error,
     fmt::Display,
-    io::BufRead,
-    path::{Path, PathBuf},
+    path::PathBuf,
     thread::JoinHandle,
     time::{Duration, Instant},
 };
 
 use smallvec::{smallvec, SmallVec};
-use volac::{backends::PipelineBackend, Pipeline, Target};
+use volac::{backends::PipelineBackend, Pipeline, PipelineError, Target};
 use yansi::Paint;
+
+use crate::config::Config;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ResultType {
     Success,
     Error(String),
-}
-
-///Test run config.
-///
-/// A test file can add the following header:
-/// ```ignore
-/// //BEGIN-CONFIG
-/// //ERROR: Some output string to set an expected error
-/// //STDOUT: Some exepected iout string
-/// //NO-VALIDATE
-/// //NO-WASM
-/// //NO-SPIRV
-/// //END-CONFIG
-/// ```
-/// Each line (except for begin and end) is optional. Otherwise the default config is used.
-pub struct Config {
-    spirv: bool,
-    wasm: bool,
-    validate: bool,
-
-    //The expected correct behavior, including the error string, if an error is expected.
-    expected_result: ResultType,
-    //If Stdout output is expected, the content of it.
-    //if set to None, stdout is not checked at all.
-    expected_io_output: Option<String>,
-}
-
-impl Default for Config {
-    fn default() -> Self {
-        Config {
-            spirv: true,
-            wasm: true,
-            validate: true,
-            expected_result: ResultType::Success,
-            expected_io_output: None,
-        }
-    }
-}
-
-impl Config {
-    ///tries to parse the header of a file into this config
-    pub fn parse_file(path: impl AsRef<Path>) -> Result<Self, Box<dyn Error>> {
-        let mut config = Config::default();
-
-        let file = std::fs::File::open(path.as_ref())?;
-        let reader = std::io::BufReader::new(file);
-
-        let mut lines = reader.lines();
-
-        if let Some(first_line) = lines.next() {
-            let line = first_line?;
-            if !line.starts_with("//BEGIN-CONFIG") {
-                //if no begin, just return
-                return Ok(config);
-            }
-        } else {
-            //if no first line
-            return Ok(config);
-        }
-
-        //Now read the rest of the lines till we find an end, or a malformed line
-        for line in lines {
-            let line = line?;
-
-            //the correct break
-            if line.starts_with("//END-CONFIG") {
-                break;
-            }
-
-            if line.starts_with("//NO-VALIDATE") {
-                config.validate = false;
-                continue;
-            }
-
-            if line.starts_with("//NO-WASM") {
-                config.wasm = false;
-                continue;
-            }
-            if line.starts_with("//NO-SPIRV") {
-                config.spirv = false;
-                continue;
-            }
-
-            if line.starts_with("//ERROR:") {
-                //strip the error part and push the string
-                if let Some(suffix) = line.strip_prefix("//ERROR:") {
-                    config.expected_result = ResultType::Error(suffix.to_string());
-                } else {
-                    return Err(format!(
-                        "{} \"ERROR\" string for {:?}",
-                        "Malformed".bold(),
-                        path.as_ref()
-                    )
-                    .into());
-                }
-                continue;
-            }
-
-            if line.starts_with("//STDOUT:") {
-                //strip the error part and push the string
-                if let Some(suffix) = line.strip_prefix("//STDOUT:") {
-                    config.expected_io_output = Some(suffix.to_string());
-                } else {
-                    return Err(format!(
-                        "{} \"STDOUT\" string for {:?}",
-                        "Malformed".bold(),
-                        path.as_ref()
-                    )
-                    .into());
-                }
-                continue;
-            }
-
-            return Err(format!(
-                "Unexpected line\n{}\n{:?}\n\nDid you forget the END-CONFIG?",
-                line.bold(),
-                path.as_ref(),
-            )
-            .into());
-        }
-
-        Ok(config)
-    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -215,6 +93,86 @@ impl Display for TestRun {
     }
 }
 
+fn pipeline_res_to_testrun(
+    res: Result<Target, PipelineError>,
+    config: &Config,
+    backend: Backend,
+    time: Duration,
+    path: PathBuf,
+) -> TestRun {
+    //check _if the right thing_ happened and push that result into the runs-result list
+    match res {
+        Ok(t) => {
+            if config.expected_result == ResultType::Success {
+                //If the result was actually expected to be successful, check if we have exec-test-data for that run.
+                //if so, try it out.
+
+                let test_run_result = match backend {
+                    Backend::Wasm => {
+                        let result = crate::wasm_executor::try_execute(t, config);
+                        //blindly overwrite the test result
+                        result
+                    }
+                    //for all others, don't run and keep it at
+                    //success
+                    _ => TestState::Success,
+                };
+
+                //is alright
+                TestRun {
+                    backend,
+                    time,
+                    state: test_run_result,
+                    path: path.clone(),
+                }
+            } else {
+                //expected error, but had none
+                TestRun {
+                    backend,
+                    time,
+                    state: TestState::Error(format!("Expected Error, but was success")),
+                    path: path.clone(),
+                }
+            }
+        }
+        Err(e) => {
+            let pipeline_error = e.to_string();
+            match &config.expected_result {
+                ResultType::Error(expected_error) => {
+                    //make sure the error matches
+                    if expected_error == &pipeline_error {
+                        TestRun {
+                            backend,
+                            time,
+                            state: TestState::Success,
+                            path: path.clone(),
+                        }
+                    } else {
+                        TestRun {
+                            backend,
+                            time,
+                            state: TestState::Error(format!(
+                                "Expected error:\n    {}\ngot\n    {}",
+                                expected_error, pipeline_error
+                            )),
+                            path: path.clone(),
+                        }
+                    }
+                }
+                ResultType::Success => {
+                    //expected success, but was error
+                    TestRun {
+                        backend,
+                        time,
+                        state: TestState::Error(pipeline_error),
+                        path: path.clone(),
+                    }
+                }
+            }
+        }
+    }
+}
+
 pub fn run_file(path: PathBuf) -> Result<JoinHandle<TestResult>, Box<dyn Error>> {
     let hdl = std::thread::Builder::new()
         .name(format!("TestRun: {:?}", path.as_path()))
@@ -242,15 +200,15 @@ pub fn run_file(path: PathBuf) -> Result<JoinHandle<TestResult>, Box<dyn Error>>
                 runs: SmallVec::new(),
             };
 
-            let mut runs: SmallVec<[Backend; 2]> = SmallVec::new();
+            let mut backend_runs: SmallVec<[Backend; 2]> = SmallVec::new();
             if config.spirv {
-                runs.push(Backend::Spirv);
+                backend_runs.push(Backend::Spirv);
             }
             if config.wasm {
-                runs.push(Backend::Wasm);
+                backend_runs.push(Backend::Wasm);
             }
 
-            for backend in runs {
+            for backend in backend_runs {
                 //Run that thing and check if the output matches
                 let start = Instant::now();
                 let execfile = path.clone();
@@ -280,67 +238,7 @@ pub fn run_file(path: PathBuf) -> Result<JoinHandle<TestResult>, Box<dyn Error>>
                             path: path.clone(),
                         }
                     }
-                    Ok(res) => {
-                        //Otherwise check _if the right thing_ happened and push that result into the runs-result list
-                        match res {
-                            Ok(_t) => {
-                                if config.expected_result == ResultType::Success {
-                                    //is alright
-                                    TestRun {
-                                        backend,
-                                        time,
-                                        state: TestState::Success,
-                                        path: path.clone(),
-                                    }
-                                } else {
-                                    //expected error, but had none
-                                    TestRun {
-                                        backend,
-                                        time,
-                                        state: TestState::Error(format!(
-                                            "Expected Error, but was success"
-                                        )),
-                                        path: path.clone(),
-                                    }
-                                }
-                            }
-                            Err(e) => {
-                                let pipeline_error = e.to_string();
-                                match &config.expected_result {
-                                    ResultType::Error(expected_error) => {
-                                        //make sure the error matches
-                                        if expected_error == &pipeline_error {
-                                            TestRun {
-                                                backend,
-                                                time,
-                                                state: TestState::Success,
-                                                path: path.clone(),
-                                            }
-                                        } else {
-                                            TestRun {
-                                                backend,
-                                                time,
-                                                state: TestState::Error(format!(
-                                                    "Expected error:\n    {}\ngot\n    {}",
-                                                    expected_error, pipeline_error
-                                                )),
-                                                path: path.clone(),
-                                            }
-                                        }
-                                    }
-                                    ResultType::Success => {
-                                        //expected success, but was error
-                                        TestRun {
-                                            backend,
-                                            time,
-                                            state: TestState::Error(pipeline_error),
-                                            path: path.clone(),
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
+                    Ok(res) => pipeline_res_to_testrun(res, &config, backend, time, path.clone()),
                 };
 
                 results.runs.push(pipeline_run);

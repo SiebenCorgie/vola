@@ -10,3 +10,4 @@ yansi.workspace = true
 smallvec.workspace = true
 clap.workspace = true
 pretty_env_logger.workspace = true
+wasmtime.workspace = true
