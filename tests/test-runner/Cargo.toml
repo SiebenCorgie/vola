@@ -8,3 +8,5 @@ volac = { path = "../../crates/volac" }
 vola-common = { path = "../../crates/vola-common" }
 yansi.workspace = true
 smallvec.workspace = true
+clap.workspace = true
+pretty_env_logger.workspace = true

@@ -1,9 +1,8 @@
 use std::{
     error::Error,
     fmt::Display,
-    io::{BufRead, Read},
+    io::BufRead,
     path::{Path, PathBuf},
-    sync::mpsc::Receiver,
     thread::JoinHandle,
     time::{Duration, Instant},
 };
@@ -262,12 +261,17 @@ pub fn run_file(path: PathBuf) -> Result<JoinHandle<TestResult>, Box<dyn Error>>
                         Backend::Spirv => Box::new(volac::backends::Spirv::new(Target::buffer())),
                     };
                     let mut pipeline = Pipeline::new_in_memory().with_backend(pipeline_backend);
+
+                    if config.validate {
+                        pipeline = pipeline.with_validation();
+                    }
+
                     pipeline.execute_on_file(&execfile)
                 });
                 let time = start.elapsed();
 
                 let pipeline_run = match pipeline_result {
-                    Err(e) => {
+                    Err(_e) => {
                         //if this happened, then the run crashed.
                         TestRun {
                             backend,

@@ -13,6 +13,18 @@ use yansi::Paint;
 mod crawler;
 mod run;
 
+use clap::{Parser, ValueEnum};
+
+#[derive(Parser)]
+#[command(name = "test-runner")]
+#[command(version, about, long_about = "Vola's test runner!")]
+struct Args {
+    ///Specifies a file that should be tested. Can be used multiple times to test multiple files.
+    ///If not used, all files are tested.
+    #[arg(long, short = 'f')]
+    files: Option<Vec<PathBuf>>,
+}
+
 const TIMEOUT: Duration = Duration::from_secs(5);
 
 enum LaunchState {
@@ -68,7 +80,14 @@ impl Display for LaunchState {
 ///parsed config, and sends the result back to the runner. Once all test finished, the runner collects
 ///the results and pretty prints them.
 fn main() -> Result<(), Box<dyn Error>> {
-    let test_files = crawl_ui()?;
+    pretty_env_logger::init();
+    let args = Args::parse();
+
+    let test_files = if let Some(files) = args.files {
+        files
+    } else {
+        crawl_ui()?
+    };
 
     let mut launch_states = test_files
         .into_iter()

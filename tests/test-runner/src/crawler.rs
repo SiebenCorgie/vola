@@ -1,7 +1,6 @@
 use std::{
     error::Error,
     ffi::OsStr,
-    fs::FileType,
     path::{Path, PathBuf},
 };
 

@@ -91,6 +91,10 @@ To compile some file to a SPIR-V file, use the `vola-cli` package. By default it
 cargo run --bin vola-cli -- path/to/some/file.vola output_file_name
 ```
 
+### Testing
+
+There is a test runner in `tests`. It uses all integration tests in `tests/ui` on each backend and reports the results.
+
 ### Rendering
 
 There is a repository that implements a renderer over at [vola-sdf-renderer](https://gitlab.com/tendsinmende/vola-sdf-renderer). It is not included here, since it has some heavy dependencies and is not compiler related.
