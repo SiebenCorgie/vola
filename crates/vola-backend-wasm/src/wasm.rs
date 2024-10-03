@@ -25,7 +25,6 @@ use vola_opt::{
     },
     imm::{ImmNat, ImmScalar},
 };
-use walrus::ValType;
 
 use crate::{
     graph::{TyShape, WasmNode, WasmTy},
@@ -34,15 +33,38 @@ use crate::{
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ExternOp {
-    Cross,
     Dot,
+    Cross,
     Length,
+
+    //NOTE Native for f32, else extern
+    SquareRoot,
+
+    Exp,
+    Pow,
+
+    Abs,
+    Ceil,
+    Floor,
+    Neg,
+    Round,
+
+    Min,
+    Max,
+    Mix,
+    Clamp,
+
     MatrixInverse,
 
+    //All Trigs
     Sin,
+    Cos,
+    Tan,
+    ASin,
+    ACos,
+    ATan,
 
     Mod,
-
     Fract,
 
     //Emulation of piece wise vector ops
@@ -51,36 +73,75 @@ pub enum ExternOp {
     SubVec,
     MulVec,
     DivVec,
-    ModVec,
 }
 
 impl ExternOp {
+    pub fn base_symbol_name(&self) -> &'static str {
+        match self {
+            Self::Dot => "dot",
+            Self::Cross => "cross",
+            Self::Length => "length",
+            Self::SquareRoot => "sqrt",
+            Self::Exp => "exp",
+            Self::Pow => "pow",
+            Self::Min => "min",
+            Self::Max => "max",
+            Self::Mix => "mix",
+            Self::Clamp => "clamp",
+            Self::MatrixInverse => "inverse",
+
+            Self::Sin => "sin",
+            Self::Cos => "cos",
+            Self::Tan => "tan",
+            Self::ASin => "asin",
+            Self::ACos => "acos",
+            Self::ATan => "atan",
+
+            Self::Mod => "mod",
+            Self::Fract => "fract",
+            Self::AddVec => "add",
+            Self::SubVec => "sub",
+            Self::MulVec => "mul",
+            Self::DivVec => "div",
+            _ => "unknown",
+        }
+    }
+
     pub fn get_static_symbol_name(&self, input_types: &[WasmTy]) -> Result<String, WasmError> {
-        let (ty_suffix, symbol_name) = match self {
-            Self::Length => {
-                if input_types.len() != 1 || !input_types[0].is_vector() {
-                    return Err(WasmError::RuntimeIncompatibleSig(
-                        self.clone(),
-                        input_types.len(),
-                    ));
+        //NOTE: all external functions are suffixed by the first args's type.
+        let ty_suffix = {
+            if let WasmTy::Defined { shape, ty: _ } = &input_types[0] {
+                match shape {
+                    TyShape::Scalar => "scalar",
+                    TyShape::Vector { width } => &format!("vec{}", width),
+                    TyShape::Matrix { width, height } => match (width, height) {
+                        (2, 2) => "mat2",
+                        (3, 3) => "mat3",
+                        (4, 4) => "mat4",
+                        _ => {
+                            return Err(WasmError::RuntimeIncompatibleSig(
+                                self.clone(),
+                                input_types.len(),
+                            ))
+                        }
+                    },
+                    //NOTE: we currently have no vector typed extern functions
+                    _ => {
+                        return Err(WasmError::RuntimeIncompatibleSig(
+                            self.clone(),
+                            input_types.len(),
+                        ))
+                    }
                 }
-
-                let element_count = input_types[0].element_count();
-                let waltype = input_types[0].unwarp_walrus_ty();
-
-                if element_count > 4 || element_count == 1 || waltype != ValType::F32 {
-                    return Err(WasmError::RuntimeIncompatibleType(
-                        self.clone(),
-                        0,
-                        input_types[0].clone(),
-                    ));
-                }
-
-                (format!("vec{}", element_count), "length")
+            } else {
+                return Err(WasmError::RuntimeIncompatibleSig(
+                    self.clone(),
+                    input_types.len(),
+                ));
             }
-
-            _ => panic!("Extern Op {self:?} not implemented"),
         };
+
+        let symbol_name = self.base_symbol_name();
 
         Ok(format!("{}_{}", symbol_name, ty_suffix))
     }
@@ -131,7 +192,34 @@ impl From<&Buildin> for WasmNode {
                 value.inputs.len(),
                 ExternOp::Length,
             )),
-            _ => panic!("Unsupported buildin op {:?}", value.op),
+            BuildinOp::SquareRoot => WasmNode::Runtime(WasmRuntimeOp::new_with_signature(
+                value.inputs.len(),
+                ExternOp::SquareRoot,
+            )),
+            BuildinOp::Exp => WasmNode::Runtime(WasmRuntimeOp::new_with_signature(
+                value.inputs.len(),
+                ExternOp::Exp,
+            )),
+            BuildinOp::Pow => WasmNode::Runtime(WasmRuntimeOp::new_with_signature(
+                value.inputs.len(),
+                ExternOp::Pow,
+            )),
+            BuildinOp::Min => WasmNode::Runtime(WasmRuntimeOp::new_with_signature(
+                value.inputs.len(),
+                ExternOp::Min,
+            )),
+            BuildinOp::Max => WasmNode::Runtime(WasmRuntimeOp::new_with_signature(
+                value.inputs.len(),
+                ExternOp::Max,
+            )),
+            BuildinOp::Mix => WasmNode::Runtime(WasmRuntimeOp::new_with_signature(
+                value.inputs.len(),
+                ExternOp::Mix,
+            )),
+            BuildinOp::Clamp => WasmNode::Runtime(WasmRuntimeOp::new_with_signature(
+                value.inputs.len(),
+                ExternOp::Clamp,
+            )),
         }
     }
 }
@@ -140,7 +228,12 @@ impl From<&Trig> for WasmNode {
     fn from(value: &Trig) -> Self {
         match &value.op {
             TrigOp::Sin => WasmNode::Runtime(WasmRuntimeOp::new_with_signature(1, ExternOp::Sin)),
-            _ => todo!("unimplemented trig op"),
+            TrigOp::Cos => WasmNode::Runtime(WasmRuntimeOp::new_with_signature(1, ExternOp::Cos)),
+            TrigOp::Tan => WasmNode::Runtime(WasmRuntimeOp::new_with_signature(1, ExternOp::Tan)),
+
+            TrigOp::ASin => WasmNode::Runtime(WasmRuntimeOp::new_with_signature(1, ExternOp::ASin)),
+            TrigOp::ACos => WasmNode::Runtime(WasmRuntimeOp::new_with_signature(1, ExternOp::ACos)),
+            TrigOp::ATan => WasmNode::Runtime(WasmRuntimeOp::new_with_signature(1, ExternOp::ATan)),
         }
     }
 }
@@ -273,21 +366,77 @@ impl WasmNode {
     }
 }
 
-impl From<&BinaryRel> for WasmNode {
-    fn from(value: &BinaryRel) -> Self {
-        match value.op {
-            BinaryRelOp::Eq => WasmNode::Binary(WasmBinaryOp::new(walrus::ir::BinaryOp::F32Eq)),
-            BinaryRelOp::Gt => WasmNode::Binary(WasmBinaryOp::new(walrus::ir::BinaryOp::F32Ge)),
-            BinaryRelOp::Gte => WasmNode::Binary(WasmBinaryOp::new(walrus::ir::BinaryOp::F32Gt)),
-            BinaryRelOp::Lt => WasmNode::Binary(WasmBinaryOp::new(walrus::ir::BinaryOp::F32Lt)),
-            BinaryRelOp::Lte => WasmNode::Binary(WasmBinaryOp::new(walrus::ir::BinaryOp::F32Le)),
-            BinaryRelOp::NotEq => WasmNode::Binary(WasmBinaryOp::new(walrus::ir::BinaryOp::F32Ne)),
+impl WasmNode {
+    pub fn try_from_op_binaryrel(
+        value: &BinaryRel,
+        input_sig: [vola_opt::common::Ty; 2],
+        output_sig: vola_opt::common::Ty,
+    ) -> Self {
+        //NOTE make sure both are of scalar shape, otherwise
+        //abort
+        if !input_sig[0].is_scalar() || input_sig[0].is_scalar() {
+            return Self::error_for_sig(2, 1);
+        }
+        //Also, output must be a bool.
+        if !output_sig.is_bool() {
+            return Self::error_for_sig(2, 1);
+        }
+        //Must be of same input type.
+        if input_sig[0] != input_sig[1] {
+            return Self::error_for_sig(2, 1);
+        }
+
+        //now dispatch either to f32 rels, or i32 rels, depending on the type
+        match input_sig[0] {
+            //NOTE: we have _natural_ numbers, so only signed integers
+            vola_opt::common::Ty::Nat => match value.op {
+                BinaryRelOp::Eq => WasmNode::Binary(WasmBinaryOp::new(walrus::ir::BinaryOp::I32Eq)),
+                BinaryRelOp::Gt => {
+                    WasmNode::Binary(WasmBinaryOp::new(walrus::ir::BinaryOp::I32GeS))
+                }
+                BinaryRelOp::Gte => {
+                    WasmNode::Binary(WasmBinaryOp::new(walrus::ir::BinaryOp::I32GtS))
+                }
+                BinaryRelOp::Lt => {
+                    WasmNode::Binary(WasmBinaryOp::new(walrus::ir::BinaryOp::I32LtS))
+                }
+                BinaryRelOp::Lte => {
+                    WasmNode::Binary(WasmBinaryOp::new(walrus::ir::BinaryOp::I32LeS))
+                }
+                BinaryRelOp::NotEq => {
+                    WasmNode::Binary(WasmBinaryOp::new(walrus::ir::BinaryOp::I32Ne))
+                }
+            },
+            vola_opt::common::Ty::Scalar => match value.op {
+                BinaryRelOp::Eq => WasmNode::Binary(WasmBinaryOp::new(walrus::ir::BinaryOp::F32Eq)),
+                BinaryRelOp::Gt => WasmNode::Binary(WasmBinaryOp::new(walrus::ir::BinaryOp::F32Ge)),
+                BinaryRelOp::Gte => {
+                    WasmNode::Binary(WasmBinaryOp::new(walrus::ir::BinaryOp::F32Gt))
+                }
+                BinaryRelOp::Lt => WasmNode::Binary(WasmBinaryOp::new(walrus::ir::BinaryOp::F32Lt)),
+                BinaryRelOp::Lte => {
+                    WasmNode::Binary(WasmBinaryOp::new(walrus::ir::BinaryOp::F32Le))
+                }
+                BinaryRelOp::NotEq => {
+                    WasmNode::Binary(WasmBinaryOp::new(walrus::ir::BinaryOp::F32Ne))
+                }
+            },
+            _ => Self::error_for_sig(2, 1),
         }
     }
 }
 
-impl From<&BinaryBool> for WasmNode {
-    fn from(value: &BinaryBool) -> Self {
+impl WasmNode {
+    pub fn try_from_binary_bool(
+        value: &BinaryBool,
+        input_sig: [vola_opt::common::Ty; 2],
+        output_sig: vola_opt::common::Ty,
+    ) -> Self {
+        //NOTE we expect a bool input
+        if !input_sig[0].is_bool() || !input_sig[1].is_bool() || !output_sig.is_bool() {
+            return WasmNode::error_for_sig(2, 1);
+        }
+
         match value.op {
             BinaryBoolOp::And => WasmNode::Binary(WasmBinaryOp::new(walrus::ir::BinaryOp::I32And)),
             BinaryBoolOp::Or => WasmNode::Binary(WasmBinaryOp::new(walrus::ir::BinaryOp::I32Or)),
@@ -314,17 +463,60 @@ impl WasmUnaryOp {
     }
 }
 
-impl From<&UnaryArith> for WasmNode {
-    fn from(value: &UnaryArith) -> Self {
-        match value.op {
-            UnaryArithOp::Abs => WasmNode::Unary(WasmUnaryOp::new(walrus::ir::UnaryOp::F32Abs)),
-            UnaryArithOp::Ceil => WasmNode::Unary(WasmUnaryOp::new(walrus::ir::UnaryOp::F32Ceil)),
-            UnaryArithOp::Floor => WasmNode::Unary(WasmUnaryOp::new(walrus::ir::UnaryOp::F32Floor)),
-            UnaryArithOp::Neg => WasmNode::Unary(WasmUnaryOp::new(walrus::ir::UnaryOp::F32Neg)),
-            UnaryArithOp::Round => WasmNode::Unary(WasmUnaryOp::new(walrus::ir::UnaryOp::F32Abs)),
-            UnaryArithOp::Fract => {
-                WasmNode::Runtime(WasmRuntimeOp::new_with_signature(1, ExternOp::Fract))
+impl WasmNode {
+    pub fn try_from_unary_arith(
+        value: &UnaryArith,
+        input_sig: vola_opt::common::Ty,
+        output_sig: vola_opt::common::Ty,
+    ) -> Self {
+        if input_sig != output_sig {
+            return WasmNode::error_for_sig(1, 1);
+        }
+
+        match input_sig {
+            vola_opt::common::Ty::Nat => {
+                //Not in WASM, and we don't (yet?) have implementations for those
+                WasmNode::error_for_sig(1, 1)
             }
+            //NOTE: We can dispatch those to _buildin_ ops mostly
+            vola_opt::common::Ty::Scalar => match value.op {
+                UnaryArithOp::Abs => WasmNode::Unary(WasmUnaryOp::new(walrus::ir::UnaryOp::F32Abs)),
+                UnaryArithOp::Ceil => {
+                    WasmNode::Unary(WasmUnaryOp::new(walrus::ir::UnaryOp::F32Ceil))
+                }
+                UnaryArithOp::Floor => {
+                    WasmNode::Unary(WasmUnaryOp::new(walrus::ir::UnaryOp::F32Floor))
+                }
+                UnaryArithOp::Neg => WasmNode::Unary(WasmUnaryOp::new(walrus::ir::UnaryOp::F32Neg)),
+                UnaryArithOp::Round => {
+                    WasmNode::Unary(WasmUnaryOp::new(walrus::ir::UnaryOp::F32Abs))
+                }
+                UnaryArithOp::Fract => {
+                    WasmNode::Runtime(WasmRuntimeOp::new_with_signature(1, ExternOp::Fract))
+                }
+            },
+            //For externs, we have runtime calls
+            vola_opt::common::Ty::Vector { .. } => match value.op {
+                UnaryArithOp::Abs => {
+                    WasmNode::Runtime(WasmRuntimeOp::new_with_signature(1, ExternOp::Abs))
+                }
+                UnaryArithOp::Ceil => {
+                    WasmNode::Runtime(WasmRuntimeOp::new_with_signature(1, ExternOp::Ceil))
+                }
+                UnaryArithOp::Floor => {
+                    WasmNode::Runtime(WasmRuntimeOp::new_with_signature(1, ExternOp::Floor))
+                }
+                UnaryArithOp::Neg => {
+                    WasmNode::Runtime(WasmRuntimeOp::new_with_signature(1, ExternOp::Neg))
+                }
+                UnaryArithOp::Round => {
+                    WasmNode::Runtime(WasmRuntimeOp::new_with_signature(1, ExternOp::Round))
+                }
+                UnaryArithOp::Fract => {
+                    WasmNode::Runtime(WasmRuntimeOp::new_with_signature(1, ExternOp::Fract))
+                }
+            },
+            _ => WasmNode::error_for_sig(1, 1),
         }
     }
 }

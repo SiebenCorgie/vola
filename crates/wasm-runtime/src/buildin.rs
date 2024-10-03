@@ -36,6 +36,27 @@ crate::impl_macros::impl_op2!(Vec2, powf, 2, pow_vec2);
 crate::impl_macros::impl_op2!(Vec3, powf, 3, pow_vec3);
 crate::impl_macros::impl_op2!(Vec4, powf, 4, pow_vec4);
 
+crate::impl_macros::impl_op!(Vec2, abs, 2, abs_vec2);
+crate::impl_macros::impl_op!(Vec3, abs, 3, abs_vec3);
+crate::impl_macros::impl_op!(Vec4, abs, 4, abs_vec4);
+
+crate::impl_macros::impl_op!(Vec2, ceil, 2, ceil_vec2);
+crate::impl_macros::impl_op!(Vec3, ceil, 3, ceil_vec3);
+crate::impl_macros::impl_op!(Vec4, ceil, 4, ceil_vec4);
+
+crate::impl_macros::impl_op!(Vec2, floor, 2, floor_vec2);
+crate::impl_macros::impl_op!(Vec3, floor, 3, floor_vec3);
+crate::impl_macros::impl_op!(Vec4, floor, 4, floor_vec4);
+
+use core::ops::Neg;
+crate::impl_macros::impl_op!(Vec2, neg, 2, neg_vec2);
+crate::impl_macros::impl_op!(Vec3, neg, 3, neg_vec3);
+crate::impl_macros::impl_op!(Vec4, neg, 4, neg_vec4);
+
+crate::impl_macros::impl_op!(Vec2, round, 2, round_vec2);
+crate::impl_macros::impl_op!(Vec3, round, 3, round_vec3);
+crate::impl_macros::impl_op!(Vec4, round, 4, round_vec4);
+
 //crate::impl_macros::impl_op2!(f32, min, 1, min_scalar);
 crate::impl_macros::impl_op2!(Vec2, min, 2, min_vec2);
 crate::impl_macros::impl_op2!(Vec3, min, 3, min_vec3);

@@ -6,6 +6,7 @@
  * 2024 Tendsin Mende
  */
 
+use glam::{Mat2, Mat3, Mat4};
 use glam::{Vec2, Vec3, Vec4};
 
 use core::ops::Add;
@@ -34,3 +35,17 @@ crate::impl_macros::impl_op2!(f32, rem, 1, mod_scalar);
 crate::impl_macros::impl_op2!(Vec2, rem, 2, mod_vec2);
 crate::impl_macros::impl_op2!(Vec3, rem, 3, mod_vec3);
 crate::impl_macros::impl_op2!(Vec4, rem, 4, mod_vec4);
+
+#[no_mangle]
+extern "C" fn inverse_mat2(a: Mat2) -> Mat2 {
+    a.inverse()
+}
+
+#[no_mangle]
+extern "C" fn inverse_mat3(a: Mat3) -> Mat3 {
+    a.inverse()
+}
+#[no_mangle]
+extern "C" fn inverse_mat4(a: Mat4) -> Mat4 {
+    a.inverse()
+}

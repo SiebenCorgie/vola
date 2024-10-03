@@ -46,4 +46,6 @@ pub enum WasmError {
     RuntimeIncompatibleSig(ExternOp, usize),
     #[error("Extern Runtime Op {0:?} encountered incompatible type for argument {1} : {2:?}")]
     RuntimeIncompatibleType(ExternOp, usize, WasmTy),
+    #[error("ExternOp not (yet) implemented: {0:?}")]
+    ExternOpUnimplemented(ExternOp),
 }
