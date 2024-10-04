@@ -57,12 +57,12 @@ crate::impl_macros::impl_op!(Vec2, round, 2, round_vec2);
 crate::impl_macros::impl_op!(Vec3, round, 3, round_vec3);
 crate::impl_macros::impl_op!(Vec4, round, 4, round_vec4);
 
-//crate::impl_macros::impl_op2!(f32, min, 1, min_scalar);
+crate::impl_macros::impl_op2!(f32, min, 1, min_scalar);
 crate::impl_macros::impl_op2!(Vec2, min, 2, min_vec2);
 crate::impl_macros::impl_op2!(Vec3, min, 3, min_vec3);
 crate::impl_macros::impl_op2!(Vec4, min, 4, min_vec4);
 
-//crate::impl_macros::impl_op2!(f32, max, 1, max_scalar);
+crate::impl_macros::impl_op2!(f32, max, 1, max_scalar);
 crate::impl_macros::impl_op2!(Vec2, max, 2, max_vec2);
 crate::impl_macros::impl_op2!(Vec3, max, 3, max_vec3);
 crate::impl_macros::impl_op2!(Vec4, max, 4, max_vec4);

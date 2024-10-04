@@ -11,17 +11,16 @@
 //! The idea is to wrap each instruction with loads for each argument, and a result-store.
 //! The builder pre-allocates _enough_ local variables.
 
-use ahash::{AHashMap, AHashSet};
+use ahash::AHashMap;
 use rvsdg::{
-    edge::OutportLocation,
-    nodes::StructuralNode,
+    edge::{InputType, OutportLocation},
     util::cfg::{Cfg, CfgNode},
-    NodeRef, Rvsdg, SmallColl,
+    NodeRef, SmallColl,
 };
 use walrus::{FunctionId, LocalId, Module, ModuleFunctions, ModuleLocals};
 
 use crate::{
-    graph::{WasmEdge, WasmNode, WasmTy},
+    graph::{WasmNode, WasmTy},
     WasmBackend, WasmError,
 };
 
@@ -308,6 +307,20 @@ impl WasmLambdaBuilder {
             WasmNode::Value(v) => {
                 builder.const_(v.op.clone());
             }
+            WasmNode::Index(i) => {
+                //Index basically just mean copy the _nth_ input to our output
+                //Since we don't want to lookup _where_ in the just loaded argument everything is,
+                //we resort to loading the _nth_ input _again_. This will result in the post-op
+                //store storing the _right_ elements.
+                let port = backend
+                    .graph
+                    .find_producer_inp(node.as_inport_location(InputType::Input(i.index)))
+                    .unwrap();
+                self.emit_load(port, builder);
+            }
+            WasmNode::Construct(_) => {
+                //for construct we don't have to do anything, since this basically just tells the vm "push all elements" (that make  a vector/mat etc.) onto this edge's heap element.
+            }
             WasmNode::Runtime(r) => {
                 let input_types = backend.graph[node]
                     .inport_types()
@@ -329,7 +342,13 @@ impl WasmLambdaBuilder {
                     crate::runtime::lookup_function_symbol(locals, functions, &extern_symbol);
                 //While at it, verify that the input types match
 
-                assert!(function_symbol.arguments.len() == flattened_valty.len());
+                assert!(
+                    function_symbol.arguments.len() == flattened_valty.len(),
+                    "symbol_args.len()={}, valty.args.len()={} for {}",
+                    function_symbol.arguments.len(),
+                    flattened_valty.len(),
+                    extern_symbol
+                );
                 for (a, b) in function_symbol
                     .arguments
                     .iter()

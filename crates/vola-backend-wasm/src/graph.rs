@@ -24,6 +24,7 @@ use vola_opt::{
         matrix::UnaryMatrix,
         relational::BinaryRel,
         trigonometric::Trig,
+        ConstantIndex,
     },
     imm::{ImmMatrix, ImmNat, ImmScalar, ImmVector},
     OptNode,
@@ -31,7 +32,7 @@ use vola_opt::{
 
 use crate::{
     error::WasmError,
-    wasm::{self, WasmBinaryOp, WasmRuntimeOp, WasmUnaryOp, WasmValue},
+    wasm::{self, Construct, Index, WasmBinaryOp, WasmRuntimeOp, WasmUnaryOp, WasmValue},
 };
 
 mod utils;
@@ -41,6 +42,8 @@ pub enum WasmNode {
     Binary(WasmBinaryOp),
     Runtime(WasmRuntimeOp),
     Value(WasmValue),
+    Index(Index),
+    Construct(Construct),
     Error {
         inputs: SmallColl<Input>,
         outputs: SmallColl<Output>,
@@ -76,6 +79,18 @@ impl WasmNode {
             assert!(output_sig.len() == 1);
             assert!(output_sig[0] == Some(vola_opt::common::Ty::Scalar));
             return Ok(WasmNode::from(imm));
+        }
+
+        if let Some(index_node) = value.try_downcast_ref::<ConstantIndex>() {
+            return Ok(WasmNode::Index(Index {
+                input: Inport::default(),
+                index: index_node.access,
+                output: Outport::default(),
+            }));
+        }
+
+        if let Some(construct_node) = value.try_downcast_ref::<vola_opt::alge::Construct>() {
+            return Ok(WasmNode::Construct(wasm::Construct::from(construct_node)));
         }
 
         if let Some(binop) = value.try_downcast_ref::<BinaryArith>() {
@@ -164,6 +179,8 @@ impl LangNode for WasmNode {
             Self::Binary(b) => b.inputs(),
             Self::Runtime(r) => r.inputs(),
             Self::Value(v) => v.inputs(),
+            Self::Index(i) => i.inputs(),
+            Self::Construct(c) => c.inputs(),
             Self::Error { inputs, outputs: _ } => inputs,
         }
     }
@@ -174,6 +191,8 @@ impl LangNode for WasmNode {
             Self::Binary(b) => b.inputs_mut(),
             Self::Runtime(r) => r.inputs_mut(),
             Self::Value(v) => v.inputs_mut(),
+            Self::Index(i) => i.inputs_mut(),
+            Self::Construct(c) => c.inputs_mut(),
             Self::Error { inputs, outputs: _ } => inputs,
         }
     }
@@ -184,6 +203,8 @@ impl LangNode for WasmNode {
             Self::Binary(b) => b.outputs(),
             Self::Runtime(r) => r.outputs(),
             Self::Value(v) => v.outputs(),
+            Self::Index(i) => i.outputs(),
+            Self::Construct(c) => c.outputs(),
             Self::Error { inputs: _, outputs } => outputs,
         }
     }
@@ -194,6 +215,8 @@ impl LangNode for WasmNode {
             Self::Binary(b) => b.outputs_mut(),
             Self::Runtime(r) => r.outputs_mut(),
             Self::Value(v) => v.outputs_mut(),
+            Self::Index(i) => i.outputs_mut(),
+            Self::Construct(c) => c.outputs_mut(),
             Self::Error { inputs: _, outputs } => outputs,
         }
     }
@@ -206,6 +229,8 @@ impl View for WasmNode {
             Self::Binary(b) => format!("{:?}", b.op),
             Self::Runtime(r) => format!("{:?}", r.op),
             Self::Value(v) => format!("{:?}", v.op),
+            Self::Index(i) => format!("Index<{}>", i.index),
+            Self::Construct(_) => format!("Construct"),
             Self::Error { .. } => format!("Error"),
         }
     }
@@ -216,6 +241,8 @@ impl View for WasmNode {
             Self::Binary(_b) => rvsdg_viewer::Color::from_rgba(220, 255, 230, 255),
             Self::Runtime(_r) => rvsdg_viewer::Color::from_rgba(230, 220, 255, 255),
             Self::Value(_r) => rvsdg_viewer::Color::from_rgba(150, 220, 150, 255),
+            Self::Index(_r) => rvsdg_viewer::Color::from_rgba(150, 150, 150, 255),
+            Self::Construct(_r) => rvsdg_viewer::Color::from_rgba(150, 150, 150, 255),
             Self::Error { .. } => rvsdg_viewer::Color::from_rgba(255, 150, 100, 255),
         }
     }
