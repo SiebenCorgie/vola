@@ -36,6 +36,9 @@ impl PipelineBackend for Wasm {
         //By loading the runtime, and then adding all exported functions to that.
         let mut module = backend.into_wasm_module()?;
 
+        //Run garbage collection
+        vola_backend_wasm::walrus::passes::gc::run(&mut module);
+
         //Depending on the target either write to file, or to buffer
         match &mut self.target {
             Target::Buffer(buffer) => {

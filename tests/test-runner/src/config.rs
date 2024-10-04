@@ -175,6 +175,9 @@ impl Config {
                     //TODO: support ints as well?
                     let mut args = SmallVec::new();
                     for item in suffix.split(",") {
+                        if item.is_empty() {
+                            continue;
+                        }
                         if let Ok(f) = item.parse::<f32>() {
                             args.push(f);
                         } else {

@@ -29,6 +29,10 @@ use vola_opt::{
     imm::{ImmMatrix, ImmNat, ImmScalar, ImmVector},
     OptNode,
 };
+use walrus::{
+    ir::{LoadKind, StoreKind},
+    ValType,
+};
 
 use crate::{
     error::WasmError,
@@ -280,6 +284,41 @@ impl From<vola_opt::common::Ty> for WasmTy {
 }
 
 impl WasmTy {
+    ///Turns a _index_ operation into a set of indices into this type.
+    ///
+    ///For example, indexing a vec3 with 1 returns 4, which is the offset
+    ///of the second float.
+    ///
+    ///Doing the same for a mat3 returns three offsets for the
+    ///4-th, 5-th & 6-th float, which is the second column of the vector
+    pub fn index_to_offset_elements(&self, index: usize) -> SmallColl<u32> {
+        let per_element_offset = self.base_type_size();
+        match self {
+            WasmTy::Defined { shape, .. } => match shape {
+                TyShape::Scalar => panic!("cannot index scalar"),
+                TyShape::Vector { width } => {
+                    assert!(*width > index, "Out of bound vector index");
+                    smallvec![(index * per_element_offset).try_into().unwrap()]
+                }
+                TyShape::Matrix { width, height } => {
+                    assert!(*width > index);
+                    //load all indices of the n-th column.
+                    //the base offset is index-times the element count of each
+                    //column times the element size
+                    let base_offset = per_element_offset * height * index;
+                    let mut indices = SmallColl::new();
+                    for idx in 0..*height {
+                        indices.push((base_offset + per_element_offset * idx).try_into().unwrap());
+                    }
+
+                    indices
+                }
+                TyShape::Tensor { .. } => panic!("Tensor not yet supported"),
+            },
+            WasmTy::Undefined => SmallColl::new(),
+        }
+    }
+
     pub fn is_vector(&self) -> bool {
         if let Self::Defined {
             shape: TyShape::Vector { .. },
@@ -291,6 +330,66 @@ impl WasmTy {
             false
         }
     }
+
+    pub fn is_scalar(&self) -> bool {
+        if let Self::Defined { shape, .. } = self {
+            if let TyShape::Scalar = shape {
+                true
+            } else {
+                false
+            }
+        } else {
+            false
+        }
+    }
+
+    pub fn store_kind(&self) -> StoreKind {
+        match self.unwarp_walrus_ty() {
+            ValType::F32 => StoreKind::F32,
+            ValType::I32 => StoreKind::I32 { atomic: false },
+            ValType::F64 => StoreKind::F64,
+            ValType::I64 => StoreKind::I64 { atomic: false },
+            //TODO: is this right, or should we panic?
+            ValType::Ref(_) => StoreKind::I32 { atomic: false },
+            ValType::V128 => StoreKind::V128,
+        }
+    }
+
+    pub fn load_kind(&self) -> LoadKind {
+        match self.unwarp_walrus_ty() {
+            ValType::F32 => LoadKind::F32,
+            ValType::I32 => LoadKind::I32 { atomic: false },
+            ValType::F64 => LoadKind::F64,
+            ValType::I64 => LoadKind::I64 { atomic: false },
+            //TODO: is this right, or should we panic?
+            ValType::Ref(_) => LoadKind::I32 { atomic: false },
+            ValType::V128 => LoadKind::V128,
+        }
+    }
+
+    pub fn base_type_size(&self) -> usize {
+        match self {
+            Self::Defined { shape: _, ty } => match ty {
+                ValType::F32 | ValType::I32 | ValType::Ref(_) => 4,
+                ValType::F64 | ValType::I64 => 8,
+                ValType::V128 => 16,
+            },
+            Self::Undefined => 0,
+        }
+    }
+
+    ///Returns the size (in bytes) of this type for wasm.
+    pub fn wasm_size(&self) -> usize {
+        match self {
+            WasmTy::Defined { shape, ty: _ } => {
+                let base_type_size = self.base_type_size();
+                let element_count = shape.element_count();
+                base_type_size * element_count
+            }
+            WasmTy::Undefined => 0,
+        }
+    }
+
     pub fn new_with_shape(ty: walrus::ValType, shape: TyShape) -> Self {
         Self::Defined { shape, ty }
     }

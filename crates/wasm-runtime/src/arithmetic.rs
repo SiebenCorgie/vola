@@ -37,15 +37,15 @@ crate::impl_macros::impl_op2!(Vec3, rem, 3, mod_vec3);
 crate::impl_macros::impl_op2!(Vec4, rem, 4, mod_vec4);
 
 #[no_mangle]
-extern "C" fn inverse_mat2(a: Mat2) -> Mat2 {
-    a.inverse()
+extern "C" fn inverse_mat2(a: &Mat2, res: &mut Mat2) {
+    *res = a.inverse();
 }
 
 #[no_mangle]
-extern "C" fn inverse_mat3(a: Mat3) -> Mat3 {
-    a.inverse()
+extern "C" fn inverse_mat3(a: &Mat3, res: &mut Mat3) {
+    *res = a.inverse();
 }
 #[no_mangle]
-extern "C" fn inverse_mat4(a: Mat4) -> Mat4 {
-    a.inverse()
+extern "C" fn inverse_mat4(a: &Mat4, res: &mut Mat4) {
+    *res = a.inverse();
 }

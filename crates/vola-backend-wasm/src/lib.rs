@@ -30,6 +30,8 @@ mod passes;
 mod runtime;
 mod wasm;
 
+pub use walrus;
+
 pub struct WasmBackend {
     graph: Rvsdg<graph::WasmNode, graph::WasmEdge>,
 

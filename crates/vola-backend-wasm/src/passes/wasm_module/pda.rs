@@ -17,14 +17,17 @@ use rvsdg::{
     util::cfg::{Cfg, CfgNode},
     NodeRef, SmallColl,
 };
-use walrus::{FunctionId, LocalId, Module, ModuleFunctions, ModuleLocals};
+use walrus::{
+    ir::{MemArg, Value},
+    FunctionId, InstrSeqBuilder, LocalId, Memory, Module, ModuleFunctions, ModuleLocals, ValType,
+};
 
 use crate::{
     graph::{WasmNode, WasmTy},
     WasmBackend, WasmError,
 };
 
-use super::FunctionBuilderCtx;
+use super::{memory::MemoryHandler, ArgumentCtx, FunctionBuilderCtx};
 
 struct HeapElement {
     //Possibly shaped wasm type this heap element refers to
@@ -35,15 +38,7 @@ struct HeapElement {
 
 ///The helper that tracks the virtual heap for building a λ-node.
 pub struct WasmLambdaBuilder {
-    ///Mapps each entry to a wasm type
-    heap_table: Vec<HeapElement>,
-    ///Mapps each outport in the orginal graph to a entry in the heap table. Note that each element
-    ///in the heap table can contain multiple actual local variables. This lets us map a Vec3
-    /// to 3 element in the heap table.
-    heap_map: AHashMap<OutportLocation, usize>,
-    ///Tracks current heap size
-    heap_size: usize,
-
+    mem: MemoryHandler,
     ctx: FunctionBuilderCtx,
 }
 
@@ -53,90 +48,167 @@ impl WasmBackend {
         ctx: FunctionBuilderCtx,
         module: &mut Module,
     ) -> WasmLambdaBuilder {
-        let mut sm = WasmLambdaBuilder {
-            heap_map: AHashMap::new(),
-            heap_table: Vec::new(),
-            heap_size: 0,
+        //Allocate ourself some empty memory
+        //let memid = module.memories.add_local(false, false, 0, None, None);
+
+        let memid = module.get_memory_id().unwrap();
+
+        let sm = WasmLambdaBuilder {
+            mem: MemoryHandler::empty(memid, &mut module.locals),
             ctx,
         };
-
-        //To init, we need to offset the heap size for each input element and output element. We take
-        //this to also init the heap-table for all argument-ports and output ports
-        for arg in &sm.ctx.arguments {
-            let heap_element = HeapElement {
-                ty: arg.ty.clone(),
-                //Offset each of the args's elements this is based on the WASM function convention.
-                indices: (0..arg.len)
-                    .map(|idx| {
-                        let index = sm.heap_size + idx;
-                        let id = module.locals.add(arg.ty.unwarp_walrus_ty());
-                        (index, id)
-                    })
-                    .collect(),
-            };
-
-            //Insert the heap element
-            let idx = sm.heap_table.len();
-            sm.heap_table.push(heap_element);
-            //now update the lookup table
-            sm.heap_map.insert(arg.port, idx);
-            //finally update the heap size
-            sm.heap_size += arg.len;
-        }
-
-        //NOTE: we don't push the result indices _yet_ since those
-        //      are only known once we allocated the locales for the CFG.
-
         sm
     }
 }
 
 impl WasmLambdaBuilder {
-    ///Returns the index into the heap table for the allocated element.
-    fn alloc_heap_element(&mut self, ty: WasmTy, module: &mut walrus::Module) -> usize {
-        let element_count = ty.element_count();
-        let element_indices = (0..element_count)
-            .map(|idx| {
-                let idx = self.heap_size + idx;
-                let id = module.locals.add(ty.unwarp_walrus_ty());
-                (idx, id)
-            })
-            .collect();
-        self.heap_size += element_count;
-
-        let element = HeapElement {
-            ty,
-            indices: element_indices,
-        };
-
-        let table_index = self.heap_table.len();
-        self.heap_table.push(element);
-        table_index
-    }
-
-    ///Get or set-up a port in the graph for the heap
-    fn get_or_set_port(
+    ///Emits a λ's argument preample. This bascially makes sure, that the _by-value_ elements
+    ///of each argument are stored in its respective memory element.
+    pub fn emit_argument_preample(
         &mut self,
-        port: OutportLocation,
-        backend: &WasmBackend,
-        module: &mut Module,
-    ) -> usize {
-        if let Some(cached) = self.heap_map.get(&port) {
-            *cached
-        } else {
-            let ty = backend.outport_type(port).unwrap();
-            //setup the heap element
-            let lookup_index = self.alloc_heap_element(ty, module);
-            self.heap_map.insert(port, lookup_index);
-            lookup_index
+        builder: &mut walrus::InstrSeqBuilder,
+        locals: &mut ModuleLocals,
+    ) {
+        for arg in self.ctx.arguments.iter_mut() {
+            assert!(arg.local_id.is_none());
+            let mut local_ids = SmallColl::new();
+            //allocate such a memory element
+            self.mem.alloc_port(arg.port, arg.ty.clone());
+            let addr = self.mem.get_port_address(arg.port);
+            //now emit a store for each local element of the
+
+            let per_element_offset = arg.ty.base_type_size();
+            for element_index in 0..arg.ty.element_count() {
+                //Emit a load for the local element, followed by a store to the correct
+                //to the correct offset of the `addr`
+
+                //NOTE: Since we are allocating _in order_ we can just use add
+                let localid = locals.add(arg.ty.unwarp_walrus_ty());
+                local_ids.push(localid);
+                //store it to the offset
+                builder.const_(addr);
+                builder.local_get(localid);
+                builder.store(
+                    self.mem.memid,
+                    arg.ty.store_kind(),
+                    MemArg {
+                        align: 0,
+                        //calculate local offset for this address
+                        offset: (per_element_offset * element_index).try_into().unwrap(),
+                    },
+                );
+            }
+
+            //set the used local ids for the argument
+            arg.local_id = Some(local_ids);
         }
     }
 
-    fn get_port(&self, port: OutportLocation) -> usize {
-        if let Some(cached) = self.heap_map.get(&port) {
-            *cached
-        } else {
-            panic!("Port had no assigned heap element")
+    ///Puts the `port`'s address on stack.
+    ///
+    ///If the port's memory location is a local value, adds a
+    ///new memory object and stores it to that location.
+    fn load_port_addr(&self, port: OutportLocation, builder: &mut walrus::InstrSeqBuilder) {
+        println!("LoadAddr {:?}", self.mem.get_port_address(port));
+        builder.const_(self.mem.get_port_address(port));
+    }
+
+    fn load_addr_offset(
+        &self,
+        addr: i32,
+        offset: u32,
+        ty: &WasmTy,
+        builder: &mut walrus::InstrSeqBuilder,
+    ) {
+        //push the base address
+        builder.const_(Value::I32(addr));
+        //now load the element at index
+        builder.load(self.mem.memid, ty.load_kind(), MemArg { align: 0, offset });
+    }
+
+    ///Puts the elements of `port` on stack, regardless of its location
+    fn load_port_elements(&self, port: OutportLocation, builder: &mut walrus::InstrSeqBuilder) {
+        //what we do is emit a series of _in-order_ loads,
+        //so that all elements end up on the stack
+        let memele = self.mem.get_port_element(port);
+
+        println!(
+            "   LoadElement[{}] {:?}",
+            memele.ty.element_count(),
+            self.mem.get_port_address(port)
+        );
+
+        let pe_offset = memele.ty.base_type_size();
+        for ele_idx in 0..memele.ty.element_count() {
+            let offset = (pe_offset * ele_idx).try_into().unwrap();
+            self.load_addr_offset(memele.base_addr, offset, &memele.ty, builder);
+        }
+    }
+
+    ///Stores the top elements of the stack to the port's memory location.
+    fn store_values_to_port(&self, port: OutportLocation, builder: &mut walrus::InstrSeqBuilder) {
+        println!("Store {:?}", self.mem.get_port_address(port));
+
+        //NOTE: because this is pain, we have to do the following:
+        //      The stack currently is expected to look like this for a vec3:
+        //      x,y,z
+        //          ^stack_ptr
+        //
+        //      a store expects:
+        //      addr, value
+        //             ^stack_ptr.
+        //
+        //In order to store in z,y,x order, we somehow have to get the
+        //address _in between_ each element.
+        //
+        // the way we do this by first pushing the address, to arrive at
+        // x,y,z,addr
+        //        ^stack_ptr
+        //
+        // then we use a local value to swap z and addr
+        // local.set(0)
+        // local.set(1)
+        // logal.get(0)
+        //
+        // In practice, we have to store the add value only once
+        // to a local, and then, for each element, set a different local value,
+        // and pop both in order again. But that is still the main _idea_ behind it.
+
+        let memele = self.mem.get_port_element(port);
+        let pe_offset = memele.ty.base_type_size();
+
+        //push the addr value into the local element
+        builder.const_(Value::I32(memele.base_addr));
+        let addr_id = self.mem.swap_i32[0];
+        builder.local_set(addr_id);
+
+        //we always use the _second_ swap value
+        let payload_swap_id = match memele.ty.unwarp_walrus_ty() {
+            ValType::F32 => self.mem.swap_f32[1],
+            ValType::I32 => self.mem.swap_i32[1],
+            _ => panic!("{:?} cannot swap atm.", memele.ty),
+        };
+
+        println!("Store with store@{addr_id:?} payload@{payload_swap_id:?}");
+
+        //NOTE: Store has to be in reverse...
+        for ele_idx in (0..memele.ty.element_count()).rev() {
+            //now set the top stack value into _another_ local
+            //value, and pop both in reverse
+            builder.local_set(payload_swap_id);
+
+            builder.local_get(addr_id);
+            builder.local_get(payload_swap_id);
+
+            //now store the element at index
+            builder.store(
+                self.mem.memid,
+                memele.ty.store_kind(),
+                MemArg {
+                    align: 0,
+                    offset: (pe_offset * ele_idx).try_into().unwrap(),
+                },
+            );
         }
     }
 
@@ -146,7 +218,27 @@ impl WasmLambdaBuilder {
         backend: &WasmBackend,
         lambda: NodeRef,
         module: &mut Module,
+        symbol_name: &str,
     ) -> Result<FunctionId, WasmError> {
+        //start the function builder
+        let mut params = SmallColl::new();
+        for arg in self.ctx.arguments.iter() {
+            arg.ty.append_elements_to_signature(&mut params);
+        }
+        let mut results = SmallColl::new();
+        for res in self.ctx.results.iter() {
+            res.ty.append_elements_to_signature(&mut results);
+        }
+        //setup the export's type
+        //let export_type_id = module.types.add(&params, &results);
+        let mut fnbuilder = walrus::FunctionBuilder::new(&mut module.types, &params, &results);
+        fnbuilder.name(symbol_name.to_string());
+        let mut builder = fnbuilder.func_body();
+        //Before starting anything, we emit a preample that
+        //moves all arguments to the memory
+        //object
+        self.emit_argument_preample(&mut builder, &mut module.locals);
+
         //Iterate all nodes in order of the cfg and serialize them into the flat sequence of nodes.
         //while doing so, record the heap growth.
         let topoord = cfg.topological_order()?;
@@ -172,13 +264,14 @@ impl WasmLambdaBuilder {
                                 .find_producer_inp(node.as_inport_location(inp))
                                 .unwrap();
                             //println!("Producer: {:?}", producer);
-                            assert!(self.heap_map.contains_key(&producer));
+                            assert!(self.mem.mem_map.contains_key(&producer));
                         }
 
                         //alloc the node's result element
                         assert!(backend.graph[*node].outputs().len() == 1);
                         let result_port = node.output(0);
-                        let _result_element = self.get_or_set_port(result_port, backend, module);
+                        let result_ty = backend.outport_type(result_port).unwrap();
+                        self.mem.alloc_port(result_port, result_ty);
                     }
                 }
                 //All other nodes are ignored in this pass
@@ -196,20 +289,6 @@ impl WasmLambdaBuilder {
                     )
                 }
         */
-        //start the function builder
-        let mut params = SmallColl::new();
-        for arg in self.ctx.arguments.iter() {
-            arg.ty.append_elements_to_signature(&mut params);
-        }
-        let mut results = SmallColl::new();
-        for res in self.ctx.results.iter() {
-            res.ty.append_elements_to_signature(&mut results);
-        }
-
-        //setup the export's type
-        //let export_type_id = module.types.add(&params, &results);
-        let mut fnbuilder = walrus::FunctionBuilder::new(&mut module.types, &params, &results);
-        let mut builder = fnbuilder.func_body();
 
         //actually serialize all cfg nodes, including the loop / branch nodes via the walrus builder
         for cfgnode in &topoord {
@@ -236,37 +315,22 @@ impl WasmLambdaBuilder {
             let resultport = lambda.as_inport_location(result);
             let result_src = backend.graph.find_producer_inp(resultport).unwrap();
             //produce the loads for each result element
-            self.emit_load(result_src, &mut builder);
+            self.load_port_elements(result_src, &mut builder);
         }
 
         //Now finish the walrus builder, and yeet the function into the actual module
         let mut args = Vec::new();
         for arg in self.ctx.arguments.iter() {
-            let heap_element = self.get_port(arg.port);
-            for (_, id) in self.heap_table[heap_element].indices.iter() {
-                args.push(id.clone());
-            }
+            args.extend_from_slice(&arg.local_id.as_ref().unwrap().as_slice());
         }
         let fnid = fnbuilder.finish(args, &mut module.funcs);
 
+        //Once we finished serializing, we read the memory size, and fit our
+        //memory to that size
+        let desired_page_count = (self.mem.memory_size % MemoryHandler::WASM_PAGE_SIZE) + 1;
+        module.memories.get_mut(self.mem.memid).initial = desired_page_count.try_into().unwrap();
+
         Ok(fnid)
-    }
-
-    fn emit_load(&self, port: OutportLocation, builder: &mut walrus::InstrSeqBuilder) {
-        //Based on the port's type, emit n loads
-        // _in orde_
-        let element = &self.heap_table[self.get_port(port)];
-        for (_heap_index, id) in element.indices.iter() {
-            let _ = builder.local_get(*id);
-        }
-    }
-
-    fn emit_store(&self, port: OutportLocation, builder: &mut walrus::InstrSeqBuilder) {
-        let element = &self.heap_table[self.get_port(port)];
-        //NOTE: reverse the index elements, since this is a stack
-        for (_hidx, id) in element.indices.iter().rev() {
-            let _ = builder.local_set(*id);
-        }
     }
 
     fn serialize_simple_node(
@@ -287,55 +351,96 @@ impl WasmLambdaBuilder {
 
         assert!(backend.graph[node].node_type.is_simple());
 
+        let mut input_src_ports = SmallColl::new();
+        let mut output_ports = SmallColl::new();
+
         for inp in backend.graph[node].inport_types() {
             let src = backend
                 .graph
                 .find_producer_inp(node.as_inport_location(inp))
                 .unwrap();
-            //emit the loads
-            self.emit_load(src, builder);
+            input_src_ports.push(src);
+        }
+
+        for outp in backend.graph[node].outport_types() {
+            output_ports.push(node.as_outport_location(outp));
         }
 
         //now match the operation and emit it.
+        //
+        //This makes sure that the stack is configured on a _per-operation_ basis.
+        //
+        //Generally speaking tho, anything that is not a runtime value
+        //is call-by-value, so we push the actual elements on the stack
+        //
+        //The runtime follows a call-by-reference configuration that
+        //reads first all argument adresses, followed by all result adresses.
         match backend.graph[node].node_type.unwrap_simple_ref() {
             WasmNode::Unary(u) => {
+                println!("-> Unary {:?}", u.op);
+                assert!(input_src_ports.len() == 1);
+                self.load_port_elements(input_src_ports[0], builder);
                 builder.unop(u.op.clone());
+                assert!(output_ports.len() == 1);
+                self.store_values_to_port(output_ports[0], builder);
             }
             WasmNode::Binary(b) => {
+                println!("-> Binary {:?}", b.op);
+                assert!(input_src_ports.len() == 2);
+                self.load_port_elements(input_src_ports[0], builder);
+                self.load_port_elements(input_src_ports[1], builder);
                 builder.binop(b.op.clone());
+                assert!(output_ports.len() == 1);
+                self.store_values_to_port(output_ports[0], builder);
             }
             WasmNode::Value(v) => {
+                println!("-> Const {:?}", v.op);
                 builder.const_(v.op.clone());
+                assert!(output_ports.len() == 1);
+                self.store_values_to_port(output_ports[0], builder);
             }
             WasmNode::Index(i) => {
+                println!("-> Index[{}]", i.index);
                 //Index basically just mean copy the _nth_ input to our output
-                //Since we don't want to lookup _where_ in the just loaded argument everything is,
-                //we resort to loading the _nth_ input _again_. This will result in the post-op
-                //store storing the _right_ elements.
-                let port = backend
-                    .graph
-                    .find_producer_inp(node.as_inport_location(InputType::Input(i.index)))
-                    .unwrap();
-                self.emit_load(port, builder);
+
+                assert!(input_src_ports.len() == 1);
+                assert!(output_ports.len() == 1);
+
+                let input_ty = backend.outport_type(input_src_ports[0]).unwrap();
+                let addr = self.mem.get_port_element(input_src_ports[0]).base_addr;
+                for element_offset in input_ty.index_to_offset_elements(i.index) {
+                    self.load_addr_offset(addr, element_offset, &input_ty, builder);
+                }
+
+                self.store_values_to_port(output_ports[0], builder);
             }
             WasmNode::Construct(_) => {
-                //for construct we don't have to do anything, since this basically just tells the vm "push all elements" (that make  a vector/mat etc.) onto this edge's heap element.
+                //for construct we just load all inputs on the stack, and then
+                //store them.
+                println!("-> Construct:");
+                for input in &input_src_ports {
+                    println!("    in: {:?}", backend.outport_type(*input).unwrap());
+                    self.load_port_elements(*input, builder);
+                }
+                assert!(output_ports.len() == 1);
+                println!("    out: {:?}", backend.outport_type(output_ports[0]));
+                self.store_values_to_port(output_ports[0], builder);
             }
             WasmNode::Runtime(r) => {
-                let input_types = backend.graph[node]
-                    .inport_types()
-                    .iter()
-                    .map(|inp| {
-                        let port = node.as_inport_location(*inp);
-                        let edg = backend.graph[port].edge.unwrap();
-                        backend.graph[edg].ty.type_or_undefined()
-                    })
-                    .collect::<SmallColl<_>>();
-
+                //NOTE: The convention is, that there is an 32bit adress for each
+                //      argument, followed by an address for each result.
                 let mut flattened_valty = SmallColl::new();
-                for inty in input_types.iter() {
-                    inty.append_elements_to_signature(&mut flattened_valty);
+                for _inty in &input_src_ports {
+                    flattened_valty.push(ValType::I32);
                 }
+                for _out in &output_ports {
+                    flattened_valty.push(ValType::I32);
+                }
+
+                let input_types = input_src_ports
+                    .iter()
+                    .map(|port| backend.outport_type(*port).unwrap())
+                    .collect::<SmallColl<_>>();
 
                 let extern_symbol = r.op.get_static_symbol_name(&input_types)?;
                 let function_symbol =
@@ -349,6 +454,7 @@ impl WasmLambdaBuilder {
                     flattened_valty.len(),
                     extern_symbol
                 );
+
                 for (a, b) in function_symbol
                     .arguments
                     .iter()
@@ -356,18 +462,29 @@ impl WasmLambdaBuilder {
                 {
                     assert!(
                         a.1 == b,
-                        "Runtime function argument type missmatch on {extern_symbol}"
+                        "Runtime function argument type missmatch on {extern_symbol}: {} != {}",
+                        a.1,
+                        b
                     );
                 }
 
+                //At this point we are pretty sure that the signature is given,
+                //therfore load all adresses in order and _just_ execute,
+                //without any write back
+                for inp in &input_src_ports {
+                    self.load_port_addr(*inp, builder);
+                }
+
+                for res in &output_ports {
+                    self.load_port_addr(*res, builder);
+                }
+
+                println!("-> {}", extern_symbol);
                 //emit the call, assuming that the signature matches
                 let _ = builder.call(function_symbol.id);
             }
             WasmNode::Error { .. } => panic!("encountered error node!"),
         }
-
-        //finally emit the store(s) for the value(s) that where just put on the stack.
-        self.emit_store(node.output(0), builder);
 
         Ok(())
     }

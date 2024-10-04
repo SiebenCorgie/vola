@@ -14,13 +14,16 @@ use rvsdg::{
     NodeRef, SmallColl,
 };
 use vola_common::{error::error_reporter, report, Span};
+use walrus::{LocalId, ModuleConfig};
 
 use crate::{graph::WasmTy, runtime, WasmBackend, WasmError};
 
+mod memory;
 mod pda;
 
 struct ArgumentCtx {
     port: OutportLocation,
+    local_id: Option<SmallColl<LocalId>>,
     ty: WasmTy,
     len: usize,
 }
@@ -40,7 +43,7 @@ impl WasmBackend {
     pub fn into_wasm_module(&self) -> Result<walrus::Module, WasmError> {
         //First step is to load the runtime as the base module.
         let mut module = runtime::load_runtime_module()?;
-
+        //let mut module = walrus::Module::with_config(ModuleConfig::new());
         let mut last_fail = None;
 
         //search for all exports, read the name,
@@ -105,12 +108,14 @@ impl WasmBackend {
                     let ty_element_count = ty.element_count();
                     ArgumentCtx {
                         port: export.as_outport_location(OutputType::Argument(idx)),
+                        local_id: None,
                         ty,
                         len: ty_element_count,
                     }
                 } else {
                     ArgumentCtx {
                         port: export.as_outport_location(OutputType::Argument(idx)),
+                        local_id: None,
                         ty: WasmTy::Undefined,
                         len: 0,
                     }
@@ -150,7 +155,7 @@ impl WasmBackend {
         })?;
 
         let sm_sequence = self.init_sm_for_ctx(fnctx, module);
-        let function_id = sm_sequence.serialize_cfg(cfg, self, export, module)?;
+        let function_id = sm_sequence.serialize_cfg(cfg, self, export, module, &symbol_name)?;
 
         module.exports.add(&symbol_name, function_id);
 

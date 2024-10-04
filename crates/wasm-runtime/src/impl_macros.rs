@@ -3,15 +3,15 @@
 macro_rules! impl_op {
     (f32, $op:ident, 1, $name:ident) => {
         #[no_mangle]
-        extern "C" fn $name(a: f32) -> f32 {
-            a.$op()
+        extern "C" fn $name(a: &f32, res: &mut f32) {
+            *res = a.$op()
         }
     };
     ($t:ty, $op:ident, $count:expr, $name:ident) => {
         #[no_mangle]
-        extern "C" fn $name(a: &mut $t) {
+        extern "C" fn $name(a: &$t, res: &mut $t) {
             for i in 0..$count {
-                a[i] = a[i].$op();
+                res[i] = a[i].$op();
             }
         }
     };
@@ -24,8 +24,8 @@ pub(crate) use impl_op;
 macro_rules! impl_op_flatten {
     ($t:ty, $op:ident, $count:expr, $name:ident) => {
         #[no_mangle]
-        extern "C" fn $name(a: $t) -> f32 {
-            a.$op()
+        extern "C" fn $name(a: &$t, res: &mut f32) {
+            *res = a.$op();
         }
     };
 }
@@ -38,15 +38,15 @@ pub(crate) use impl_op_flatten;
 macro_rules! impl_op2 {
     (f32, $op:ident, 1, $name:ident) => {
         #[no_mangle]
-        extern "C" fn $name(a: f32, b: f32) -> f32 {
-            a.$op(b)
+        extern "C" fn $name(a: &f32, b: &f32, res: &mut f32) {
+            *res = a.$op(*b);
         }
     };
     ($t:ty, $op:ident, $count:expr, $name:ident) => {
         #[no_mangle]
-        extern "C" fn $name(a: &mut $t, b: &$t) {
+        extern "C" fn $name(a: &$t, b: &$t, res: &mut $t) {
             for i in 0..$count {
-                a[i] = a[i].$op(b[i]);
+                res[i] = a[i].$op(b[i]);
             }
         }
     };
@@ -59,8 +59,8 @@ pub(crate) use impl_op2;
 macro_rules! impl_op2_flatten {
     ($t:ty, $op:ident, $count:expr, $name:ident) => {
         #[no_mangle]
-        extern "C" fn $name(a: &$t, b: &$t) -> f32 {
-            a.$op(*b)
+        extern "C" fn $name(a: &$t, b: &$t, res: &mut f32) {
+            *res = a.$op(*b);
         }
     };
 }

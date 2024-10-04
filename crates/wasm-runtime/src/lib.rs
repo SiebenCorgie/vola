@@ -15,6 +15,5 @@
 
 pub mod arithmetic;
 pub mod buildin;
-pub mod trigonometric;
-
 pub mod impl_macros;
+pub mod trigonometric;
