@@ -219,11 +219,11 @@ pub fn run_file(path: PathBuf) -> Result<JoinHandle<TestResult>, Box<dyn Error>>
                         Backend::Spirv => Box::new(volac::backends::Spirv::new(Target::buffer())),
                     };
                     let mut pipeline = Pipeline::new_in_memory().with_backend(pipeline_backend);
-
-                    pipeline.early_cnf = false;
-                    pipeline.late_cne = false;
-                    pipeline.late_cnf = false;
-
+                    /* NOTE: uncomment any of these if tests are failing.
+                        pipeline.early_cnf = false;
+                        pipeline.late_cne = false;
+                        pipeline.late_cnf = false;
+                    */
                     if config.validate {
                         pipeline = pipeline.with_validation();
                     }
