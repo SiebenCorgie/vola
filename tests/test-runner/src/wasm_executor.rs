@@ -1,5 +1,3 @@
-use std::u32;
-
 use smallvec::{smallvec, SmallVec};
 use volac::Target;
 use wasmtime::{Module, Store};

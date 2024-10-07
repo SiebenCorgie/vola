@@ -11,3 +11,4 @@ Cargo.lock
 *.bin
 /*.svg
 crates/wasm-runtime/pkg*
+*.wasm

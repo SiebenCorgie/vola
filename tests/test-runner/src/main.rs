@@ -15,7 +15,7 @@ mod crawler;
 mod run;
 mod wasm_executor;
 
-use clap::{Parser, ValueEnum};
+use clap::Parser;
 
 #[derive(Parser)]
 #[command(name = "test-runner")]

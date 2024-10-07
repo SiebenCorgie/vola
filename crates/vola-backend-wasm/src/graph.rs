@@ -155,8 +155,16 @@ impl WasmNode {
             return Ok(WasmNode::from(unop));
         }
 
-        if let Some(unop) = value.try_downcast_ref::<Buildin>() {
-            return Ok(WasmNode::from(unop));
+        if let Some(bi) = value.try_downcast_ref::<Buildin>() {
+            let inputs = input_sig
+                .into_iter()
+                .map(|i| i.clone().unwrap_or(vola_opt::common::Ty::Void))
+                .collect::<SmallColl<_>>();
+            let outputs = output_sig
+                .into_iter()
+                .map(|o| o.clone().unwrap_or(vola_opt::common::Ty::Void))
+                .collect::<SmallColl<_>>();
+            return Ok(WasmNode::try_from_opt_buildin(bi, &inputs, &outputs));
         }
         if let Some(unop) = value.try_downcast_ref::<Trig>() {
             return Ok(WasmNode::from(unop));
@@ -396,7 +404,7 @@ impl WasmTy {
 
     pub fn element_count(&self) -> usize {
         match self {
-            Self::Defined { shape, ty } => shape.element_count(),
+            Self::Defined { shape, ty: _ } => shape.element_count(),
             Self::Undefined => 0,
         }
     }

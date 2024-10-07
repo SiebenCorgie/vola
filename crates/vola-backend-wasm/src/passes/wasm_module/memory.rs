@@ -9,15 +9,10 @@
 //!Abstraction over the Memory characteristics of the WASM-VM.
 
 use ahash::AHashMap;
-use rvsdg::{edge::OutportLocation, SmallColl};
-use walrus::{
-    ir::{MemArg, Value},
-    LocalId, MemoryId, ModuleLocals,
-};
+use rvsdg::edge::OutportLocation;
+use walrus::{ir::Value, LocalId, MemoryId, ModuleLocals};
 
 use crate::graph::WasmTy;
-
-use super::ArgumentCtx;
 
 #[derive(Clone)]
 pub struct MemElement {
@@ -38,6 +33,7 @@ pub struct MemoryHandler {
     pub memid: MemoryId,
     pub mem_map: AHashMap<OutportLocation, MemElement>,
     ///Tracks the element count in the local array.
+    #[allow(dead_code)]
     pub local_size: usize,
     ///Tracks last knows size of the used memory by this function.
     pub memory_size: usize,
@@ -51,23 +47,31 @@ impl MemoryHandler {
     pub const WASM_PAGE_SIZE: usize = 65_536;
 
     pub fn empty(memid: MemoryId, locals: &mut ModuleLocals) -> Self {
+        let swap_i32 = [
+            locals.add(walrus::ValType::I32),
+            locals.add(walrus::ValType::I32),
+        ];
+        locals.get_mut(swap_i32[0]).name = Some("swap_i32_0".to_string());
+        locals.get_mut(swap_i32[1]).name = Some("swap_i32_1".to_string());
+
+        let swap_f32 = [
+            locals.add(walrus::ValType::F32),
+            locals.add(walrus::ValType::F32),
+        ];
+        locals.get_mut(swap_f32[0]).name = Some("swap_f32_0".to_string());
+        locals.get_mut(swap_f32[1]).name = Some("swap_f32_1".to_string());
+
         MemoryHandler {
             memid,
             local_size: 0,
             mem_map: AHashMap::default(),
             memory_size: 0,
-            swap_i32: [
-                locals.add(walrus::ValType::I32),
-                locals.add(walrus::ValType::I32),
-            ],
-            swap_f32: [
-                locals.add(walrus::ValType::F32),
-                locals.add(walrus::ValType::F32),
-            ],
+            swap_i32,
+            swap_f32,
         }
     }
 
-    pub fn get_port_address(&self, port: OutportLocation) -> Value {
+    pub fn get_port_base_address(&self, port: OutportLocation) -> Value {
         Value::I32(self.mem_map.get(&port).unwrap().base_addr)
     }
 
@@ -87,10 +91,11 @@ impl MemoryHandler {
             ty: ty.clone(),
             base_addr,
         };
+        /*
         println!(
             "Alloc<{ty:?}> {port:?} @ {} .. {} ({}byte)",
             element.base_addr, self.memory_size, element_size
-        );
+        );*/
         self.mem_map.insert(port, element);
     }
 }

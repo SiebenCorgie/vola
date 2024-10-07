@@ -11,15 +11,14 @@
 //! The idea is to wrap each instruction with loads for each argument, and a result-store.
 //! The builder pre-allocates _enough_ local variables.
 
-use ahash::AHashMap;
 use rvsdg::{
-    edge::{InputType, OutportLocation},
+    edge::OutportLocation,
     util::cfg::{Cfg, CfgNode},
     NodeRef, SmallColl,
 };
 use walrus::{
     ir::{MemArg, Value},
-    FunctionId, InstrSeqBuilder, LocalId, Memory, Module, ModuleFunctions, ModuleLocals, ValType,
+    FunctionId, GlobalId, LocalId, Module, ModuleFunctions, ModuleLocals, ValType,
 };
 
 use crate::{
@@ -27,19 +26,16 @@ use crate::{
     WasmBackend, WasmError,
 };
 
-use super::{memory::MemoryHandler, ArgumentCtx, FunctionBuilderCtx};
-
-struct HeapElement {
-    //Possibly shaped wasm type this heap element refers to
-    ty: WasmTy,
-    //the actual indexes into the heap table for each element of the `ty`
-    indices: SmallColl<(usize, LocalId)>,
-}
+use super::{memory::MemoryHandler, FunctionBuilderCtx};
 
 ///The helper that tracks the virtual heap for building a λ-node.
 pub struct WasmLambdaBuilder {
     mem: MemoryHandler,
     ctx: FunctionBuilderCtx,
+
+    ///The function local stack pointer set at the start of the function
+    fn_local_stack_pointer: LocalId,
+    global_stack_pointer: GlobalId,
 }
 
 impl WasmBackend {
@@ -52,10 +48,27 @@ impl WasmBackend {
         //let memid = module.memories.add_local(false, false, 0, None, None);
 
         let memid = module.get_memory_id().unwrap();
+        let fn_local_stack_pointer = module.locals.add(ValType::I32);
+        module.locals.get_mut(fn_local_stack_pointer).name =
+            Some("__vola_stack_pointer".to_string());
+
+        let stackptr = module
+            .globals
+            .iter()
+            .find_map(|g| {
+                if g.name == Some("__stack_pointer".to_string()) {
+                    Some(g.id())
+                } else {
+                    None
+                }
+            })
+            .expect("Failed to find stack pointer in module!");
 
         let sm = WasmLambdaBuilder {
             mem: MemoryHandler::empty(memid, &mut module.locals),
             ctx,
+            fn_local_stack_pointer,
+            global_stack_pointer: stackptr,
         };
         sm
     }
@@ -74,7 +87,7 @@ impl WasmLambdaBuilder {
             let mut local_ids = SmallColl::new();
             //allocate such a memory element
             self.mem.alloc_port(arg.port, arg.ty.clone());
-            let addr = self.mem.get_port_address(arg.port);
+            let addr = self.mem.get_port_base_address(arg.port);
             //now emit a store for each local element of the
 
             let per_element_offset = arg.ty.base_type_size();
@@ -87,6 +100,9 @@ impl WasmLambdaBuilder {
                 local_ids.push(localid);
                 //store it to the offset
                 builder.const_(addr);
+                builder.local_get(self.fn_local_stack_pointer);
+                builder.binop(walrus::ir::BinaryOp::I32Add);
+
                 builder.local_get(localid);
                 builder.store(
                     self.mem.memid,
@@ -104,24 +120,51 @@ impl WasmLambdaBuilder {
         }
     }
 
+    ///Prepends the stackpointer preample _before_ the start of this function
+    pub fn emit_stackpointer_preample(&mut self, builder: &mut walrus::InstrSeqBuilder) {
+        //get the stack pointer
+        builder.global_get_at(0, self.global_stack_pointer);
+        //lit our local stack size we calculated while collecting all the ~stuff~
+        builder.const_at(1, Value::I32(self.mem.memory_size as i32));
+        builder.binop_at(2, walrus::ir::BinaryOp::I32Sub);
+        //sub to arrive at the new global stack pointer location
+        //store locally...
+        builder.local_tee_at(3, self.fn_local_stack_pointer);
+        builder.global_set_at(4, self.global_stack_pointer);
+    }
+
+    ///Emits the _post-function_ global stack reconstruction.
+    ///Note that the result valuse (if any) are pushed to the stack _before that_.
+    ///So this really are the last instructions on the tape.
+    pub fn emit_stackpointer_post_build(&mut self, builder: &mut walrus::InstrSeqBuilder) {
+        builder.local_get(self.fn_local_stack_pointer);
+        builder.i32_const(self.mem.memory_size as i32);
+        builder.binop(walrus::ir::BinaryOp::I32Add);
+        builder.global_set(self.global_stack_pointer);
+    }
+
     ///Puts the `port`'s address on stack.
     ///
     ///If the port's memory location is a local value, adds a
     ///new memory object and stores it to that location.
     fn load_port_addr(&self, port: OutportLocation, builder: &mut walrus::InstrSeqBuilder) {
-        println!("LoadAddr {:?}", self.mem.get_port_address(port));
-        builder.const_(self.mem.get_port_address(port));
+        //NOTE: in practice we get the base address, and add it to the current stack address
+        builder.const_(self.mem.get_port_base_address(port));
+        builder.local_get(self.fn_local_stack_pointer);
+        builder.binop(walrus::ir::BinaryOp::I32Add);
     }
 
     fn load_addr_offset(
         &self,
-        addr: i32,
+        base_addr: i32,
         offset: u32,
         ty: &WasmTy,
         builder: &mut walrus::InstrSeqBuilder,
     ) {
-        //push the base address
-        builder.const_(Value::I32(addr));
+        //push and calculate the base addr
+        builder.i32_const(base_addr);
+        builder.local_get(self.fn_local_stack_pointer);
+        builder.binop(walrus::ir::BinaryOp::I32Add);
         //now load the element at index
         builder.load(self.mem.memid, ty.load_kind(), MemArg { align: 0, offset });
     }
@@ -132,23 +175,16 @@ impl WasmLambdaBuilder {
         //so that all elements end up on the stack
         let memele = self.mem.get_port_element(port);
 
-        println!(
-            "   LoadElement[{}] {:?}",
-            memele.ty.element_count(),
-            self.mem.get_port_address(port)
-        );
-
         let pe_offset = memele.ty.base_type_size();
         for ele_idx in 0..memele.ty.element_count() {
             let offset = (pe_offset * ele_idx).try_into().unwrap();
+
             self.load_addr_offset(memele.base_addr, offset, &memele.ty, builder);
         }
     }
 
     ///Stores the top elements of the stack to the port's memory location.
     fn store_values_to_port(&self, port: OutportLocation, builder: &mut walrus::InstrSeqBuilder) {
-        println!("Store {:?}", self.mem.get_port_address(port));
-
         //NOTE: because this is pain, we have to do the following:
         //      The stack currently is expected to look like this for a vec3:
         //      x,y,z
@@ -173,12 +209,15 @@ impl WasmLambdaBuilder {
         // In practice, we have to store the add value only once
         // to a local, and then, for each element, set a different local value,
         // and pop both in order again. But that is still the main _idea_ behind it.
+        // Also we do this on the informal stack, so we have to add that value as well.
 
         let memele = self.mem.get_port_element(port);
         let pe_offset = memele.ty.base_type_size();
 
         //push the addr value into the local element
         builder.const_(Value::I32(memele.base_addr));
+        builder.local_get(self.fn_local_stack_pointer);
+        builder.binop(walrus::ir::BinaryOp::I32Add);
         let addr_id = self.mem.swap_i32[0];
         builder.local_set(addr_id);
 
@@ -188,8 +227,6 @@ impl WasmLambdaBuilder {
             ValType::I32 => self.mem.swap_i32[1],
             _ => panic!("{:?} cannot swap atm.", memele.ty),
         };
-
-        println!("Store with store@{addr_id:?} payload@{payload_swap_id:?}");
 
         //NOTE: Store has to be in reverse...
         for ele_idx in (0..memele.ty.element_count()).rev() {
@@ -318,6 +355,13 @@ impl WasmLambdaBuilder {
             self.load_port_elements(result_src, &mut builder);
         }
 
+        //The function _part_ is emitted at this point. We now wrap it in a stack_pointer construction _preample_
+        //and a stack_pointer destruction routine.
+        //This'll effectively grow the stack (downwards) for the elements we are using while working
+        //and'll shrink it back once we ended.
+        self.emit_stackpointer_preample(&mut builder);
+        self.emit_stackpointer_post_build(&mut builder);
+
         //Now finish the walrus builder, and yeet the function into the actual module
         let mut args = Vec::new();
         for arg in self.ctx.arguments.iter() {
@@ -377,7 +421,6 @@ impl WasmLambdaBuilder {
         //reads first all argument adresses, followed by all result adresses.
         match backend.graph[node].node_type.unwrap_simple_ref() {
             WasmNode::Unary(u) => {
-                println!("-> Unary {:?}", u.op);
                 assert!(input_src_ports.len() == 1);
                 self.load_port_elements(input_src_ports[0], builder);
                 builder.unop(u.op.clone());
@@ -385,7 +428,6 @@ impl WasmLambdaBuilder {
                 self.store_values_to_port(output_ports[0], builder);
             }
             WasmNode::Binary(b) => {
-                println!("-> Binary {:?}", b.op);
                 assert!(input_src_ports.len() == 2);
                 self.load_port_elements(input_src_ports[0], builder);
                 self.load_port_elements(input_src_ports[1], builder);
@@ -394,13 +436,11 @@ impl WasmLambdaBuilder {
                 self.store_values_to_port(output_ports[0], builder);
             }
             WasmNode::Value(v) => {
-                println!("-> Const {:?}", v.op);
                 builder.const_(v.op.clone());
                 assert!(output_ports.len() == 1);
                 self.store_values_to_port(output_ports[0], builder);
             }
             WasmNode::Index(i) => {
-                println!("-> Index[{}]", i.index);
                 //Index basically just mean copy the _nth_ input to our output
 
                 assert!(input_src_ports.len() == 1);
@@ -417,13 +457,10 @@ impl WasmLambdaBuilder {
             WasmNode::Construct(_) => {
                 //for construct we just load all inputs on the stack, and then
                 //store them.
-                println!("-> Construct:");
                 for input in &input_src_ports {
-                    println!("    in: {:?}", backend.outport_type(*input).unwrap());
                     self.load_port_elements(*input, builder);
                 }
                 assert!(output_ports.len() == 1);
-                println!("    out: {:?}", backend.outport_type(output_ports[0]));
                 self.store_values_to_port(output_ports[0], builder);
             }
             WasmNode::Runtime(r) => {
@@ -479,7 +516,6 @@ impl WasmLambdaBuilder {
                     self.load_port_addr(*res, builder);
                 }
 
-                println!("-> {}", extern_symbol);
                 //emit the call, assuming that the signature matches
                 let _ = builder.call(function_symbol.id);
             }

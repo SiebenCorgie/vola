@@ -14,7 +14,6 @@
 //!
 //! Under the hood the module loads [vola-wasm-runtime]() crate's wasm module as a runtime. The crate implements special functions like `length`, `cross` etc, and loads functions like `sqrt`, `sin` etc.
 
-use graph::{WasmEdge, WasmTy};
 use rvsdg::{
     attrib::{AttribLocation, FlagStore},
     Rvsdg,

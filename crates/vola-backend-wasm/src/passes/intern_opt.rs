@@ -10,12 +10,12 @@ use rvsdg::{
     util::graph_type_transform::{GraphMapping, GraphTypeTransformer},
     SmallColl,
 };
-use vola_common::{error::error_reporter, report, Span};
-use vola_opt::{common::Ty, OptEdge, OptNode, Optimizer};
+use vola_common::{error::error_reporter, report};
+use vola_opt::{OptEdge, OptNode, Optimizer};
 
 use crate::{
     error::WasmError,
-    graph::{TyShape, WasmEdge, WasmNode, WasmTy},
+    graph::{WasmEdge, WasmNode, WasmTy},
     WasmBackend,
 };
 

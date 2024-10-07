@@ -14,7 +14,7 @@ use rvsdg::{
     NodeRef, SmallColl,
 };
 use vola_common::{error::error_reporter, report, Span};
-use walrus::{LocalId, ModuleConfig};
+use walrus::LocalId;
 
 use crate::{graph::WasmTy, runtime, WasmBackend, WasmError};
 
@@ -25,13 +25,12 @@ struct ArgumentCtx {
     port: OutportLocation,
     local_id: Option<SmallColl<LocalId>>,
     ty: WasmTy,
-    len: usize,
 }
 
 struct ResultCtx {
+    #[allow(dead_code)]
     port: InportLocation,
     ty: WasmTy,
-    len: usize,
 }
 
 struct FunctionBuilderCtx {
@@ -105,19 +104,16 @@ impl WasmBackend {
             .enumerate()
             .map(|(idx, ty)| {
                 if let Some(ty) = ty {
-                    let ty_element_count = ty.element_count();
                     ArgumentCtx {
                         port: export.as_outport_location(OutputType::Argument(idx)),
                         local_id: None,
                         ty,
-                        len: ty_element_count,
                     }
                 } else {
                     ArgumentCtx {
                         port: export.as_outport_location(OutputType::Argument(idx)),
                         local_id: None,
                         ty: WasmTy::Undefined,
-                        len: 0,
                     }
                 }
             })
@@ -128,17 +124,14 @@ impl WasmBackend {
             .enumerate()
             .map(|(idx, res)| {
                 if let Some(r) = res {
-                    let ty_element_count = r.element_count();
                     ResultCtx {
                         port: export.as_inport_location(InputType::Result(idx)),
                         ty: r,
-                        len: ty_element_count,
                     }
                 } else {
                     ResultCtx {
                         port: export.as_inport_location(InputType::Result(idx)),
                         ty: WasmTy::Undefined,
-                        len: 0,
                     }
                 }
             })

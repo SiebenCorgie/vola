@@ -8,9 +8,8 @@
 
 //! Handles loading of the wasm runtime
 
-use ahash::AHashMap;
 use rvsdg::SmallColl;
-use walrus::{FunctionId, FunctionKind, LocalId, Module, ModuleFunctions, ModuleLocals, ValType};
+use walrus::{FunctionId, FunctionKind, LocalId, ModuleFunctions, ModuleLocals, ValType};
 
 use crate::error::WasmError;
 

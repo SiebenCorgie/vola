@@ -18,6 +18,7 @@ use vola_opt::alge::buildin::{Buildin, BuildinOp};
 
 use crate::{
     graph::{TyShape, WasmNode, WasmTy},
+    wasm::WasmUnaryOp,
     WasmError,
 };
 
@@ -156,8 +157,12 @@ impl WasmRuntimeOp {
     }
 }
 
-impl From<&Buildin> for WasmNode {
-    fn from(value: &Buildin) -> Self {
+impl WasmNode {
+    pub fn try_from_opt_buildin(
+        value: &Buildin,
+        input_sig: &[vola_opt::common::Ty],
+        #[allow(unused_variables)] output_sig: &[vola_opt::common::Ty],
+    ) -> Self {
         match &value.op {
             BuildinOp::Dot => WasmNode::Runtime(WasmRuntimeOp::new_with_signature(
                 value.inputs.len(),
@@ -171,10 +176,17 @@ impl From<&Buildin> for WasmNode {
                 value.inputs.len(),
                 ExternOp::Length,
             )),
-            BuildinOp::SquareRoot => WasmNode::Runtime(WasmRuntimeOp::new_with_signature(
-                value.inputs.len(),
-                ExternOp::SquareRoot,
-            )),
+            BuildinOp::SquareRoot => {
+                assert!(input_sig.len() == 1);
+                if input_sig[0].is_scalar() {
+                    WasmNode::Unary(WasmUnaryOp::new(walrus::ir::UnaryOp::F32Sqrt))
+                } else {
+                    WasmNode::Runtime(WasmRuntimeOp::new_with_signature(
+                        value.inputs.len(),
+                        ExternOp::SquareRoot,
+                    ))
+                }
+            }
             BuildinOp::Exp => WasmNode::Runtime(WasmRuntimeOp::new_with_signature(
                 value.inputs.len(),
                 ExternOp::Exp,
