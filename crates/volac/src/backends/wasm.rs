@@ -32,6 +32,12 @@ impl PipelineBackend for Wasm {
         let mut backend = vola_backend_wasm::WasmBackend::new();
         backend.intern_module(&opt)?;
 
+        if std::env::var("VOLA_DUMP_ALL").is_ok()
+            || std::env::var("VOLA_DUMP_WASM_BEFORE_CFG").is_ok()
+        {
+            backend.push_debug_state("WASM before CFG");
+        }
+
         //This transforms the RVSDG into a WASM module
         //By loading the runtime, and then adding all exported functions to that.
         let mut module = backend.into_wasm_module()?;

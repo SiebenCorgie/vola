@@ -203,7 +203,7 @@ impl Cfg {
         }
 
         if seen.len() != self.nodes.len() {
-            return Err(ScfrError::ContainedCycle);
+            return Err(ScfrError::TopoOrdNotAllNodesTraversed(l));
         } else {
             Ok(l)
         }

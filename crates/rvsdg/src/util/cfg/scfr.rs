@@ -29,6 +29,9 @@ pub enum ScfrError {
     NoneBinaryGamma(usize),
     #[error("CFG contained cycle. This should not happen, if the graph was generated from a RVSDG and was not changed.")]
     ContainedCycle,
+    //NOTE: that might be okay, if there are dead nodes in the graph
+    #[error("CFG does not traverse all nodes.")]
+    TopoOrdNotAllNodesTraversed(Vec<CfgRef>),
 }
 
 impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {

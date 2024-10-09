@@ -13,7 +13,7 @@
 
 use rvsdg::{
     edge::OutportLocation,
-    util::cfg::{Cfg, CfgNode},
+    util::cfg::{scfr::ScfrError, Cfg, CfgNode},
     NodeRef, SmallColl,
 };
 use walrus::{
@@ -278,7 +278,11 @@ impl WasmLambdaBuilder {
 
         //Iterate all nodes in order of the cfg and serialize them into the flat sequence of nodes.
         //while doing so, record the heap growth.
-        let topoord = cfg.topological_order()?;
+        let topoord = match cfg.topological_order() {
+            Ok(l) => l,
+            Err(ScfrError::TopoOrdNotAllNodesTraversed(l)) => l,
+            Err(e) => return Err(e.into()),
+        };
 
         //This pass just records all _simple_ nodes in order of occurence and allocates the correct
         //heap elements.
@@ -343,7 +347,37 @@ impl WasmLambdaBuilder {
                         )?;
                     }
                 }
-                _ => todo!("CFG not implemented (yet)"),
+                CfgNode::BranchHeader {
+                    src_node,
+                    condition_src,
+                    last_bb,
+                    true_branch,
+                    false_branch,
+                    merge,
+                    post_merge_block,
+                } => {
+                    //
+                }
+                CfgNode::BranchMerge {
+                    src_node,
+                    src_true,
+                    src_false,
+                    next,
+                } => {}
+                CfgNode::LoopHeader {
+                    src_node,
+                    pre_loop_bb,
+                    loop_entry_bb,
+                    ctrl_tail,
+                } => {}
+                CfgNode::LoopCtrlTail {
+                    last_bb,
+                    loop_entry_bb,
+                    post_loop_bb,
+                    condition_src,
+                    src_node,
+                    header,
+                } => {}
             }
         }
 
@@ -375,6 +409,17 @@ impl WasmLambdaBuilder {
         module.memories.get_mut(self.mem.memid).initial = desired_page_count.try_into().unwrap();
 
         Ok(fnid)
+    }
+
+    fn handle_branch_header(
+        &mut self,
+        node: NodeRef,
+        backend: &WasmBackend,
+        builder: &mut walrus::InstrSeqBuilder,
+        functions: &ModuleFunctions,
+        locals: &ModuleLocals,
+    ) -> Result<(), WasmError> {
+        todo!()
     }
 
     fn serialize_simple_node(
