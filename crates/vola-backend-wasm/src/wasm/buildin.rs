@@ -162,8 +162,8 @@ impl WasmNode {
         value: &Buildin,
         input_sig: &[vola_opt::common::Ty],
         #[allow(unused_variables)] output_sig: &[vola_opt::common::Ty],
-    ) -> Self {
-        match &value.op {
+    ) -> Result<Self, WasmError> {
+        let node = match &value.op {
             BuildinOp::Dot => WasmNode::Runtime(WasmRuntimeOp::new_with_signature(
                 value.inputs.len(),
                 ExternOp::Dot,
@@ -211,6 +211,8 @@ impl WasmNode {
                 value.inputs.len(),
                 ExternOp::Clamp,
             )),
-        }
+        };
+
+        Ok(node)
     }
 }

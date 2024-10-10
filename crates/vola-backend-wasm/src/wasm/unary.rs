@@ -11,15 +11,16 @@
 use rvsdg::{
     region::{Inport, Outport},
     rvsdg_derive_lang::LangNode,
+    smallvec::smallvec,
 };
 use vola_opt::alge::{
     arithmetic::{UnaryArith, UnaryArithOp},
-    logical::UnaryBool,
+    logical::{UnaryBool, UnaryBoolOp},
     matrix::{UnaryMatrix, UnaryMatrixOp},
     trigonometric::{Trig, TrigOp},
 };
 
-use crate::graph::WasmNode;
+use crate::{graph::WasmNode, WasmError};
 
 use super::{ExternOp, WasmRuntimeOp};
 
@@ -72,15 +73,22 @@ impl WasmNode {
         value: &UnaryArith,
         input_sig: vola_opt::common::Ty,
         output_sig: vola_opt::common::Ty,
-    ) -> Self {
+    ) -> Result<Self, WasmError> {
         if input_sig != output_sig {
-            return WasmNode::error_for_sig(1, 1);
+            return Err(WasmError::UnexpectedSignature {
+                node: format!("{:?}", value.op),
+                input: smallvec![input_sig],
+                output: smallvec![output_sig],
+            });
         }
 
-        match input_sig {
+        let node = match input_sig {
             vola_opt::common::Ty::Nat => {
                 //Not in WASM, and we don't (yet?) have implementations for those
-                WasmNode::error_for_sig(1, 1)
+                return Err(WasmError::UnsupportedNode(format!(
+                    "{:?} for natural number",
+                    value.op
+                )));
             }
             //NOTE: We can dispatch those to _buildin_ ops mostly
             vola_opt::common::Ty::Scalar => match value.op {
@@ -120,15 +128,42 @@ impl WasmNode {
                     WasmNode::Runtime(WasmRuntimeOp::new_with_signature(1, ExternOp::Fract))
                 }
             },
-            _ => WasmNode::error_for_sig(1, 1),
-        }
+            _ => {
+                return Err(WasmError::UnexpectedSignature {
+                    node: format!("{:?}", value.op),
+                    input: smallvec![input_sig],
+                    output: smallvec![output_sig],
+                })
+            }
+        };
+
+        Ok(node)
     }
 }
 
-impl From<&UnaryBool> for WasmNode {
-    fn from(value: &UnaryBool) -> Self {
+impl WasmNode {
+    pub fn try_from_opt_unary_bool(
+        value: &UnaryBool,
+        input_sig: vola_opt::common::Ty,
+        output_sig: vola_opt::common::Ty,
+    ) -> Result<Self, WasmError> {
+        //only works on Nat / bools which are both wrapped as i32
+
+        if input_sig != output_sig
+            || !(input_sig.is_bool() || input_sig == vola_opt::common::Ty::Nat)
+        {
+            return Err(WasmError::UnexpectedSignature {
+                node: format!("{:?}", value.op),
+                input: smallvec![input_sig],
+                output: smallvec![output_sig],
+            });
+        }
+
         match value.op {
-            _ => panic!("unimplemented unary op"),
+            //NOTE: Eqz is defined for the whole I32 range. But we use it as bool in this case
+            UnaryBoolOp::Not => Ok(WasmNode::Unary(WasmUnaryOp::new(
+                walrus::ir::UnaryOp::I32Eqz,
+            ))),
         }
     }
 }

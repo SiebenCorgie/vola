@@ -19,7 +19,7 @@ use rvsdg::{
     NodeRef, SmallColl,
 };
 use walrus::{
-    ir::{InstrSeqId, MemArg, Value},
+    ir::{InstrSeqId, InstrSeqType, MemArg, Value},
     FunctionBuilder, FunctionId, GlobalId, InstrSeqBuilder, LocalId, Module, ModuleFunctions,
     ModuleLocals, ValType,
 };
@@ -249,9 +249,29 @@ impl WasmLambdaBuilder {
         */
 
         //Allocate implicit-stack locations for all outports (that are used).
+        //and start SeqInstr builder for all unique regions we encounter
         for node in &topoord {
             match &cfg.nodes[*node] {
                 CfgNode::BasicBlock(bb) => {
+                    if bb.nodes.len() == 0 {
+                        continue;
+                    }
+
+                    //allocate a seq-instr builder if not yet done
+                    let region = backend.graph[bb.nodes[0]].parent.unwrap();
+                    if !self.label.contains_key(&region) {
+                        //NOTE: the λ id should be pushed allready, so we should only encounter _simple_
+                        //      regions for gamma or theta nodes
+                        assert!(
+                            backend.graph[region.node].node_type.is_intra_procedural(),
+                            "Exepected Gamma or Theta, was: {}",
+                            backend.graph[region.node].node_type
+                        );
+                        let builder = fn_builder.dangling_instr_seq(InstrSeqType::Simple(None));
+                        let builder_id = builder.id();
+                        let _ = self.label.insert(region, builder_id);
+                    }
+
                     for node in &bb.nodes {
                         assert!(backend.graph[*node].node_type.is_simple());
 

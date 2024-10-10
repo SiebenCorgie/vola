@@ -10,7 +10,7 @@ use rvsdg::{
     util::graph_type_transform::{GraphMapping, GraphTypeTransformer},
     SmallColl,
 };
-use vola_common::{error::error_reporter, report};
+use vola_common::{ariadne::Label, error::error_reporter, report};
 use vola_opt::{OptEdge, OptNode, Optimizer};
 
 use crate::{
@@ -66,7 +66,11 @@ impl<'a> GraphTypeTransformer for InterningTransformer<'a> {
             Err(e) => {
                 self.has_failed_node = true;
                 let span = src_node.span.clone();
-                report(error_reporter(e, span).finish());
+                report(
+                    error_reporter(e, span.clone())
+                        .with_label(Label::new(span).with_message("for this node"))
+                        .finish(),
+                );
                 WasmNode::error_for_opt(src_node)
             }
         }

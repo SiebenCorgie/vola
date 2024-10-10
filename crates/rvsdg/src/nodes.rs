@@ -80,6 +80,24 @@ pub enum NodeType<N: LangNode + 'static> {
     Omega(OmegaNode),
 }
 
+impl<N: LangNode + 'static> NodeType<N> {
+    ///True for Lambda, Delta, Phi and Omega nodes
+    pub fn is_inter_procedural(&self) -> bool {
+        match self {
+            Self::Lambda(_) | Self::Delta(_) | Self::Phi(_) | Self::Omega(_) => true,
+            _ => false,
+        }
+    }
+
+    ///True for Gamma and Theta nodes
+    pub fn is_intra_procedural(&self) -> bool {
+        match self {
+            Self::Gamma(_) | Self::Theta(_) => true,
+            _ => false,
+        }
+    }
+}
+
 macro_rules! impl_unwrap {
     ( NodeType:: $nodevar:tt ( $noderef:ident ) -> $node_type:ty, $asref:ident, $asmut:ident, $owning:ident, $is_def:ident) => {
         impl<N: LangNode + 'static> NodeType<N> {

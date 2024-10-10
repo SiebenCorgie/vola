@@ -102,42 +102,42 @@ impl WasmNode {
             assert!(input_sig[0].is_some() && input_sig[1].is_some());
             assert!(output_sig.len() == 1);
             assert!(output_sig[0].is_some());
-            return Ok(WasmNode::try_from_opt_binary(
+            return WasmNode::try_from_opt_binary(
                 binop,
                 [
                     input_sig[0].as_ref().unwrap().clone(),
                     input_sig[1].as_ref().unwrap().clone(),
                 ],
                 output_sig[0].as_ref().unwrap().clone(),
-            ));
+            );
         }
         if let Some(binop) = value.try_downcast_ref::<BinaryRel>() {
             assert!(input_sig.len() == 2);
             assert!(input_sig[0].is_some() && input_sig[1].is_some());
             assert!(output_sig.len() == 1);
             assert!(output_sig[0].is_some());
-            return Ok(WasmNode::try_from_op_binaryrel(
+            return WasmNode::try_from_op_binaryrel(
                 binop,
                 [
                     input_sig[0].as_ref().unwrap().clone(),
                     input_sig[1].as_ref().unwrap().clone(),
                 ],
                 output_sig[0].as_ref().unwrap().clone(),
-            ));
+            );
         }
         if let Some(binop) = value.try_downcast_ref::<BinaryBool>() {
             assert!(input_sig.len() == 2);
             assert!(input_sig[0].is_some() && input_sig[1].is_some());
             assert!(output_sig.len() == 1);
             assert!(output_sig[0].is_some());
-            return Ok(WasmNode::try_from_binary_bool(
+            return WasmNode::try_from_opt_binary_bool(
                 binop,
                 [
                     input_sig[0].as_ref().unwrap().clone(),
                     input_sig[1].as_ref().unwrap().clone(),
                 ],
                 output_sig[0].as_ref().unwrap().clone(),
-            ));
+            );
         }
 
         if let Some(unop) = value.try_downcast_ref::<UnaryArith>() {
@@ -145,14 +145,22 @@ impl WasmNode {
             assert!(input_sig[0].is_some());
             assert!(output_sig.len() == 1);
             assert!(output_sig[0].is_some());
-            return Ok(WasmNode::try_from_unary_arith(
+            return WasmNode::try_from_unary_arith(
                 unop,
                 input_sig[0].as_ref().unwrap().clone(),
                 output_sig[0].as_ref().unwrap().clone(),
-            ));
+            );
         }
         if let Some(unop) = value.try_downcast_ref::<UnaryBool>() {
-            return Ok(WasmNode::from(unop));
+            assert!(input_sig.len() == 1);
+            assert!(input_sig[0].is_some());
+            assert!(output_sig.len() == 1);
+            assert!(output_sig[0].is_some());
+            return WasmNode::try_from_opt_unary_bool(
+                unop,
+                input_sig[0].as_ref().unwrap().clone(),
+                output_sig[0].as_ref().unwrap().clone(),
+            );
         }
 
         if let Some(bi) = value.try_downcast_ref::<Buildin>() {
@@ -164,7 +172,7 @@ impl WasmNode {
                 .into_iter()
                 .map(|o| o.clone().unwrap_or(vola_opt::common::Ty::Void))
                 .collect::<SmallColl<_>>();
-            return Ok(WasmNode::try_from_opt_buildin(bi, &inputs, &outputs));
+            return WasmNode::try_from_opt_buildin(bi, &inputs, &outputs);
         }
         if let Some(unop) = value.try_downcast_ref::<Trig>() {
             return Ok(WasmNode::from(unop));

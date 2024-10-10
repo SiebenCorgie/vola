@@ -11,6 +11,7 @@
 use rvsdg::{
     region::{Inport, Outport},
     rvsdg_derive_lang::LangNode,
+    smallvec::smallvec,
 };
 use vola_opt::alge::{
     arithmetic::{BinaryArith, BinaryArithOp},
@@ -21,6 +22,7 @@ use vola_opt::alge::{
 use crate::{
     graph::{TyShape, WasmNode, WasmTy},
     wasm::{ExternOp, WasmRuntimeOp},
+    WasmError,
 };
 
 #[derive(LangNode)]
@@ -47,12 +49,12 @@ impl WasmNode {
         value: &BinaryArith,
         input_sig: [vola_opt::common::Ty; 2],
         output_sig: vola_opt::common::Ty,
-    ) -> Self {
+    ) -> Result<Self, WasmError> {
         assert!(input_sig[0] == input_sig[1] && input_sig[0] == output_sig);
 
         let wasm_inout_ty = WasmTy::from(input_sig[0].clone());
 
-        match wasm_inout_ty {
+        let node = match wasm_inout_ty {
             //Scalar binary ops
             WasmTy::Defined {
                 shape: TyShape::Scalar,
@@ -92,7 +94,13 @@ impl WasmNode {
                         WasmNode::Runtime(WasmRuntimeOp::new_with_signature(2, ExternOp::Mod))
                     }
                 },
-                _ => WasmNode::error_for_sig(2, 1),
+                _ => {
+                    return Err(WasmError::UnexpectedSignature {
+                        node: format!("{:?}", value.op),
+                        input: input_sig.into_iter().collect(),
+                        output: smallvec![output_sig],
+                    })
+                }
             },
             //Vector binary ops
             WasmTy::Defined {
@@ -116,11 +124,25 @@ impl WasmNode {
                         WasmNode::Runtime(WasmRuntimeOp::new_with_signature(2, ExternOp::Mod))
                     }
                 },
-                _ => WasmNode::error_for_sig(2, 1),
+                _ => {
+                    return Err(WasmError::UnexpectedSignature {
+                        node: format!("{:?}", value.op),
+                        input: input_sig.into_iter().collect(),
+                        output: smallvec![output_sig],
+                    });
+                }
             },
 
-            _ => WasmNode::error_for_sig(2, 1),
-        }
+            _ => {
+                return Err(WasmError::UnexpectedSignature {
+                    node: format!("{:?}", value.op),
+                    input: input_sig.into_iter().collect(),
+                    output: smallvec![output_sig],
+                });
+            }
+        };
+
+        Ok(node)
     }
 }
 
@@ -129,23 +151,27 @@ impl WasmNode {
         value: &BinaryRel,
         input_sig: [vola_opt::common::Ty; 2],
         output_sig: vola_opt::common::Ty,
-    ) -> Self {
+    ) -> Result<Self, WasmError> {
         //NOTE make sure both are of scalar shape, otherwise
         //abort
-        if !input_sig[0].is_scalar() || input_sig[0].is_scalar() {
-            return Self::error_for_sig(2, 1);
+        if !input_sig[0].is_scalar() || !input_sig[1].is_scalar() {
+            return Err(WasmError::UnexpectedSignature {
+                node: format!("{:?}", value.op),
+                input: input_sig.into_iter().collect(),
+                output: smallvec![output_sig],
+            });
         }
         //Also, output must be a bool.
         if !output_sig.is_bool() {
-            return Self::error_for_sig(2, 1);
-        }
-        //Must be of same input type.
-        if input_sig[0] != input_sig[1] {
-            return Self::error_for_sig(2, 1);
+            return Err(WasmError::UnexpectedSignature {
+                node: format!("{:?}", value.op),
+                input: input_sig.into_iter().collect(),
+                output: smallvec![output_sig],
+            });
         }
 
         //now dispatch either to f32 rels, or i32 rels, depending on the type
-        match input_sig[0] {
+        let node = match input_sig[0] {
             //NOTE: we have _natural_ numbers, so only signed integers
             vola_opt::common::Ty::Nat => match value.op {
                 BinaryRelOp::Eq => WasmNode::Binary(WasmBinaryOp::new(walrus::ir::BinaryOp::I32Eq)),
@@ -179,25 +205,33 @@ impl WasmNode {
                     WasmNode::Binary(WasmBinaryOp::new(walrus::ir::BinaryOp::F32Ne))
                 }
             },
-            _ => Self::error_for_sig(2, 1),
-        }
+            _ => return Err(WasmError::UnsupportedNode(format!("{:?}", value.op))),
+        };
+
+        Ok(node)
     }
 }
 
 impl WasmNode {
-    pub fn try_from_binary_bool(
+    pub fn try_from_opt_binary_bool(
         value: &BinaryBool,
         input_sig: [vola_opt::common::Ty; 2],
         output_sig: vola_opt::common::Ty,
-    ) -> Self {
+    ) -> Result<Self, WasmError> {
         //NOTE we expect a bool input
         if !input_sig[0].is_bool() || !input_sig[1].is_bool() || !output_sig.is_bool() {
-            return WasmNode::error_for_sig(2, 1);
+            return Err(WasmError::UnexpectedSignature {
+                node: format!("{:?}", value.op),
+                input: input_sig.into_iter().collect(),
+                output: smallvec![output_sig],
+            });
         }
 
-        match value.op {
+        let node = match value.op {
             BinaryBoolOp::And => WasmNode::Binary(WasmBinaryOp::new(walrus::ir::BinaryOp::I32And)),
             BinaryBoolOp::Or => WasmNode::Binary(WasmBinaryOp::new(walrus::ir::BinaryOp::I32Or)),
-        }
+        };
+
+        Ok(node)
     }
 }

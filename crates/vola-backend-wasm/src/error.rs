@@ -11,7 +11,7 @@ use std::error::Error;
 use rvsdg::{
     edge::InportLocation,
     util::{cfg::scfr::ScfrError, graph_type_transform::GraphTypeTransformerError},
-    NodeRef,
+    NodeRef, SmallColl,
 };
 use vola_common::thiserror::Error;
 use vola_opt::common::Ty;
@@ -34,6 +34,12 @@ pub enum WasmError {
     UnexpectedComposite,
     #[error("Unexpected type {0:?}")]
     UnexpectedType(Ty),
+    #[error("Node {node} had unexpected signature:\nInput: {input:?}\noutput: {output:?}")]
+    UnexpectedSignature {
+        node: String,
+        input: SmallColl<Ty>,
+        output: SmallColl<Ty>,
+    },
     #[error("Export {0:?} unconnected!")]
     ExportUnconnected(InportLocation),
     #[error("Exported Node {0:?} has no symbol name set.")]
