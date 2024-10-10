@@ -102,6 +102,12 @@ or a specific file via
 cargo run --bin test-runner -- -f tests/ui/some_file.vola
 ```
 
+Unit tests are handeled by Rust's native test framework. Just run
+```shell
+cargo test
+```
+to execute them.
+
 ### Rendering
 
 There is a repository that implements a renderer over at [vola-sdf-renderer](https://gitlab.com/tendsinmende/vola-sdf-renderer). It is not included here, since it has some heavy dependencies and is not compiler related.

@@ -1,0 +1,21 @@
+//BEGIN-CONFIG
+//EXEC-FN:myField
+//EXEC-ARGS:4.2,1.0,4.0
+//EXEC-EPS:0.0
+//EXEC-RES:42.0
+//END-CONFIG
+
+module std;
+
+entity Loopy();
+
+impl Loopy for SDF3D(at){
+    for t = 0.0 in 0..10{
+        t += at.x;
+    }
+}
+
+export myField(at: vec3){
+	csg t = Loopy();
+	eval t.SDF3D(at)
+}

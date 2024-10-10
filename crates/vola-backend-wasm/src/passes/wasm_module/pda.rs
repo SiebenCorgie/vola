@@ -15,11 +15,11 @@ use rvsdg::{
     attrib::FlagStore,
     edge::OutportLocation,
     region::RegionLocation,
-    util::cfg::{scfr::ScfrError, Cfg, CfgNode},
+    util::cfg::{scfr::ScfrError, Cfg, CfgNode, CfgRef},
     NodeRef, SmallColl,
 };
 use walrus::{
-    ir::{InstrSeqId, InstrSeqType, MemArg, Value},
+    ir::{IfElse, InstrSeqId, InstrSeqType, MemArg, Value},
     FunctionBuilder, FunctionId, GlobalId, InstrSeqBuilder, LocalId, Module, ModuleFunctions,
     ModuleLocals, ValType,
 };
@@ -206,6 +206,41 @@ impl WasmLambdaBuilder {
         }
     }
 
+    fn allocate_instr_sequences(
+        &mut self,
+        cfg: &Cfg,
+        list: &[CfgRef],
+        backend: &WasmBackend,
+        fn_builder: &mut FunctionBuilder,
+    ) {
+        for node in list {
+            match &cfg.nodes[*node] {
+                CfgNode::BasicBlock(bb) => {
+                    if bb.nodes.len() == 0 {
+                        continue;
+                    }
+
+                    //allocate a seq-instr builder if not yet done
+                    let region = backend.graph[bb.nodes[0]].parent.unwrap();
+                    if !self.label.contains_key(&region) {
+                        //NOTE: the λ id should be pushed allready, so we should only encounter _simple_
+                        //      regions for gamma or theta nodes
+                        assert!(
+                            backend.graph[region.node].node_type.is_intra_procedural(),
+                            "Exepected Gamma or Theta, was: {}",
+                            backend.graph[region.node].node_type
+                        );
+                        let builder = fn_builder.dangling_instr_seq(InstrSeqType::Simple(None));
+                        let builder_id = builder.id();
+                        let _ = self.label.insert(region, builder_id);
+                    }
+                }
+                //All other nodes are ignored in this pass
+                _ => {}
+            }
+        }
+    }
+
     pub fn serialize_cfg(
         mut self,
         cfg: Cfg,
@@ -239,6 +274,12 @@ impl WasmLambdaBuilder {
             Err(e) => return Err(e.into()),
         };
 
+        //allocates a instruction sequence for each region that is touched by the
+        //cfg. Note that instruction-sequences in walrus are NOT the same as basic-blocks.
+        self.allocate_instr_sequences(&cfg, &topoord, backend, &mut fn_builder);
+        //Dataflow based memory allocation. Have a look at the implementation for more info.
+        self.mem.allocate_for_cfg(&cfg, &topoord, backend);
+
         //This pass just records all _simple_ nodes in order of occurence and allocates the correct
         //heap elements.
         /*
@@ -248,54 +289,6 @@ impl WasmLambdaBuilder {
                 }
         */
 
-        //Allocate implicit-stack locations for all outports (that are used).
-        //and start SeqInstr builder for all unique regions we encounter
-        for node in &topoord {
-            match &cfg.nodes[*node] {
-                CfgNode::BasicBlock(bb) => {
-                    if bb.nodes.len() == 0 {
-                        continue;
-                    }
-
-                    //allocate a seq-instr builder if not yet done
-                    let region = backend.graph[bb.nodes[0]].parent.unwrap();
-                    if !self.label.contains_key(&region) {
-                        //NOTE: the λ id should be pushed allready, so we should only encounter _simple_
-                        //      regions for gamma or theta nodes
-                        assert!(
-                            backend.graph[region.node].node_type.is_intra_procedural(),
-                            "Exepected Gamma or Theta, was: {}",
-                            backend.graph[region.node].node_type
-                        );
-                        let builder = fn_builder.dangling_instr_seq(InstrSeqType::Simple(None));
-                        let builder_id = builder.id();
-                        let _ = self.label.insert(region, builder_id);
-                    }
-
-                    for node in &bb.nodes {
-                        assert!(backend.graph[*node].node_type.is_simple());
-
-                        for inp in backend.graph[*node].inport_types() {
-                            //get all args. NOTE: those _have to have_ allocated elements already.
-                            let producer = backend
-                                .graph
-                                .find_producer_inp(node.as_inport_location(inp))
-                                .unwrap();
-                            //println!("Producer: {:?}", producer);
-                            assert!(self.mem.mem_map.contains_key(&producer));
-                        }
-
-                        //alloc the node's result element
-                        assert!(backend.graph[*node].outputs().len() == 1);
-                        let result_port = node.output(0);
-                        let result_ty = backend.outport_type(result_port).unwrap();
-                        self.mem.alloc_port(result_port, result_ty);
-                    }
-                }
-                //All other nodes are ignored in this pass
-                _ => {}
-            }
-        }
         /*
                 println!("HeapTable:");
                 for ele in &self.heap_table {
@@ -321,7 +314,6 @@ impl WasmLambdaBuilder {
 
                     //Get the parent region for the nodes of this block
                     let parent_region = backend.graph[bb.nodes[0]].parent.unwrap();
-                    //activate that region's builder
 
                     //switch to the region's builder, and serialize all simple nodes
                     {
@@ -347,7 +339,34 @@ impl WasmLambdaBuilder {
                     merge,
                     post_merge_block,
                 } => {
-                    //
+                    //Insert the if-else instruction on the
+                    //out-region's sequence builder
+
+                    let parent_region = backend.graph[*src_node].parent.unwrap();
+                    {
+                        let seqid = self.label.get(&parent_region).unwrap();
+                        let mut seq = fn_builder.instr_seq(*seqid);
+                        let consequence_id = self
+                            .label
+                            .get(&RegionLocation {
+                                node: *src_node,
+                                region_index: 0,
+                            })
+                            .unwrap();
+                        let alternative_id = self
+                            .label
+                            .get(&RegionLocation {
+                                node: *src_node,
+                                region_index: 1,
+                            })
+                            .unwrap();
+                        //now load the switch criterion and add the if-else instruction
+                        self.load_port_elements(*condition_src, &mut seq);
+                        seq.instr(IfElse {
+                            consequent: *consequence_id,
+                            alternative: *alternative_id,
+                        });
+                    }
                 }
                 CfgNode::BranchMerge {
                     src_node,
