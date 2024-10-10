@@ -12,13 +12,16 @@
 //! The builder pre-allocates _enough_ local variables.
 
 use rvsdg::{
+    attrib::FlagStore,
     edge::OutportLocation,
+    region::RegionLocation,
     util::cfg::{scfr::ScfrError, Cfg, CfgNode},
     NodeRef, SmallColl,
 };
 use walrus::{
-    ir::{MemArg, Value},
-    FunctionId, GlobalId, LocalId, Module, ModuleFunctions, ModuleLocals, ValType,
+    ir::{InstrSeqId, MemArg, Value},
+    FunctionBuilder, FunctionId, GlobalId, InstrSeqBuilder, LocalId, Module, ModuleFunctions,
+    ModuleLocals, ValType,
 };
 
 use crate::{
@@ -26,58 +29,12 @@ use crate::{
     WasmBackend, WasmError,
 };
 
-use super::{memory::MemoryHandler, FunctionBuilderCtx};
-
-///The helper that tracks the virtual heap for building a λ-node.
-pub struct WasmLambdaBuilder {
-    mem: MemoryHandler,
-    ctx: FunctionBuilderCtx,
-
-    ///The function local stack pointer set at the start of the function
-    fn_local_stack_pointer: LocalId,
-    global_stack_pointer: GlobalId,
-}
-
-impl WasmBackend {
-    pub(super) fn init_sm_for_ctx(
-        &self,
-        ctx: FunctionBuilderCtx,
-        module: &mut Module,
-    ) -> WasmLambdaBuilder {
-        //Allocate ourself some empty memory
-        //let memid = module.memories.add_local(false, false, 0, None, None);
-
-        let memid = module.get_memory_id().unwrap();
-        let fn_local_stack_pointer = module.locals.add(ValType::I32);
-        module.locals.get_mut(fn_local_stack_pointer).name =
-            Some("__vola_stack_pointer".to_string());
-
-        let stackptr = module
-            .globals
-            .iter()
-            .find_map(|g| {
-                if g.name == Some("__stack_pointer".to_string()) {
-                    Some(g.id())
-                } else {
-                    None
-                }
-            })
-            .expect("Failed to find stack pointer in module!");
-
-        let sm = WasmLambdaBuilder {
-            mem: MemoryHandler::empty(memid, &mut module.locals),
-            ctx,
-            fn_local_stack_pointer,
-            global_stack_pointer: stackptr,
-        };
-        sm
-    }
-}
+use super::{memory::MemoryHandler, FunctionBuilderCtx, WasmLambdaBuilder};
 
 impl WasmLambdaBuilder {
-    ///Emits a λ's argument preample. This bascially makes sure, that the _by-value_ elements
+    ///Emits a λ's argument preamble. This bascially makes sure, that the _by-value_ elements
     ///of each argument are stored in its respective memory element.
-    pub fn emit_argument_preample(
+    pub fn emit_argument_preamble(
         &mut self,
         builder: &mut walrus::InstrSeqBuilder,
         locals: &mut ModuleLocals,
@@ -120,8 +77,8 @@ impl WasmLambdaBuilder {
         }
     }
 
-    ///Prepends the stackpointer preample _before_ the start of this function
-    pub fn emit_stackpointer_preample(&mut self, builder: &mut walrus::InstrSeqBuilder) {
+    ///Prepends the stackpointer preamble _before_ the start of this function
+    pub fn emit_stackpointer_preamble(&mut self, builder: &mut walrus::InstrSeqBuilder) {
         //get the stack pointer
         builder.global_get_at(0, self.global_stack_pointer);
         //lit our local stack size we calculated while collecting all the ~stuff~
@@ -253,31 +210,29 @@ impl WasmLambdaBuilder {
         mut self,
         cfg: Cfg,
         backend: &WasmBackend,
-        lambda: NodeRef,
         module: &mut Module,
-        symbol_name: &str,
+        mut fn_builder: FunctionBuilder,
     ) -> Result<FunctionId, WasmError> {
-        //start the function builder
-        let mut params = SmallColl::new();
-        for arg in self.ctx.arguments.iter() {
-            arg.ty.append_elements_to_signature(&mut params);
-        }
-        let mut results = SmallColl::new();
-        for res in self.ctx.results.iter() {
-            res.ty.append_elements_to_signature(&mut results);
-        }
-        //setup the export's type
-        //let export_type_id = module.types.add(&params, &results);
-        let mut fnbuilder = walrus::FunctionBuilder::new(&mut module.types, &params, &results);
-        fnbuilder.name(symbol_name.to_string());
-        let mut builder = fnbuilder.func_body();
-        //Before starting anything, we emit a preample that
-        //moves all arguments to the memory
-        //object
-        self.emit_argument_preample(&mut builder, &mut module.locals);
+        //Before starting to work on the actual graph, we have to setup a preamble
+        // The first action is to load all arguments onto the implicit stack
+        // We that interate all nodes in the CFG, and allocate space in the implicit stack for them.
+        // Afterwards we start the actual serialzing process.
 
-        //Iterate all nodes in order of the cfg and serialize them into the flat sequence of nodes.
-        //while doing so, record the heap growth.
+        //First annotate the λ's region as the function body
+        let lmd_region = RegionLocation {
+            node: self.ctx.lamda,
+            region_index: 0,
+        };
+        self.label
+            .insert(lmd_region.clone().into(), fn_builder.func_body_id());
+
+        {
+            let mut builder = fn_builder.func_body();
+            self.emit_argument_preamble(&mut builder, &mut module.locals);
+        }
+
+        //NOTE: Since we don't necessarly clean up all nodes before creating the CFG
+        //      there might be untouched nodes.
         let topoord = match cfg.topological_order() {
             Ok(l) => l,
             Err(ScfrError::TopoOrdNotAllNodesTraversed(l)) => l,
@@ -292,6 +247,8 @@ impl WasmLambdaBuilder {
                     println!("    {:?}", cfg.nodes[*n]);
                 }
         */
+
+        //Allocate implicit-stack locations for all outports (that are used).
         for node in &topoord {
             match &cfg.nodes[*node] {
                 CfgNode::BasicBlock(bb) => {
@@ -337,14 +294,28 @@ impl WasmLambdaBuilder {
                 CfgNode::Null => {}
                 CfgNode::Root(_) => {}
                 CfgNode::BasicBlock(bb) => {
-                    for node in &bb.nodes {
-                        self.serialize_simple_node(
-                            *node,
-                            backend,
-                            &mut builder,
-                            &module.funcs,
-                            &module.locals,
-                        )?;
+                    //ignore empty blocks
+                    if bb.nodes.len() == 0 {
+                        continue;
+                    }
+
+                    //Get the parent region for the nodes of this block
+                    let parent_region = backend.graph[bb.nodes[0]].parent.unwrap();
+                    //activate that region's builder
+
+                    //switch to the region's builder, and serialize all simple nodes
+                    {
+                        let seqid = self.label.get(&parent_region).unwrap();
+                        let mut seq = fn_builder.instr_seq(*seqid);
+                        for node in &bb.nodes {
+                            self.serialize_simple_node(
+                                *node,
+                                backend,
+                                &mut seq,
+                                &module.funcs,
+                                &module.locals,
+                            )?;
+                        }
                     }
                 }
                 CfgNode::BranchHeader {
@@ -381,27 +352,37 @@ impl WasmLambdaBuilder {
             }
         }
 
-        //Now setup the ordered load instructions for the result(s).
-        for result in backend.graph[lambda].result_types(0) {
-            let resultport = lambda.as_inport_location(result);
-            let result_src = backend.graph.find_producer_inp(resultport).unwrap();
-            //produce the loads for each result element
-            self.load_port_elements(result_src, &mut builder);
+        //After serialzing everything, build the postamble.
+        //This'll frist load all result values onto the stack, then
+        //emit the implicit-stack cleanup (mostly resetting to the pre-λ-call state).
+
+        {
+            let seqid = self.label.get(&lmd_region).unwrap();
+            let mut seq = fn_builder.instr_seq(*seqid);
+
+            for result in backend.graph[self.ctx.lamda].result_types(0) {
+                let resultport = self.ctx.lamda.as_inport_location(result);
+                let result_src = backend.graph.find_producer_inp(resultport).unwrap();
+                //produce the loads for each result element
+                self.load_port_elements(result_src, &mut seq);
+            }
+
+            //NOTE: we only emit the preamble here, since we only know the needed stack size at this point
+            //
+            //The function _part_ is emitted at this point. We now wrap it in a stack_pointer construction _preamble_
+            //and a stack_pointer destruction routine.
+            //This'll effectively grow the stack (downwards) for the elements we are using while working
+            //and'll shrink it back once we ended.
+            self.emit_stackpointer_preamble(&mut seq);
+            self.emit_stackpointer_post_build(&mut seq);
         }
 
-        //The function _part_ is emitted at this point. We now wrap it in a stack_pointer construction _preample_
-        //and a stack_pointer destruction routine.
-        //This'll effectively grow the stack (downwards) for the elements we are using while working
-        //and'll shrink it back once we ended.
-        self.emit_stackpointer_preample(&mut builder);
-        self.emit_stackpointer_post_build(&mut builder);
-
-        //Now finish the walrus builder, and yeet the function into the actual module
+        //Now finish the walrus builder, and put the function into the actual module
         let mut args = Vec::new();
         for arg in self.ctx.arguments.iter() {
             args.extend_from_slice(&arg.local_id.as_ref().unwrap().as_slice());
         }
-        let fnid = fnbuilder.finish(args, &mut module.funcs);
+        let fnid = fn_builder.finish(args, &mut module.funcs);
 
         //Once we finished serializing, we read the memory size, and fit our
         //memory to that size
@@ -411,19 +392,8 @@ impl WasmLambdaBuilder {
         Ok(fnid)
     }
 
-    fn handle_branch_header(
-        &mut self,
-        node: NodeRef,
-        backend: &WasmBackend,
-        builder: &mut walrus::InstrSeqBuilder,
-        functions: &ModuleFunctions,
-        locals: &ModuleLocals,
-    ) -> Result<(), WasmError> {
-        todo!()
-    }
-
     fn serialize_simple_node(
-        &mut self,
+        &self,
         node: NodeRef,
         backend: &WasmBackend,
         builder: &mut walrus::InstrSeqBuilder,

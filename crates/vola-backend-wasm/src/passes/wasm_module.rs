@@ -8,13 +8,16 @@
 
 //! Transforms the current graph into a walrus WASM module.
 
+use ahash::AHashMap;
+use memory::MemoryHandler;
 use rvsdg::{
+    attrib::FlagStore,
     edge::{InportLocation, InputType, OutportLocation, OutputType},
     region::RegionLocation,
     NodeRef, SmallColl,
 };
 use vola_common::{error::error_reporter, report, Span};
-use walrus::LocalId;
+use walrus::{ir::InstrSeqId, FunctionBuilder, GlobalId, LocalId, Module, ValType};
 
 use crate::{graph::WasmTy, runtime, WasmBackend, WasmError};
 
@@ -36,6 +39,58 @@ struct ResultCtx {
 struct FunctionBuilderCtx {
     pub arguments: SmallColl<ArgumentCtx>,
     pub results: SmallColl<ResultCtx>,
+    pub lamda: NodeRef,
+}
+
+///The helper that tracks the virtual heap for building a λ-node.
+pub struct WasmLambdaBuilder {
+    mem: MemoryHandler,
+    ctx: FunctionBuilderCtx,
+
+    //Maps regions to instruction sequences of `fn_builder`
+    label: AHashMap<RegionLocation, InstrSeqId>,
+
+    ///The function local stack pointer set at the start of the function
+    fn_local_stack_pointer: LocalId,
+    ///The global stack pointer id we are reusing from the rust code
+    global_stack_pointer: GlobalId,
+}
+
+impl WasmLambdaBuilder {
+    fn init_for_ctx(
+        ctx: FunctionBuilderCtx,
+        module: &mut Module,
+        symbol_name: &str,
+    ) -> WasmLambdaBuilder {
+        //Allocate ourself some empty memory
+        //let memid = module.memories.add_local(false, false, 0, None, None);
+
+        let memid = module.get_memory_id().unwrap();
+        let fn_local_stack_pointer = module.locals.add(ValType::I32);
+        module.locals.get_mut(fn_local_stack_pointer).name =
+            Some("__vola_stack_pointer".to_string());
+
+        let stackptr = module
+            .globals
+            .iter()
+            .find_map(|g| {
+                if g.name == Some("__stack_pointer".to_string()) {
+                    Some(g.id())
+                } else {
+                    None
+                }
+            })
+            .expect("Failed to find stack pointer in module!");
+
+        let sm = WasmLambdaBuilder {
+            mem: MemoryHandler::empty(memid, &mut module.locals),
+            ctx,
+            fn_local_stack_pointer,
+            label: AHashMap::default(),
+            global_stack_pointer: stackptr,
+        };
+        sm
+    }
 }
 
 impl WasmBackend {
@@ -137,19 +192,39 @@ impl WasmBackend {
             })
             .collect();
 
-        let fnctx = FunctionBuilderCtx { arguments, results };
+        let fnctx = FunctionBuilderCtx {
+            arguments,
+            results,
+            lamda: export,
+        };
 
-        //let (export_fn_id, _import) =
-        //    module.add_import_func("wasm_runtime.wasm", &symbol_name, export_type_id);
-
+        //Build the CFG for this region
         let cfg = self.graph.region_to_cfg_scfr(RegionLocation {
             node: export,
             region_index: 0,
         })?;
 
-        let sm_sequence = self.init_sm_for_ctx(fnctx, module);
-        let function_id = sm_sequence.serialize_cfg(cfg, self, export, module, &symbol_name)?;
+        //Now init the Wasm-λ-builder for the module and node
+        let lmd_builder = WasmLambdaBuilder::init_for_ctx(fnctx, module, &symbol_name);
 
+        //start the function builder
+        let mut params = SmallColl::new();
+        for arg in lmd_builder.ctx.arguments.iter() {
+            arg.ty.append_elements_to_signature(&mut params);
+        }
+
+        let mut results = SmallColl::new();
+        for res in lmd_builder.ctx.results.iter() {
+            res.ty.append_elements_to_signature(&mut results);
+        }
+        //setup the export's type
+        //let export_type_id = module.types.add(&params, &results);
+        let mut fn_builder = walrus::FunctionBuilder::new(&mut module.types, &params, &results);
+        fn_builder.name(symbol_name.to_string());
+
+        //Serialize the λ into the `module`
+        let function_id = lmd_builder.serialize_cfg(cfg, self, module, fn_builder)?;
+        //and finish by exporting the symbol
         module.exports.add(&symbol_name, function_id);
 
         Ok(())
