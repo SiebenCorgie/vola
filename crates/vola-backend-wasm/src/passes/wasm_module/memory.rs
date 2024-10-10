@@ -10,7 +10,7 @@
 
 use ahash::AHashMap;
 use rvsdg::{
-    edge::OutportLocation,
+    edge::{InputType, OutportLocation, OutputType},
     region::RegionLocation,
     util::cfg::{Cfg, CfgNode, CfgRef},
 };
@@ -224,6 +224,88 @@ impl MemoryHandler {
                         //finally tag the outport of the gamma node with (yet again) the same index
                         self.mem_map
                             .insert(src_node.as_outport_location(output_ty), unified_src_index);
+                    }
+                }
+                CfgNode::LoopHeader {
+                    src_node,
+                    pre_loop_bb,
+                    loop_entry_bb,
+                    ctrl_tail,
+                } => {
+                    //For the header, just _reuse_ the input-src as the argument_src and the result_destination.
+
+                    for input in backend.graph[*src_node].inport_types() {
+                        let in_region = input.map_to_in_region(0).unwrap();
+                        let mem_index = if let Some(src) = backend
+                            .graph
+                            .find_producer_inp(src_node.as_inport_location(input))
+                        {
+                            *self.mem_map.get(&src).unwrap()
+                        } else {
+                            //make sure the inner-region doesn't use that
+                            assert!(
+                                backend.graph[src_node.as_outport_location(in_region)]
+                                    .edges
+                                    .len()
+                                    == 0
+                            );
+                            continue;
+                        };
+
+                        //map to in-region port
+                        self.mem_map
+                            .insert(src_node.as_outport_location(in_region), mem_index);
+                    }
+                }
+                CfgNode::LoopCtrlTail {
+                    last_bb,
+                    loop_entry_bb,
+                    post_loop_bb,
+                    condition_src,
+                    src_node,
+                    header,
+                } => {
+                    //For the control-tail, map the result srcs to the input memory index, and the
+                    // output-port to the same as well. This basically makes sure, that even if the loop doesn't execute at all, the right memory location is used, and that the intermediate value
+                    // is mapped back to the start of the loop again.
+
+                    for result in backend.graph[*src_node].result_types(0) {
+                        //don't touch the predicate port though
+                        if result == InputType::ThetaPredicate {
+                            continue;
+                        }
+
+                        let output = result.map_out_of_region().unwrap();
+                        let result_src = if let Some(src) = backend
+                            .graph
+                            .find_producer_inp(src_node.as_inport_location(result))
+                        {
+                            src
+                        } else {
+                            //make sure the output is not in use as well
+                            assert!(
+                                backend.graph[src_node.as_outport_location(output)]
+                                    .edges
+                                    .len()
+                                    == 0
+                            );
+                            continue;
+                        };
+
+                        let argument_ty = match result {
+                            InputType::Result(idx) => OutputType::Argument(idx),
+                            _ => panic!("unexpected result type: {:?}", result),
+                        };
+
+                        let argument_index = *self
+                            .mem_map
+                            .get(&src_node.as_outport_location(argument_ty))
+                            .expect("Expected input-port to have argument already mapped");
+
+                        //now overwrite the value_src port to that index, then set the output-port as that as well
+                        self.mem_map.insert(result_src, argument_index);
+                        self.mem_map
+                            .insert(src_node.as_outport_location(output), argument_index);
                     }
                 }
                 _ => {}

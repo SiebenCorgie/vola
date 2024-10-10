@@ -102,6 +102,14 @@ impl Ty {
         }
     }
 
+    pub fn is_nat(&self) -> bool {
+        if let Self::Nat = self {
+            true
+        } else {
+            false
+        }
+    }
+
     pub fn is_vector(&self) -> bool {
         if let Self::Vector { .. } = self {
             true

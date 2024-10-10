@@ -69,7 +69,10 @@ impl WasmBackend {
     pub fn push_debug_state(&mut self, name: &str) {}
 
     #[cfg(feature = "viewer")]
-    pub fn push_debug_state(&mut self, name: &str) {
+    pub fn push_debug_state_with<F>(&mut self, name: &str, with: F)
+    where
+        F: FnOnce(rvsdg_viewer::GraphStateBuilder) -> rvsdg_viewer::GraphStateBuilder,
+    {
         use rvsdg_viewer::{layout::LayoutConfig, View};
 
         let mut local_typemap = FlagStore::new();
@@ -83,16 +86,22 @@ impl WasmBackend {
             ..Default::default()
         };
 
-        self.viewer
+        let builder = self
+            .viewer
             .new_state_builder(name, &self.graph, &layout_config)
             .with_flags("Name", &self.names)
             .with_flags("Span", &self.spans)
-            .with_flags("Type", &local_typemap)
-            .build();
+            .with_flags("Type", &local_typemap);
+        with(builder).build();
 
         if std::env::var("VOLA_ALWAYS_WRITE_DUMP").is_ok() {
             self.dump_debug_state(&format!("{name}.bin"));
         }
+    }
+
+    #[cfg(feature = "viewer")]
+    pub fn push_debug_state(&mut self, name: &str) {
+        self.push_debug_state_with(name, |t| t)
     }
 
     #[cfg(not(feature = "viewer"))]

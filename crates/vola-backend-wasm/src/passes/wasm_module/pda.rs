@@ -19,7 +19,7 @@ use rvsdg::{
     NodeRef, SmallColl,
 };
 use walrus::{
-    ir::{IfElse, InstrSeqId, InstrSeqType, MemArg, Value},
+    ir::{Block, IfElse, InstrSeqId, InstrSeqType, Loop, MemArg, Value},
     FunctionBuilder, FunctionId, GlobalId, InstrSeqBuilder, LocalId, Module, ModuleFunctions,
     ModuleLocals, ValType,
 };
@@ -222,7 +222,7 @@ impl WasmLambdaBuilder {
 
                     //allocate a seq-instr builder if not yet done
                     let region = backend.graph[bb.nodes[0]].parent.unwrap();
-                    if !self.label.contains_key(&region) {
+                    if !self.label.flags.contains_key(&region.into()) {
                         //NOTE: the λ id should be pushed allready, so we should only encounter _simple_
                         //      regions for gamma or theta nodes
                         assert!(
@@ -232,10 +232,21 @@ impl WasmLambdaBuilder {
                         );
                         let builder = fn_builder.dangling_instr_seq(InstrSeqType::Simple(None));
                         let builder_id = builder.id();
-                        let _ = self.label.insert(region, builder_id);
+                        let _ = self.label.set(region.into(), builder_id);
                     }
                 }
-                //All other nodes are ignored in this pass
+                CfgNode::LoopHeader {
+                    src_node,
+                    pre_loop_bb,
+                    loop_entry_bb,
+                    ctrl_tail,
+                } => {
+                    //allocate a sequence id for the loop. This is the one used for the
+                    //_break-out-of-block_ section
+                    let builder = fn_builder.dangling_instr_seq(InstrSeqType::Simple(None));
+                    let id = builder.id();
+                    self.label.set(src_node.into(), id);
+                }
                 _ => {}
             }
         }
@@ -244,7 +255,7 @@ impl WasmLambdaBuilder {
     pub fn serialize_cfg(
         mut self,
         cfg: Cfg,
-        backend: &WasmBackend,
+        backend: &mut WasmBackend,
         module: &mut Module,
         mut fn_builder: FunctionBuilder,
     ) -> Result<FunctionId, WasmError> {
@@ -259,7 +270,7 @@ impl WasmLambdaBuilder {
             region_index: 0,
         };
         self.label
-            .insert(lmd_region.clone().into(), fn_builder.func_body_id());
+            .set(lmd_region.clone().into(), fn_builder.func_body_id());
 
         {
             let mut builder = fn_builder.func_body();
@@ -279,6 +290,19 @@ impl WasmLambdaBuilder {
         self.allocate_instr_sequences(&cfg, &topoord, backend, &mut fn_builder);
         //Dataflow based memory allocation. Have a look at the implementation for more info.
         self.mem.allocate_for_cfg(&cfg, &topoord, backend);
+
+        //If wanted, dump the graph with the assigned memory indices
+
+        if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("VOLA_DUMP_WASM_MEMORY").is_ok()
+        {
+            backend.push_debug_state_with(&format!("WASM memory for {}", self.name), |b| {
+                let mut flagstore = FlagStore::new();
+                for (port, index) in self.mem.mem_map.iter() {
+                    flagstore.set(port.into(), *index);
+                }
+                b.with_flags("MemoryId", &flagstore)
+            });
+        }
 
         //This pass just records all _simple_ nodes in order of occurence and allocates the correct
         //heap elements.
@@ -317,7 +341,7 @@ impl WasmLambdaBuilder {
 
                     //switch to the region's builder, and serialize all simple nodes
                     {
-                        let seqid = self.label.get(&parent_region).unwrap();
+                        let seqid = self.label.get(&parent_region.into()).unwrap();
                         let mut seq = fn_builder.instr_seq(*seqid);
                         for node in &bb.nodes {
                             self.serialize_simple_node(
@@ -344,21 +368,27 @@ impl WasmLambdaBuilder {
 
                     let parent_region = backend.graph[*src_node].parent.unwrap();
                     {
-                        let seqid = self.label.get(&parent_region).unwrap();
+                        let seqid = self.label.get(&parent_region.into()).unwrap();
                         let mut seq = fn_builder.instr_seq(*seqid);
                         let consequence_id = self
                             .label
-                            .get(&RegionLocation {
-                                node: *src_node,
-                                region_index: 0,
-                            })
+                            .get(
+                                &RegionLocation {
+                                    node: *src_node,
+                                    region_index: 0,
+                                }
+                                .into(),
+                            )
                             .unwrap();
                         let alternative_id = self
                             .label
-                            .get(&RegionLocation {
-                                node: *src_node,
-                                region_index: 1,
-                            })
+                            .get(
+                                &RegionLocation {
+                                    node: *src_node,
+                                    region_index: 1,
+                                }
+                                .into(),
+                            )
                             .unwrap();
                         //now load the switch criterion and add the if-else instruction
                         self.load_port_elements(*condition_src, &mut seq);
@@ -373,13 +403,46 @@ impl WasmLambdaBuilder {
                     src_true,
                     src_false,
                     next,
-                } => {}
+                } => {
+                    //NOTE: right now we don't need to do anything here, since this is
+                    // a) handeled by walrus
+                    // b) everything is done on the implicit stack, so all CF sequences are _simple_.
+                }
                 CfgNode::LoopHeader {
                     src_node,
                     pre_loop_bb,
                     loop_entry_bb,
                     ctrl_tail,
-                } => {}
+                } => {
+                    //emit the loop
+
+                    let parent_region = backend.graph[*src_node].parent.unwrap();
+                    let loop_body = RegionLocation {
+                        node: *src_node,
+                        region_index: 0,
+                    };
+
+                    {
+                        let loop_block_id = self.label.get(&src_node.into()).unwrap();
+                        let loop_body_id = self.label.get(&loop_body.into()).unwrap();
+
+                        //Now add the loop block to the outer sequence
+                        {
+                            let seqid = self.label.get(&parent_region.into()).unwrap();
+                            let mut seq = fn_builder.instr_seq(*seqid);
+                            //start the loop block
+                            seq.instr(Block {
+                                seq: *loop_block_id,
+                            });
+                        }
+                        //After that, on the loop-block, emit the _loop_ directive that'll
+                        //pull in the actual loop's sequence
+                        {
+                            let mut seq = fn_builder.instr_seq(*loop_block_id);
+                            seq.instr(Loop { seq: *loop_body_id });
+                        }
+                    }
+                }
                 CfgNode::LoopCtrlTail {
                     last_bb,
                     loop_entry_bb,
@@ -387,7 +450,32 @@ impl WasmLambdaBuilder {
                     condition_src,
                     src_node,
                     header,
-                } => {}
+                } => {
+                    //At the end of the loop, first load the loop criterion, and depending on that
+                    //either branch to the block-id (which will abort the loop), or branch to the loop-body-id,
+                    //which will start another iteration
+                    let loop_body = RegionLocation {
+                        node: *src_node,
+                        region_index: 0,
+                    };
+                    let loop_block_id = *self.label.get(&src_node.into()).unwrap();
+                    let loop_body_id = *self.label.get(&loop_body.into()).unwrap();
+                    {
+                        let mut seq = fn_builder.instr_seq(loop_body_id);
+                        self.load_port_elements(*condition_src, &mut seq);
+                        seq.if_else(
+                            None,
+                            |if_seq| {
+                                //criterion is true, branch to the loop-start for the next iteration
+                                if_seq.br(loop_body_id);
+                            },
+                            |then_seq| {
+                                //is false, end the loop
+                                then_seq.br(loop_block_id);
+                            },
+                        );
+                    }
+                }
             }
         }
 
@@ -396,13 +484,14 @@ impl WasmLambdaBuilder {
         //emit the implicit-stack cleanup (mostly resetting to the pre-λ-call state).
 
         {
-            let seqid = self.label.get(&lmd_region).unwrap();
+            let seqid = self.label.get(&lmd_region.into()).unwrap();
             let mut seq = fn_builder.instr_seq(*seqid);
 
             for result in backend.graph[self.ctx.lamda].result_types(0) {
                 let resultport = self.ctx.lamda.as_inport_location(result);
                 let result_src = backend.graph.find_producer_inp(resultport).unwrap();
                 //produce the loads for each result element
+                println!("Load port element: {:?} in {:?}", result, lmd_region);
                 self.load_port_elements(result_src, &mut seq);
             }
 

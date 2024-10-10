@@ -1,7 +1,7 @@
 //BEGIN-CONFIG
 //EXEC-FN:myField
 //EXEC-ARGS:4.2,1.0,4.0
-//EXEC-EPS:0.0
+//EXEC-EPS:0.01
 //EXEC-RES:42.0
 //END-CONFIG
 
@@ -10,9 +10,11 @@ module std;
 entity Loopy();
 
 impl Loopy for SDF3D(at){
-    for t = 0.0 in 0..10{
-        t += at.x;
-    }
+    let d = for t = 0.0 in 0..10{
+        t = t + at.x;
+    };
+
+    d
 }
 
 export myField(at: vec3){

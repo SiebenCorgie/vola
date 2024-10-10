@@ -48,19 +48,20 @@ pub struct WasmLambdaBuilder {
     ctx: FunctionBuilderCtx,
 
     //Maps regions to instruction sequences of `fn_builder`
-    label: AHashMap<RegionLocation, InstrSeqId>,
+    label: FlagStore<InstrSeqId>,
 
     ///The function local stack pointer set at the start of the function
     fn_local_stack_pointer: LocalId,
     ///The global stack pointer id we are reusing from the rust code
     global_stack_pointer: GlobalId,
+    name: String,
 }
 
 impl WasmLambdaBuilder {
     fn init_for_ctx(
         ctx: FunctionBuilderCtx,
         module: &mut Module,
-        symbol_name: &str,
+        symbol_name: String,
     ) -> WasmLambdaBuilder {
         //Allocate ourself some empty memory
         //let memid = module.memories.add_local(false, false, 0, None, None);
@@ -86,15 +87,16 @@ impl WasmLambdaBuilder {
             mem: MemoryHandler::empty(memid, &mut module.locals),
             ctx,
             fn_local_stack_pointer,
-            label: AHashMap::default(),
+            label: FlagStore::new(),
             global_stack_pointer: stackptr,
+            name: symbol_name,
         };
         sm
     }
 }
 
 impl WasmBackend {
-    pub fn into_wasm_module(&self) -> Result<walrus::Module, WasmError> {
+    pub fn into_wasm_module(&mut self) -> Result<walrus::Module, WasmError> {
         //First step is to load the runtime as the base module.
         let mut module = runtime::load_runtime_module()?;
         //let mut module = walrus::Module::with_config(ModuleConfig::new());
@@ -143,7 +145,7 @@ impl WasmBackend {
     }
 
     pub fn emit_export(
-        &self,
+        &mut self,
         export: NodeRef,
         symbol_name: String,
         module: &mut walrus::Module,
@@ -205,7 +207,7 @@ impl WasmBackend {
         })?;
 
         //Now init the Wasm-λ-builder for the module and node
-        let lmd_builder = WasmLambdaBuilder::init_for_ctx(fnctx, module, &symbol_name);
+        let lmd_builder = WasmLambdaBuilder::init_for_ctx(fnctx, module, symbol_name.clone());
 
         //start the function builder
         let mut params = SmallColl::new();

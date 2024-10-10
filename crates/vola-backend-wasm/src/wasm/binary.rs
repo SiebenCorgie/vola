@@ -79,19 +79,21 @@ impl WasmNode {
                 },
                 walrus::ValType::I32 => match value.op {
                     BinaryArithOp::Add => {
-                        WasmNode::Binary(WasmBinaryOp::new(walrus::ir::BinaryOp::F32Add))
+                        WasmNode::Binary(WasmBinaryOp::new(walrus::ir::BinaryOp::I32Add))
                     }
                     BinaryArithOp::Sub => {
-                        WasmNode::Binary(WasmBinaryOp::new(walrus::ir::BinaryOp::F32Sub))
+                        WasmNode::Binary(WasmBinaryOp::new(walrus::ir::BinaryOp::I32Sub))
                     }
                     BinaryArithOp::Mul => {
-                        WasmNode::Binary(WasmBinaryOp::new(walrus::ir::BinaryOp::F32Mul))
+                        WasmNode::Binary(WasmBinaryOp::new(walrus::ir::BinaryOp::I32Mul))
                     }
                     BinaryArithOp::Div => {
-                        WasmNode::Binary(WasmBinaryOp::new(walrus::ir::BinaryOp::F32Div))
+                        WasmNode::Binary(WasmBinaryOp::new(walrus::ir::BinaryOp::I32DivU))
                     }
                     BinaryArithOp::Mod => {
-                        WasmNode::Runtime(WasmRuntimeOp::new_with_signature(2, ExternOp::Mod))
+                        return Err(WasmError::UnsupportedNode(format!(
+                            "Mod is unsupported for Nat"
+                        )))
                     }
                 },
                 _ => {
@@ -152,9 +154,11 @@ impl WasmNode {
         input_sig: [vola_opt::common::Ty; 2],
         output_sig: vola_opt::common::Ty,
     ) -> Result<Self, WasmError> {
-        //NOTE make sure both are of scalar shape, otherwise
+        //NOTE make sure both are of scalar or nat, otherwise
         //abort
-        if !input_sig[0].is_scalar() || !input_sig[1].is_scalar() {
+        if !((input_sig[0].is_scalar() && input_sig[1].is_scalar())
+            || (input_sig[0].is_nat() && input_sig[1].is_nat()))
+        {
             return Err(WasmError::UnexpectedSignature {
                 node: format!("{:?}", value.op),
                 input: input_sig.into_iter().collect(),
@@ -176,16 +180,16 @@ impl WasmNode {
             vola_opt::common::Ty::Nat => match value.op {
                 BinaryRelOp::Eq => WasmNode::Binary(WasmBinaryOp::new(walrus::ir::BinaryOp::I32Eq)),
                 BinaryRelOp::Gt => {
-                    WasmNode::Binary(WasmBinaryOp::new(walrus::ir::BinaryOp::I32GeS))
+                    WasmNode::Binary(WasmBinaryOp::new(walrus::ir::BinaryOp::I32GtU))
                 }
                 BinaryRelOp::Gte => {
-                    WasmNode::Binary(WasmBinaryOp::new(walrus::ir::BinaryOp::I32GtS))
+                    WasmNode::Binary(WasmBinaryOp::new(walrus::ir::BinaryOp::I32GeU))
                 }
                 BinaryRelOp::Lt => {
-                    WasmNode::Binary(WasmBinaryOp::new(walrus::ir::BinaryOp::I32LtS))
+                    WasmNode::Binary(WasmBinaryOp::new(walrus::ir::BinaryOp::I32LtU))
                 }
                 BinaryRelOp::Lte => {
-                    WasmNode::Binary(WasmBinaryOp::new(walrus::ir::BinaryOp::I32LeS))
+                    WasmNode::Binary(WasmBinaryOp::new(walrus::ir::BinaryOp::I32LeU))
                 }
                 BinaryRelOp::NotEq => {
                     WasmNode::Binary(WasmBinaryOp::new(walrus::ir::BinaryOp::I32Ne))
@@ -193,9 +197,9 @@ impl WasmNode {
             },
             vola_opt::common::Ty::Scalar => match value.op {
                 BinaryRelOp::Eq => WasmNode::Binary(WasmBinaryOp::new(walrus::ir::BinaryOp::F32Eq)),
-                BinaryRelOp::Gt => WasmNode::Binary(WasmBinaryOp::new(walrus::ir::BinaryOp::F32Ge)),
+                BinaryRelOp::Gt => WasmNode::Binary(WasmBinaryOp::new(walrus::ir::BinaryOp::F32Gt)),
                 BinaryRelOp::Gte => {
-                    WasmNode::Binary(WasmBinaryOp::new(walrus::ir::BinaryOp::F32Gt))
+                    WasmNode::Binary(WasmBinaryOp::new(walrus::ir::BinaryOp::F32Ge))
                 }
                 BinaryRelOp::Lt => WasmNode::Binary(WasmBinaryOp::new(walrus::ir::BinaryOp::F32Lt)),
                 BinaryRelOp::Lte => {
