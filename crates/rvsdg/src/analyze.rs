@@ -343,6 +343,8 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
             }
         }
     }
+
+    ///See [find_producer_out] for a detailed explaination on what this does.
     pub fn find_producer_inp(&self, input: InportLocation) -> Option<OutportLocation> {
         let start_out = if let Some(start_edge) = self.node(input.node).inport(&input.input)?.edge {
             self.edge(start_edge).src.clone()

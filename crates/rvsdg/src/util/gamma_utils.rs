@@ -84,17 +84,35 @@ impl<N: LangNode + StructuralClone + 'static, E: LangEdge + StructuralClone + 's
             if let Some(in_region_src) =
                 self.node(gamma_node).regions()[branch].result_src(self, outidx)
             {
-                //map in _region_src to out_of_region src, then disconnect all results on _outidx_ and connect them
-                //to the mapped.
-                let mapped_node =
-                    if let Some(out_of_region_node) = node_mapping.get(&in_region_src.node) {
-                        out_of_region_node.clone()
-                    } else {
-                        continue;
-                    };
+                //We now have two cases:
+                // 1. the result was connected to an entry-var of our self.
+                //    In that case, find the out-of-gamma src for that, and hook up all output connected nodes
+                // 2. the argument was connected to some kind of node,
+                //    In that case, reconnect to that some kind of node based on the mapping.
 
-                let mut new_src = in_region_src.clone();
-                new_src.node = mapped_node;
+                let new_src = if in_region_src.node == gamma_node
+                    && in_region_src.output.is_argument()
+                {
+                    //is actually an argument, map that out of region, find its source and use that for the remapping
+                    let mapped_out = in_region_src.output.map_out_of_region().unwrap();
+                    let src = self
+                        .inport_src(gamma_node.as_inport_location(mapped_out))
+                        .unwrap();
+                    src
+                } else {
+                    //map in _region_src to out_of_region src, then disconnect all results on _outidx_ and connect them
+                    //to the mapped.
+                    let mapped_node =
+                        if let Some(out_of_region_node) = node_mapping.get(&in_region_src.node) {
+                            out_of_region_node.clone()
+                        } else {
+                            continue;
+                        };
+
+                    let mut new_src = in_region_src.clone();
+                    new_src.node = mapped_node;
+                    new_src
+                };
 
                 for edg in self.node(gamma_node).outputs()[outidx].edges.clone() {
                     let dst = self.edge(edg).dst().clone();
