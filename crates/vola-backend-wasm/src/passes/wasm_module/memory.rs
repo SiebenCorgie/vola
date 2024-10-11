@@ -10,8 +10,7 @@
 
 use ahash::AHashMap;
 use rvsdg::{
-    edge::{InputType, OutportLocation, OutputType},
-    region::RegionLocation,
+    edge::OutportLocation,
     util::cfg::{Cfg, CfgNode, CfgRef},
 };
 use walrus::{ir::Value, LocalId, MemoryId, ModuleLocals};
@@ -102,11 +101,6 @@ impl MemoryHandler {
             ty: ty.clone(),
             base_addr,
         };
-        /*
-        println!(
-            "Alloc<{ty:?}> {port:?} @ {} .. {} ({}byte)",
-            element.base_addr, self.memory_size, element_size
-        );*/
 
         let index = self.mem_table.len();
         self.mem_table.push(element);
@@ -135,7 +129,6 @@ impl MemoryHandler {
                                 .graph
                                 .find_producer_inp(node.as_inport_location(inp))
                                 .unwrap();
-                            //println!("Producer: {:?}", producer);
                             assert!(self.mem_map.contains_key(&producer));
                         }
 
@@ -146,15 +139,7 @@ impl MemoryHandler {
                         self.alloc_port(result_port, result_ty);
                     }
                 }
-                CfgNode::BranchHeader {
-                    src_node,
-                    condition_src,
-                    last_bb,
-                    true_branch,
-                    false_branch,
-                    merge,
-                    post_merge_block,
-                } => {
+                CfgNode::BranchHeader { src_node, .. } => {
                     //For the branches we just map the source-port memory element to the in-region port. So a simple pass through
                     for input in backend.graph[*src_node].inport_types() {
                         let input_port = src_node.as_inport_location(input);
@@ -178,12 +163,7 @@ impl MemoryHandler {
                         }
                     }
                 }
-                CfgNode::BranchMerge {
-                    src_node,
-                    src_true,
-                    src_false,
-                    next,
-                } => {
+                CfgNode::BranchMerge { src_node, .. } => {
                     //NOTE: For the branch we do the following: We unify the output targets of both branches to the same memory location
                     //      So if branch_true[0] writes to a, then branch_false[0] also writes to a.
                     //      We then, again, just tell the output-port[0] to _be_ a.
@@ -226,12 +206,7 @@ impl MemoryHandler {
                             .insert(src_node.as_outport_location(output_ty), unified_src_index);
                     }
                 }
-                CfgNode::LoopHeader {
-                    src_node,
-                    pre_loop_bb,
-                    loop_entry_bb,
-                    ctrl_tail,
-                } => {
+                CfgNode::LoopHeader { src_node, .. } => {
                     //For the header, just _reuse_ the input-src as the argument_src and the result_destination.
 
                     for input in backend.graph[*src_node].inport_types() {
@@ -257,55 +232,15 @@ impl MemoryHandler {
                             .insert(src_node.as_outport_location(in_region), mem_index);
                     }
                 }
-                CfgNode::LoopCtrlTail {
-                    last_bb,
-                    loop_entry_bb,
-                    post_loop_bb,
-                    condition_src,
-                    src_node,
-                    header,
-                } => {
-                    //For the control-tail, map the result srcs to the input memory index, and the
-                    // output-port to the same as well. This basically makes sure, that even if the loop doesn't execute at all, the right memory location is used, and that the intermediate value
-                    // is mapped back to the start of the loop again.
-
-                    for result in backend.graph[*src_node].result_types(0) {
-                        //don't touch the predicate port though
-                        if result == InputType::ThetaPredicate {
+                CfgNode::LoopCtrlTail { src_node, .. } => {
+                    //So far, only allocate a port where we can write back the final output to.
+                    for output in backend.graph[*src_node].outport_types() {
+                        let outport = src_node.as_outport_location(output);
+                        if backend.graph[outport].edges.len() == 0 {
                             continue;
                         }
-
-                        let output = result.map_out_of_region().unwrap();
-                        let result_src = if let Some(src) = backend
-                            .graph
-                            .find_producer_inp(src_node.as_inport_location(result))
-                        {
-                            src
-                        } else {
-                            //make sure the output is not in use as well
-                            assert!(
-                                backend.graph[src_node.as_outport_location(output)]
-                                    .edges
-                                    .len()
-                                    == 0
-                            );
-                            continue;
-                        };
-
-                        let argument_ty = match result {
-                            InputType::Result(idx) => OutputType::Argument(idx),
-                            _ => panic!("unexpected result type: {:?}", result),
-                        };
-
-                        let argument_index = *self
-                            .mem_map
-                            .get(&src_node.as_outport_location(argument_ty))
-                            .expect("Expected input-port to have argument already mapped");
-
-                        //now overwrite the value_src port to that index, then set the output-port as that as well
-                        self.mem_map.insert(result_src, argument_index);
-                        self.mem_map
-                            .insert(src_node.as_outport_location(output), argument_index);
+                        let ty = backend.outport_type(outport).unwrap();
+                        self.alloc_port(outport, ty)
                     }
                 }
                 _ => {}

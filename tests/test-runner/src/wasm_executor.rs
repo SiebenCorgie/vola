@@ -1,6 +1,6 @@
 use smallvec::{smallvec, SmallVec};
 use volac::Target;
-use wasmtime::{Module, Store};
+use wasmtime::{Module, Store, Trap};
 use yansi::Paint;
 
 use crate::{config::Config, run::TestState};
@@ -32,7 +32,16 @@ pub fn try_execute(target: Target, config: &Config) -> TestState {
         },
     };
 
-    let engine = wasmtime::Engine::default();
+    let mut wasm_config = wasmtime::Config::new();
+    wasm_config.wasm_backtrace(true);
+    wasm_config.wasm_backtrace_details(wasmtime::WasmBacktraceDetails::Enable);
+
+    let engine = match wasmtime::Engine::new(&wasm_config)
+        .map_err(|e| TestState::Error(format!("Failed to start wasmtime Engine: {e:?}")))
+    {
+        Ok(c) => c,
+        Err(e) => return e,
+    };
 
     let module = match Module::new(&engine, target_bytes) {
         Ok(module) => module,
@@ -45,7 +54,18 @@ pub fn try_execute(target: Target, config: &Config) -> TestState {
     let mut store = Store::new(&engine, ());
     let instance = match linker.instantiate(&mut store, &module) {
         Ok(inst) => inst,
-        Err(e) => return TestState::Error(format!("Failed to instatiate WASMTime: {e:?}")),
+        Err(e) => {
+            //check if we can unwrap a trap:
+
+            if let Some(trap) = e.downcast_ref::<Trap>() {
+                return TestState::Error(format!(
+                    "Failed to instatiate WASM-Time: {trap:?}\n\nBacktrace:\n{}",
+                    e.backtrace()
+                ));
+            } else {
+                return TestState::Error(format!("Failed to instatiate WASM-Time: {e:?}"));
+            }
+        }
     };
 
     let entrypoint = match instance.get_func(&mut store, &target_fn) {

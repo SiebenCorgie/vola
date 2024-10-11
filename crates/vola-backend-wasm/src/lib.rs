@@ -14,6 +14,7 @@
 //!
 //! Under the hood the module loads [vola-wasm-runtime]() crate's wasm module as a runtime. The crate implements special functions like `length`, `cross` etc, and loads functions like `sqrt`, `sin` etc.
 
+use graph::WasmTy;
 use rvsdg::{
     attrib::{AttribLocation, FlagStore},
     Rvsdg,
@@ -36,6 +37,7 @@ pub struct WasmBackend {
 
     spans: FlagStore<Span>,
     names: FlagStore<String>,
+    types: FlagStore<WasmTy>,
 
     #[cfg(feature = "viewer")]
     viewer: ViewerState,
@@ -48,6 +50,7 @@ impl WasmBackend {
 
             spans: FlagStore::new(),
             names: FlagStore::new(),
+            types: FlagStore::new(),
 
             #[cfg(feature = "viewer")]
             viewer: ViewerState::new(),

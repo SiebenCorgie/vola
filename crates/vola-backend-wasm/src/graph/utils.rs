@@ -98,35 +98,35 @@ impl WasmBackend {
             .node_type
             .unwrap_lambda_ref()
             .argument_count();
+        let mut signature = SmallColl::new();
+        for argidx in 0..arg_count {
+            let argrport = lambda.as_outport_location(OutputType::Argument(argidx));
+            let mut unified_type = None;
+            for edg in &self.graph[argrport].edges {
+                let this_type = self.graph[*edg].ty.type_or_undefined();
+                if let Some(tystate) = unified_type.clone() {
+                    //If type is already set, but does not match, make it undefined
+                    if tystate != this_type {
+                        unified_type = Some(WasmTy::Undefined);
+                    }
+                } else {
+                    //None set yet, just use this one
+                    unified_type = Some(this_type);
+                }
+            }
 
-        let sig = (0..arg_count)
-            .map(|argidx| {
-                self.graph[lambda.as_outport_location(OutputType::Argument(argidx))]
-                    .edges
-                    .clone()
-            })
-            .map(|edg| {
-                let unified_type = edg
-                    .into_iter()
-                    .map(|edg| self.graph[edg].ty.type_or_undefined())
-                    .fold(None, |tystate, this| {
-                        if let Some(tystate) = tystate {
-                            //one set, try to unify
-                            if tystate == this {
-                                Some(this)
-                            } else {
-                                Some(WasmTy::Undefined)
-                            }
-                        } else {
-                            //None set yet, just use this one
-                            Some(this)
-                        }
-                    });
+            //if none is yet found, try to read port's type
+            if unified_type.is_some() {
+                signature.push(unified_type);
+            } else {
+                if let Some(port_ty) = self.types.get(&argrport.into()) {
+                    signature.push(Some(port_ty.clone()));
+                } else {
+                    signature.push(None)
+                }
+            }
+        }
 
-                unified_type
-            })
-            .collect::<SmallColl<_>>();
-
-        Ok(sig)
+        Ok(signature)
     }
 }

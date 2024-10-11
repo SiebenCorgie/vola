@@ -13,15 +13,14 @@
 
 use rvsdg::{
     attrib::FlagStore,
-    edge::OutportLocation,
+    edge::{InputType, OutportLocation, OutputType},
     region::RegionLocation,
     util::cfg::{scfr::ScfrError, Cfg, CfgNode, CfgRef},
     NodeRef, SmallColl,
 };
 use walrus::{
-    ir::{Block, IfElse, InstrSeqId, InstrSeqType, Loop, MemArg, Value},
-    FunctionBuilder, FunctionId, GlobalId, InstrSeqBuilder, LocalId, Module, ModuleFunctions,
-    ModuleLocals, ValType,
+    ir::{Block, IfElse, InstrSeqType, Loop, MemArg, Value},
+    FunctionBuilder, Module, ModuleFunctions, ModuleLocals, ValType,
 };
 
 use crate::{
@@ -29,7 +28,7 @@ use crate::{
     WasmBackend, WasmError,
 };
 
-use super::{memory::MemoryHandler, FunctionBuilderCtx, WasmLambdaBuilder};
+use super::{memory::MemoryHandler, WasmLambdaBuilder, WasmLmdBuildReport};
 
 impl WasmLambdaBuilder {
     ///Emits a λ's argument preamble. This bascially makes sure, that the _by-value_ elements
@@ -38,15 +37,30 @@ impl WasmLambdaBuilder {
         &mut self,
         builder: &mut walrus::InstrSeqBuilder,
         locals: &mut ModuleLocals,
+        backend: &WasmBackend,
     ) {
         for arg in self.ctx.arguments.iter_mut() {
             assert!(arg.local_id.is_none());
+
+            //As an optimization for code size, do not allocat a port (and therfore memory)
+            //for unused args. However, still keep the local-id, since those are needed to build the
+            //function signature.
+            let is_dead_arg = if backend.graph[arg.port].edges.len() == 0 {
+                true
+            } else {
+                false
+            };
+
             let mut local_ids = SmallColl::new();
             //allocate such a memory element
-            self.mem.alloc_port(arg.port, arg.ty.clone());
-            let addr = self.mem.get_port_base_address(arg.port);
+            let addr = if !is_dead_arg {
+                self.mem.alloc_port(arg.port, arg.ty.clone());
+                let addr = self.mem.get_port_base_address(arg.port);
+                Some(addr)
+            } else {
+                None
+            };
             //now emit a store for each local element of the
-
             let per_element_offset = arg.ty.base_type_size();
             for element_index in 0..arg.ty.element_count() {
                 //Emit a load for the local element, followed by a store to the correct
@@ -55,21 +69,24 @@ impl WasmLambdaBuilder {
                 //NOTE: Since we are allocating _in order_ we can just use add
                 let localid = locals.add(arg.ty.unwarp_walrus_ty());
                 local_ids.push(localid);
-                //store it to the offset
-                builder.const_(addr);
-                builder.local_get(self.fn_local_stack_pointer);
-                builder.binop(walrus::ir::BinaryOp::I32Add);
+                //only store, if there is an actual address
+                if let Some(addr) = addr {
+                    //store it to the offset
+                    builder.const_(addr);
+                    builder.local_get(self.fn_local_stack_pointer);
+                    builder.binop(walrus::ir::BinaryOp::I32Add);
 
-                builder.local_get(localid);
-                builder.store(
-                    self.mem.memid,
-                    arg.ty.store_kind(),
-                    MemArg {
-                        align: 0,
-                        //calculate local offset for this address
-                        offset: (per_element_offset * element_index).try_into().unwrap(),
-                    },
-                );
+                    builder.local_get(localid);
+                    builder.store(
+                        self.mem.memid,
+                        arg.ty.store_kind(),
+                        MemArg {
+                            align: 0,
+                            //calculate local offset for this address
+                            offset: (per_element_offset * element_index).try_into().unwrap(),
+                        },
+                    );
+                }
             }
 
             //set the used local ids for the argument
@@ -235,12 +252,7 @@ impl WasmLambdaBuilder {
                         let _ = self.label.set(region.into(), builder_id);
                     }
                 }
-                CfgNode::LoopHeader {
-                    src_node,
-                    pre_loop_bb,
-                    loop_entry_bb,
-                    ctrl_tail,
-                } => {
+                CfgNode::LoopHeader { src_node, .. } => {
                     //allocate a sequence id for the loop. This is the one used for the
                     //_break-out-of-block_ section
                     let builder = fn_builder.dangling_instr_seq(InstrSeqType::Simple(None));
@@ -252,13 +264,13 @@ impl WasmLambdaBuilder {
         }
     }
 
-    pub fn serialize_cfg(
+    pub(crate) fn serialize_cfg(
         mut self,
         cfg: Cfg,
         backend: &mut WasmBackend,
         module: &mut Module,
         mut fn_builder: FunctionBuilder,
-    ) -> Result<FunctionId, WasmError> {
+    ) -> Result<WasmLmdBuildReport, WasmError> {
         //Before starting to work on the actual graph, we have to setup a preamble
         // The first action is to load all arguments onto the implicit stack
         // We that interate all nodes in the CFG, and allocate space in the implicit stack for them.
@@ -274,7 +286,7 @@ impl WasmLambdaBuilder {
 
         {
             let mut builder = fn_builder.func_body();
-            self.emit_argument_preamble(&mut builder, &mut module.locals);
+            self.emit_argument_preamble(&mut builder, &mut module.locals, backend);
         }
 
         //NOTE: Since we don't necessarly clean up all nodes before creating the CFG
@@ -303,27 +315,6 @@ impl WasmLambdaBuilder {
                 b.with_flags("MemoryId", &flagstore)
             });
         }
-
-        //This pass just records all _simple_ nodes in order of occurence and allocates the correct
-        //heap elements.
-        /*
-                println!("TOPORD:");
-                for n in &topoord {
-                    println!("    {:?}", cfg.nodes[*n]);
-                }
-        */
-
-        /*
-                println!("HeapTable:");
-                for ele in &self.heap_table {
-                    println!(
-                        "    {:?} @ <{}>:{:?}",
-                        ele.ty,
-                        ele.indices.len(),
-                        ele.indices
-                    )
-                }
-        */
 
         //actually serialize all cfg nodes, including the loop / branch nodes via the walrus builder
         for cfgnode in &topoord {
@@ -357,11 +348,7 @@ impl WasmLambdaBuilder {
                 CfgNode::BranchHeader {
                     src_node,
                     condition_src,
-                    last_bb,
-                    true_branch,
-                    false_branch,
-                    merge,
-                    post_merge_block,
+                    ..
                 } => {
                     //Insert the if-else instruction on the
                     //out-region's sequence builder
@@ -398,22 +385,12 @@ impl WasmLambdaBuilder {
                         });
                     }
                 }
-                CfgNode::BranchMerge {
-                    src_node,
-                    src_true,
-                    src_false,
-                    next,
-                } => {
+                CfgNode::BranchMerge { .. } => {
                     //NOTE: right now we don't need to do anything here, since this is
                     // a) handeled by walrus
                     // b) everything is done on the implicit stack, so all CF sequences are _simple_.
                 }
-                CfgNode::LoopHeader {
-                    src_node,
-                    pre_loop_bb,
-                    loop_entry_bb,
-                    ctrl_tail,
-                } => {
+                CfgNode::LoopHeader { src_node, .. } => {
                     //emit the loop
 
                     let parent_region = backend.graph[*src_node].parent.unwrap();
@@ -444,12 +421,9 @@ impl WasmLambdaBuilder {
                     }
                 }
                 CfgNode::LoopCtrlTail {
-                    last_bb,
-                    loop_entry_bb,
-                    post_loop_bb,
                     condition_src,
                     src_node,
-                    header,
+                    ..
                 } => {
                     //At the end of the loop, first load the loop criterion, and depending on that
                     //either branch to the block-id (which will abort the loop), or branch to the loop-body-id,
@@ -466,11 +440,55 @@ impl WasmLambdaBuilder {
                         seq.if_else(
                             None,
                             |if_seq| {
-                                //criterion is true, branch to the loop-start for the next iteration
+                                //criterion is true, branch to the loop-start for the next iteration.
+                                //before doint that, load all _intermediate_ results
+                                //and write them back to the argument port
+
+                                for result in backend.graph[*src_node].result_types(0) {
+                                    if result == InputType::ThetaPredicate {
+                                        continue;
+                                    }
+                                    let result_port = src_node.as_inport_location(result);
+                                    if backend.graph[result_port].edge.is_none() {
+                                        continue;
+                                    }
+                                    let result_src = backend.graph.inport_src(result_port).unwrap();
+                                    let argument = if let InputType::Result(x) = result {
+                                        OutputType::Argument(x)
+                                    } else {
+                                        panic!("invalid result!")
+                                    };
+                                    let argument_port = src_node.as_outport_location(argument);
+
+                                    //if both ports are the same, we can safe that
+                                    if result_src == argument_port {
+                                        continue;
+                                    }
+
+                                    self.load_port_elements(result_src, if_seq);
+                                    self.store_values_to_port(argument_port, if_seq)
+                                }
+
                                 if_seq.br(loop_body_id);
                             },
                             |then_seq| {
                                 //is false, end the loop
+                                //while doing so, store the result to the port's outputs
+                                for output in backend.graph[*src_node].outport_types() {
+                                    let outport = src_node.as_outport_location(output);
+                                    if backend.graph[outport].edges.len() == 0 {
+                                        continue;
+                                    }
+
+                                    let result_src = backend
+                                        .graph
+                                        .find_producer_inp(src_node.as_inport_location(
+                                            output.map_to_in_region(0).unwrap(),
+                                        ))
+                                        .unwrap();
+                                    self.load_port_elements(result_src, then_seq);
+                                    self.store_values_to_port(outport, then_seq);
+                                }
                                 then_seq.br(loop_block_id);
                             },
                         );
@@ -491,7 +509,6 @@ impl WasmLambdaBuilder {
                 let resultport = self.ctx.lamda.as_inport_location(result);
                 let result_src = backend.graph.find_producer_inp(resultport).unwrap();
                 //produce the loads for each result element
-                println!("Load port element: {:?} in {:?}", result, lmd_region);
                 self.load_port_elements(result_src, &mut seq);
             }
 
@@ -517,11 +534,16 @@ impl WasmLambdaBuilder {
         let desired_page_count = (self.mem.memory_size % MemoryHandler::WASM_PAGE_SIZE) + 1;
         module.memories.get_mut(self.mem.memid).initial = desired_page_count.try_into().unwrap();
 
-        Ok(fnid)
+        let build_report = WasmLmdBuildReport {
+            additional_memory: self.mem.memory_size,
+            function_id: fnid,
+            touched_functions: self.touched_export_functions,
+        };
+        Ok(build_report)
     }
 
     fn serialize_simple_node(
-        &self,
+        &mut self,
         node: NodeRef,
         backend: &WasmBackend,
         builder: &mut walrus::InstrSeqBuilder,
@@ -625,6 +647,8 @@ impl WasmLambdaBuilder {
                 let extern_symbol = r.op.get_static_symbol_name(&input_types)?;
                 let function_symbol =
                     crate::runtime::lookup_function_symbol(locals, functions, &extern_symbol);
+                //mark as touched
+                self.touched_export_functions.insert(extern_symbol.clone());
                 //While at it, verify that the input types match
 
                 assert!(
