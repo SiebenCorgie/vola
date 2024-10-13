@@ -1,8 +1,4 @@
-use rvsdg::{
-    edge::{InportLocation, InputType},
-    region::RegionLocation,
-    util::cne::CneError,
-};
+use rvsdg::{region::RegionLocation, util::cne::CneError};
 
 use crate::{OptError, Optimizer};
 
@@ -29,11 +25,12 @@ impl Optimizer {
     ///go into a _region-containing_ node, but aren't used within that region
     pub fn remove_unused_edges(&mut self) -> Result<(), OptError> {
         let tl = self.graph.toplevel_region();
-        let topo_ord = self.graph.reverse_topological_order_region(tl);
+        let mut topo_ord = self.graph.topological_order_region(tl);
+        topo_ord.reverse();
         for node in topo_ord {
             for region_index in 0..self.graph[node].regions().len() {
                 self.graph
-                    .remove_unused_edges_in_region(RegionLocation { node, region_index }, None)?;
+                    .remove_unused_edges_in_region(RegionLocation { node, region_index }, true)?;
             }
         }
 

@@ -21,7 +21,6 @@ use vola_common::Span;
 use crate::{
     alge::{
         implblock::{ConceptImpl, ConceptImplKey},
-        relational::{BinaryRel, BinaryRelOp},
         EvalNode,
     },
     common::Ty,

@@ -118,7 +118,7 @@ impl MemoryHandler {
         //
         //The serializer then assumes that those locations are _valid_ and does not change them.
         for node in list {
-            match &cfg.nodes[*node] {
+            match &cfg.nodes.get(*node).unwrap() {
                 CfgNode::BasicBlock(bb) => {
                     for node in &bb.nodes {
                         assert!(backend.graph[*node].node_type.is_simple());
@@ -153,7 +153,6 @@ impl MemoryHandler {
                             .find_producer_inp(input_port)
                             .expect("Exepcted allocated src!");
 
-                        //println!("Src[{input:?}]:\n {src:?}");
                         let src_index = *self.mem_map.get(&src).expect("Expected src to be valid!");
                         //ignore un-mappable input ports
                         for idx in 0..backend.graph[*src_node].regions().len() {
@@ -165,46 +164,19 @@ impl MemoryHandler {
                     }
                 }
                 CfgNode::BranchMerge { src_node, .. } => {
-                    //NOTE: For the branch we do the following: We unify the output targets of both branches to the same memory location
-                    //      So if branch_true[0] writes to a, then branch_false[0] also writes to a.
-                    //      We then, again, just tell the output-port[0] to _be_ a.
-
+                    //We just allocate a new port for each _in-use_ result
                     for output_ty in backend.graph[*src_node].outport_types() {
-                        let unified_src_index = {
-                            let in_first_branch = output_ty.map_to_in_region(0).unwrap();
-                            if let Some(src) = backend
-                                .graph
-                                .find_producer_inp(src_node.as_inport_location(in_first_branch))
-                            {
-                                *self.mem_map.get(&src).expect("Expected port to be set!")
-                            } else {
-                                //make sure the other branch is also unused
-                                let in_second_branch = output_ty.map_to_in_region(1).unwrap();
-                                assert!(backend.graph[src_node.as_inport_location(in_second_branch)].edge.is_none(), "If first branch doesn't produces a value, the second shouldn't produce one as well");
-                                continue;
-                            }
-                        };
-
-                        //set the location of the src of all none-first branches (which is usally just one).
-                        //At this point we assume that the types match, since the whole compiler should have aborted way
-                        //before WASM code-generation otherwise.
-                        for region_index in 1..backend.graph[*src_node].regions().len() {
-                            let in_nth_branch = output_ty.map_to_in_region(region_index).unwrap();
-                            let src = backend
-                                .graph
-                                .find_producer_inp(src_node.as_inport_location(in_nth_branch))
-                                .unwrap();
-                            //check if ther is already an element allocated (should be the case)
-                            //TODO: right now we are not removing it. But a _better_ implementation would mark that as dead, and free up space.
-                            assert!(self.mem_map.contains_key(&src));
-                            //Now unify to the same index
-                            self.mem_map.insert(src, unified_src_index);
+                        let outport = src_node.as_outport_location(output_ty);
+                        //ignore unused branches
+                        if backend.graph[outport].edges.len() == 0 {
+                            continue;
                         }
-
-                        //now set the same element for the
-                        //finally tag the outport of the gamma node with (yet again) the same index
-                        self.mem_map
-                            .insert(src_node.as_outport_location(output_ty), unified_src_index);
+                        if let Some(outty) = backend.outport_type(outport) {
+                            //allocate memory location for output
+                            self.alloc_port(outport, outty);
+                        } else {
+                            panic!("Port must be typed!")
+                        }
                     }
                 }
                 CfgNode::LoopHeader { src_node, .. } => {
@@ -244,6 +216,7 @@ impl MemoryHandler {
                         self.alloc_port(outport, ty)
                     }
                 }
+
                 _ => {}
             }
         }

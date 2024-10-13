@@ -10,11 +10,7 @@ use rvsdg::{
     util::graph_type_transform::{GraphMapping, GraphTypeTransformer},
     SmallColl,
 };
-use vola_common::{
-    ariadne::{Label, Report, ReportBuilder, ReportKind},
-    error::error_reporter,
-    report, Span,
-};
+use vola_common::{ariadne::Label, error::error_reporter, report, Span};
 use vola_opt::{OptEdge, OptNode, Optimizer};
 
 use crate::{
@@ -88,6 +84,7 @@ impl<'a> GraphTypeTransformer for InterningTransformer<'a> {
                     match WasmTy::try_from(t) {
                         Ok(k) => k,
                         Err(e) => {
+                            self.has_failed_transform = true;
                             report(error_reporter(e, Span::empty()).finish());
                             WasmTy::Undefined
                         }

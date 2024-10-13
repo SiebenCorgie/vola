@@ -13,7 +13,7 @@
 
 use rvsdg::{
     attrib::FlagStore,
-    edge::{InputType, OutportLocation, OutputType},
+    edge::{InportLocation, InputType, OutportLocation, OutputType},
     region::RegionLocation,
     util::cfg::{scfr::ScfrError, Cfg, CfgNode, CfgRef},
     NodeRef, SmallColl,
@@ -259,6 +259,17 @@ impl WasmLambdaBuilder {
                     let id = builder.id();
                     self.label.set(src_node.into(), id);
                 }
+                CfgNode::BranchHeader { src_node, .. } => {
+                    for region_index in 0..backend.graph[*src_node].regions().len() {
+                        let reg = RegionLocation {
+                            node: *src_node,
+                            region_index,
+                        };
+                        let builder = fn_builder.dangling_instr_seq(InstrSeqType::Simple(None));
+                        let id = builder.id();
+                        self.label.set(reg.into(), id);
+                    }
+                }
                 _ => {}
             }
         }
@@ -307,6 +318,9 @@ impl WasmLambdaBuilder {
 
         if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("VOLA_DUMP_WASM_MEMORY").is_ok()
         {
+            #[cfg(feature = "dot")]
+            crate::passes::cfg_dot::cfg_to_svg(&cfg, backend, "memcfg.svg");
+
             backend.push_debug_state_with(&format!("WASM memory for {}", self.name), |b| {
                 let mut flagstore = FlagStore::new();
                 for (port, index) in self.mem.mem_map.iter() {
@@ -385,10 +399,44 @@ impl WasmLambdaBuilder {
                         });
                     }
                 }
-                CfgNode::BranchMerge { .. } => {
-                    //NOTE: right now we don't need to do anything here, since this is
-                    // a) handeled by walrus
-                    // b) everything is done on the implicit stack, so all CF sequences are _simple_.
+                CfgNode::BranchMerge { src_node, .. } => {
+                    //write back the results to the _in-use_ ports
+                    for region_index in 0..backend.graph[*src_node].regions().len() {
+                        let seq_id = *self
+                            .label
+                            .get(
+                                &RegionLocation {
+                                    node: *src_node,
+                                    region_index,
+                                }
+                                .into(),
+                            )
+                            .unwrap();
+                        let mut seq = fn_builder.instr_seq(seq_id);
+
+                        for result_type in backend.graph[*src_node].result_types(region_index) {
+                            if let Some(out_of_region) = result_type.map_out_of_region() {
+                                let outregion_port = OutportLocation {
+                                    node: *src_node,
+                                    output: out_of_region,
+                                };
+                                if backend.graph[outregion_port].edges.len() == 0 {
+                                    continue;
+                                }
+
+                                let src = backend
+                                    .graph
+                                    .inport_src(InportLocation {
+                                        node: *src_node,
+                                        input: result_type,
+                                    })
+                                    .unwrap();
+                                //is in use, so emit store to that port
+                                self.load_port_elements(src, &mut seq);
+                                self.store_values_to_port(outregion_port, &mut seq);
+                            }
+                        }
+                    }
                 }
                 CfgNode::LoopHeader { src_node, .. } => {
                     //emit the loop

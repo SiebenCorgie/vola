@@ -5,6 +5,7 @@
  *
  * 2024 Tendsin Mende
  */
-
+#[cfg(feature = "dot")]
+mod cfg_dot;
 mod intern_opt;
 mod wasm_module;
