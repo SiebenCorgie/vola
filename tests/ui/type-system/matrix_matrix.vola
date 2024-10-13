@@ -1,5 +1,16 @@
-module std;
+//BEGIN-CONFIG
+//EXEC-FN:myField
+//EXEC-ARGS:2.0,1.0,4.0
+//EXEC-EPS:0.0
+//EXEC-RES:4.0,3.0,12.0
+//END-CONFIG
 
+
+concept None: vec3 -> vec3;
+entity PassThrough();
+impl PassThrough for None(a){
+    a
+}
 
 export myField(at: vec3){
 	let t = [
@@ -9,19 +20,15 @@ export myField(at: vec3){
 	];
 
 	let b = [
-		at, 
+		at,
 		[0.0, 1.0, 0.0],
 		[0.0, 0.0, 1.0]
 	];
+
 	let a = t * b;
+    let c = a * at;
 
-	csg r = SmoothUnion(1.0){
-		Translate(a.0){
-			Sphere(1.0)
-		}
-	}{
-		Box([1.0, 1.0, 1.0])
-	};
+	csg r = PassThrough();
 
-	eval r.SDF3D(at)
+	eval r.None(c)
 }

@@ -15,6 +15,7 @@ use rvsdg::{
     SmallColl,
 };
 use vola_opt::alge::buildin::{Buildin, BuildinOp};
+use walrus::ValType;
 
 use crate::{
     graph::{TyShape, WasmNode, WasmTy},
@@ -64,6 +65,8 @@ pub enum ExternOp {
     SubVec,
     MulVec,
     DivVec,
+
+    MulMat,
 }
 
 impl ExternOp {
@@ -134,6 +137,173 @@ impl ExternOp {
                             input_types[0], input_types[1]
                         )));
                     }
+                }
+            }
+        }
+
+        if self == &Self::MulMat {
+            let a = if let WasmTy::Defined { shape, ty } = &input_types[0] {
+                (shape, ty)
+            } else {
+                return Err(WasmError::UndefinedType);
+            };
+
+            let b = if let WasmTy::Defined { shape, ty } = &input_types[1] {
+                (shape, ty)
+            } else {
+                return Err(WasmError::UndefinedType);
+            };
+
+            match (a, b) {
+                //MatScalar
+                (
+                    (
+                        TyShape::Matrix {
+                            width: 2,
+                            height: 2,
+                        },
+                        ValType::F32,
+                    ),
+                    (TyShape::Scalar, ValType::F32),
+                ) => return Ok("mul_mat2_scalar".to_string()),
+                (
+                    (
+                        TyShape::Matrix {
+                            width: 3,
+                            height: 3,
+                        },
+                        ValType::F32,
+                    ),
+                    (TyShape::Scalar, ValType::F32),
+                ) => return Ok("mul_mat3_scalar".to_string()),
+                (
+                    (
+                        TyShape::Matrix {
+                            width: 4,
+                            height: 4,
+                        },
+                        ValType::F32,
+                    ),
+                    (TyShape::Scalar, ValType::F32),
+                ) => return Ok("mul_mat4_scalar".to_string()),
+                //MatVec
+                //2
+                (
+                    (
+                        TyShape::Matrix {
+                            width: 2,
+                            height: 2,
+                        },
+                        ValType::F32,
+                    ),
+                    (TyShape::Vector { width: 2 }, ValType::F32),
+                ) => return Ok("mul_mat2_vec2".to_string()),
+                (
+                    (TyShape::Vector { width: 2 }, ValType::F32),
+                    (
+                        TyShape::Matrix {
+                            width: 2,
+                            height: 2,
+                        },
+                        ValType::F32,
+                    ),
+                ) => return Ok("mul_vec2_mat2".to_string()),
+                //3
+                (
+                    (
+                        TyShape::Matrix {
+                            width: 3,
+                            height: 3,
+                        },
+                        ValType::F32,
+                    ),
+                    (TyShape::Vector { width: 3 }, ValType::F32),
+                ) => return Ok("mul_mat3_vec3".to_string()),
+                (
+                    (TyShape::Vector { width: 3 }, ValType::F32),
+                    (
+                        TyShape::Matrix {
+                            width: 3,
+                            height: 3,
+                        },
+                        ValType::F32,
+                    ),
+                ) => return Ok("mul_vec3_mat3".to_string()),
+                //4
+                (
+                    (
+                        TyShape::Matrix {
+                            width: 4,
+                            height: 4,
+                        },
+                        ValType::F32,
+                    ),
+                    (TyShape::Vector { width: 4 }, ValType::F32),
+                ) => return Ok("mul_mat4_vec4".to_string()),
+                (
+                    (TyShape::Vector { width: 4 }, ValType::F32),
+                    (
+                        TyShape::Matrix {
+                            width: 4,
+                            height: 4,
+                        },
+                        ValType::F32,
+                    ),
+                ) => return Ok("mul_vec4_mat4".to_string()),
+                //Mat Mat
+                (
+                    (
+                        TyShape::Matrix {
+                            width: 2,
+                            height: 2,
+                        },
+                        ValType::F32,
+                    ),
+                    (
+                        TyShape::Matrix {
+                            width: 2,
+                            height: 2,
+                        },
+                        ValType::F32,
+                    ),
+                ) => return Ok("mul_mat2_mat2".to_string()),
+                (
+                    (
+                        TyShape::Matrix {
+                            width: 3,
+                            height: 3,
+                        },
+                        ValType::F32,
+                    ),
+                    (
+                        TyShape::Matrix {
+                            width: 3,
+                            height: 3,
+                        },
+                        ValType::F32,
+                    ),
+                ) => return Ok("mul_mat3_mat3".to_string()),
+                (
+                    (
+                        TyShape::Matrix {
+                            width: 4,
+                            height: 4,
+                        },
+                        ValType::F32,
+                    ),
+                    (
+                        TyShape::Matrix {
+                            width: 4,
+                            height: 4,
+                        },
+                        ValType::F32,
+                    ),
+                ) => return Ok("mul_mat4_mat4".to_string()),
+                other => {
+                    return Err(WasmError::UnsupportedNode(format!(
+                        "Unuspported MatMul signature:\n{:?}\n{:?}",
+                        other.0, other.1
+                    )))
                 }
             }
         }

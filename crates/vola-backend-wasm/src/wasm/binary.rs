@@ -18,6 +18,7 @@ use vola_opt::alge::{
     logical::{BinaryBool, BinaryBoolOp},
     relational::{BinaryRel, BinaryRelOp},
 };
+use walrus::ValType;
 
 use crate::{
     graph::{TyShape, WasmNode, WasmTy},
@@ -61,6 +62,66 @@ impl WasmNode {
                         2,
                         ExternOp::MulVec,
                     )))
+                }
+                //Simple Matrix scaling
+                [vola_opt::common::Ty::Matrix { width, height }, vola_opt::common::Ty::Scalar] => {
+                    if width != height {
+                        return Err(WasmError::UnsupportedNode(format!(
+                            "Matrix-Scalar multiplication is only supported for square matrices: This one was Mat<{},{}>",
+                            width, height
+                        )));
+                    }
+
+                    if width > 4 {
+                        return Err(WasmError::UnsupportedNode(format!(
+                                "Matrix-Scalar multiplication is only supported up to Mat<4,4>. This one was Mat<{},{}>",
+                                width, height
+                            )));
+                    }
+                    return Ok(WasmNode::Runtime(WasmRuntimeOp::new_with_signature(
+                        2,
+                        ExternOp::MulMat,
+                    )));
+                }
+                //Matrix-Vector multiplication. Note Both work, Mat_x_Vec and Vec_x_Mat
+                [vola_opt::common::Ty::Matrix {
+                    width: 2,
+                    height: 2,
+                }, vola_opt::common::Ty::Vector { width: 2 }]
+                | [vola_opt::common::Ty::Vector { width: 2 }, vola_opt::common::Ty::Matrix {
+                    width: 2,
+                    height: 2,
+                }] => {
+                    return Ok(WasmNode::Runtime(WasmRuntimeOp::new_with_signature(
+                        2,
+                        ExternOp::MulMat,
+                    )));
+                }
+                [vola_opt::common::Ty::Matrix {
+                    width: 3,
+                    height: 3,
+                }, vola_opt::common::Ty::Vector { width: 3 }]
+                | [vola_opt::common::Ty::Vector { width: 3 }, vola_opt::common::Ty::Matrix {
+                    width: 3,
+                    height: 3,
+                }] => {
+                    return Ok(WasmNode::Runtime(WasmRuntimeOp::new_with_signature(
+                        2,
+                        ExternOp::MulMat,
+                    )));
+                }
+                [vola_opt::common::Ty::Matrix {
+                    width: 4,
+                    height: 4,
+                }, vola_opt::common::Ty::Vector { width: 4 }]
+                | [vola_opt::common::Ty::Vector { width: 4 }, vola_opt::common::Ty::Matrix {
+                    width: 4,
+                    height: 4,
+                }] => {
+                    return Ok(WasmNode::Runtime(WasmRuntimeOp::new_with_signature(
+                        2,
+                        ExternOp::MulMat,
+                    )));
                 }
                 _ => {
                     return Err(WasmError::UnsupportedNode(format!(
@@ -161,6 +222,25 @@ impl WasmNode {
                     });
                 }
             },
+
+            WasmTy::Defined {
+                shape: TyShape::Matrix { width, height },
+                ty: ValType::F32,
+            } => {
+                if width != height {
+                    return Err(WasmError::UnsupportedNode(format!("Matrix-Matrix multiplication exepects square matrix, but had shape Mat<{}, {}>", width, height)));
+                }
+                match width{
+                    1 => return Err(WasmError::UnsupportedNode(format!("Encountered Mat<1,1>"))),
+                    2 | 3 | 4 =>
+                    return Ok(WasmNode::Runtime(WasmRuntimeOp::new_with_signature(
+                            2,
+                            ExternOp::MulMat,
+                        ))),
+                    _other =>
+                    return Err(WasmError::UnsupportedNode(format!("Matrix-Matrix multiplication only supported up to Mat<4,4>, is Mat<{width}, {height}>")))
+                }
+            }
 
             _ => {
                 return Err(WasmError::UnexpectedSignature {
