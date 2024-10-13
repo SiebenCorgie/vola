@@ -22,8 +22,82 @@ use crate::{
 
 impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
     //NOTE: At first I wanted to implement things like `remove_result` and `remove_argument` here,
-    //to make life easier. But this would make it easy to produce invalid graph. For instanec if you'd
+    //to make life easier. But this would make it easy to produce invalid graph. For instance if you'd
     //remove a result of a λ-Node's body, you'd have to update all apply node outputs as well.
+
+    ///Returns true, if any sub region of the node's `port` uses the port's value. Always returns true for
+    /// Result-like value, and inputs of nodes, that have no sub-region (eg. any input to a simple node is _in-use_).
+    pub fn is_input_in_use(&self, port: InportLocation) -> bool {
+        if port.input.is_result() || port.input == InputType::GammaPredicate {
+            return true;
+        }
+
+        let ty = self[port.node].into_abstract();
+        if ty == AbstractNodeType::Simple || ty == AbstractNodeType::Apply {
+            return true;
+        }
+
+        //otherwise, check the sub regions by trying  to map the port into the region, if any uses it, early return true,
+        //else end with false
+
+        for regixd in 0..self[port.node].regions().len() {
+            if let Some(mapped_into) = port.input.map_to_in_region(regixd) {
+                if self[OutportLocation {
+                    node: port.node,
+                    output: mapped_into,
+                }]
+                .edges
+                .len()
+                    > 0
+                {
+                    return true;
+                }
+            }
+        }
+
+        false
+    }
+
+    ///Removes all edges in that region, that lead to a node with sub-regions, but where the node doesn't use the
+    ///value or state.
+    ///
+    /// So for instance a gamma node with an entry variable `e`, where none of the branches uses `e`.
+    ///
+    /// # Note
+    /// `disconnected` can be used to store all disconnected edge-values. If `None` is supplied, disconected
+    /// edges are just dropped.
+    pub fn remove_unused_edges_in_region(
+        &mut self,
+        region: RegionLocation,
+        recursive: bool,
+        //mut disconnected: Option<&mut Vec<E>>,
+    ) -> Result<(), GraphError> {
+        for node in self[region].nodes.clone() {
+            //note: only work on node with sub regions
+            let subregions = self[node].regions().len();
+            if subregions > 0 {
+                if recursive {
+                    for region_index in 0..subregions {
+                        self.remove_unused_edges_in_region(
+                            RegionLocation { node, region_index },
+                            recursive,
+                        )?;
+                    }
+                }
+
+                for input in self[node].inport_types() {
+                    let port = InportLocation { node, input };
+                    if let Some(edg) = self[port].edge {
+                        if !self.is_input_in_use(port) {
+                            let _ = self.disconnect(edg)?;
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
 
     ///Removes all unused context variables of the lambda or Phi `node`.
     ///

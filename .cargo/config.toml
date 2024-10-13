@@ -1,0 +1,4 @@
+
+#Need this right not to make the wasm32 building of the wasmruntime work
+[unstable]
+bindeps = true

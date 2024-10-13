@@ -21,7 +21,6 @@ use vola_common::Span;
 use crate::{
     alge::{
         implblock::{ConceptImpl, ConceptImplKey},
-        relational::{BinaryRel, BinaryRelOp},
         EvalNode,
     },
     common::Ty,
@@ -268,33 +267,39 @@ impl Optimizer {
         if !self.graph[theta].node_type.is_theta() {
             return Err(UnrollError::NotThetaNode);
         }
-        let criteria_src = self
-            .graph
-            .inport_src(theta.as_inport_location(InputType::ThetaPredicate))
-            .unwrap();
 
-        let (low_src, high_src) =
-            if let Some(lt_arg) = self.try_unwrap_node::<BinaryRel>(criteria_src.node) {
-                assert!(lt_arg.op == BinaryRelOp::Lt, "Expected lt as criterion!");
-                let low_src = self
-                    .graph
-                    .find_producer_inp(criteria_src.node.input(0))
-                    .expect("Expectede connected src");
-                let high_src = self
-                    .graph
-                    .find_producer_inp(criteria_src.node.input(1))
-                    .expect("Expectede connected src");
-                (low_src, high_src)
-            } else {
-                panic!("Theta predicate must be BinaryRel node!");
-            };
+        //NOTE: This used to be a analysis from the criterion port
+        //      However, by definition we have the first input to the theta-node
+        //      as lower bound, and the second as higher bound, so we use those now.
+
+        let lower_src = self
+            .graph
+            .find_producer_inp(theta.as_inport_location(InputType::Input(0)));
+        let higher_src = self
+            .graph
+            .find_producer_inp(theta.as_inport_location(InputType::Input(1)));
+
+        if lower_src.is_none() || higher_src.is_none() {
+            return Err(UnrollError::NonStaticBounds);
+        }
 
         //println!("Loopcount for {theta} ended at: \n    {low_src:?}\n    {high_src:?}");
-        //now _assume_ both are nats
-        let lower = self.try_unwrap_node::<ImmNat>(low_src.node).unwrap().lit as usize;
-        let higher = self.try_unwrap_node::<ImmNat>(high_src.node).unwrap().lit as usize;
+
+        //unwrap both bounds and check for natural numbers
+        let lower = if let Some(nat) = self.try_unwrap_node::<ImmNat>(lower_src.unwrap().node) {
+            nat.lit
+        } else {
+            return Err(UnrollError::NonStaticBounds);
+        };
+
+        let higher = if let Some(nat) = self.try_unwrap_node::<ImmNat>(higher_src.unwrap().node) {
+            nat.lit
+        } else {
+            return Err(UnrollError::NonStaticBounds);
+        };
+
         assert!(lower <= higher);
 
-        Ok(higher - lower)
+        Ok((higher - lower) as usize)
     }
 }

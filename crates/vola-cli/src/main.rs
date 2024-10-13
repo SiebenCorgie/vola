@@ -12,7 +12,10 @@
 use std::path::PathBuf;
 
 use clap::{Parser, ValueEnum};
-use volac::{Backend, CraneliftTarget};
+use volac::{
+    backends::{PipelineBackend, Spirv, Wasm},
+    Target,
+};
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug)]
 enum Format {
@@ -37,6 +40,10 @@ struct Args {
     #[arg(long, default_value_t = false)]
     no_cne: bool,
 
+    ///Turns on validation of the output fragment. Note that spirv-tools or wasm-tools must be installed.
+    #[arg(long, default_value_t = false)]
+    validate: bool,
+
     ///Specifies the emitted format.
     #[arg(long, short, value_enum, default_value_t = Format::Spirv)]
     format: Format,
@@ -54,19 +61,19 @@ fn main() {
     pretty_env_logger::init();
     let args = Args::parse();
 
-    let target_format = match args.format {
-        Format::Spirv => Backend::Spirv,
-        Format::X86 => Backend::Cranelift(CraneliftTarget::X86),
-        Format::WASM => Backend::Cranelift(CraneliftTarget::Wasm),
+    let backend: Box<dyn PipelineBackend> = match args.format {
+        Format::Spirv => Box::new(Spirv::new(Target::file(&args.output_name))),
+        Format::X86 => unimplemented!(),
+        Format::WASM => Box::new(Wasm::new(Target::file(&args.output_name))),
     };
 
     //configure volac based on the args and execute
-    let pipeline = volac::Pipeline {
-        target_format,
-        target: volac::Target::File(args.output_name),
+    let mut pipeline = volac::Pipeline {
+        backend,
         late_cne: !args.no_opt && !args.no_cne,
         late_cnf: !args.no_opt && !args.no_cnf,
         early_cnf: !args.no_opt && !args.no_cnf,
+        validate_output: args.validate,
     };
 
     match pipeline.execute_on_file(&args.src_file) {

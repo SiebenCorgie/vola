@@ -14,12 +14,9 @@ use vola_common::{
     error::error_reporter,
     report,
     thiserror::{self, Error},
-    Reportable,
 };
 
 use crate::{autodiff::AutoDiffError, common::Ty};
-
-impl Reportable for OptError {}
 
 ///Runtime optimizer errors. Note that at this point errors are pretty specific and mostly can't be recovered from.
 /// So we opt to use generic descriptions, instead of specific errors.

@@ -1,0 +1,9 @@
+//BEGIN-CONFIG
+//ERROR:At least 1 errors occurred while running optimizer.
+//END-CONFIG
+
+
+define mySubField(arg: vec3){
+	let some_sub = eval sub.Sdf3d(arg);
+	Sphere(1.0)
+}

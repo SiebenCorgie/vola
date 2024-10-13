@@ -272,7 +272,7 @@ impl Optimizer {
         }
 
         let layout_config = LayoutConfig {
-            ignore_dead_node: true,
+            ignore_dead_node: false,
             ..Default::default()
         };
 

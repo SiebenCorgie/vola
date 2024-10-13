@@ -12,13 +12,13 @@ The implementation will focus on SDFs at first.
 
 </div>
 
-## Disclaimer 
+## Disclaimer
 
 The whole thing is highly experimental at the moment. Don't use it for anything serious!
 
 ## Goal
 
-We try to create a language and intermediate representation for distance function (DF) that makes it easy to write, and programmatically generate such distance fields. The final compiler should make 
+We try to create a language and intermediate representation for distance function (DF) that makes it easy to write, and programmatically generate such distance fields. The final compiler should make
 it possible to patch code that targets GPU execution at runtime in an efficient manor.
 
 An example field that describes a sphere translated by one unit on `X` might look like this:
@@ -40,10 +40,10 @@ impl Translate<sub> for SDF3D(at){
 
 export myField(pos: vec3){
     csg field = Translate([1, 0, 0]){
-        Sphere(1.0)  
+        Sphere(1.0)
     };
-    
-    //Returns the result of `field` evaluated for the 
+
+    //Returns the result of `field` evaluated for the
     //signed distance field concept SDF3D at the location
     // `pos`.
     field.SDF3D(pos)
@@ -56,8 +56,7 @@ For more examples either have a look at the syntax [test corpus](https://gitlab.
 ## Techstack / Packages
 
 - [Treesitter](https://github.com/tree-sitter/tree-sitter) based grammar + parser
-- [Cranelift](https://cranelift.dev/) based CPU targeting
-- [SPIR-T](https://github.com/EmbarkStudios/spirt) based SPIR-V / GPU targeting (in the future)
+- [WASM](https://github.com/rustwasm/walrus)/[Cranelift](https://cranelift.dev/) based CPU targeting
 - [Rspriv](https://github.com/gfx-rs/rspirv) SPIR-V generation for the first MVP
 - [SPV-Patcher](https://gitlab.com/tendsinmende/spv-patcher) for runtime shader code patching
 
@@ -66,22 +65,24 @@ Note: The techstack is not set in stone. We might switch to a hand written parse
 ## Packages
 
 - [tree-sitter-vola](https://gitlab.com/tendsinmende/tree-sitter-vola): Treesitter based parser. Also contains the language grammar.
-- `vola-ast`: The Abstract-Syntax-Tree representation of any Vola program. Can either be build from a file (using `tree-sitter-vola`) or 
+- `vola-ast`: The Abstract-Syntax-Tree representation of any Vola program. Can either be build from a file (using `tree-sitter-vola`) or
 by using this as a library. Servers as interface between the Vola frontend, and any middle- / backend.
 - `vola-opt`: The RVSDG based optimizer
 - `vola-backend-spirv`: SPIR-V backend
+- `vola-backend-wasm`: WASM backend based on [Walrus](https://github.com/rustwasm/walrus).
+- `wasm-runtime`: Companion crate to the WASM backend. Depends on cargo and the `wasm32-unknown-unknown` toolchain.
 - `volac`: The compiler library. Mostly takes care of executing passes of the various parts _in order_.
 - `vola-cli`: Thin CLI interface around `volac`
-- `rvsdg`: A generic [RVSDG](https://dl.acm.org/doi/abs/10.1145/3391902) implementation. 
+- `rvsdg`: A generic [RVSDG](https://dl.acm.org/doi/abs/10.1145/3391902) implementation.
 - `vola-common`: Factors out common components for Vola's compiler stages. These are mostly debugging / error-reporting related.
 
 ## Status
 
-_Working on the first, powerful implementation aka. MVB or Milestone 0_.
+Working on automatic differentiation support.
 
 ## Building & Running
 
-To build ✨ _Just run `cargo build`_ ✨.
+Make sure that you are on rust-nightly (eg. `rustup default nightly`). Then just build ✨ `cargo build`_ ✨.
 
 ### vola-cli
 
@@ -90,12 +91,29 @@ To compile some file to a SPIR-V file, use the `vola-cli` package. By default it
 cargo run --bin vola-cli -- path/to/some/file.vola output_file_name
 ```
 
+### Testing
+
+There is a test runner in `tests`. It uses all integration tests in `tests/ui` on each backend and reports the results. Run it via
+``` shell
+cargo run --bin test-runner --release
+```
+or a specific file via
+``` shell
+cargo run --bin test-runner -- -f tests/ui/some_file.vola
+```
+
+Unit tests are handeled by Rust's native test framework. Just run
+```shell
+cargo test
+```
+to execute them.
+
 ### Rendering
 
 There is a repository that implements a renderer over at [vola-sdf-renderer](https://gitlab.com/tendsinmende/vola-sdf-renderer). It is not included here, since it has some heavy dependencies and is not compiler related.
 
 ### Debugging
-You can set `VOLA_BACKTRACE=1` to print a backtrace whenever an error is reported. There are `cargo test` units in place, as well as tree-sitter tests. Those should always 
+You can set `VOLA_BACKTRACE=1` to print a backtrace whenever an error is reported. There are `cargo test` units in place, as well as tree-sitter tests. Those should always
 work.
 
 Some packages have a `dot` feature. This lets you create [DOT](https://en.wikipedia.org/wiki/DOT_%28graph_description_language%29) graphs that can then be rendered into SVGs or similar formats. This really helps debugging graph/tree related problems.
@@ -110,8 +128,9 @@ If you are interested in the runtime SPIR-V patching, have a look at [spv-patche
 
 
 ## Roadmap
+
 - ✨More [stdlib](https://gitlab.com/tendsinmende/vola-sdf-stdlib) features ✨
-- Find a way to do (static?) derivative calculation on SDF values possibly based on [Enzyme](https://enzyme.mit.edu/)
+- Refactor optimization passes based on [egg](https://github.com/egraphs-good/egg)
 
 
 ## License

@@ -1,7 +1,0 @@
-
-
-
-define mySubField(arg: vec3){
-	let some_sub = eval sub.Sdf3d(arg);
-	Sphere(1.0)
-}

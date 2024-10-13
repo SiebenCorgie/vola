@@ -9,6 +9,7 @@ vola-ast = { path = "../vola-ast" }
 vola-tree-sitter-parser = { path = "../vola-tree-sitter-parser" }
 vola-opt = { path = "../vola-opt" }
 vola-backend-spirv = { path = "../vola-backend-spirv" }
+vola-backend-wasm = { path = "../vola-backend-wasm" }
 vola-common = { path = "../vola-common" }
 rvsdg = { path = "../rvsdg" }
 bytemuck.workspace = true

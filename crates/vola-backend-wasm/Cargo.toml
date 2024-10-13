@@ -1,0 +1,26 @@
+[package]
+name = "vola-backend-wasm"
+version = "0.1.0"
+edition = "2021"
+
+[features]
+default = ["viewer", "log"]
+log = ["dep:log"]
+viewer = ["rvsdg-viewer"]
+dot = ["graphviz-rust"]
+
+[dependencies]
+thiserror.workspace = true
+
+vola-opt = { path = "../vola-opt" }
+vola-common = { path = "../vola-common" }
+rvsdg = { path = "../rvsdg" }
+rvsdg-viewer = { path = "../rvsdg-viewer", optional = true }
+walrus.workspace = true
+ahash.workspace = true
+log = { workspace = true, optional = true }
+graphviz-rust = { workspace = true, optional = true }
+
+[build-dependencies]
+#NOTE: this needs the -Z bindeps option at the moment. This is set in the .cargo/config.toml.
+wasm-runtime = { path = "../wasm-runtime", artifact = "cdylib", target = "wasm32-unknown-unknown" }

@@ -9,11 +9,9 @@ use ariadne::Cache;
 use backtrace::Backtrace;
 
 use lazy_static::lazy_static;
-use std::{error::Error, ops::Deref, sync::Mutex};
+use std::{ops::Deref, sync::Mutex};
 
 use crate::Span;
-
-pub trait Reportable: Error + Send + Sync + 'static {}
 
 lazy_static! {
     static ref FILE_CACHE: Mutex<ariadne::FileCache> = Mutex::new(ariadne::FileCache::default());

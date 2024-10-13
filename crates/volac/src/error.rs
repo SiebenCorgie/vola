@@ -1,11 +1,9 @@
-use rvsdg::{err::GraphError, util::cnf::CnfError};
-use vola_common::{
-    thiserror::{self, Error},
-    Reportable,
+use rvsdg::{
+    err::GraphError,
+    util::{cne::CneError, cnf::CnfError},
 };
+use vola_common::thiserror::{self, Error};
 use vola_opt::OptError;
-
-impl Reportable for PipelineError {}
 
 ///Error type collection that can happen at compile-time.
 ///Mostly transparent errors
@@ -22,7 +20,13 @@ pub enum PipelineError {
     #[error(transparent)]
     SpirvError(#[from] vola_backend_spirv::BackendSpirvError),
     #[error(transparent)]
+    WasmError(#[from] vola_backend_wasm::WasmError),
+    #[error(transparent)]
     AstError(#[from] vola_ast::AstError),
     #[error(transparent)]
     CnfError(#[from] CnfError),
+    #[error(transparent)]
+    CneError(#[from] CneError),
+    #[error("Failed to validate: {0}")]
+    ValidationFailed(String),
 }

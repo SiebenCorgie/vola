@@ -36,6 +36,8 @@ pub enum UnrollError {
     InternalError(#[from] GraphError),
     #[error("Could not find node mapping for unrolled node")]
     RemapError,
+    #[error("Loop had non-static bounds")]
+    NonStaticBounds,
 }
 
 impl<N: LangNode + StructuralClone + 'static, E: LangEdge + StructuralClone + 'static> Rvsdg<N, E> {

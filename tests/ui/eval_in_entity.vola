@@ -1,0 +1,12 @@
+//BEGIN-CONFIG
+//ERROR:At least 1 errors occurred while running optimizer.
+//END-CONFIG
+
+module std;
+
+entity Test();
+
+impl Test for SDF3D(at){
+	let t = eval sub.SDF3D(at);
+	t
+}

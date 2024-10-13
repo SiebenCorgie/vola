@@ -1,0 +1,19 @@
+//BEGIN-CONFIG
+//ERROR:Could not find implementation of "SDF3D" for "InnerEntity"
+//END-CONFIG
+
+module std;
+
+entity InnerEntity();
+
+export myFn(at: vec3){
+	csg s = Union(){
+		Translate(at){
+			InnerEntity()
+		}
+	}{
+		Sphere(1.0)
+	};
+
+	eval s.SDF3D(at)
+}

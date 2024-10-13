@@ -1,0 +1,13 @@
+//BEGIN-CONFIG
+//ERROR:At least 1 errors occurred while running optimizer.
+//END-CONFIG
+
+concept Sdf3d: vec3 -> s;
+
+export myExport(at: vec3){
+	let t = eval sub.Sdf3d(at);
+
+	csg a = Sphere(1.0);
+
+	eval a.Sdf3d(at)
+}
