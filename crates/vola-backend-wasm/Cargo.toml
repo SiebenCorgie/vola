@@ -7,6 +7,7 @@ edition = "2021"
 default = ["viewer", "log"]
 log = ["dep:log"]
 viewer = ["rvsdg-viewer"]
+dot = ["graphviz-rust"]
 
 [dependencies]
 thiserror.workspace = true
@@ -18,6 +19,7 @@ rvsdg-viewer = { path = "../rvsdg-viewer", optional = true }
 walrus.workspace = true
 ahash.workspace = true
 log = { workspace = true, optional = true }
+graphviz-rust = { workspace = true, optional = true }
 
 [build-dependencies]
 #NOTE: this needs the -Z bindeps option at the moment. This is set in the .cargo/config.toml.
