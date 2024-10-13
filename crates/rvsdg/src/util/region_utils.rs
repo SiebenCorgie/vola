@@ -6,7 +6,6 @@
  * 2024 Tendsin Mende
  */
 use core::panic;
-use std::any::Any;
 
 use ahash::{AHashMap, AHashSet};
 use smallvec::SmallVec;
@@ -65,25 +64,32 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
     /// So for instance a gamma node with an entry variable `e`, where none of the branches uses `e`.
     ///
     /// # Note
-    /// This does not recures into sub-regions. `disconnected` can be used to store all disconnected edge-values. If `None` is supplied, disconected
+    /// `disconnected` can be used to store all disconnected edge-values. If `None` is supplied, disconected
     /// edges are just dropped.
     pub fn remove_unused_edges_in_region(
         &mut self,
         region: RegionLocation,
-        mut disconnected: Option<&mut Vec<E>>,
+        recursive: bool,
+        //mut disconnected: Option<&mut Vec<E>>,
     ) -> Result<(), GraphError> {
         for node in self[region].nodes.clone() {
             //note: only work on node with sub regions
-            if self[node].regions().len() > 0 {
+            let subregions = self[node].regions().len();
+            if subregions > 0 {
+                if recursive {
+                    for region_index in 0..subregions {
+                        self.remove_unused_edges_in_region(
+                            RegionLocation { node, region_index },
+                            recursive,
+                        )?;
+                    }
+                }
+
                 for input in self[node].inport_types() {
                     let port = InportLocation { node, input };
                     if let Some(edg) = self[port].edge {
                         if !self.is_input_in_use(port) {
-                            if let Some(collector) = &mut disconnected {
-                                collector.push(self.disconnect(edg)?);
-                            } else {
-                                let _ = self.disconnect(edg)?;
-                            }
+                            let _ = self.disconnect(edg)?;
                         }
                     }
                 }

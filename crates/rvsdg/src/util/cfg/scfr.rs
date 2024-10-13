@@ -96,6 +96,7 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
         }
 
         let mut working_bb = BasicBlock::new(cfg, predecessor_id);
+
         //pre-insert the bb and overwrite it later
         let mut bb_id = entry_id;
 
@@ -143,7 +144,7 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
                                 loop_entry_bb: loop_entry_id,
                                 ctrl_tail: tail_ctrl_id,
                             });
-                            let mut post_merge_block = BasicBlock::new(cfg, merge_block_id);
+                            let mut post_merge_block = BasicBlock::new(cfg, tail_ctrl_id);
 
                             //set this condition-id to the exit reference of the current bb
                             working_bb.exit_node = loop_header;
@@ -196,7 +197,7 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
                             //Overwrite the current working_bb's exit node to that
                             working_bb.exit_node = branch_header;
 
-                            let _branch_merge_id = self.scfr_handle_gamma(
+                            self.scfr_handle_gamma(
                                 cfg,
                                 node,
                                 branch_header,
