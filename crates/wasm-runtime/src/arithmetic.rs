@@ -49,3 +49,18 @@ extern "C" fn inverse_mat3(a: &Mat3, res: &mut Mat3) {
 extern "C" fn inverse_mat4(a: &Mat4, res: &mut Mat4) {
     *res = a.inverse();
 }
+
+#[no_mangle]
+extern "C" fn mul_vec2_scalar(a: &Vec2, b: &f32, res: &mut Vec2) {
+    *res = a * b;
+}
+
+#[no_mangle]
+extern "C" fn mul_vec3_scalar(a: &Vec3, b: &f32, res: &mut Vec3) {
+    *res = a * b;
+}
+
+#[no_mangle]
+extern "C" fn mul_vec4_scalar(a: &Vec4, b: &f32, res: &mut Vec4) {
+    *res = a * b;
+}

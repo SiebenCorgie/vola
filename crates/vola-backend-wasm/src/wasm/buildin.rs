@@ -75,6 +75,12 @@ impl ExternOp {
             Self::SquareRoot => "sqrt",
             Self::Exp => "exp",
             Self::Pow => "pow",
+
+            Self::Abs => "abs",
+            Self::Floor => "floor",
+            Self::Neg => "neg",
+            Self::Round => "round",
+
             Self::Min => "min",
             Self::Max => "max",
             Self::Mix => "mix",
@@ -94,12 +100,44 @@ impl ExternOp {
             Self::SubVec => "sub",
             Self::MulVec => "mul",
             Self::DivVec => "div",
-            _ => "unknown",
+            other => {
+                println!("{:?} not known", other);
+                "unknown"
+            }
         }
     }
 
     pub fn get_static_symbol_name(&self, input_types: &[WasmTy]) -> Result<String, WasmError> {
         //NOTE: all external functions are suffixed by the first args's type.
+        //      the only outlier is Mul (so far), which is also defined for vecn_scalar. This i caught early
+
+        if self == &Self::MulVec {
+            if input_types[0].is_vector() && input_types[1].is_scalar() {
+                match &input_types[0] {
+                    WasmTy::Defined {
+                        shape: TyShape::Vector { width },
+                        ty: _,
+                    } => match width {
+                        2 => return Ok("mul_vec2_scalar".to_string()),
+                        3 => return Ok("mul_vec3_scalar".to_string()),
+                        4 => return Ok("mul_vec4_scalar".to_string()),
+                        other => {
+                            return Err(WasmError::UnsupportedNode(format!(
+                                "MulVec is not defined for vector with width={}",
+                                other
+                            )))
+                        }
+                    },
+                    _ => {
+                        return Err(WasmError::UnsupportedNode(format!(
+                            "MulVec is not defined for {:?} * {:?}",
+                            input_types[0], input_types[1]
+                        )));
+                    }
+                }
+            }
+        }
+
         let ty_suffix = {
             if let WasmTy::Defined { shape, ty: _ } = &input_types[0] {
                 match shape {

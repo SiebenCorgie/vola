@@ -50,7 +50,34 @@ impl WasmNode {
         input_sig: [vola_opt::common::Ty; 2],
         output_sig: vola_opt::common::Ty,
     ) -> Result<Self, WasmError> {
-        assert!(input_sig[0] == input_sig[1] && input_sig[0] == output_sig);
+        //NOTE: Most of those operations expect that all types are the same, so input[0] == input[1] == outupt.
+        //      The only outlier is multiplication, which is defined for VecX * Scalar as well. So what we do is
+        //      catching that case early, and emit a runtime op accordingly
+
+        if value.op == BinaryArithOp::Mul && input_sig[0] != input_sig[1] {
+            match input_sig {
+                [vola_opt::common::Ty::Vector { width: _ }, vola_opt::common::Ty::Scalar] => {
+                    return Ok(WasmNode::Runtime(WasmRuntimeOp::new_with_signature(
+                        2,
+                        ExternOp::MulVec,
+                    )))
+                }
+                _ => {
+                    return Err(WasmError::UnsupportedNode(format!(
+                        "{:?} does not support signature\nInput: {}, {}\nOutput: {}",
+                        value.op, input_sig[0], input_sig[1], output_sig
+                    )))
+                }
+            }
+        }
+
+        assert!(
+            input_sig[0] == input_sig[1] && input_sig[0] == output_sig,
+            "signature test failed for {:?}: {:?} != {:?}",
+            value.op,
+            input_sig,
+            output_sig
+        );
 
         let wasm_inout_ty = WasmTy::from(input_sig[0].clone());
 

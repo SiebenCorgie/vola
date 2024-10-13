@@ -6,7 +6,7 @@
  * 2024 Tendsin Mende
  */
 
-use glam::{Vec2, Vec3, Vec4};
+use glam::{FloatExt, Vec2, Vec3, Vec4};
 
 //NOTE can't use our macros, but only in that case, so its fine I guess.
 #[no_mangle]
@@ -73,6 +73,11 @@ crate::impl_macros::impl_op!(Vec3, fract, 3, fract_vec3);
 crate::impl_macros::impl_op!(Vec4, fract, 4, fract_vec4);
 
 #[no_mangle]
+extern "C" fn mix_scalar(a: &f32, b: &f32, c: &f32, res: &mut f32) {
+    *res = a.lerp(*b, *c);
+}
+
+#[no_mangle]
 extern "C" fn mix_vec2(a: &Vec2, b: &Vec2, c: &f32, res: &mut Vec2) {
     *res = glam::Vec2::lerp(*a, *b, *c);
 }
@@ -85,6 +90,11 @@ extern "C" fn mix_vec3(a: &Vec3, b: &Vec3, c: &f32, res: &mut Vec3) {
 #[no_mangle]
 extern "C" fn mix_vec4(a: &Vec4, b: &Vec4, c: &f32, res: &mut Vec4) {
     *res = glam::Vec4::lerp(*a, *b, *c);
+}
+
+#[no_mangle]
+extern "C" fn clamp_scalar(a: &f32, b: &f32, c: &f32, res: &mut f32) {
+    *res = f32::clamp(*a, *b, *c)
 }
 
 #[no_mangle]
