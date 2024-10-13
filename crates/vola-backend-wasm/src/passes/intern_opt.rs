@@ -10,7 +10,11 @@ use rvsdg::{
     util::graph_type_transform::{GraphMapping, GraphTypeTransformer},
     SmallColl,
 };
-use vola_common::{ariadne::Label, error::error_reporter, report};
+use vola_common::{
+    ariadne::{Label, Report, ReportBuilder, ReportKind},
+    error::error_reporter,
+    report, Span,
+};
 use vola_opt::{OptEdge, OptNode, Optimizer};
 
 use crate::{
@@ -21,7 +25,7 @@ use crate::{
 
 struct InterningTransformer<'a> {
     opt: &'a Optimizer,
-    has_failed_node: bool,
+    has_failed_transform: bool,
 }
 
 impl<'a> GraphTypeTransformer for InterningTransformer<'a> {
@@ -64,7 +68,7 @@ impl<'a> GraphTypeTransformer for InterningTransformer<'a> {
         match WasmNode::try_from_opt(src_node, &insig, &outsig) {
             Ok(n) => n,
             Err(e) => {
-                self.has_failed_node = true;
+                self.has_failed_transform = true;
                 let span = src_node.span.clone();
                 report(
                     error_reporter(e, span.clone())
@@ -81,8 +85,15 @@ impl<'a> GraphTypeTransformer for InterningTransformer<'a> {
             OptEdge::State => WasmEdge::State,
             OptEdge::Value { ty } => {
                 let ty = if let Some(t) = ty.get_type() {
-                    WasmTy::from(t)
+                    match WasmTy::try_from(t) {
+                        Ok(k) => k,
+                        Err(e) => {
+                            report(error_reporter(e, Span::empty()).finish());
+                            WasmTy::Undefined
+                        }
+                    }
                 } else {
+                    //self.has_failed_transform = true;
                     WasmTy::Undefined
                 };
 
@@ -101,11 +112,11 @@ impl WasmBackend {
 
         let mut transformer = InterningTransformer {
             opt: optimizer,
-            has_failed_node: false,
+            has_failed_transform: false,
         };
         let (new_graph, remapping) = optimizer.graph.transform_new(&mut transformer)?;
 
-        if transformer.has_failed_node {
+        if transformer.has_failed_transform {
             return Err(WasmError::InterningFailed);
         }
 
@@ -128,8 +139,9 @@ impl WasmBackend {
                     self.spans.set(dst_attrib.clone(), span.clone());
                 }
                 if let Some(ty) = opt.typemap.get(&attrib) {
-                    let new_ty = WasmTy::from(ty.clone());
-                    self.types.set(dst_attrib, new_ty);
+                    if let Ok(ty) = WasmTy::try_from(ty.clone()) {
+                        self.types.set(dst_attrib, ty);
+                    }
                 }
             }
         }

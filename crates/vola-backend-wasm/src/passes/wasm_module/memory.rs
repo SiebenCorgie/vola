@@ -153,6 +153,7 @@ impl MemoryHandler {
                             .find_producer_inp(input_port)
                             .expect("Exepcted allocated src!");
 
+                        //println!("Src[{input:?}]:\n {src:?}");
                         let src_index = *self.mem_map.get(&src).expect("Expected src to be valid!");
                         //ignore un-mappable input ports
                         for idx in 0..backend.graph[*src_node].regions().len() {

@@ -25,6 +25,8 @@ impl Wasm {
 impl PipelineBackend for Wasm {
     fn opt_pre_finalize(&self, opt: &mut vola_opt::Optimizer) -> Result<(), crate::PipelineError> {
         opt.imm_scalarize()?;
+        opt.remove_unused_edges()?;
+        opt.cleanup_export_lmd();
         Ok(())
     }
 

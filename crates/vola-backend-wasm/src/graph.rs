@@ -274,8 +274,9 @@ pub enum WasmTy {
     Undefined,
 }
 
-impl From<vola_opt::common::Ty> for WasmTy {
-    fn from(value: vola_opt::common::Ty) -> Self {
+impl TryFrom<vola_opt::common::Ty> for WasmTy {
+    type Error = WasmError;
+    fn try_from(value: vola_opt::common::Ty) -> Result<Self, Self::Error> {
         let (shape, ty) = match value {
             vola_opt::common::Ty::Bool => (TyShape::Scalar, walrus::ValType::I32),
             vola_opt::common::Ty::Nat => (TyShape::Scalar, walrus::ValType::I32),
@@ -292,10 +293,10 @@ impl From<vola_opt::common::Ty> for WasmTy {
                 },
                 walrus::ValType::F32,
             ),
-            _ => return WasmTy::Undefined,
+            other => return Err(WasmError::UnexpectedType(other)),
         };
 
-        WasmTy::Defined { shape, ty }
+        Ok(WasmTy::Defined { shape, ty })
     }
 }
 

@@ -140,7 +140,7 @@ impl WasmNode {
             output_sig
         );
 
-        let wasm_inout_ty = WasmTy::from(input_sig[0].clone());
+        let wasm_inout_ty = WasmTy::try_from(input_sig[0].clone()).unwrap();
 
         let node = match wasm_inout_ty {
             //Scalar binary ops
