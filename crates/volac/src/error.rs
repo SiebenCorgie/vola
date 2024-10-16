@@ -23,6 +23,10 @@ pub enum PipelineError {
     #[cfg(feature = "wasm")]
     #[error(transparent)]
     WasmError(#[from] vola_backend_wasm::WasmError),
+    #[cfg(feature = "native")]
+    #[error("Could not find native ISA: {0}")]
+    NativeIsaError(String),
+
     #[error(transparent)]
     AstError(#[from] vola_ast::AstError),
     #[error(transparent)]

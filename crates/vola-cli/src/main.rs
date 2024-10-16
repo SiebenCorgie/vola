@@ -13,14 +13,15 @@ use std::path::PathBuf;
 
 use clap::{Parser, ValueEnum};
 use volac::{
-    backends::{PipelineBackend, Spirv, Wasm},
+    backends::{Native, PipelineBackend, Spirv, Wasm},
     Target,
 };
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug)]
 enum Format {
     Spirv,
-    X86,
+    ///The platform native format. For instance x86 for your Linux flavour.
+    Native,
     WASM,
 }
 
@@ -63,7 +64,7 @@ fn main() {
 
     let backend: Box<dyn PipelineBackend> = match args.format {
         Format::Spirv => Box::new(Spirv::new(Target::file(&args.output_name))),
-        Format::X86 => unimplemented!(),
+        Format::Native => Box::new(Native::new(Target::file(&args.output_name))),
         Format::WASM => Box::new(Wasm::new(Target::file(&args.output_name))),
     };
 

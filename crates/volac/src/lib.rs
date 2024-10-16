@@ -31,6 +31,22 @@ pub enum Target {
 }
 
 impl Target {
+    pub fn unwrap_buffer(self) -> Vec<u8> {
+        if let Self::Buffer(b) = self {
+            b
+        } else {
+            panic!("Was no buffer!")
+        }
+    }
+
+    pub fn is_file(&self) -> bool {
+        if let Self::File(_) = self {
+            true
+        } else {
+            false
+        }
+    }
+
     pub fn file(file: &dyn AsRef<Path>) -> Self {
         Self::File(file.as_ref().to_path_buf())
     }

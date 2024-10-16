@@ -8,7 +8,7 @@ license = "MPL-2.0"
 [features]
 default = ["spirv", "wasm", "native"]
 dot = ["vola-ast/dot", "vola-common/dot"]
-native = ["vola-backend-wasm", "wasm"]
+native = ["vola-backend-wasm", "wasm", "wasmtime"]
 wasm = ["vola-backend-wasm"]
 spirv = ["vola-backend-spirv"]
 
@@ -22,3 +22,4 @@ vola-common = { path = "../vola-common" }
 rvsdg = { path = "../rvsdg" }
 bytemuck.workspace = true
 log.workspace = true
+wasmtime = { workspace = true, optional = true }

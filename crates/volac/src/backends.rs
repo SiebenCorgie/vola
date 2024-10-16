@@ -16,6 +16,12 @@ mod wasm;
 #[cfg(feature = "wasm")]
 pub use wasm::Wasm;
 
+#[cfg(feature = "native")]
+mod native;
+
+#[cfg(feature = "native")]
+pub use native::Native;
+
 use vola_opt::Optimizer;
 
 use crate::{PipelineError, Target};
