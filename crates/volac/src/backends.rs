@@ -6,9 +6,14 @@
  * 2024 Tendsin Mende
  */
 
+#[cfg(feature = "spirv")]
 mod spriv;
+#[cfg(feature = "spirv")]
 pub use spriv::Spirv;
+
+#[cfg(feature = "wasm")]
 mod wasm;
+#[cfg(feature = "wasm")]
 pub use wasm::Wasm;
 
 use vola_opt::Optimizer;
@@ -25,5 +30,25 @@ pub trait PipelineBackend {
     ///If implemented tries to use installed tools to verify the emitted artifact.
     fn try_verify(&self) -> Result<(), String> {
         Ok(())
+    }
+}
+
+pub struct StubBackend;
+impl Default for StubBackend {
+    fn default() -> Self {
+        StubBackend
+    }
+}
+impl PipelineBackend for StubBackend {
+    fn execute(&mut self, _opt: Optimizer) -> Result<Target, PipelineError> {
+        Err(PipelineError::IsStub)
+    }
+
+    fn try_verify(&self) -> Result<(), String> {
+        Ok(())
+    }
+
+    fn opt_pre_finalize(&self, _opt: &mut Optimizer) -> Result<(), PipelineError> {
+        Err(PipelineError::IsStub)
     }
 }

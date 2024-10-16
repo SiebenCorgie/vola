@@ -3,6 +3,10 @@ name = "vola-tree-sitter-parser"
 version = "0.2.0"
 edition = "2021"
 
+[features]
+default = []
+dot = ["vola-common/dot", "graphviz-rust"]
+
 [dependencies]
 tree-sitter-vola = { git = "https://gitlab.com/tendsinmende/tree-sitter-vola.git" }
 vola-ast = { path = "../vola-ast" }
