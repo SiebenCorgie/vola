@@ -12,7 +12,7 @@
 //!
 //!
 
-use backends::{PipelineBackend, Spirv};
+use backends::{PipelineBackend, StubBackend};
 use std::path::{Path, PathBuf};
 use vola_ast::VolaAst;
 
@@ -31,6 +31,22 @@ pub enum Target {
 }
 
 impl Target {
+    pub fn unwrap_buffer(self) -> Vec<u8> {
+        if let Self::Buffer(b) = self {
+            b
+        } else {
+            panic!("Was no buffer!")
+        }
+    }
+
+    pub fn is_file(&self) -> bool {
+        if let Self::File(_) = self {
+            true
+        } else {
+            false
+        }
+    }
+
     pub fn file(file: &dyn AsRef<Path>) -> Self {
         Self::File(file.as_ref().to_path_buf())
     }
@@ -39,6 +55,8 @@ impl Target {
         Self::Buffer(Vec::with_capacity(0))
     }
 
+    //NOTE: only used by _some_ features.
+    #[allow(dead_code)]
     fn update_from_buffer(&mut self, buffer: &[u8]) {
         match self {
             Self::File(f) => {
@@ -53,7 +71,9 @@ impl Target {
         }
     }
 
-    fn target_file_name(&self, extension: &str) -> Option<PathBuf> {
+    //NOTE: only used by _some_ features.
+    #[allow(dead_code)]
+    pub(crate) fn target_file_name(&self, extension: &str) -> Option<PathBuf> {
         if let Self::File(filepath) = self {
             if filepath.extension().is_none() {
                 let mut name = filepath.clone();
@@ -98,9 +118,9 @@ pub struct Pipeline {
 }
 
 impl Pipeline {
-    pub fn new(output_file: &dyn AsRef<Path>) -> Self {
+    pub fn new() -> Self {
         Pipeline {
-            backend: Box::new(Spirv::new(Target::file(output_file))),
+            backend: Box::new(StubBackend::default()),
 
             early_cnf: true,
             late_cnf: true,
@@ -109,16 +129,17 @@ impl Pipeline {
         }
     }
 
-    ///Creates a new _in_memory_ pipeline. This will not produce a file, but a buffer after compilation.
-    pub fn new_in_memory() -> Self {
-        Pipeline {
-            backend: Box::new(Spirv::new(Target::buffer())),
+    pub fn no_optimization(mut self) -> Self {
+        self.early_cnf = false;
+        self.late_cne = false;
+        self.late_cnf = false;
+        self
+    }
 
-            early_cnf: true,
-            late_cnf: true,
-            late_cne: true,
-            validate_output: false,
-        }
+    pub fn no_common_node_elemination(mut self) -> Self {
+        self.early_cnf = false;
+        self.late_cnf = false;
+        self
     }
 
     pub fn with_backend(mut self, backend: Box<dyn PipelineBackend + 'static>) -> Self {
@@ -188,6 +209,7 @@ impl Pipeline {
         reset_file_cache();
         let mut parser = vola_tree_sitter_parser::VolaTreeSitterParser;
         let ast = VolaAst::new_from_bytes(data, &mut parser)?;
+        #[cfg(feature = "dot")]
         if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("VOLA_DUMP_AST").is_ok() {
             vola_ast::dot::ast_to_svg(&ast, "ast.svg");
         }
@@ -202,6 +224,7 @@ impl Pipeline {
         let mut parser = vola_tree_sitter_parser::VolaTreeSitterParser;
         let ast = VolaAst::new_from_file(file, &mut parser)?;
 
+        #[cfg(feature = "dot")]
         if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("VOLA_DUMP_AST").is_ok() {
             vola_ast::dot::ast_to_svg(&ast, "ast.svg");
         }

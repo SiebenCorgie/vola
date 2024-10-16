@@ -17,10 +17,16 @@ pub enum PipelineError {
     ParserError(String),
     #[error(transparent)]
     RVSDGError(#[from] GraphError),
+    #[cfg(feature = "spirv")]
     #[error(transparent)]
     SpirvError(#[from] vola_backend_spirv::BackendSpirvError),
+    #[cfg(feature = "wasm")]
     #[error(transparent)]
     WasmError(#[from] vola_backend_wasm::WasmError),
+    #[cfg(feature = "native")]
+    #[error("Could not find native ISA: {0}")]
+    NativeIsaError(String),
+
     #[error(transparent)]
     AstError(#[from] vola_ast::AstError),
     #[error(transparent)]
@@ -29,4 +35,6 @@ pub enum PipelineError {
     CneError(#[from] CneError),
     #[error("Failed to validate: {0}")]
     ValidationFailed(String),
+    #[error("No backend configured!")]
+    IsStub,
 }

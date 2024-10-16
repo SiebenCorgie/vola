@@ -218,7 +218,7 @@ pub fn run_file(path: PathBuf) -> Result<JoinHandle<TestResult>, Box<dyn Error>>
                         Backend::Wasm => Box::new(volac::backends::Wasm::new(Target::buffer())),
                         Backend::Spirv => Box::new(volac::backends::Spirv::new(Target::buffer())),
                     };
-                    let mut pipeline = Pipeline::new_in_memory().with_backend(pipeline_backend);
+                    let mut pipeline = Pipeline::new().with_backend(pipeline_backend);
                     /* NOTE: uncomment any of these if tests are failing.
                         pipeline.early_cnf = false;
                         pipeline.late_cne = false;
