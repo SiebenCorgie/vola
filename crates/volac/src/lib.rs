@@ -39,6 +39,13 @@ impl Target {
         }
     }
 
+    pub fn unwrap_file(self) -> PathBuf {
+        if let Self::File(f) = self {
+            f
+        } else {
+            panic!("Was no file!")
+        }
+    }
     pub fn is_file(&self) -> bool {
         if let Self::File(_) = self {
             true
