@@ -17,7 +17,7 @@ mod ad_canonicalize;
 mod ad_dispatch;
 mod ad_forward;
 mod ad_utils;
-mod diff_node;
+mod diff;
 
 use rvsdg::{
     edge::InputType,

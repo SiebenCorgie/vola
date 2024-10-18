@@ -60,7 +60,7 @@ use rvsdg::{
     util::abstract_node_type::AbstractNodeType,
     NodeRef,
 };
-use vola_common::{error::error_reporter, report, Span};
+use vola_common::{ariadne::Label, error::error_reporter, report, Span};
 
 use crate::{autodiff::AutoDiff, OptEdge, OptError, Optimizer};
 
@@ -312,7 +312,21 @@ impl Optimizer {
         //handeled by the respective node.
         //
         //however, dispatching the chain-rule can / must be done
-        let (result, postdiffs) = self.build_diff_value(region, node, activity)?;
+        let (result, postdiffs) = match self.build_diff_value(region, node, activity) {
+            Ok(t) => t,
+            Err(e) => {
+                if let Some(span) = self.find_span(node.into()) {
+                    report(
+                        error_reporter(e.clone(), span.clone())
+                            .with_label(Label::new(span).with_message("On this operation"))
+                            .finish(),
+                    );
+                    return Err(e.into());
+                } else {
+                    return Err(e.into());
+                }
+            }
+        };
         for (post_diff_src, targets) in postdiffs {
             //Try to reuse expr-cache, otherwise build new subexpression
             let diff_expr_src = if let Some(cached) = expr_cache.get(&post_diff_src) {
