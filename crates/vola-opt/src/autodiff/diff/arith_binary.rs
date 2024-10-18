@@ -83,15 +83,35 @@ impl Optimizer {
 
                 let left_type = self.find_type(&left_src.into()).unwrap();
                 let right_type = self.find_type(&right_src.into()).unwrap();
-                println!("Yeet[{node:?}]: {left_type:?}, {right_type:?}");
+
+                let left_active = activity.is_active_port(self, left_src);
+                let right_active = activity.is_active_port(self, right_src);
 
                 //We have implementations for scalar-scalar, scalar-vector, vector-scalar, vector-vector.
-                match (left_type, right_type) {
+                //
+                //For Matrix * vector we have a hand rolled derivative calculation, if only vector is active
+                match (left_type.clone(), right_type.clone()) {
                     (Ty::Scalar, Ty::Scalar) => {}
                     (Ty::Scalar, Ty::Vector { .. }) | (Ty::Vector { .. }, Ty::Scalar) => {}
                     (Ty::Vector { width: w2 }, Ty::Vector { width: w1 }) => {
                         assert!(w2 == w1);
                     }
+                    /*TODO: Implement a hand-rolled derivative based on activity analysis instead
+                    (Ty::Matrix { .. }, Ty::Vector { .. }) => {
+                        if left_active {
+                            return Err(AutoDiffError::NoAdImpl(format!(
+                                "Multiplication derivative not implemented where the matrix has an active argument"
+                            )));
+                        }
+                    }
+                    (Ty::Vector { .. }, Ty::Matrix { .. }) => {
+                        if right_active {
+                            return Err(AutoDiffError::NoAdImpl(format!(
+                                "Multiplication derivative not implemented where the matrix has an active argument"
+                            )));
+                        }
+                    }
+                    */
                     (a, b) => {
                         println!("That Aint it");
                         return Err(AutoDiffError::NoAdImpl(format!(
@@ -100,10 +120,7 @@ impl Optimizer {
                     }
                 }
 
-                match (
-                    activity.is_active_port(self, left_src),
-                    activity.is_active_port(self, right_src),
-                ) {
+                match (left_active, right_active) {
                     (true, true) => {
                         //product-rule: (left is f, right is g):
                         //(f(x)*g(x))' = f'(x) * g(x) + f(x) * g'(x).
@@ -164,29 +181,49 @@ impl Optimizer {
                     (false, false) => panic!("{node:?} should not be active"),
                     (is_left_diff, is_right_diff) => {
                         assert!(is_left_diff != is_right_diff);
-                        println!("Had {is_left_diff}, {is_right_diff}");
-                        //constant-factor-rule (only one is active).
-                        let diff_defered_src = if is_left_diff { left_src } else { right_src };
-                        let constant_src = if is_left_diff { right_src } else { left_src };
 
-                        let result = self
-                            .graph
-                            .on_region(&region, |g| {
-                                let (node, _edg) = g
-                                    .connect_node(
-                                        OptNode::new(BinaryArith::new(BinaryArithOp::Mul), span),
-                                        &[constant_src],
-                                    )
+                        //pick out special implementations
+                        match (left_type, right_type) {
+                            /*
+                            (Ty::Matrix { .. }, Ty::Vector { .. }) => {
+                                assert!(!left_active && right_active);
+                                self.build_matrix_active_vector_diff(region, node, activity)
+                            }
+                            (Ty::Vector { .. }, Ty::Matrix { .. }) => {
+                                assert!(!right_active && left_active);
+                                self.build_active_vector_matrix_diff(region, node, activity)
+                            }
+                            */
+                            //standard implementations
+                            _ => {
+                                //constant-factor-rule (only one is active).
+                                let diff_defered_src =
+                                    if is_left_diff { left_src } else { right_src };
+                                let constant_src = if is_left_diff { right_src } else { left_src };
+
+                                let result = self
+                                    .graph
+                                    .on_region(&region, |g| {
+                                        let (node, _edg) = g
+                                            .connect_node(
+                                                OptNode::new(
+                                                    BinaryArith::new(BinaryArithOp::Mul),
+                                                    span,
+                                                ),
+                                                &[constant_src],
+                                            )
+                                            .unwrap();
+
+                                        subdiff.push((diff_defered_src, smallvec![node.input(1)]));
+
+                                        self.names
+                                            .set(node.into(), "ConstantFactorRule".to_string());
+                                        node.output(0)
+                                    })
                                     .unwrap();
-
-                                subdiff.push((diff_defered_src, smallvec![node.input(1)]));
-
-                                self.names
-                                    .set(node.into(), "ConstantFactorRule".to_string());
-                                node.output(0)
-                            })
-                            .unwrap();
-                        Ok((result, subdiff))
+                                Ok((result, subdiff))
+                            }
+                        }
                     }
                 }
             }
@@ -283,4 +320,53 @@ impl Optimizer {
             }
         }
     }
+    /*
+    //This is our special vector-matrix derivative handler.
+    //will analyse the active part of the vector, and
+    fn build_active_vector_matrix_diff(
+        &mut self,
+        region: RegionLocation,
+        node: NodeRef,
+        activity: &mut Activity,
+    ) -> Result<
+        (
+            OutportLocation,
+            SmallColl<(OutportLocation, SmallColl<InportLocation>)>,
+        ),
+        AutoDiffError,
+    > {
+        //Our strategy in this case is _just_ building the whole multiplication,
+        //then yielding. This'll effectively index into the right part of the
+        if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("DUMP_YEET").is_ok() {
+            self.push_debug_state_with(&format!("fw-autodiff-{node}-at-yeet"), |builder| {
+                builder.with_flags("activity", &activity.active)
+            });
+        }
+
+        todo!()
+    }
+
+    //This is our special matrix*vector derivative handler.
+    //will analyse the active part of the vector, and
+    fn build_matrix_active_vector_diff(
+        &mut self,
+        region: RegionLocation,
+        node: NodeRef,
+        activity: &mut Activity,
+    ) -> Result<
+        (
+            OutportLocation,
+            SmallColl<(OutportLocation, SmallColl<InportLocation>)>,
+        ),
+        AutoDiffError,
+    > {
+        if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("DUMP_YEET").is_ok() {
+            self.push_debug_state_with(&format!("fw-autodiff-{node}-at-yeet"), |builder| {
+                builder.with_flags("activity", &activity.active)
+            });
+        }
+
+        todo!()
+    }
+    */
 }

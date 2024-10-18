@@ -15,6 +15,8 @@ use rvsdg::{
 };
 use vola_common::Span;
 
+mod matrix_multiplication;
+
 use crate::{
     alge::{
         arithmetic::{BinaryArith, BinaryArithOp, UnaryArith, UnaryArithOp},
@@ -27,6 +29,20 @@ use crate::{
 };
 
 impl Optimizer {
+    pub(crate) fn handle_canon_binary(
+        &mut self,
+        region: &RegionLocation,
+        node: NodeRef,
+    ) -> Result<(), OptError> {
+        if let Some(binary) = self.try_unwrap_node::<BinaryArith>(node) {
+            match binary.op {
+                BinaryArithOp::Mul => self.handle_canon_mul(region, node),
+                _ => Ok(()),
+            }
+        } else {
+            panic!("Should have been binary arith!");
+        }
+    }
     pub(crate) fn handle_canon_unary(
         &mut self,
         region: &RegionLocation,

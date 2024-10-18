@@ -14,11 +14,14 @@ use ahash::AHashSet;
 use rvsdg::{
     edge::OutportLocation, region::RegionLocation, smallvec::smallvec, NodeRef, SmallColl,
 };
-use rvsdg_viewer::View;
 use vola_common::Span;
 
 use crate::{
-    alge::{arithmetic::UnaryArith, buildin::Buildin, ConstantIndex, Construct},
+    alge::{
+        arithmetic::{BinaryArith, UnaryArith},
+        buildin::Buildin,
+        ConstantIndex, Construct,
+    },
     autodiff::{AutoDiff, AutoDiffError},
     common::Ty,
     imm::ImmScalar,
@@ -177,6 +180,9 @@ impl Optimizer {
         if self.is_node_type::<UnaryArith>(node) {
             return self.handle_canon_unary(&target_region, node);
         }
+        if self.is_node_type::<BinaryArith>(node) {
+            return self.handle_canon_binary(&target_region, node);
+        }
 
         if self.graph[node].node_type.is_theta() {
             let unroll_count = self.loop_count(node)?;
@@ -198,8 +204,25 @@ impl Optimizer {
         Ok(())
     }
 
+    //Tries to get the type of the port, If that is not possible, tries to derive a type. Panics if that is not possible, since the graph
+    //should always be able to derive a type for any output.
+    pub(crate) fn get_or_derive_type(&mut self, output: OutportLocation) -> Ty {
+        match self.find_type(&output.into()) {
+            Some(t) => return t,
+            None => {}
+        }
+
+        self.type_derive_and_propagate(output.node).unwrap();
+        //try again or panic
+        self.find_type(&output.into()).unwrap()
+    }
+
     ///Handles type derive and propagation of a node that is added while canonicalizing.
     pub(crate) fn type_derive_and_propagate(&mut self, node: NodeRef) -> Result<(), OptError> {
+        //We first try to just do a per-node derivation. Most of our canonicalizations just replace with _one_ level
+        //of nodes.
+        //However, this'll fail, if the canonicalization adds _many_ nodes.
+        //in that case we'll start a full pass.
         match self.try_node_type_derive(node)? {
             (Some(ty), outport) => {
                 self.typemap.set(outport.into(), ty.clone());
@@ -210,12 +233,15 @@ impl Optimizer {
 
                 Ok(())
             }
-            (None, _) => Err(OptError::Any {
-                text: format!(
-                    "Could not derive the type for canonicalized node \"{}\"",
-                    self.graph[node].name()
-                ),
-            }),
+            (None, _) => {
+                //Simple pass failed, therfore start the real-deal
+
+                let parent_region = self.graph[node].parent.unwrap();
+                let span = self
+                    .find_span(parent_region.into())
+                    .unwrap_or(Span::empty());
+                self.derive_region(parent_region, span)
+            }
         }
     }
 }

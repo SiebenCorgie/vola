@@ -13,10 +13,10 @@
 //! The submoduls implement the actual autodiff pass as well a specific optimizations.
 
 mod activity;
-mod ad_canonicalize;
 mod ad_dispatch;
 mod ad_forward;
 mod ad_utils;
+mod canonicalize;
 mod diff;
 
 use rvsdg::{
@@ -47,6 +47,8 @@ pub enum AutoDiffError {
     UnexpectedAutoDiffNode,
     #[error("\"{0:?}\" can not be differentiated")]
     UndiffNode(String),
+    #[error("Failed to canonicalize: {0:?}")]
+    CanonicalizationFailed(String),
 }
 
 //Macro that implements the "View" trait for the Autodiff

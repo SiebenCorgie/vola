@@ -27,7 +27,7 @@ impl Default for ConfigAutoDiff {
         ConfigAutoDiff {
             canonicalize_undiff: true,
             abort_on_undiff: false,
-            smooth_abs_c: 0.0001,
+            smooth_abs_c: 0.000001,
         }
     }
 }

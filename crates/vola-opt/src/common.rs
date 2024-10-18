@@ -141,6 +141,28 @@ impl Ty {
             false
         }
     }
+
+    ///If the type has a width, returns it. This is either the vector's or matrix's width,
+    ///or the tensors first dimension.
+    pub fn width(&self) -> Option<usize> {
+        match self {
+            Self::Vector { width } => Some(*width),
+            Self::Matrix { width, .. } => Some(*width),
+            Self::Tensor { dim } => dim.get(0).cloned(),
+            _ => None,
+        }
+    }
+
+    ///If the type has a height, returns it. This is either the matrix's height,
+    ///or the tensors second dimension.
+    pub fn height(&self) -> Option<usize> {
+        match self {
+            Self::Matrix { height, .. } => Some(*height),
+            Self::Tensor { dim } => dim.get(1).cloned(),
+            _ => None,
+        }
+    }
+
     ///Tries to derive a type that would be produced by indexing with `index` into the `Ty`.
     pub(crate) fn try_derive_access_index(&self, index: usize) -> Result<Ty, OptError> {
         match self {
