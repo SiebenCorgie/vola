@@ -110,6 +110,8 @@ impl PipelineBackend for Wasm {
 
 #[cfg(test)]
 mod test {
+    use std::panic::UnwindSafe;
+
     use static_assertions::assert_impl_all;
 
     use crate::backends::Wasm;
@@ -122,5 +124,10 @@ mod test {
     #[test]
     fn impl_sync() {
         assert_impl_all!(Wasm: Sync);
+    }
+
+    #[test]
+    fn impl_unwind_safe() {
+        assert_impl_all!(Wasm: UnwindSafe);
     }
 }

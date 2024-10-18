@@ -12,8 +12,11 @@
 //!
 //!
 
-use backends::{PipelineBackend, StubBackend};
-use std::path::{Path, PathBuf};
+use backends::{BoxedBackend, PipelineBackend, StubBackend};
+use std::{
+    panic::UnwindSafe,
+    path::{Path, PathBuf},
+};
 use vola_ast::VolaAst;
 
 mod error;
@@ -112,7 +115,7 @@ impl Target {
 /// 4. Automatic differentiation
 /// 5. Emit some format based on a configured backend.
 pub struct Pipeline {
-    pub backend: Box<dyn PipelineBackend + Send + Sync>,
+    pub backend: BoxedBackend,
 
     //If the early constant-node-fold is executed before specializing
     pub early_cnf: bool,
@@ -149,10 +152,7 @@ impl Pipeline {
         self
     }
 
-    pub fn with_backend(
-        mut self,
-        backend: Box<dyn PipelineBackend + Send + Sync + 'static>,
-    ) -> Self {
+    pub fn with_backend(mut self, backend: BoxedBackend) -> Self {
         self.backend = backend;
         self
     }
@@ -245,6 +245,8 @@ impl Pipeline {
 
 #[cfg(test)]
 mod test {
+    use std::panic::UnwindSafe;
+
     use static_assertions::assert_impl_all;
 
     use crate::Pipeline;
@@ -257,5 +259,9 @@ mod test {
     #[test]
     fn impl_sync() {
         assert_impl_all!(Pipeline: Sync);
+    }
+    #[test]
+    fn impl_unwind_safe() {
+        assert_impl_all!(Pipeline: UnwindSafe);
     }
 }

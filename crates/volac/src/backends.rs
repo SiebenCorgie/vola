@@ -8,6 +8,8 @@
 
 #[cfg(feature = "spirv")]
 mod spriv;
+use std::panic::UnwindSafe;
+
 #[cfg(feature = "spirv")]
 pub use spriv::Spirv;
 
@@ -25,6 +27,12 @@ pub use native::Native;
 use vola_opt::Optimizer;
 
 use crate::{PipelineError, Target};
+
+///Shortcut type to refer to something that can become a boxed pipeline backend
+pub type BoxableBackend = dyn PipelineBackend + Send + Sync + UnwindSafe;
+
+///Shortcut type to refer to a boxed, `dyn` backend.
+pub type BoxedBackend = Box<dyn PipelineBackend + Send + Sync + UnwindSafe>;
 
 pub trait PipelineBackend {
     ///Gets executed before the optimizer is finalized.

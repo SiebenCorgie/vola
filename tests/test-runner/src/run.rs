@@ -7,7 +7,10 @@ use std::{
 };
 
 use smallvec::{smallvec, SmallVec};
-use volac::{backends::PipelineBackend, Pipeline, PipelineError, Target};
+use volac::{
+    backends::{BoxedBackend, PipelineBackend},
+    Pipeline, PipelineError, Target,
+};
 use yansi::Paint;
 
 use crate::config::Config;
@@ -213,14 +216,11 @@ pub fn run_file(path: PathBuf) -> Result<JoinHandle<TestResult>, Box<dyn Error>>
                 let start = Instant::now();
                 let execfile = path.clone();
                 let pipeline_result = std::panic::catch_unwind(|| {
-                    let pipeline_backend: Box<dyn PipelineBackend + Send + Sync + 'static> =
-                        match backend {
-                            Backend::None => panic!("No pipeline"),
-                            Backend::Wasm => Box::new(volac::backends::Wasm::new(Target::buffer())),
-                            Backend::Spirv => {
-                                Box::new(volac::backends::Spirv::new(Target::buffer()))
-                            }
-                        };
+                    let pipeline_backend: BoxedBackend = match backend {
+                        Backend::None => panic!("No pipeline"),
+                        Backend::Wasm => Box::new(volac::backends::Wasm::new(Target::buffer())),
+                        Backend::Spirv => Box::new(volac::backends::Spirv::new(Target::buffer())),
+                    };
                     let mut pipeline = Pipeline::new().with_backend(pipeline_backend);
                     /* NOTE: uncomment any of these if tests are failing.
                         pipeline.early_cnf = false;

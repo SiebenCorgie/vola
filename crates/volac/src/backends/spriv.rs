@@ -125,6 +125,8 @@ impl PipelineBackend for Spirv {
 
 #[cfg(test)]
 mod test {
+    use std::panic::UnwindSafe;
+
     use static_assertions::assert_impl_all;
 
     use crate::backends::Spirv;
@@ -137,5 +139,9 @@ mod test {
     #[test]
     fn impl_sync() {
         assert_impl_all!(Spirv: Sync);
+    }
+    #[test]
+    fn impl_unwind_safe() {
+        assert_impl_all!(Spirv: UnwindSafe);
     }
 }
