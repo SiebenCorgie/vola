@@ -96,20 +96,33 @@ pub fn try_execute(target: Target, config: &Config) -> TestState {
     }
 
     //returned successfully, check that the result is indeed correct
-    for (idx, (calculated, expected)) in result_store.iter().zip(results.iter()).enumerate() {
-        let calcf = if let wasmtime::Val::F32(f) = calculated {
-            f32::from_bits(*f)
-        } else {
-            return TestState::Error(format!("Calculated value was not F32"));
-        };
+    let mut any_wrong = false;
+    let mut diffs: SmallVec<[f32; 3]> = smallvec![0.0; results.len()];
+    let wasm_f32_results: SmallVec<[f32; 3]> = result_store
+        .iter()
+        .map(|i| {
+            if let wasmtime::Val::F32(f) = i {
+                f32::from_bits(*f)
+            } else {
+                panic!("Had none-float return type");
+            }
+        })
+        .collect();
 
-        if (calcf - *expected).abs() > config.exec_eps {
-            return TestState::Error(format!(
-                "Unexpected result[{}]: {} != {}",
-                idx, calcf, expected
-            ));
+    for (idx, (calculated, expected)) in wasm_f32_results.iter().zip(results.iter()).enumerate() {
+        let diff = (calculated - *expected).abs();
+        diffs[idx] = diff;
+        if diff > config.exec_eps {
+            any_wrong = true;
         }
     }
 
-    TestState::Success
+    if any_wrong {
+        return TestState::Error(format!(
+            "Unexpected result {:?} != {:?}: (Diff: {:?})",
+            results, wasm_f32_results, diffs
+        ));
+    } else {
+        TestState::Success
+    }
 }

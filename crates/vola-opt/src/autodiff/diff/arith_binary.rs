@@ -8,6 +8,7 @@
 
 use crate::{
     autodiff::{activity::Activity, AutoDiffError},
+    common::Ty,
     Optimizer,
 };
 
@@ -79,17 +80,31 @@ impl Optimizer {
                 //There is also the added caveat, that, for the double_active part,
                 //there should not be a matrix-matrix, matrix-vector or vector-matrix multiplication.
                 //Only scalar-scalar are _right now_ implemented
+
+                let left_type = self.find_type(&left_src.into()).unwrap();
+                let right_type = self.find_type(&right_src.into()).unwrap();
+                println!("Yeet[{node:?}]: {left_type:?}, {right_type:?}");
+
+                //We have implementations for scalar-scalar, scalar-vector, vector-scalar, vector-vector.
+                match (left_type, right_type) {
+                    (Ty::Scalar, Ty::Scalar) => {}
+                    (Ty::Scalar, Ty::Vector { .. }) | (Ty::Vector { .. }, Ty::Scalar) => {}
+                    (Ty::Vector { width: w2 }, Ty::Vector { width: w1 }) => {
+                        assert!(w2 == w1);
+                    }
+                    (a, b) => {
+                        println!("That Aint it");
+                        return Err(AutoDiffError::NoAdImpl(format!(
+                            "Multiplication derivative not implemented for {a} * {b}"
+                        )));
+                    }
+                }
+
                 match (
                     activity.is_active_port(self, left_src),
                     activity.is_active_port(self, right_src),
                 ) {
                     (true, true) => {
-                        if !self.find_type(&left_src.into()).unwrap().is_scalar()
-                            || !self.find_type(&right_src.into()).unwrap().is_scalar()
-                        {
-                            return Err(AutoDiffError::NoAdImpl(format!("Multiplication derivative with two active values is not implemented for non-scalars!")));
-                        }
-
                         //product-rule: (left is f, right is g):
                         //(f(x)*g(x))' = f'(x) * g(x) + f(x) * g'(x).
                         //turns to vector-product rule for vectorns
@@ -149,6 +164,7 @@ impl Optimizer {
                     (false, false) => panic!("{node:?} should not be active"),
                     (is_left_diff, is_right_diff) => {
                         assert!(is_left_diff != is_right_diff);
+                        println!("Had {is_left_diff}, {is_right_diff}");
                         //constant-factor-rule (only one is active).
                         let diff_defered_src = if is_left_diff { left_src } else { right_src };
                         let constant_src = if is_left_diff { right_src } else { left_src };

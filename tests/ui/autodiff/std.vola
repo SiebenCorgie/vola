@@ -66,3 +66,54 @@ impl SmoothUnion<left, right> for SDF3D(at){
     let dist = mix(l, r, h) * - suradius * h * (1.0 - h);
     dist
 }
+
+entity Cylinder(radius: s, height: s);
+impl Cylinder for SDF3D(at){
+	let d = length([at.x, at.y]) - radius;
+	let bound = abs(at.z) - height;
+	min(max(d, bound), 0.0) + length(max([d, bound], [0.0, 0.0]))
+}
+
+
+
+
+fn rotmatrix_3d(axis: vec3, amount: s) -> mat3x3{
+
+	let l = length(axis);
+	let u = axis / [l, l, l];
+	let s = sin(amount);
+	let c = cos(amount);
+	let oc = 1.0 - c;
+
+	let rotmat = [
+		[
+			oc * u.x * u.x + c,
+			oc * u.x * u.y - u.z * s,
+			oc * u.z * u.x + u.y * s
+		],
+		[
+			oc * u.x * u.y + u.z * s,
+			oc * u.y * u.y + c,
+			oc * u.y * u.z - u.x * s
+		],
+		[
+			oc * u.z * u.x - u.y * s,
+			oc * u.y * u.z + u.x * s,
+			oc * u.z * u.z + c
+		]
+	];
+
+	rotmat
+}
+
+
+
+operation Rot3dAxis(axis: vec3, amount: s);
+
+//NOTE: shamelessly stolen from the wiki page for
+//      rotation matrix
+impl Rot3dAxis<sub> for SDF3D(at){
+	let rotmat = rotmatrix_3d(axis, amount);
+	let newat = at * rotmat;
+	eval sub.SDF3D(newat)
+}

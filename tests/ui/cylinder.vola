@@ -1,0 +1,14 @@
+//BEGIN-CONFIG
+//EXEC-FN:myfield
+//EXEC-ARGS:0.0,0.0,4.0
+//EXEC-EPS:0.1
+//EXEC-RES:3
+//END-CONFIG
+
+module std;
+
+//NOTE: In this case we know, that the cylinder lies on the z axis, and is 3 _away_ form z=4.
+export myfield(at: vec3){
+    csg s = Cylinder(1.0, 1.0);
+    eval s.SDF3D(at)
+}

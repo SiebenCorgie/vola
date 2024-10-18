@@ -66,3 +66,10 @@ impl SmoothUnion<left, right> for SDF3D(at){
     let dist = mix(l, r, h) * - suradius * h * (1.0 - h);
     dist
 }
+
+entity Cylinder(radius: s, height: s);
+impl Cylinder for SDF3D(at){
+	let d = length([at.x, at.y]) - radius;
+	let bound = abs(at.z) - height;
+	min(max(d, bound), 0.0) + length(max([d, bound], [0.0, 0.0]))
+}

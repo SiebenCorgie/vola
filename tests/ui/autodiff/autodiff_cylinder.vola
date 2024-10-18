@@ -1,0 +1,23 @@
+//BEGIN-CONFIG
+//EXEC-FN:mysdf
+//EXEC-ARGS:0.0,0.0,-1.0
+//EXEC-EPS:0.01
+//EXEC-RES:0.0,0.0,-1.0
+//END-CONFIG
+
+module std;
+
+
+concept FieldGrad: vec3 -> vec3;
+operation MyAdOp();
+impl MyAdOp<sub> for FieldGrad(at){
+    let sd = eval sub.SDF3D(at);
+    let res = diff(sd, at);
+    res
+}
+
+export mysdf(at: vec3){
+    //The gradient should point to the negative z at that location
+    csg sphere = MyAdOp(){Cylinder(1.0, 1.0)};
+    eval sphere.FieldGrad(at)
+}
