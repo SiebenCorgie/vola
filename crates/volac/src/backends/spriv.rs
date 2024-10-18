@@ -122,3 +122,20 @@ impl PipelineBackend for Spirv {
         }
     }
 }
+
+#[cfg(test)]
+mod test {
+    use static_assertions::assert_impl_all;
+
+    use crate::backends::Spirv;
+
+    #[test]
+    fn impl_send() {
+        assert_impl_all!(Spirv: Send);
+    }
+
+    #[test]
+    fn impl_sync() {
+        assert_impl_all!(Spirv: Sync);
+    }
+}

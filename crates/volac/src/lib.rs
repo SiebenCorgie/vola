@@ -112,7 +112,7 @@ impl Target {
 /// 4. Automatic differentiation
 /// 5. Emit some format based on a configured backend.
 pub struct Pipeline {
-    pub backend: Box<dyn PipelineBackend>,
+    pub backend: Box<dyn PipelineBackend + Send + Sync>,
 
     //If the early constant-node-fold is executed before specializing
     pub early_cnf: bool,
@@ -149,7 +149,10 @@ impl Pipeline {
         self
     }
 
-    pub fn with_backend(mut self, backend: Box<dyn PipelineBackend + 'static>) -> Self {
+    pub fn with_backend(
+        mut self,
+        backend: Box<dyn PipelineBackend + Send + Sync + 'static>,
+    ) -> Self {
         self.backend = backend;
         self
     }
@@ -237,5 +240,22 @@ impl Pipeline {
         }
 
         self.execute_on_ast(ast)
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use static_assertions::assert_impl_all;
+
+    use crate::Pipeline;
+
+    #[test]
+    fn impl_send() {
+        assert_impl_all!(Pipeline: Send);
+    }
+
+    #[test]
+    fn impl_sync() {
+        assert_impl_all!(Pipeline: Sync);
     }
 }

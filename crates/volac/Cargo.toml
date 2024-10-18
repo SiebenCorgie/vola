@@ -23,3 +23,6 @@ rvsdg = { path = "../rvsdg" }
 bytemuck.workspace = true
 log.workspace = true
 wasmtime = { workspace = true, optional = true }
+
+[dev-dependencies]
+static_assertions.workspace = true

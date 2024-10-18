@@ -91,6 +91,10 @@ To compile some file to a SPIR-V file, use the `vola-cli` package. By default it
 cargo run --bin vola-cli -- path/to/some/file.vola output_file_name
 ```
 
+### Caveat
+
+The wasm backend currently needs the `bindeps` nightly cargo feature. Either append `-Z bindeps` to your cargo command, or copy the `.cargo/config.toml` file to your project's workspace.
+
 ### Testing
 
 There is a test runner in `tests`. It uses all integration tests in `tests/ui` on each backend and reports the results. Run it via

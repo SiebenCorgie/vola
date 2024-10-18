@@ -59,3 +59,20 @@ impl PipelineBackend for Native {
         self.wasm_backend.try_verify()
     }
 }
+
+#[cfg(test)]
+mod test {
+    use static_assertions::assert_impl_all;
+
+    use crate::backends::Native;
+
+    #[test]
+    fn impl_send() {
+        assert_impl_all!(Native: Send);
+    }
+
+    #[test]
+    fn impl_sync() {
+        assert_impl_all!(Native: Sync);
+    }
+}

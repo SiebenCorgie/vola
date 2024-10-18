@@ -107,3 +107,20 @@ impl PipelineBackend for Wasm {
         }
     }
 }
+
+#[cfg(test)]
+mod test {
+    use static_assertions::assert_impl_all;
+
+    use crate::backends::Wasm;
+
+    #[test]
+    fn impl_send() {
+        assert_impl_all!(Wasm: Send);
+    }
+
+    #[test]
+    fn impl_sync() {
+        assert_impl_all!(Wasm: Sync);
+    }
+}
