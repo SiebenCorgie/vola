@@ -12,11 +12,8 @@
 //!
 //!
 
-use backends::{BoxedBackend, PipelineBackend, StubBackend};
-use std::{
-    panic::UnwindSafe,
-    path::{Path, PathBuf},
-};
+use backends::{BoxedBackend, StubBackend};
+use std::path::{Path, PathBuf};
 use vola_ast::VolaAst;
 
 mod error;

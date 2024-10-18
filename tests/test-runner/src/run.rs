@@ -7,10 +7,7 @@ use std::{
 };
 
 use smallvec::{smallvec, SmallVec};
-use volac::{
-    backends::{BoxedBackend, PipelineBackend},
-    Pipeline, PipelineError, Target,
-};
+use volac::{backends::BoxedBackend, Pipeline, PipelineError, Target};
 use yansi::Paint;
 
 use crate::config::Config;

@@ -25,3 +25,8 @@ serde = { workspace = true, optional = true }
 
 [dev-dependencies]
 vola-tree-sitter-parser = { path = "../vola-tree-sitter-parser" }
+
+
+[[example]]
+name = "simple_csg"
+required-features = ["serde", "dot"]

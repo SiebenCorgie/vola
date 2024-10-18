@@ -13,7 +13,7 @@ use std::path::PathBuf;
 
 use clap::{Parser, ValueEnum};
 use volac::{
-    backends::{Native, PipelineBackend, Spirv, Wasm},
+    backends::{BoxedBackend, Native, Spirv, Wasm},
     Target,
 };
 
@@ -62,7 +62,7 @@ fn main() {
     pretty_env_logger::init();
     let args = Args::parse();
 
-    let backend: Box<dyn PipelineBackend> = match args.format {
+    let backend: BoxedBackend = match args.format {
         Format::Spirv => Box::new(Spirv::new(Target::file(&args.output_name))),
         Format::Native => Box::new(Native::new(Target::file(&args.output_name))),
         Format::WASM => Box::new(Wasm::new(Target::file(&args.output_name))),
