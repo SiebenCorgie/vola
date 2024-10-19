@@ -161,6 +161,9 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
                     .filter(|n| *n != parent_region.node)
                     .collect();
                 stack_follower.push_back((node, follower));
+                //also add to node_edges, so we can latter check if a node is in the `nodes`
+                //list
+                node_edges.insert(node, SmallColl::new());
             } else {
                 node_edges.insert(node, filtered_srcs);
             }
@@ -179,6 +182,12 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
 
             //remove popped from all followers
             for f in follower {
+                //Ignore followers that are not in the initial list
+                if !node_edges.contains_key(&f) {
+                    continue;
+                }
+
+                //Remove the edge to the popped element
                 let must_be_enqued = if let Some(ne) = node_edges.get_mut(&f) {
                     ne.retain(|n| *n != popped);
 
