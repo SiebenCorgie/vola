@@ -50,6 +50,11 @@ impl Optimizer {
 
                 Ok(())
             }
+            (Ty::Matrix { .. }, Ty::Matrix { .. }) => {
+                let _canonicalized = self
+                    .unroll_matrix_matrix(region, node, left_type, right_type, left_src, right_src);
+                Ok(())
+            }
             _ => Ok(()),
         }
     }
@@ -68,7 +73,8 @@ impl Optimizer {
         //we now just iterate all columns of the matrix, and multiply each element in the _row-vector_ with the corresbonding element in the
         //column-vector of the matrix.
 
-        //Cause we cool, we prefetch each column of the matrix, and then we fetch the right_collumn's source in the double loop.
+        //In the vector-matrix case we can omit the row-vector element pre fetching that is used in the matrix-matrix case. Instead
+        //we can directly _dot_ the matrix
 
         assert!(matrix_ty.height().unwrap() == vector_ty.width().unwrap());
 
@@ -123,53 +129,49 @@ impl Optimizer {
         self.graph.replace_node_uses(mul_node, new_result).unwrap();
         new_result
     }
-
+    ///Unrolls a matrix-vector multiplication into multiple dot product operations.
     fn unroll_matrix_vector(
         &mut self,
         region: &RegionLocation,
         mul_node: NodeRef,
-        matrix_ty: Ty,
-        vector_ty: Ty,
-        matrix_src: OutportLocation,
-        vector_src: OutportLocation,
+        left_ty: Ty,
+        right_ty: Ty,
+        left_src: OutportLocation,
+        right_src: OutportLocation,
     ) -> NodeRef {
-        //Similar idea to the vector-matrix multiplication. But this time the the indexing of
-        //the matrix is a little harder :/
-
-        assert!(matrix_ty.width().unwrap() == vector_ty.width().unwrap());
+        assert!(left_ty.width().unwrap() == right_ty.width().unwrap());
 
         let span = self.find_span(mul_node.into()).unwrap_or(Span::empty());
 
         let new_result = self
             .graph
             .on_region(region, |reg| {
-                let column_sources: SmallColl<OutportLocation> = (0..matrix_ty.width().unwrap())
+                let column_sources: SmallColl<OutportLocation> = (0..left_ty.width().unwrap())
                     .map(|col_index| {
                         let (column_src, _) = reg
                             .connect_node(
                                 OptNode::new(ConstantIndex::new(col_index), span.clone()),
-                                &[matrix_src],
+                                &[left_src],
                             )
                             .unwrap();
                         column_src.output(0)
                     })
                     .collect();
 
-                let row_vectors: SmallColl<OutportLocation> = (0..matrix_ty.height().unwrap())
+                let row_vectors: SmallColl<OutportLocation> = (0..left_ty.height().unwrap())
                     .map(|row_idx| {
                         //Load all indices of that row into a new vector
-                        let row_indices: SmallColl<OutportLocation> =
-                            (0..matrix_ty.width().unwrap())
-                                .map(|col_idx| {
-                                    let (element, _) = reg
-                                        .connect_node(
-                                            OptNode::new(ConstantIndex::new(row_idx), span.clone()),
-                                            &[column_sources[col_idx]],
-                                        )
-                                        .unwrap();
-                                    element.output(0)
-                                })
-                                .collect();
+                        let row_indices: SmallColl<OutportLocation> = (0..left_ty.width().unwrap())
+                            .map(|col_idx| {
+                                let (element, _) = reg
+                                    .connect_node(
+                                        OptNode::new(ConstantIndex::new(row_idx), span.clone()),
+                                        &[column_sources[col_idx]],
+                                    )
+                                    .unwrap();
+                                element.output(0)
+                            })
+                            .collect();
 
                         let (row_vector, _) = reg
                             .connect_node(
@@ -192,7 +194,7 @@ impl Optimizer {
                         let (dot_res, _) = reg
                             .connect_node(
                                 OptNode::new(Buildin::new(BuildinOp::Dot), span.clone()),
-                                &[row_src, vector_src],
+                                &[row_src, right_src],
                             )
                             .unwrap();
                         dot_res.output(0)
@@ -207,6 +209,125 @@ impl Optimizer {
                             span.clone(),
                         ),
                         &vector_elements,
+                    )
+                    .unwrap();
+
+                result_vec
+            })
+            .unwrap();
+
+        //now replace the uses of this mul with the newly dot-based vector
+        self.graph.replace_node_uses(mul_node, new_result).unwrap();
+        new_result
+    }
+
+    ///Unrolls a matrix-matrix multiplication into multiple dot product operations.
+    ///
+    ///NOTE: This also works for Matrix-Vector and Vector-Matrix operations, since vectors can be treated as
+    ///      single-column/single-row matrixes.
+    fn unroll_matrix_matrix(
+        &mut self,
+        region: &RegionLocation,
+        mul_node: NodeRef,
+        left_ty: Ty,
+        right_ty: Ty,
+        left_src: OutportLocation,
+        right_src: OutportLocation,
+    ) -> NodeRef {
+        assert!(left_ty.width().unwrap() == right_ty.height().unwrap());
+
+        let span = self.find_span(mul_node.into()).unwrap_or(Span::empty());
+
+        let new_result = self
+            .graph
+            .on_region(region, |reg| {
+                let column_sources: SmallColl<OutportLocation> = (0..left_ty.width().unwrap())
+                    .map(|col_index| {
+                        let (column_src, _) = reg
+                            .connect_node(
+                                OptNode::new(ConstantIndex::new(col_index), span.clone()),
+                                &[left_src],
+                            )
+                            .unwrap();
+                        column_src.output(0)
+                    })
+                    .collect();
+
+                let row_vectors: SmallColl<OutportLocation> = (0..left_ty.height().unwrap())
+                    .map(|row_idx| {
+                        //Load all indices of that row into a new vector
+                        let row_indices: SmallColl<OutportLocation> = (0..left_ty.width().unwrap())
+                            .map(|col_idx| {
+                                let (element, _) = reg
+                                    .connect_node(
+                                        OptNode::new(ConstantIndex::new(row_idx), span.clone()),
+                                        &[column_sources[col_idx]],
+                                    )
+                                    .unwrap();
+                                element.output(0)
+                            })
+                            .collect();
+
+                        let (row_vector, _) = reg
+                            .connect_node(
+                                OptNode::new(
+                                    Construct::new().with_inputs(row_indices.len()),
+                                    span.clone(),
+                                ),
+                                &row_indices,
+                            )
+                            .unwrap();
+                        row_vector.output(0)
+                    })
+                    .collect();
+
+                let right_colmuns: SmallColl<OutportLocation> = (0..right_ty.width().unwrap())
+                    .map(|col_idx| {
+                        //add a index into the right value's columns
+                        let (element, _) = reg
+                            .connect_node(
+                                OptNode::new(ConstantIndex::new(col_idx), span.clone()),
+                                &[right_src],
+                            )
+                            .unwrap();
+                        element.output(0)
+                    })
+                    .collect();
+
+                //Now we do the double loop that uses dot to calculate each new element in the result matrix
+                let mut result_columns = SmallColl::new();
+                for column_idx in 0..column_sources.len() {
+                    let mut result_column_elements: SmallColl<OutportLocation> = SmallColl::new();
+                    for row_idx in 0..row_vectors.len() {
+                        let (element, _) = reg
+                            .connect_node(
+                                OptNode::new(Buildin::new(BuildinOp::Dot), span.clone()),
+                                &[row_vectors[row_idx], right_colmuns[column_idx]],
+                            )
+                            .unwrap();
+                        result_column_elements.push(element.output(0));
+                    }
+                    //after finishing this column's vector elements, construct the actual vector that make the column
+                    let (col_vec, _) = reg
+                        .connect_node(
+                            OptNode::new(
+                                Construct::new().with_inputs(result_column_elements.len()),
+                                span.clone(),
+                            ),
+                            &result_column_elements,
+                        )
+                        .unwrap();
+                    result_columns.push(col_vec.output(0));
+                }
+
+                //Finally assemble the matrix from those columns
+                let (result_vec, _) = reg
+                    .connect_node(
+                        OptNode::new(
+                            Construct::new().with_inputs(result_columns.len()),
+                            span.clone(),
+                        ),
+                        &result_columns,
                     )
                     .unwrap();
 
