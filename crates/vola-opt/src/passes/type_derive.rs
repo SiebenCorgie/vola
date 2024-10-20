@@ -17,16 +17,16 @@
 //! The pass itself just tries to find a fix-point style resolution, which basically comes down to calling try-derive on all _just changed nodes_ till
 //! either all are resolved, or nothing changes and we end in an _unresolved_ state.
 
-use std::collections::VecDeque;
-
 use ahash::{AHashMap, AHashSet};
 use rvsdg::{
-    edge::{InportLocation, InputType, OutportLocation},
+    edge::{InportLocation, InputType, OutportLocation, OutputType},
     nodes::{ApplyNode, NodeType},
     region::RegionLocation,
     smallvec::SmallVec,
+    util::abstract_node_type::AbstractNodeType,
     NodeRef,
 };
+use rvsdg_viewer::View;
 use vola_common::{ariadne::Label, error::error_reporter, report, Span};
 
 use crate::{
@@ -894,202 +894,181 @@ impl Optimizer {
         }
     }
 
-    fn try_theta_derive(&mut self, node: NodeRef) -> Result<Option<Ty>, OptError> {
-        let loop_node_span = self
-            .span_tags
-            .get(&node.into())
-            .cloned()
-            .unwrap_or(Span::empty());
-        //check lower bound value
-        if let Some(ty) = self.find_type(
-            &InportLocation {
-                node,
-                input: InputType::Input(0),
-            }
-            .into(),
-        ) {
-            if ty != Ty::Nat {
-                let err = OptError::Any { text: format!("Loop bound conflict: Lower loop bound needs to be a natural number, but is {ty}") };
-                report(
-                    error_reporter(err.clone(), loop_node_span.clone())
-                        .with_label(
-                            Label::new(loop_node_span.clone())
-                                .with_message(format!("in this loop")),
-                        )
-                        .finish(),
-                );
-                return Err(err);
-            }
-        } else {
-            //not yet resolved
-            return Ok(None);
-        }
-        //check higher bound value
-        if let Some(ty) = self.find_type(
-            &InportLocation {
-                node,
-                input: InputType::Input(1),
-            }
-            .into(),
-        ) {
-            if ty != Ty::Nat {
-                let err = OptError::Any { text: format!("Loop bound conflict: Upper loop bound needs to be a natural number, but is {ty}") };
-                report(
-                    error_reporter(err.clone(), loop_node_span.clone())
-                        .with_label(
-                            Label::new(loop_node_span.clone())
-                                .with_message(format!("in this loop")),
-                        )
-                        .finish(),
-                );
-                return Err(err);
-            }
-        } else {
-            //not yet resolved
-            return Ok(None);
-        }
-
-        //now checkout the type of the assigned result. This basically makes sure, that we can later on
-        //identify type missmatches between the first assigned value, and the later-on assigned
-        //value in the loop.
-        let initial_result_type = if let Some(ty) = self.find_type(
-            &InportLocation {
-                node,
-                input: InputType::Input(2),
-            }
-            .into(),
-        ) {
-            ty
-        } else {
-            //not yet set
-            return Ok(None);
-        };
-
-        //the idea here is similar, we only start deriving the theta node, once we
-        //could tag all lv-variables with a type.
-        //however, in here, we can do all testing only _after_ finishing
-        for input_type in self.graph.node(node).inport_types() {
-            if let Some(ty) = self
-                .find_type(
-                    &InportLocation {
-                        node,
-                        input: input_type,
-                    }
-                    .into(),
-                )
-                .clone()
-            {
-                if let Some(mapped_internally) = input_type.map_to_in_region(0) {
-                    self.typemap.set(
-                        OutportLocation {
-                            node,
-                            output: mapped_internally,
+    ///Does theta type derive, assuming that all used inputs are type set.
+    fn theta_type_derive(&mut self, theta: NodeRef) -> Result<(), OptError> {
+        let theta_span = self.find_span(theta.into()).unwrap_or(Span::empty());
+        //at the start, check input types.
+        //we must be sure that the loop bounds (input 0 & 1) are natural numbers.
+        //
+        //for all other inports we map the input type to the argument type in the loop-region.
+        //Inputs that have no edge connected to the input and the equivalent argument are ignored
+        for inport in self.graph[theta].inport_types() {
+            let inportloc = theta.as_inport_location(inport);
+            let in_region_arg = theta.as_outport_location(inport.map_to_in_region(0).unwrap());
+            let arg_span = if let Some(span) = self.find_span(inportloc.into()) {
+                span
+            } else {
+                theta_span.clone()
+            };
+            let input_ty = match inport {
+                //Check for natural
+                InputType::Input(0) | InputType::Input(1) => {
+                    if let Some(ty) = self.find_type(&inportloc.into()) {
+                        if !ty.is_nat() {
+                            let err = OptError::TypeDeriveError {
+                                text: format!("Loop bound should be {}, was {}", Ty::Nat, ty),
+                            };
+                            report(
+                                error_reporter(err.clone(), arg_span.clone())
+                                    .with_label(Label::new(arg_span).with_message("Here"))
+                                    .finish(),
+                            );
+                            return Err(err);
+                        } else {
+                            ty
                         }
-                        .into(),
-                        ty.clone(),
-                    );
-                } else {
-                    if input_type != InputType::ThetaPredicate {
-                        panic!("any non-theta-predicate type should be mapable, but {input_type:?} wasnt!");
+                    } else {
+                        //Did not find a type for the loop-bound, which is also undefined
+                        let err = OptError::TypeDeriveError {
+                            text: format!("Loop bound should be {}, but had no type!", Ty::Nat),
+                        };
+                        report(
+                            error_reporter(err.clone(), arg_span.clone())
+                                .with_label(Label::new(arg_span).with_message("Here"))
+                                .finish(),
+                        );
+                        return Err(err);
                     }
                 }
+                InputType::Input(other) => {
+                    //if both, the arg, and the in-loop arg are unconnected, ignore, otherwise,
+                    //expect a type, and map that into the region
+                    //Yay can ignore
+                    if self.graph[inportloc].edge.is_none()
+                        && self.graph[in_region_arg].edges.len() == 0
+                    {
+                        continue;
+                    }
+                    if let Some(ty) = self.find_type(&inportloc.into()) {
+                        ty
+                    } else {
+                        //unexpected
+                        let err = OptError::TypeDeriveError {
+                            text: format!("Loop argument[{other}] should be typed but wasn't!"),
+                        };
+                        report(
+                            error_reporter(err.clone(), arg_span.clone())
+                                .with_label(Label::new(arg_span).with_message("Here"))
+                                .finish(),
+                        );
+                        return Err(err);
+                    }
+                }
+                other => {
+                    //unexpected input type. However panic, since the loop would be malformed anywasy in that case
+                    panic!("Malformed Theta node, can only have Inputs, had {other:?}");
+                }
+            };
+
+            //map the type into the region
+            self.typemap.set(in_region_arg.into(), input_ty);
+        }
+
+        //aight, derive the region
+        self.derive_region(
+            RegionLocation {
+                node: theta,
+                region_index: 0,
+            },
+            theta_span.clone(),
+        )?;
+        //make sure the theta-predicate is a bool now
+        if let Some(ty) =
+            self.find_type(&theta.as_inport_location(InputType::ThetaPredicate).into())
+        {
+            if !ty.is_bool() {
+                let err = OptError::TypeDeriveError {
+                    text: format!("Loop predicate should be {:?}, but is {:?}!", Ty::Bool, ty),
+                };
+                report(
+                    error_reporter(err.clone(), theta_span.clone())
+                        .with_label(Label::new(theta_span).with_message("Here"))
+                        .finish(),
+                );
+                return Err(err);
+            }
+        } else {
+            let err = OptError::TypeDeriveError {
+                text: format!("Loop predicate should be {:?}, but had no type!", Ty::Bool,),
+            };
+            report(
+                error_reporter(err.clone(), theta_span.clone())
+                    .with_label(Label::new(theta_span.clone()).with_message("Here"))
+                    .finish(),
+            );
+            return Err(err);
+        }
+
+        //now map all results out of the theta
+        for output in self.graph[theta].outport_types() {
+            let result_port = theta.as_outport_location(output);
+            let in_region_port = theta.as_inport_location(output.map_to_in_region(0).unwrap());
+            let result_ty = if let Some(ty) = self.find_type(&in_region_port.into()) {
+                ty
             } else {
-                //this one wasn't set, so return
-                return Ok(None);
-            }
-        }
-
-        //now dispatch the loop-region
-        let regloc = RegionLocation {
-            node,
-            region_index: 0,
-        };
-        let span = self
-            .span_tags
-            .get(&regloc.into())
-            .cloned()
-            .unwrap_or(Span::empty());
-        self.derive_region(regloc, span)?;
-
-        //now do our semantic tests. which is:
-        // - theta_predicate needs to be bool,
-        // - there needs to be only one return value ..
-        // - ...and that needs to be typed the same way as initial_result_type
-        if let Some(ty) = self.find_type(
-            &InportLocation {
-                node,
-                input: InputType::ThetaPredicate,
-            }
-            .into(),
-        ) {
-            if ty != Ty::Bool {
-                let err = OptError::Any {
-                    text: format!("Loop condition must be Bool, but was {ty}. This is a bug!"),
-                };
-                report(
-                    error_reporter(err.clone(), loop_node_span.clone())
-                        .with_label(Label::new(loop_node_span).with_message("here"))
-                        .finish(),
-                );
-                return Err(err);
-            }
-        } else {
-            //this is an error at this point, since the region derive has already returned
-            let err = OptError::Any {
-                text: format!(
-                    "Could not derive a type for the loop's break condition. This is a bug!"
-                ),
+                //has no type. Make sure there is no producer, and user
+                if self.graph[in_region_port].edge.is_none()
+                    && self.graph[result_port].edges.len() == 0
+                {
+                    continue;
+                } else {
+                    let err = OptError::TypeDeriveError {
+                        text: format!("Loop output should be typed, but had no type!"),
+                    };
+                    report(
+                        error_reporter(err.clone(), theta_span.clone())
+                            .with_label(Label::new(theta_span).with_message("Here"))
+                            .finish(),
+                    );
+                    return Err(err);
+                }
             };
-            report(
-                error_reporter(err.clone(), loop_node_span.clone())
-                    .with_label(Label::new(loop_node_span).with_message("here"))
-                    .finish(),
-            );
-            return Err(err);
-        }
-
-        //now do the lv of the loop-value
-        if let Some(ty) = self.find_type(
-            &InportLocation {
-                node,
-                input: InputType::Result(2),
-            }
-            .into(),
-        ) {
-            if ty != initial_result_type {
-                let err = OptError::Any {
-                    text: format!("Loop value must be {initial_result_type}, but was {ty}."),
-                };
-                //TODO: find the right span?
-                let value_result_span = Span::empty();
-                report(
-                    error_reporter(err.clone(), loop_node_span.clone())
-                        .with_label(
-                            Label::new(loop_node_span.clone())
-                                .with_message("first defined here as {initial_result_type}"),
-                        )
-                        .with_label(
-                            Label::new(value_result_span)
-                                .with_message("But than defined here as {ty}"),
-                        )
-                        .finish(),
-                );
-                return Err(err);
-            }
-        } else {
-            //this is an error at this point, since the region derive has already returned
-            let err = OptError::Any {
-                text: format!("Could not derive a type for the loop-value. This is a bug!"),
+            //result has a type. Find the equivalent argument port, and also make sure that they match.
+            let argument_port = if let OutputType::Output(t) = output {
+                OutputType::Argument(t)
+            } else {
+                panic!("Theta node outupt-argument missmatch");
             };
-            report(
-                error_reporter(err.clone(), loop_node_span.clone())
-                    .with_label(Label::new(loop_node_span).with_message("here"))
-                    .finish(),
-            );
-            return Err(err);
+            let argloc = theta.as_outport_location(argument_port);
+            let argument_ty = self.find_type(&argloc.into());
+            let set_ty = match (result_ty, argument_ty) {
+                (ty, None) => {
+                    //result is set, argument is not, thats all right
+                    ty
+                }
+                (ty, Some(argty)) => {
+                    if ty != argty {
+                        //type missmatch
+                        let err = OptError::TypeDeriveError {
+                            text: format!("Loop-Variable[{argument_port:?}] type missmatch. Argument was {argty}, but Result was {ty}!"),
+                        };
+                        report(
+                            error_reporter(err.clone(), theta_span.clone())
+                                .with_label(Label::new(theta_span).with_message("Here"))
+                                .finish(),
+                        );
+                        return Err(err);
+                    } else {
+                        ty
+                    }
+                }
+            };
+            //overwrite both, just to be sure
+            self.typemap.set(argloc.into(), set_ty.clone());
+            self.typemap.set(result_port.into(), set_ty);
         }
 
-        Ok(Some(initial_result_type))
+        Ok(())
     }
 
     pub fn try_node_type_derive(
@@ -1121,8 +1100,18 @@ impl Optimizer {
             }
             //NOTE: by convention the θ-Node resolves to output 2
             NodeType::Theta(_t) => {
-                let ty = self.try_theta_derive(node);
-                (ty?, node.output(2))
+                self.theta_type_derive(node)?;
+                let output_port = self.value_producer_port(node).unwrap();
+                let ty = self.find_type(&output_port.into());
+                (ty, output_port)
+            }
+            NodeType::Lambda(_l) => {
+                self.derive_lambda(node)?;
+                //lambdas alwas return a single callable
+                (
+                    Some(Ty::Callable),
+                    node.as_outport_location(OutputType::LambdaDeclaration),
+                )
             }
             t => {
                 let err = OptError::Any {
@@ -1135,37 +1124,121 @@ impl Optimizer {
         Ok(payload)
     }
 
+    fn derive_lambda(&mut self, lambda: NodeRef) -> Result<(), OptError> {
+        //The only thing we need to do is check that all CVs are set (and map them into the region),
+        //and that all arguments have a type.
+        assert_eq!(self.graph[lambda].into_abstract(), AbstractNodeType::Lambda);
+        let span = self.find_span(lambda.into()).unwrap_or(Span::empty());
+
+        for argty in self.graph[lambda].argument_types(0) {
+            match argty {
+                OutputType::Argument(a) => {
+                    let loc = lambda.as_outport_location(argty);
+                    //NOTE: if the argument is anused, just ignore it
+                    if self.graph[loc].edges.len() == 0 {
+                        continue;
+                    }
+                    //for arguments, just check that the type is already set
+                    if self.find_type(&loc.into()).is_none() {
+                        let argspan = if let Some(argspan) = self.find_span(loc.into()) {
+                            argspan
+                        } else {
+                            span.clone()
+                        };
+
+                        let err = OptError::TypeDeriveError {
+                            text: format!(
+                                "Expected function's argument[{a}] to be type set, but wasn't"
+                            ),
+                        };
+                        report(
+                            error_reporter(err.clone(), argspan.clone())
+                                .with_label(Label::new(argspan.clone()).with_message("Here"))
+                                .finish(),
+                        );
+                        return Err(err);
+                    }
+                }
+                OutputType::ContextVariableArgument(idx) => {
+                    //for cv inputs, try to find a type.
+                    //we ignore that tho, if the cv is not connected
+                    let loc = lambda.as_outport_location(argty);
+                    if self.graph[loc].edges.len() == 0 {
+                        continue;
+                    }
+
+                    //is connected, try to copy over type
+                    let input_port = lambda.as_inport_location(argty.map_out_of_region().unwrap());
+                    if let Some(ty) = self.find_type(&input_port.into()) {
+                        self.typemap.set(loc.into(), ty);
+                    } else {
+                        //failed to find inputs's type
+
+                        let argspan = if let Some(argspan) = self.find_span(loc.into()) {
+                            argspan
+                        } else {
+                            span.clone()
+                        };
+
+                        let err = OptError::TypeDeriveError {
+                            text: format!(
+                                "Function's context-variable[{idx}] was not yet type set!"
+                            ),
+                        };
+                        report(
+                            error_reporter(err.clone(), argspan.clone())
+                                .with_label(Label::new(argspan.clone()).with_message("Here"))
+                                .finish(),
+                        );
+                        return Err(err);
+                    }
+                }
+                _ => {
+                    let err = OptError::TypeDeriveError {
+                        text: format!("Function had unexpected argument type {argty:?}"),
+                    };
+                    report(
+                        error_reporter(err.clone(), span.clone())
+                            .with_label(Label::new(span.clone()).with_message("Here"))
+                            .finish(),
+                    );
+                    return Err(err);
+                }
+            }
+        }
+
+        //now do internal type derivative
+        self.derive_region(
+            RegionLocation {
+                node: lambda,
+                region_index: 0,
+            },
+            span,
+        )?;
+
+        Ok(())
+    }
+
+    ///Derives the type for all live nodes in the region.
     pub(crate) fn derive_region(
         &mut self,
         reg: RegionLocation,
         region_src_span: Span,
     ) -> Result<(), OptError> {
-        //First gather all nodes in the region
-        let (mut build_stack, edges) = self
-            .graph
-            .on_region(&reg, |builder| {
-                //The resolution stack. Note that we only do type resolution on _live_ nodes.
-                // dead nodes _might_ be garbage already.
-                let build_stack: VecDeque<NodeRef> = builder
-                    .ctx()
-                    .live_nodes_in_region(reg)
-                    .into_iter()
-                    .collect();
-                //For the edges we just use _all_, since we only carry over available information
-                let edges = builder
-                    .region()
-                    .edges
-                    .iter()
-                    .map(|e| *e)
-                    .collect::<Vec<_>>();
-                (build_stack, edges)
-            })
-            .expect("Failed to gather nodes in λ-Region");
+        //The idea is pretty simple: we build the topological order of all nodes, and
+        //derive the type for each.
+        //
+        //The assumption is, that the type of any node can be calculated from the types of all inputs.
+        //
+        //A special case are nodes with sub regions. In that case we copy over all input-types to the
+        //arguments of each region, and recurse into the region.
+        //
+        //In practice this makes the algorithm have the recursion depth of the graph's maximum region-nesting count... which is okay.
 
         //Preset all edges where we know the type already. For instance if the type map
         //contains type info for any of the ports of an edge
-        for edg in &edges {
-            let src = self.graph.edge(*edg).src().clone();
+        for edg in &self.graph[reg].edges.clone() {
+            let src = self.graph[*edg].src().clone();
             if let Some(ty) = self.find_type(&src.into()) {
                 if let Some(preset) = self.graph.edge(*edg).ty.get_type() {
                     if preset != &ty {
@@ -1190,129 +1263,59 @@ impl Optimizer {
             }
         }
 
-        'resolution_loop: loop {
-            //Flag that tells us _after_ touching all nodes,
-            // if we made any advances. If not we are stuck and return with an error.
-            let mut resolved_any_node = false;
+        let topoord = self.graph.topological_order_region(reg);
 
-            let mut local_stack = VecDeque::new();
-            std::mem::swap(&mut local_stack, &mut build_stack);
-            for node in local_stack {
-                let (type_resolve_try, resolved_port) = match self.try_node_type_derive(node) {
-                    Ok(t) => t,
-                    Err(e) => {
-                        let span = self.find_span(node.into()).unwrap_or(Span::empty());
-                        report(
-                            error_reporter(e.clone(), span.clone())
-                                .with_label(
-                                    Label::new(span.clone()).with_message("on this operation"),
-                                )
-                                .finish(),
-                        );
-                        //Immediately abort, since we have no way of finishing.
-                        // TODO: We could also collect all error at this point...
-                        return Err(e);
-                    }
-                };
+        for node in topoord {
+            let (type_resolve_try, resolved_port) = match self.try_node_type_derive(node) {
+                Ok(t) => t,
+                Err(e) => {
+                    let span = self.find_span(node.into()).unwrap_or(Span::empty());
+                    report(
+                        error_reporter(e.clone(), span.clone())
+                            .with_label(Label::new(span.clone()).with_message("on this operation"))
+                            .finish(),
+                    );
+                    //Immediately abort, since we have no way of finishing.
+                    // TODO: We could also collect all error at this point...
+                    return Err(e);
+                }
+            };
 
-                match type_resolve_try {
-                    Some(ty) => {
-                        //flag change.
-                        resolved_any_node = true;
+            match type_resolve_try {
+                Some(ty) => {
+                    //now assign that type to the nodes's output.
+                    self.typemap.set(resolved_port.into(), ty.clone());
 
-                        //now assign that type to the nodes's output.
-                        self.typemap.set(resolved_port.into(), ty.clone());
-
-                        //And propagate to all edges
-                        for edg in self
-                            .graph
-                            .node(node)
-                            .outport(&resolved_port.output)
-                            .unwrap()
-                            .edges
-                            .clone()
-                            .iter()
-                        {
-                            if let Err(e) =
-                                self.graph.edge_mut(*edg).ty.set_derived_state(ty.clone())
-                            {
-                                if let Some(span) = self.find_span(resolved_port.node.into()) {
-                                    report(
-                                        error_reporter(e.clone(), span.clone())
-                                            .with_label(
-                                                Label::new(span.clone())
-                                                    .with_message("On this node"),
-                                            )
-                                            .finish(),
-                                    );
-                                } else {
-                                    report(error_reporter(e.clone(), Span::empty()).finish());
-                                }
-
-                                return Err(e);
+                    //And propagate to all edges
+                    for edg in self.graph[resolved_port].edges.clone().iter() {
+                        if let Err(e) = self.graph[*edg].ty.set_derived_state(ty.clone()) {
+                            if let Some(span) = self.find_span(resolved_port.node.into()) {
+                                report(
+                                    error_reporter(e.clone(), span.clone())
+                                        .with_label(
+                                            Label::new(span.clone()).with_message("On this node"),
+                                        )
+                                        .finish(),
+                                );
+                            } else {
+                                report(error_reporter(e.clone(), Span::empty()).finish());
                             }
+
+                            return Err(e);
                         }
                     }
-                    None => {
-                        //push back into build_stack
-                        build_stack.push_front(node);
-                    }
+                }
+                None => {
+                    //This was a soft error before, but now we assume that it is a hard erro
+                    return Err(OptError::TypeDeriveError {
+                        text: format!(
+                            "Could not derive type for node: {} ({})",
+                            self.graph[node].name(),
+                            node
+                        ),
+                    });
                 }
             }
-
-            //If we didn't change anything, or if the build_stack is empty, end the loop
-            if !resolved_any_node || build_stack.is_empty() {
-                break 'resolution_loop;
-            }
-        }
-
-        //If the build stack is not empty at this point, type derivation has failed. Report all failed nodes
-        if !build_stack.is_empty() {
-            for failed_node in &build_stack {
-                let node = self.graph.node(*failed_node);
-                let span = match &node.node_type {
-                    NodeType::Simple(s) => Some(s.span.clone()),
-                    NodeType::Apply(_) => {
-                        if let Some(span) = self.span_tags.get(&failed_node.clone().into()) {
-                            Some(span.clone())
-                        } else {
-                            None
-                        }
-                    }
-                    _ => None,
-                };
-
-                let err = OptError::Any {
-                    text: format!("Failed to derive a type"),
-                };
-
-                if let Some(span) = span {
-                    report(
-                        error_reporter(err.clone(), span.clone())
-                            .with_label(Label::new(span.clone()).with_message("for this"))
-                            .finish(),
-                    );
-                } else {
-                    report(
-                        error_reporter(err.clone(), Span::empty())
-                            .with_message(&format!(
-                                "On note of type {} without span",
-                                &node.node_type
-                            ))
-                            .finish(),
-                    );
-                }
-            }
-
-            if std::env::var("VOLA_DUMP_ALL").is_ok()
-                || std::env::var("DUMP_TYPE_DERIVE_FAILED").is_ok()
-            {
-                self.push_debug_state("type derive failed");
-            }
-
-            return Err(OptError::TypeDeriveFailed {
-                errorcount: build_stack.len(),
-            });
         }
 
         Ok(())

@@ -585,8 +585,8 @@ impl<'a> BlockBuilder<'a> {
             g_result_value_out_port: OutportLocation,
         }
 
+        let range_span = theta.range_expr_span();
         let initial_assignment_src = self.setup_alge_expr(theta.initial_assignment.expr)?;
-
         let bound_lower = self.setup_alge_expr(theta.bound_lower)?;
         let bound_upper = self.setup_alge_expr(theta.bound_upper)?;
 
@@ -598,7 +598,7 @@ impl<'a> BlockBuilder<'a> {
                 let (node, _edges) = reg
                     .connect_node(
                         OptNode {
-                            span: Span::empty(),
+                            span: range_span,
                             node: Box::new(BinaryRel::new(BinaryRelOp::Lt)),
                         },
                         &[bound_lower, bound_upper],

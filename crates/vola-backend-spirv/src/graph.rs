@@ -166,7 +166,8 @@ impl SpirvBackend {
     ///Returns None, if `node` is not a _simple-node_.
     pub fn get_single_node_result_type(&self, node: NodeRef) -> Option<SpvType> {
         let return_port = match self.graph.node(node).node_type {
-            NodeType::Simple(_) | NodeType::Gamma(_) | NodeType::Apply(_) => OutputType::Output(0),
+            NodeType::Simple(_) | NodeType::Apply(_) => OutputType::Output(0),
+            NodeType::Gamma(_) => OutputType::ExitVariableOutput(0),
             NodeType::Theta(_) => OutputType::Output(2),
             _ => return None,
         };
