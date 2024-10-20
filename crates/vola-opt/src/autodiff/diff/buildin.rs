@@ -7,7 +7,7 @@
  */
 
 use rvsdg::{
-    edge::{InportLocation, InputType, OutportLocation},
+    edge::{InputType, OutportLocation},
     region::RegionLocation,
     smallvec::smallvec,
     NodeRef, SmallColl,
@@ -21,7 +21,7 @@ use crate::{
         buildin::{Buildin, BuildinOp},
         relational::{BinaryRel, BinaryRelOp},
     },
-    autodiff::activity::Activity,
+    autodiff::{activity::Activity, AdResponse},
     imm::ImmScalar,
     OptEdge, OptNode, Optimizer,
 };
@@ -34,13 +34,7 @@ impl Optimizer {
         region: RegionLocation,
         node: NodeRef,
         activity: &mut Activity,
-    ) -> Result<
-        (
-            OutportLocation,
-            SmallColl<(OutportLocation, SmallColl<InportLocation>)>,
-        ),
-        AutoDiffError,
-    > {
+    ) -> Result<AdResponse, AutoDiffError> {
         let span = self.find_span(node.into()).unwrap_or(Span::empty());
         let op = self.graph[node]
             .node_type
@@ -94,7 +88,7 @@ impl Optimizer {
                 subdiff.push((u_src, smallvec![u_diff_dst]));
                 subdiff.push((v_src, smallvec![v_diff_dst]));
 
-                Ok((result, subdiff))
+                Ok(AdResponse::new(node.output(0), result).with_chained_derivatives(subdiff))
             }
 
             BuildinOp::SquareRoot => {
@@ -131,12 +125,15 @@ impl Optimizer {
                     .unwrap();
 
                 //make chain rule
-                let (result, subdiff) = self.build_chain_rule_for(&region, div_result, f_src);
+                let response =
+                    self.build_chain_rule_for(&region, node.output(0), div_result, f_src);
 
-                self.names
-                    .set(result.node.into(), "Sqrt chain-rule right".to_string());
+                self.names.set(
+                    response.diff_output.node.into(),
+                    "Sqrt chain-rule right".to_string(),
+                );
 
-                Ok((result, subdiff))
+                Ok(response)
             }
             BuildinOp::Min | BuildinOp::Max => {
                 if self.config.autodiff.abort_on_undiff {
@@ -270,17 +267,19 @@ impl Optimizer {
 
                 self.names
                     .set(gamma_node.into(), format!("diff({op:?}) choice"));
-                Ok((
-                    value_output,
-                    //Tell the differ, that thae feed-through-src needs to be diffed, and hooked up to the
+                Ok(AdResponse::new(node.output(0), value_output)
+                    //Tell the differ, that the feed-through-src needs to be diffed, and hooked up to the
                     //gamma-node
-                    smallvec![(feed_through_src, smallvec![value_input])],
-                ))
+                    .with_chained_derivatives(smallvec![(
+                        feed_through_src,
+                        smallvec![value_input]
+                    )]))
             }
             BuildinOp::Exp => {
                 //e^x == e^x
                 Ok(self.build_chain_rule_for(
                     &region,
+                    node.output(0),
                     node.output(0),
                     self.graph.inport_src(node.input(0)).unwrap(),
                 ))
@@ -339,7 +338,7 @@ impl Optimizer {
                         })
                         .unwrap();
 
-                    Ok(self.build_chain_rule_for(&region, diffed_output, x_src))
+                    Ok(self.build_chain_rule_for(&region, node.output(0), diffed_output, x_src))
                 }
             }
             _other => Err(AutoDiffError::NoAdImpl(

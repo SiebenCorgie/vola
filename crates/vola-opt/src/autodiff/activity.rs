@@ -178,6 +178,7 @@ impl Activity {
                     } else {
                         continue;
                     };
+
                     let is_active = self.is_active_port(opt, src);
 
                     let wrt_index_chain = self.wrt_producer.get(&src).cloned();

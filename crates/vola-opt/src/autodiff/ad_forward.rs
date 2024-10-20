@@ -53,6 +53,8 @@
 //! part being, that for any constant we can reuse parts of the original
 //! graph.
 
+use super::{activity::Activity, AdResponse, AutoDiffError};
+use crate::{autodiff::AutoDiff, OptEdge, OptError, Optimizer};
 use ahash::AHashMap;
 use rvsdg::{
     edge::{InportLocation, OutportLocation, OutputType},
@@ -62,11 +64,14 @@ use rvsdg::{
 };
 use vola_common::{ariadne::Label, error::error_reporter, report, Span};
 
-use crate::{autodiff::AutoDiff, OptEdge, OptError, Optimizer};
-
-use super::{activity::Activity, AutoDiffError};
-
 type DiffExprCache = AHashMap<OutportLocation, OutportLocation>;
+
+struct ForwardADCtx {
+    ///Tracks already created derivatives for reuse
+    expr_cache: DiffExprCache,
+    ///Handles activity exploration and initialization of active values
+    activity: Activity,
+}
 
 impl Optimizer {
     ///Executes forward-ad pass on `entrypoint`. Assumes that it is a `AutoDiff` node. If that is the case, the node will be replaced
@@ -119,6 +124,27 @@ impl Optimizer {
         Ok(())
     }
 
+    ///Builds the topological order of `value`'s producer node and all its dependencies in that region
+    fn collect_with_dependencies_in_region(
+        &self,
+        region: RegionLocation,
+        value: OutportLocation,
+    ) -> Vec<NodeRef> {
+        //build dependency node list for diff node's expression
+        let mut dependencies: Vec<_> = self
+            .graph
+            .walk_predecessor_nodes_region(value.node, region)
+            .collect();
+        //push back expr_seed node
+        dependencies.push(value.node);
+
+        //order the dependencies
+        let ordered_dependencies = self
+            .graph
+            .topological_order_nodes(dependencies.iter().cloned());
+        ordered_dependencies
+    }
+
     ///The actual forward-autodiff implementation for a single, scalar
     /// wrt-arg.
     ///
@@ -136,62 +162,118 @@ impl Optimizer {
 
         //find all active nodes of this expression, then start doing the forward iteration,
         //guided by the activity analysis.
-
-        let mut activity = self.activity_explorer(diffnode)?;
+        let activity = self.activity_explorer(diffnode)?;
 
         if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("DUMP_AD_ACTIVITY").is_ok() {
             self.push_debug_state_with(&format!("fw-autodiff-{diffnode}-activity"), |builder| {
                 builder.with_flags("activity", &activity.active)
             });
         }
-        /*
-        println!("Active Nodes: ");
-        for active in activity.active.flags.keys() {
-            if let AttribLocation::Node(n) = active {
-                println!("    {n}");
-            }
-        }
 
-        println!("WRT-Outputs");
-        for o in &activity.wrt_producer {
-            println!("    {o:?}");
-        }
-        */
+        let mut ctx = ForwardADCtx {
+            expr_cache: DiffExprCache::new(),
+            activity,
+        };
 
-        let mut expr_cache = DiffExprCache::new();
-        let diffed_src = self.fwad_handle_port(region, expr_src, &mut activity, &mut expr_cache)?;
+        let derivative_src = self.forward_diff_in_region(region, &mut ctx, expr_src)?;
 
         //replace the differential_value and the autodiff node
         self.graph
-            .replace_outport_uses(diffnode.output(0), diffed_src)?;
+            .replace_outport_uses(diffnode.output(0), derivative_src)?;
 
         Ok(())
     }
 
-    ///The push-forward recursive differentiation handler.
-    ///The idea is to apply all auto-diff rules _simply_ recursively.
-    ///
-    /// On paper this might generate a lot of redundant code/nodes. In practice
-    /// a common-node-elemination pass can take care of that.
-    ///
-    ///
-    /// The _nice_ part about the recursive pattern is, that we can apply all
-    /// rules simply by traversing the dependecy DAG of a node an rewriting said node
-    /// according to the rules.
-    ///
-    /// So given a node N = f(g(x)), that needs to apply the chain rule, we can simply
-    /// split the tree into f'(g(x)) (where g(x) is the original _rest_ of the DAG), and
-    /// g'(x), where we just call fwad_handle_node(g) to recursively process _the rest_.
+    ///Builds the derivative of `expr_src` based on `ctx`'s activity state.
+    fn forward_diff_in_region(
+        &mut self,
+        region: RegionLocation,
+        ctx: &mut ForwardADCtx,
+        expr_src: OutportLocation,
+    ) -> Result<OutportLocation, OptError> {
+        let ordered_dependencies = self.collect_with_dependencies_in_region(region, expr_src);
+
+        //Now iterate the topo-ordered dependecy list. This is effectively the
+        // _forward_ part of forward AD.
+        //
+        // In practice we can be _safe_ that for each considered node, the predecessor's derivative was already calculated, if needed.
+        //
+        // Therfore we only need to build this node's derivative, and possibly hook-up chain rule sub expressions
+        for node in ordered_dependencies {
+            self.build_derivative(region, node, ctx)?;
+        }
+
+        //There is an edge case, where the initial expression is not active. In that case _nothing_
+        //will have happened, what effectively won't generate the zero-node for the expression. In that case
+        //we post-derivative generate the expression.
+        //
+        //NOTE: we don't do that in build_derivative, since we'd otherwise generate a zero for each inactive node in the dependency
+        //      graph, which is a big waste.
+        //for inactive nodes, try to get the value producer output, and let our port handler generate an inactive
+        //seed (usually zero or something)
+        if !ctx.activity.is_active_port(self, expr_src) {
+            let inactive_port = self.fwad_handle_port(region, expr_src, ctx)?;
+            ctx.expr_cache.insert(expr_src, inactive_port);
+        }
+
+        //retrieve the derivative of the diff expression port from the expr-cache
+        let derivative_src = *ctx
+            .expr_cache
+            .get(&expr_src)
+            .expect("Expected derivative for output!");
+
+        //Before ending, always do a final type derive though
+        let span = self.find_span(region.into()).unwrap_or(Span::empty());
+        self.derive_region(region, span)?;
+
+        Ok(derivative_src)
+    }
+
+    ///Builds the derivative of `node`, based on the given activties.
+    fn build_derivative(
+        &mut self,
+        parent_region: RegionLocation,
+        node: NodeRef,
+        ctx: &mut ForwardADCtx,
+    ) -> Result<(), OptError> {
+        //Bail none active nodes
+        if !ctx.activity.is_node_active(&self, node) {
+            return Ok(());
+        }
+
+        //handle node derivative
+        let response = self.fwad_handle_node(parent_region, node, ctx)?;
+
+        assert_eq!(response.src_output, self.value_producer_port(node).unwrap());
+        //push active derivative into cache
+        ctx.expr_cache
+            .insert(response.src_output, response.diff_output);
+
+        //now hookup all post-connection ports that are signaled by the node handler.
+        for (post_diff_src, targets) in response.chained_derivatives {
+            //Try to reuse expr-cache, otherwise build new subexpression
+            let diff_expr_src = self
+                .fwad_handle_port(parent_region, post_diff_src, ctx)
+                .unwrap();
+            for t in targets {
+                self.graph
+                    .connect(diff_expr_src, t, OptEdge::value_edge_unset())?;
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Handles the creation of the derivative of a node, as well as generating additional connection data.
     fn fwad_handle_node(
         &mut self,
         region: RegionLocation,
         node: NodeRef,
-        activity: &mut Activity,
-        expr_cache: &mut DiffExprCache,
-    ) -> Result<OutportLocation, OptError> {
+        ctx: &mut ForwardADCtx,
+    ) -> Result<AdResponse, OptError> {
         //we should end up here only for active nodes, otherwise the value would be zero already
         // (by the port handler)
-        assert!(activity.is_node_active(&self, node));
+        assert!(ctx.activity.is_node_active(&self, node));
 
         match self.graph[node].into_abstract() {
             AbstractNodeType::Simple => {
@@ -206,7 +288,9 @@ impl Optimizer {
                     .node
                     .dialect()
                 {
-                    "alge" => self.fwd_handle_alge_node(region, node, activity, expr_cache),
+                    "alge" => self
+                        .fwd_handle_alge_node(region, node, ctx)
+                        .map_err(|e| e.into()),
                     "autodiff" => {
                         report(
                             error_reporter(
@@ -221,7 +305,10 @@ impl Optimizer {
                     "imm" => {
                         //an active immediate value will be splat to zero, since this will always
                         //be equivalent to a constant.
-                        Ok(self.emit_zero_for_port(region, node.output(0)))
+                        Ok(AdResponse::new(
+                            node.output(0),
+                            self.emit_zero_for_port(region, node.output(0)),
+                        ))
                     }
                     other => {
                         //Right now we panic for all unknown nodes.
@@ -237,29 +324,24 @@ impl Optimizer {
                 todo!("Function calls not yet implemented!")
             }
             AbstractNodeType::Gamma => {
-                //If the gamma output was already diffed, return that instead.
-                if let Some(cached_diff) =
-                    expr_cache.get(&node.as_outport_location(OutputType::ExitVariableOutput(0)))
-                {
-                    return Ok(cached_diff.clone());
-                }
-
-                //We handle active gamma nodes by deep-copying them, and then recursing the forward-mode
+                //We handle active gamma nodes by deep-copying them, and then recursing the forward-algorithm
                 //within that region. Once that region returns,
                 //we return the gamma-node's result
+                let original_value_output =
+                    node.as_outport_location(OutputType::ExitVariableOutput(0));
                 let gamma_cpy = self.graph.deep_copy_node(node, region);
                 //Copy over connections
                 self.copy_input_connections(node, gamma_cpy);
                 //copy over activity attributes
                 for attrib in self.graph.iter_node_attribs(node) {
                     let dst_attrib_loc = attrib.clone().change_node(gamma_cpy);
-                    let _ = activity.active.copy(&attrib, dst_attrib_loc);
+                    let _ = ctx.activity.active.copy(&attrib, dst_attrib_loc);
                 }
                 //let it trace the activity.
                 //NOTE: This also pushes forward the producer states into the newly created
                 //      Region. Note that otherwise, when calling the activity-state first time from _within_
                 //      the node, this would get resolved _the wrong way_.
-                activity.trace_node_activity(self, gamma_cpy);
+                ctx.activity.trace_node_activity(self, gamma_cpy);
                 //Now with the activity and producer-state set,
                 //let the recursion handle all region's outputs.
                 for reg in 0..self.graph[gamma_cpy].regions().len() {
@@ -267,6 +349,7 @@ impl Optimizer {
                         node: gamma_cpy,
                         region_index: reg,
                     };
+
                     for resultty in self.graph[gamma_cpy].result_types(reg) {
                         let result_port = InportLocation {
                             node: gamma_cpy,
@@ -274,8 +357,7 @@ impl Optimizer {
                         };
                         if let Some(value_edge) = self.graph[result_port].edge {
                             let src = *self.graph[value_edge].src();
-                            let output =
-                                self.fwad_handle_port(subregion, src, activity, expr_cache)?;
+                            let output = self.forward_diff_in_region(subregion, ctx, src)?;
                             //disconnect old edge, connect new edge
                             let _old_value = self.graph.disconnect(value_edge).unwrap();
                             //Don't know the type yet though
@@ -285,14 +367,14 @@ impl Optimizer {
                     }
                 }
 
+                self.names
+                    .set(gamma_cpy.into(), format!("Derivative of {node}"));
+
                 let result_port = gamma_cpy.as_outport_location(OutputType::ExitVariableOutput(0));
                 //register the diffed output in the cache for the gamma-nodes output.
-                expr_cache.insert(
-                    node.as_outport_location(OutputType::ExitVariableOutput(0)),
-                    result_port,
-                );
+                ctx.expr_cache.insert(original_value_output, result_port);
                 //finaly return the gamma's output as the diff value
-                Ok(result_port)
+                Ok(AdResponse::new(original_value_output, result_port))
             }
             other => return Err(AutoDiffError::FwadUnexpectedNodeType(other).into()),
         }
@@ -303,16 +385,15 @@ impl Optimizer {
         &mut self,
         region: RegionLocation,
         node: NodeRef,
-        activity: &mut Activity,
-        expr_cache: &mut DiffExprCache,
-    ) -> Result<OutportLocation, OptError> {
+        ctx: &mut ForwardADCtx,
+    ) -> Result<AdResponse, AutoDiffError> {
         //This is the point, where we handle the dispatch of the chain rule.
         //
         //Note that things like cross-product-rule, quotient-rule or dot-product-rule are
         //handeled by the respective node.
         //
         //however, dispatching the chain-rule can / must be done
-        let (result, postdiffs) = match self.build_diff_value(region, node, activity) {
+        let response = match self.build_diff_value(region, node, &mut ctx.activity) {
             Ok(t) => t,
             Err(e) => {
                 if let Some(span) = self.find_span(node.into()) {
@@ -327,23 +408,8 @@ impl Optimizer {
                 }
             }
         };
-        for (post_diff_src, targets) in postdiffs {
-            //Try to reuse expr-cache, otherwise build new subexpression
-            let diff_expr_src = if let Some(cached) = expr_cache.get(&post_diff_src) {
-                *cached
-            } else {
-                let diffvalue =
-                    self.fwad_handle_port(region, post_diff_src, activity, expr_cache)?;
-                expr_cache.insert(post_diff_src, diffvalue);
-                diffvalue
-            };
-            for t in targets {
-                self.graph
-                    .connect(diff_expr_src, t, OptEdge::value_edge_unset())?;
-            }
-        }
 
-        Ok(result)
+        Ok(response)
     }
 
     //Small indirection that lets us catch active & WRT-Ports. This is mostly used if
@@ -353,11 +419,10 @@ impl Optimizer {
         &mut self,
         region: RegionLocation,
         port: OutportLocation,
-        activity: &mut Activity,
-        expr_cache: &mut DiffExprCache,
-    ) -> Result<OutportLocation, OptError> {
+        ctx: &mut ForwardADCtx,
+    ) -> Result<OutportLocation, AutoDiffError> {
         //A port that is part of the respect_to chain always derives to 1.0
-        if activity.is_wrt_producer(&port) {
+        if ctx.activity.is_wrt_producer(&port) {
             //NOTE: _handling_ a wrt port means splatting it with 1.0
             //      Math wise this is handling a expression:
             //      f(x) = x;
@@ -366,14 +431,16 @@ impl Optimizer {
             //      For vectors this means initing _the-right_ index with one, same for matrix.
             //      We have that information from the activity trace, which if why we'll use that.
             //println!("Getting {port:?} : {:?}", activity.wrt_producer.get(&port));
-            Ok(activity.build_diff_init_value_for_wrt(self, region, port))
+            Ok(ctx
+                .activity
+                .build_diff_init_value_for_wrt(self, region, port))
         } else {
             if port.output.is_argument() {
                 //If the outport is active and an argument, but not a wrt-producer, this means that
                 //we get _supplied_ the diffed_value here, so just use that
                 //
                 //if however the port is not active, replace it with an apropriate zero
-                if activity.is_active_port(self, port) {
+                if ctx.activity.is_active_port(self, port) {
                     Ok(port)
                 } else {
                     Ok(self.emit_zero_for_port(region, port))
@@ -382,12 +449,16 @@ impl Optimizer {
                 //if is no argument, and no wrt producer, check if the port is active, if not
                 //it can be considered a _constant_
                 //therfore the derivative is always zero.
-                if !activity.is_active_port(&self, port) {
+                if !ctx.activity.is_active_port(&self, port) {
                     let zero_node = self.emit_zero_for_port(region, port);
                     Ok(zero_node)
                 } else {
-                    //Otherwise we need to recurse
-                    self.fwad_handle_node(region, port.node, activity, expr_cache)
+                    //The last case is active, non-wrt port that is no argument. In that case there should already be the value in our cache
+                    if let Some(diffed_port) = ctx.expr_cache.get(&port) {
+                        Ok(*diffed_port)
+                    } else {
+                        Err(AutoDiffError::FwPortUnhandeled(port))
+                    }
                 }
             }
         }

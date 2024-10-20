@@ -8,14 +8,13 @@
 
 use std::collections::VecDeque;
 
-use ahash::{AHashMap, AHashSet};
+use ahash::AHashSet;
 
 use crate::{
-    edge::{InportLocation, InputType, LangEdge, OutportLocation, OutputType},
+    edge::{LangEdge, OutportLocation},
     nodes::LangNode,
     region::RegionLocation,
-    util::Path,
-    NodeRef, Rvsdg, SmallColl,
+    NodeRef, Rvsdg,
 };
 
 ///Utility that walks the predecessors of a node in breadth-first style.

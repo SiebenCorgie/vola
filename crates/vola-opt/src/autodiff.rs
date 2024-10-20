@@ -20,14 +20,53 @@ mod canonicalize;
 mod diff;
 
 use rvsdg::{
-    edge::InputType,
+    edge::{InportLocation, InputType, OutportLocation},
     region::{Input, Output},
     rvsdg_derive_lang::LangNode,
     util::abstract_node_type::AbstractNodeType,
+    SmallColl,
 };
 use vola_common::thiserror::Error;
 
 use crate::{common::Ty, DialectNode, OptError, OptNode};
+
+///Generic respons of a differentiation implementation of some node
+pub struct AdResponse {
+    //the original output value that we carry the derivative in `diff_output` of.
+    pub src_output: OutportLocation,
+    //The result port of the expression's derivative
+    pub diff_output: OutportLocation,
+    ///Signals for which Outport we need to know the derivative, and to which inport those must be connected.
+    pub chained_derivatives: SmallColl<(OutportLocation, SmallColl<InportLocation>)>,
+}
+
+impl AdResponse {
+    pub fn new(src_output: OutportLocation, differentiated_output: OutportLocation) -> Self {
+        Self {
+            src_output,
+            diff_output: differentiated_output,
+            chained_derivatives: SmallColl::new(),
+        }
+    }
+
+    pub fn with_chained_derivatives(
+        mut self,
+        derivatives: SmallColl<(OutportLocation, SmallColl<InportLocation>)>,
+    ) -> Self {
+        self.chained_derivatives = derivatives;
+        self
+    }
+
+    #[allow(dead_code)]
+    pub fn push_chain_derivatives(
+        &mut self,
+        derivative_src: OutportLocation,
+        destinations: SmallColl<InportLocation>,
+    ) {
+        self.chained_derivatives
+            .push((derivative_src, destinations));
+    }
+}
 
 #[derive(Debug, Error, Clone)]
 pub enum AutoDiffError {
@@ -49,6 +88,8 @@ pub enum AutoDiffError {
     UndiffNode(String),
     #[error("Failed to canonicalize: {0:?}")]
     CanonicalizationFailed(String),
+    #[error("Port {0:?} was not yet handeled")]
+    FwPortUnhandeled(OutportLocation),
 }
 
 //Macro that implements the "View" trait for the Autodiff

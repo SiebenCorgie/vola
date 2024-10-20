@@ -7,18 +7,13 @@
  */
 
 use crate::{
-    autodiff::{activity::Activity, AutoDiffError},
+    autodiff::{activity::Activity, AdResponse, AutoDiffError},
     common::Ty,
     imm::ImmScalar,
     Optimizer,
 };
 
-use rvsdg::{
-    edge::{InportLocation, OutportLocation},
-    region::RegionLocation,
-    smallvec::smallvec,
-    NodeRef, SmallColl,
-};
+use rvsdg::{region::RegionLocation, smallvec::smallvec, NodeRef, SmallColl};
 use rvsdg_viewer::View;
 use vola_common::Span;
 
@@ -33,13 +28,7 @@ impl Optimizer {
         region: RegionLocation,
         node: NodeRef,
         activity: &mut Activity,
-    ) -> Result<
-        (
-            OutportLocation,
-            SmallColl<(OutportLocation, SmallColl<InportLocation>)>,
-        ),
-        AutoDiffError,
-    > {
+    ) -> Result<AdResponse, AutoDiffError> {
         let op = self.graph[node]
             .node_type
             .unwrap_simple_ref()
@@ -71,7 +60,7 @@ impl Optimizer {
                     })
                     .unwrap();
 
-                Ok((result, subdiff))
+                Ok(AdResponse::new(node.output(0), result).with_chained_derivatives(subdiff))
             }
             BinaryArithOp::Mul => {
                 //We need to distinguish two cases here.
@@ -177,7 +166,8 @@ impl Optimizer {
                             })
                             .unwrap();
 
-                        return Ok((result, subdiff));
+                        return Ok(AdResponse::new(node.output(0), result)
+                            .with_chained_derivatives(subdiff));
                     }
                     (false, false) => panic!("{node:?} should not be active"),
                     (is_left_diff, is_right_diff) => {
@@ -222,7 +212,8 @@ impl Optimizer {
                                         node.output(0)
                                     })
                                     .unwrap();
-                                Ok((result, subdiff))
+                                Ok(AdResponse::new(node.output(0), result)
+                                    .with_chained_derivatives(subdiff))
                             }
                         }
                     }
@@ -283,7 +274,7 @@ impl Optimizer {
                 subdiff.push((u_src, smallvec![pd_u]));
                 subdiff.push((v_src, smallvec![pd_v]));
 
-                Ok((output, subdiff))
+                Ok(AdResponse::new(node.output(0), output).with_chained_derivatives(subdiff))
             }
             BinaryArithOp::Mod => {
                 //If allowed diff |x| => |x| / x => 1
@@ -320,7 +311,7 @@ impl Optimizer {
                                     })
                                     .unwrap();
                 */
-                Ok(self.build_chain_rule_for(&region, one, x_src))
+                Ok(self.build_chain_rule_for(&region, node.output(0), one, x_src))
             }
         }
     }

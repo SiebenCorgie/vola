@@ -58,6 +58,15 @@ impl InputType {
         }
     }
 
+    ///Returns true for GammaPredicate and ThetaPredicate
+    pub fn is_predicate(&self) -> bool {
+        if let Self::GammaPredicate | Self::ThetaPredicate = self {
+            true
+        } else {
+            false
+        }
+    }
+
     //If possible, tries to map this input to its equivalent port within a region.
     //This only works for ContextVariableInput, EntryVariableInput and Input
     pub fn map_to_in_region(&self, region_index: usize) -> Option<OutputType> {

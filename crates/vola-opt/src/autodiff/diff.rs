@@ -13,7 +13,7 @@ mod buildin;
 mod other;
 
 use rvsdg::{
-    edge::{InportLocation, OutportLocation},
+    edge::OutportLocation,
     region::RegionLocation,
     smallvec::{smallvec, SmallVec},
     NodeRef, SmallColl,
@@ -27,6 +27,7 @@ use crate::{
         buildin::Buildin,
         logical::{BinaryBool, UnaryBool},
         matrix::UnaryMatrix,
+        relational::BinaryRel,
         trigonometric::{Trig, TrigOp},
         ConstantIndex, Construct,
     },
@@ -34,7 +35,7 @@ use crate::{
     OptNode, Optimizer,
 };
 
-use super::{activity::Activity, AutoDiffError};
+use super::{activity::Activity, AdResponse, AutoDiffError};
 
 impl Optimizer {
     ///General dispatcher that can handle all _alge_ nodes differentiation.
@@ -54,13 +55,7 @@ impl Optimizer {
         region: RegionLocation,
         node: NodeRef,
         activity: &mut Activity,
-    ) -> Result<
-        (
-            OutportLocation,
-            SmallColl<(OutportLocation, SmallColl<InportLocation>)>,
-        ),
-        AutoDiffError,
-    > {
+    ) -> Result<AdResponse, AutoDiffError> {
         //FIXME: It _would be cool_ to use TypeId::of::<T> as a match
         //       criterion to dispatch the actual node here. However, that is
         //       currently unstabel (https://github.com/rust-lang/rust/issues/77125)
@@ -87,14 +82,6 @@ impl Optimizer {
             return self.build_diff_unary_arith(region, node);
         }
 
-        if self.is_node_type::<BinaryBool>(node) {
-            return self.build_diff_binary_logic(region, node);
-        }
-
-        if self.is_node_type::<UnaryBool>(node) {
-            return self.build_diff_unary_logic(region, node);
-        }
-
         if self.is_node_type::<UnaryMatrix>(node) {
             return self.build_diff_unary_matrix(region, node);
         }
@@ -106,20 +93,28 @@ impl Optimizer {
             return self.build_diff_buildin(region, node, activity);
         }
 
-        Err(AutoDiffError::ActivityExplorationRegionError)
+        if self.is_node_type::<BinaryBool>(node) {
+            return self.build_diff_binary_logic(region, node);
+        }
+
+        if self.is_node_type::<UnaryBool>(node) {
+            return self.build_diff_unary_logic(region, node);
+        }
+        if self.is_node_type::<BinaryRel>(node) {
+            return self.build_diff_binary_rel(region, node);
+        }
+
+        Err(AutoDiffError::NoAdImpl(format!(
+            "No AD implementation for {} | {node}",
+            self.graph[node].name()
+        )))
     }
 
     fn build_diff_constant_index(
         &mut self,
         region: RegionLocation,
         node: NodeRef,
-    ) -> Result<
-        (
-            OutportLocation,
-            SmallColl<(OutportLocation, SmallColl<InportLocation>)>,
-        ),
-        AutoDiffError,
-    > {
+    ) -> Result<AdResponse, AutoDiffError> {
         //constant index is handled by just pushing the trace _over_ the node and reapplying the
         //index. Lets say we are indexing for x into a vector v = f(x), in that case we'd continue doing the the derivative with
         // respect to that vector, but once v' _arrives_ here, we'd still just consider the component, v`.x
@@ -144,20 +139,14 @@ impl Optimizer {
             })
             .unwrap();
 
-        Ok((result, subdiffs))
+        Ok(AdResponse::new(node.output(0), result).with_chained_derivatives(subdiffs))
     }
 
     fn build_diff_constant_construct(
         &mut self,
         region: RegionLocation,
         node: NodeRef,
-    ) -> Result<
-        (
-            OutportLocation,
-            SmallColl<(OutportLocation, SmallColl<InportLocation>)>,
-        ),
-        AutoDiffError,
-    > {
+    ) -> Result<AdResponse, AutoDiffError> {
         //Just build a vector of all derivatives
         let span = self.find_span(node.into()).unwrap_or(Span::empty());
 
@@ -183,20 +172,14 @@ impl Optimizer {
             }
         }
 
-        Ok((result.output(0), subdiffs))
+        Ok(AdResponse::new(node.output(0), result.output(0)).with_chained_derivatives(subdiffs))
     }
 
     fn build_diff_unary_arith(
         &mut self,
         region: RegionLocation,
         node: NodeRef,
-    ) -> Result<
-        (
-            OutportLocation,
-            SmallColl<(OutportLocation, SmallColl<InportLocation>)>,
-        ),
-        AutoDiffError,
-    > {
+    ) -> Result<AdResponse, AutoDiffError> {
         let span = self.find_span(node.into()).unwrap_or(Span::empty());
         let src = self.graph.inport_src(node.input(0)).unwrap();
         match self.graph[node]
@@ -250,7 +233,7 @@ impl Optimizer {
                     .unwrap();
 
                 let subdiff = smallvec![(src, smallvec![subdiff_dst])];
-                Ok((output, subdiff))
+                Ok(AdResponse::new(node.output(0), output).with_chained_derivatives(subdiff))
             }
             UnaryArithOp::Neg => {
                 //special case of (cf)' => c f' for c=constant
@@ -274,7 +257,8 @@ impl Optimizer {
                     .unwrap();
 
                 let subdiff = smallvec![(f_src, smallvec![diff_dst])];
-                Ok((result.output(0), subdiff))
+                Ok(AdResponse::new(node.output(0), result.output(0))
+                    .with_chained_derivatives(subdiff))
             }
             UnaryArithOp::Ceil
             | UnaryArithOp::Floor
@@ -295,7 +279,7 @@ impl Optimizer {
                 let x_ty = self.find_type(&x_src.into()).unwrap();
                 let zero = self.splat_scalar(region, ImmScalar::new(0.0), x_ty);
 
-                Ok((zero, SmallColl::new()))
+                Ok(AdResponse::new(node.output(0), zero))
             }
         }
     }
@@ -304,41 +288,39 @@ impl Optimizer {
         &mut self,
         _region: RegionLocation,
         node: NodeRef,
-    ) -> Result<
-        (
-            OutportLocation,
-            SmallColl<(OutportLocation, SmallColl<InportLocation>)>,
-        ),
-        AutoDiffError,
-    > {
-        Err(AutoDiffError::NoAdImpl(self.graph[node].name().to_string()))
+    ) -> Result<AdResponse, AutoDiffError> {
+        println!("TODO: implement boolean differential calculus");
+
+        Ok(AdResponse::new(node.output(0), node.output(0)))
+        //Err(AutoDiffError::NoAdImpl(self.graph[node].name().to_string()))
     }
 
     fn build_diff_unary_logic(
         &mut self,
         _region: RegionLocation,
         node: NodeRef,
-    ) -> Result<
-        (
-            OutportLocation,
-            SmallColl<(OutportLocation, SmallColl<InportLocation>)>,
-        ),
-        AutoDiffError,
-    > {
-        Err(AutoDiffError::NoAdImpl(self.graph[node].name().to_string()))
+    ) -> Result<AdResponse, AutoDiffError> {
+        println!("TODO: implement boolean differential calculus");
+        Ok(AdResponse::new(node.output(0), node.output(0)))
+        //Err(AutoDiffError::NoAdImpl(self.graph[node].name().to_string()))
+    }
+
+    fn build_diff_binary_rel(
+        &mut self,
+        _region: RegionLocation,
+        node: NodeRef,
+    ) -> Result<AdResponse, AutoDiffError> {
+        println!("TODO: implement boolean differential calculus");
+
+        Ok(AdResponse::new(node.output(0), node.output(0)))
+        //Err(AutoDiffError::NoAdImpl(self.graph[node].name().to_string()))
     }
 
     fn build_diff_unary_matrix(
         &mut self,
         _region: RegionLocation,
         node: NodeRef,
-    ) -> Result<
-        (
-            OutportLocation,
-            SmallColl<(OutportLocation, SmallColl<InportLocation>)>,
-        ),
-        AutoDiffError,
-    > {
+    ) -> Result<AdResponse, AutoDiffError> {
         Err(AutoDiffError::NoAdImpl(self.graph[node].name().to_string()))
     }
 
@@ -346,13 +328,7 @@ impl Optimizer {
         &mut self,
         region: RegionLocation,
         node: NodeRef,
-    ) -> Result<
-        (
-            OutportLocation,
-            SmallColl<(OutportLocation, SmallColl<InportLocation>)>,
-        ),
-        AutoDiffError,
-    > {
+    ) -> Result<AdResponse, AutoDiffError> {
         let span = self.find_span(node.into()).unwrap_or(Span::empty());
         let src = self.graph.inport_src(node.input(0)).unwrap();
         let trigop = self.graph[node]
@@ -375,7 +351,7 @@ impl Optimizer {
                     })
                     .unwrap();
 
-                Ok(self.build_chain_rule_for(&region, cos_output, src))
+                Ok(self.build_chain_rule_for(&region, node.output(0), cos_output, src))
             }
             TrigOp::Cos => {
                 //cos' = -sin
@@ -397,7 +373,7 @@ impl Optimizer {
                         negged.output(0)
                     })
                     .unwrap();
-                Ok(self.build_chain_rule_for(&region, diffout, src))
+                Ok(self.build_chain_rule_for(&region, node.output(0), diffout, src))
             }
             TrigOp::Tan => {
                 //See https://math.stackexchange.com/questions/1108131/what-is-cos%C2%B2x
@@ -412,12 +388,13 @@ impl Optimizer {
     fn build_chain_rule_for(
         &mut self,
         region: &RegionLocation,
+        //The original value of f,
+        f: OutportLocation,
+        //f'(g(x))
         diffed_output: OutportLocation,
+        //g(x) where we'll need g'(x) for
         active_sub_src: OutportLocation,
-    ) -> (
-        OutportLocation,
-        SmallColl<(OutportLocation, SmallColl<InportLocation>)>,
-    ) {
+    ) -> AdResponse {
         let mut subdiff = SmallColl::new();
         let mul_out = self
             .graph
@@ -435,6 +412,6 @@ impl Optimizer {
             })
             .unwrap();
 
-        (mul_out, subdiff)
+        AdResponse::new(f, mul_out).with_chained_derivatives(subdiff)
     }
 }
