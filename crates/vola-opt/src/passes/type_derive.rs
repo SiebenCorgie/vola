@@ -701,197 +701,198 @@ impl Optimizer {
         }
     }
 
-    fn try_gamma_derive(&mut self, node: NodeRef) -> Result<Option<Ty>, OptError> {
-        //We just need to check two things:
-        // 1. that the conditional is a Boolean output,
-        // 2. That all branches emit the same type
+    fn gamma_derive(&mut self, gamma: NodeRef) -> Result<(), OptError> {
+        //Check that the condional port is a boolean, then
+        //map all connected (and used) ports into both regions
+        //
+        //After being done, map the result types out of the regions, and unify them.
+        //this should catch type missmatches in gamma branches.
+        let gamma_span = self.find_span(gamma.into()).unwrap_or(Span::empty());
 
-        let conditional_type = {
-            if let Some(condty) = self.get_type_for_inport(InportLocation {
-                node,
-                input: InputType::GammaPredicate,
-            }) {
-                condty
-            } else {
-                //Was not yet resolved, return.
-                return Ok(None);
-            }
-        };
-
-        if !conditional_type.is_bool() {
-            let span = {
-                let condition_src = self.graph.node(node).input_src(&self.graph, 0).unwrap();
-                self.span_tags
-                    .get(&condition_src.into())
-                    .cloned()
-                    .unwrap_or(Span::empty())
-            };
-
-            let err = OptError::Any {
-                text: format!(
-                    "Condition must be an expression of type Bool, was {conditional_type}"
-                ),
-            };
-            report(
-                error_reporter(err.clone(), span.clone())
-                    .with_label(
-                        Label::new(span.clone()).with_message("Consider changing this expression!"),
-                    )
-                    .finish(),
-            );
-            return Err(err);
-        }
-
-        //find all input types. If we have them, propagate them _into_
-        //the regions.
-        //Then recurse the region derive.
-        //Note that we only need the type on any
-        //EV that is acutally used by any of the branches.
-
-        let subregion_count = self.graph.node(node).regions().len();
-        assert!(subregion_count > 0);
-        for input_type in self.graph.node(node).inport_types() {
-            if let Some(ty) = self
-                .find_type(
-                    &InportLocation {
-                        node,
-                        input: input_type,
-                    }
-                    .into(),
-                )
-                .clone()
-            {
-                for ridx in 0..subregion_count {
-                    if let Some(mapped_internally) = input_type.map_to_in_region(ridx) {
-                        self.typemap.set(
-                            OutportLocation {
-                                node,
-                                output: mapped_internally,
-                            }
-                            .into(),
-                            ty.clone(),
+        for input in self.graph[gamma].inport_types() {
+            match input {
+                InputType::GammaPredicate => {
+                    let predicate_port = gamma.as_inport_location(InputType::GammaPredicate);
+                    let predicate_span = self
+                        .find_span(self.graph.inport_src(predicate_port).unwrap().into())
+                        .unwrap_or(Span::empty());
+                    if let Some(ty) = self.find_type(&predicate_port.into()) {
+                        if !ty.is_bool() {
+                            let err = OptError::TypeDeriveError {
+                                text: format!(
+                                    "Condition must be an expression of type Bool, was {ty}"
+                                ),
+                            };
+                            report(
+                                error_reporter(err.clone(), predicate_span.clone())
+                                    .with_label(
+                                        Label::new(predicate_span.clone())
+                                            .with_message("Consider changing this expression!"),
+                                    )
+                                    .finish(),
+                            );
+                            return Err(err);
+                        }
+                    } else {
+                        let err = OptError::TypeDeriveError {
+                            text: format!(
+                                "Condition must be an expression of type Bool, but had no type!"
+                            ),
+                        };
+                        report(
+                            error_reporter(err.clone(), predicate_span.clone())
+                                .with_label(
+                                    Label::new(predicate_span.clone())
+                                        .with_message("Consider changing this expression!"),
+                                )
+                                .finish(),
                         );
+                        return Err(err);
                     }
                 }
-            } else {
-                //NOTE: We check if the port is in use. If not, its okey if no type information was
-                //      found
-                let is_in_use = {
-                    let mut is_in_use = false;
-                    for subreg in 0..subregion_count {
-                        if let Some(p) = self
-                            .graph
-                            .node(node)
-                            .outport(&input_type.map_to_in_region(subreg).unwrap())
-                        {
-                            if p.edges.len() > 0 {
-                                is_in_use = true;
-                                break;
+                InputType::EntryVariableInput(ev) => {
+                    //for each ev, try to get the type, if there is none, make sure that there are also no users
+                    let evport = gamma.as_inport_location(input);
+                    if let Some(ty) = self.find_type(&evport.into()) {
+                        for region_idx in 0..self.graph[gamma].regions().len() {
+                            let in_region_port = gamma
+                                .as_outport_location(input.map_to_in_region(region_idx).unwrap());
+                            self.typemap.set(in_region_port.into(), ty.clone());
+                        }
+                    } else {
+                        for region_idx in 0..self.graph[gamma].regions().len() {
+                            let in_region_port = gamma
+                                .as_outport_location(input.map_to_in_region(region_idx).unwrap());
+                            if self.graph[in_region_port].edges.len() > 0 {
+                                let err = OptError::TypeDeriveError {
+                                    text: format!(
+                                        "Gamma input[{ev}] has no type set, but is in use in branch {region_idx}!"
+                                    ),
+                                };
+                                report(
+                                    error_reporter(err.clone(), gamma_span.clone())
+                                        .with_label(
+                                            Label::new(gamma_span.clone()).with_message("Here!"),
+                                        )
+                                        .finish(),
+                                );
+                                return Err(err);
                             }
                         }
                     }
-                    is_in_use
-                };
-
-                if is_in_use {
-                    //Port is in use, but input is untype, therfore try again later.
-                    return Ok(None);
                 }
+                _ => panic!("Malformed gamma node!"),
             }
         }
 
-        //if we reached this, recurse!
-        for ridx in 0..subregion_count {
-            let regloc = RegionLocation {
-                node,
-                region_index: ridx,
+        //now do type_derivative for each branch
+        for region_index in 0..self.graph[gamma].regions().len() {
+            let reg = RegionLocation {
+                node: gamma,
+                region_index,
             };
-            let span = self
-                .span_tags
-                .get(&regloc.into())
-                .cloned()
-                .unwrap_or(Span::empty());
-            self.derive_region(regloc, span)?;
+            if let Err(e) = self.derive_region(reg, gamma_span.clone()) {
+                let branch_span = self.find_span(reg.into()).unwrap_or(Span::empty());
+                let intermediat_error = OptError::TypeDeriveError {
+                    text: format!("Could not derive type for branch {region_index}"),
+                };
+                report(
+                    error_reporter(intermediat_error, branch_span.clone())
+                        .with_label(Label::new(branch_span.clone()).with_message("Here!"))
+                        .finish(),
+                );
+                return Err(e);
+            }
         }
 
-        //make sure that both regions return the same type.
-        //now find the output type of both regions, and make sure they are the same. If so, we are good to go
-        let reg_if_ty = if let Some(t) = self.find_type(
-            &InportLocation {
-                node,
-                input: InputType::ExitVariableResult {
-                    branch: 0,
-                    exit_variable: 0,
-                },
-            }
-            .into(),
-        ) {
-            t
-        } else {
-            panic!("Gamma-internal if-branch region should have been resolved!");
-        };
-        let reg_else_ty = if let Some(t) = self.find_type(
-            &InportLocation {
-                node,
-                input: InputType::ExitVariableResult {
-                    branch: 1,
-                    exit_variable: 0,
-                },
-            }
-            .into(),
-        ) {
-            t
-        } else {
-            panic!("Gamma-internal else-branch should have been resolved!");
-        };
+        //finally, map all set outport out of the region, and error if either they are not of unified type,
+        //or unset, but in use
+        for output in self.graph[gamma].outport_types() {
+            let outport = gamma.as_outport_location(output);
+            match output {
+                OutputType::ExitVariableOutput(idx) => {
+                    if let Some(ty) = self.gamma_unified_type(gamma, idx) {
+                        //set the output
+                        self.typemap.set(outport.into(), ty);
+                    } else {
+                        //ignore for unused values
+                        if self.graph[outport].edges.len() == 0 {
+                            continue;
+                        }
+                        let predicate_src = self
+                            .graph
+                            .inport_src(gamma.as_inport_location(InputType::GammaPredicate))
+                            .unwrap();
+                        let head_span = self
+                            .find_span(predicate_src.into())
+                            .unwrap_or(gamma_span.clone());
+                        //could not unify types
+                        let if_branch_ty = self.find_type(
+                            &gamma
+                                .as_inport_location(InputType::ExitVariableResult {
+                                    branch: 0,
+                                    exit_variable: idx,
+                                })
+                                .into(),
+                        );
+                        let else_branch_ty = self.find_type(
+                            &gamma
+                                .as_inport_location(InputType::ExitVariableResult {
+                                    branch: 1,
+                                    exit_variable: idx,
+                                })
+                                .into(),
+                        );
 
-        if reg_if_ty != reg_else_ty {
-            let if_branch_span = self
-                .span_tags
-                .get(
-                    &RegionLocation {
-                        node,
-                        region_index: 0,
+                        let if_branch_span = self
+                            .span_tags
+                            .get(
+                                &RegionLocation {
+                                    node: gamma,
+                                    region_index: 0,
+                                }
+                                .into(),
+                            )
+                            .cloned()
+                            .unwrap_or(Span::empty());
+                        let else_branch_span = self
+                            .span_tags
+                            .get(
+                                &RegionLocation {
+                                    node: gamma,
+                                    region_index: 1,
+                                }
+                                .into(),
+                            )
+                            .cloned()
+                            .unwrap_or(Span::empty());
+
+                        let err = OptError::Any {
+                            text: format!(
+                                "Return type conflict. If branch returns {:?}, but else branch returns {:?}",
+                                if_branch_ty, else_branch_ty
+                            ),
+                        };
+                        report(
+                            error_reporter(err.clone(), head_span)
+                                .with_label(
+                                    Label::new(if_branch_span.clone())
+                                        .with_message(format!("This returns {if_branch_ty:?}")),
+                                )
+                                .with_label(
+                                    Label::new(else_branch_span.clone())
+                                        .with_message(format!("This returns {else_branch_ty:?}")),
+                                )
+                                .finish(),
+                        );
+
+                        return Err(err);
                     }
-                    .into(),
-                )
-                .cloned()
-                .unwrap_or(Span::empty());
-            let else_branch_span = self
-                .span_tags
-                .get(
-                    &RegionLocation {
-                        node,
-                        region_index: 1,
-                    }
-                    .into(),
-                )
-                .cloned()
-                .unwrap_or(Span::empty());
-
-            let err = OptError::Any {
-                text: format!(
-                    "Return type conflict. If branch returns {}, but else branch returns {}",
-                    reg_if_ty, reg_else_ty
-                ),
-            };
-            report(
-                error_reporter(err.clone(), if_branch_span.clone())
-                    .with_label(
-                        Label::new(if_branch_span.clone())
-                            .with_message(format!("This returns {reg_if_ty}")),
-                    )
-                    .with_label(
-                        Label::new(else_branch_span.clone())
-                            .with_message(format!("This returns {reg_else_ty}")),
-                    )
-                    .finish(),
-            );
-
-            Err(err)
-        } else {
-            Ok(Some(reg_if_ty))
+                }
+                _ => panic!("Malformed Gamma output: {output:?}"),
+            }
         }
+        Ok(())
     }
 
     ///Does theta type derive, assuming that all used inputs are type set.
@@ -1095,8 +1096,10 @@ impl Optimizer {
                 (ty?, node.output(0))
             }
             NodeType::Gamma(_g) => {
-                let ty = self.try_gamma_derive(node);
-                (ty?, node.output(0))
+                self.gamma_derive(node)?;
+                let output_port = self.value_producer_port(node).unwrap();
+                let ty = self.find_type(&output_port.into());
+                (ty, node.output(0))
             }
             //NOTE: by convention the θ-Node resolves to output 2
             NodeType::Theta(_t) => {

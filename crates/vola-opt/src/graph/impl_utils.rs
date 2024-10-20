@@ -302,4 +302,33 @@ impl Optimizer {
 
         Ok((higher - lower) as usize)
     }
+
+    ///Tries to build a single unified type for all branches of `gamma` that make the `exit_variable`'s type.
+    ///
+    /// Returns None on missmatching types.
+    pub(crate) fn gamma_unified_type(&self, gamma: NodeRef, exit_variable: usize) -> Option<Ty> {
+        let mut candidate = None;
+        for branch in 0..self.graph[gamma].regions().len() {
+            if let Some(ty) = self.find_type(
+                &gamma
+                    .as_inport_location(InputType::ExitVariableResult {
+                        branch,
+                        exit_variable,
+                    })
+                    .into(),
+            ) {
+                if let Some(candidate) = &candidate {
+                    if *candidate != ty {
+                        //missmatch
+                        return None;
+                    }
+                } else {
+                    //no candidate yet, set it
+                    candidate = Some(ty);
+                }
+            }
+        }
+
+        candidate
+    }
 }
