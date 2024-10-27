@@ -1,0 +1,34 @@
+//BEGIN-CONFIG
+//EXEC-FN:mysdf
+//EXEC-ARGS:0.0,2.0,0.0
+//EXEC-EPS:0.01
+//EXEC-RES:1.0
+//END-CONFIG
+
+module std;
+
+operation OpWithCall();
+
+fn my_call(x: s) -> s{
+    sin(x) + cos(x * 3.0)
+}
+
+impl OpWithCall<sub> for SDF3D(at){
+    let d = eval sub.SDF3D(at);
+    d - my_call(at.x) - my_call(at.y)
+}
+
+operation MyAdOp();
+
+impl MyAdOp<sub> for SDF3D(at){
+    let sd = eval sub.SDF3D(at);
+    let res = diff(sd, at);
+    res.y
+}
+
+export mysdf(at: vec3){
+    csg sphere = MyAdOp(){OpWithCall(){
+        Box([1.0; 3])
+    }};
+    eval sphere.SDF3D(at)
+}

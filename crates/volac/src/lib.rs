@@ -171,8 +171,12 @@ impl Pipeline {
         }
         //do mandatory type derivation
         opt.type_derive()?;
-
         opt.specialize_all_exports()?;
+
+        //At this point any used nodes are hooked up. Therfore clean up
+        //any unused garbage
+        opt.graph.dead_node_elimination()?;
+
         if self.late_cnf {
             opt.full_graph_cnf()?;
         }

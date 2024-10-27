@@ -43,16 +43,13 @@ impl Optimizer {
     }
 
     pub fn inline_export(&mut self, export: &str) -> Result<(), OptError> {
-        //TODO: Do not inline _all_ applies, but use some kind of heuristic.
-        //      Simplest would be caller count, but we don't yet merge specialized λs, so...
-        //      what to do?
-        self.fully_inline_region(self.export_fn.get(export).unwrap().lambda_region)
+        self.inline_region(self.export_fn.get(export).unwrap().lambda_region)
     }
 
-    //Small recursive helper that explores all Apply nodes, and inlines their call-defs, before
+    //Recursive helper that explores all Apply nodes, and inlines their call-defs base on our [convention](Optimizer::should_inline_apply), before
     //inlining itself.
-    fn fully_inline_region(&mut self, region: RegionLocation) -> Result<(), OptError> {
-        //now recursively go through all sub regions (that are no λs, so gamma an theta for now)
+    fn inline_region(&mut self, region: RegionLocation) -> Result<(), OptError> {
+        //recursively go through all sub regions (that are no λs, so gamma and theta for now)
         //and call the inliner in there as well
         for node in self.graph.live_nodes_in_region(region) {
             if node == region.node || !self.graph.region(&region).unwrap().nodes.contains(&node) {
@@ -60,7 +57,6 @@ impl Optimizer {
             }
             let (subregcount, is_valid) = {
                 let node = self.graph.node(node);
-
                 (
                     node.regions().len(),
                     node.node_type.is_gamma() || node.node_type.is_theta(),
@@ -69,7 +65,7 @@ impl Optimizer {
 
             if is_valid && subregcount > 0 {
                 for regidx in 0..subregcount {
-                    self.fully_inline_region(RegionLocation {
+                    self.inline_region(RegionLocation {
                         node,
                         region_index: regidx,
                     })?;
@@ -82,33 +78,29 @@ impl Optimizer {
         // Also note, that we first explore all nodes with sub regions
         // so that any inlined-apply node in this region is already
         // inlined as far as-possible.
-
         for node in self.graph.live_nodes_in_region(region) {
             //If node is an apply node, inline its producer to this location
             if self.graph.node(node).node_type.is_apply() {
-                let apply_node_call_port = InportLocation {
-                    node,
-                    input: InputType::Input(0),
-                };
-                if let Some(prod) = self.graph.find_producer_inp(apply_node_call_port) {
-                    assert!(self.graph.node(prod.node).node_type.is_lambda());
-                    //recursively inline anything in this producer λ
-                    self.fully_inline_region(RegionLocation {
-                        node: prod.node,
-                        region_index: 0,
-                    })?;
-                    //ninline += 1;
-                    //now inline ourselfs
-                    let paths = self.graph.inline_apply_node(node).unwrap();
-                    for p in paths {
-                        if let Err(e) = self.type_path(&p) {
-                            log::trace!("Could not type inlined-path: {e}");
-                        }
+                //we shall not inline according to heuristic.
+                if !self.should_inline_apply(node) {
+                    continue;
+                }
+
+                let apply_node_call_port = node.input(0);
+                let prod = self.graph.find_producer_inp(apply_node_call_port).unwrap();
+                assert!(self.graph.node(prod.node).node_type.is_lambda());
+                //recursively inline anything in this producer λ
+                self.inline_region(RegionLocation {
+                    node: prod.node,
+                    region_index: 0,
+                })?;
+                //ninline += 1;
+                //now inline ourselfs
+                let paths = self.graph.inline_apply_node(node).unwrap();
+                for p in paths {
+                    if let Err(e) = self.type_path(&p) {
+                        log::trace!("Could not type inlined-path: {e}");
                     }
-                } else {
-                    #[cfg(feature = "log")]
-                    log::error!("ApplyNode {node} had no def in {region:?}");
-                    //NOTE: this can happen, if the all_nodes of the region changed. So we ignore that atm.
                 }
             }
         }
