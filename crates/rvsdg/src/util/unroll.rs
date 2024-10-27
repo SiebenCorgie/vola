@@ -10,7 +10,7 @@
 //!
 //! See
 //!
-//! - [unroll_theta](crate::Rvsdg::unroll_theta)
+//! - [unroll_theta](crate::Rvsdg::unroll_theta_head)
 //! - [unroll_replace_theta](crate::Rvsdg::unroll_replace_theta)
 
 use ahash::AHashMap;

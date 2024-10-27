@@ -9,7 +9,7 @@ use crate::run::ResultType;
 ///Test run config.
 ///
 /// A test file can add the following header:
-/// ```ignore
+/// ```text
 /// //BEGIN-CONFIG
 /// //ERROR: Some output string to set an expected error
 /// //STDOUT: Some exepected iout string

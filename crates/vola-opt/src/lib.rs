@@ -127,7 +127,7 @@ impl Optimizer {
         }
     }
 
-    ///Adds a [VolaAst](vola_ast::VolaAst) to the optimizer. Might emit errors if the
+    ///Adds a [VolaAst] to the optimizer. Might emit errors if the
     /// semantic analysis fails immediately while adding.
     pub fn add_ast(&mut self, ast: VolaAst) -> Result<(), OptError> {
         //NOTE we first add all def nodes, since those don't depend on anything else, and without those
@@ -295,6 +295,12 @@ impl Optimizer {
     #[cfg(feature = "viewer")]
     pub fn dump_debug_state(&self, path: &dyn AsRef<std::path::Path>) {
         println!("Writing debug state to {:?}", path.as_ref());
+
+        if std::env::var("VOLA_DUMP_SVG").is_ok() {
+            let mut svg_path = path.as_ref().to_path_buf();
+            svg_path.set_extension("svg");
+            self.dump_svg(svg_path.to_str().unwrap(), false);
+        }
         self.viewer_state.write_to_file(path)
     }
 }

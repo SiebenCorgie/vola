@@ -61,7 +61,7 @@ pub trait FromTreeSitter {
         Self: Sized;
 }
 
-///Parses `file`. Returns the [VolaAst](crate::VolaAst) on success, or a partially parsed AST, and the reported errors, if any
+///Parses `file`. Returns the [VolaAst] on success, or a partially parsed AST, and the reported errors, if any
 /// parsing errors happened.
 pub fn parse_file(file: impl AsRef<Path>) -> Result<VolaAst, (VolaAst, Vec<ParserError>)> {
     let dta = match std::fs::read(file.as_ref()) {
@@ -82,7 +82,7 @@ pub fn parse_file(file: impl AsRef<Path>) -> Result<VolaAst, (VolaAst, Vec<Parse
     parse_data(&dta, Some(file_src_str.into()))
 }
 
-///Parses `string`. Returns the [VolaAst](crate::VolaAst) on success, or a partially parsed AST, and the reported errors, if any
+///Parses `string`. Returns the [VolaAst] on success, or a partially parsed AST, and the reported errors, if any
 /// parsing errors happened.
 pub fn parse_string(string: String) -> Result<VolaAst, (VolaAst, Vec<ParserError>)> {
     let as_bytes = string.as_bytes();

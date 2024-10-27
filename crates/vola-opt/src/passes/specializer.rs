@@ -32,7 +32,7 @@ struct SpecCtx {
 }
 
 impl Optimizer {
-    /// Shortcut to call [specialize_export] for all exported λs
+    /// Shortcut to call [Self::specialize_export] for all exported λs
     pub fn specialize_all_exports(&mut self) -> Result<(), OptError> {
         let mut errors = SmallColl::new();
         //NOTE: somehow the compiler doesn't get that cloned keys would be okay?

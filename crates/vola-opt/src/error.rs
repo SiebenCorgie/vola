@@ -1,7 +1,3 @@
-use rvsdg::{
-    err::GraphError,
-    util::{dead_node_elimination::DneError, inline::InlineError, unroll::UnrollError},
-};
 /*
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
@@ -9,14 +5,17 @@ use rvsdg::{
  *
  * 2024 Tendsin Mende
  */
+use crate::{autodiff::AutoDiffError, common::Ty};
+use rvsdg::{
+    err::GraphError,
+    util::{dead_node_elimination::DneError, inline::InlineError, unroll::UnrollError},
+};
 use vola_common::{
     ariadne::Label,
     error::error_reporter,
     report,
     thiserror::{self, Error},
 };
-
-use crate::{autodiff::AutoDiffError, common::Ty};
 
 ///Runtime optimizer errors. Note that at this point errors are pretty specific and mostly can't be recovered from.
 /// So we opt to use generic descriptions, instead of specific errors.

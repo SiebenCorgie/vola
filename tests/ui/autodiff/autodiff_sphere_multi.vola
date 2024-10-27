@@ -2,7 +2,7 @@
 //EXEC-FN:mysdf
 //EXEC-ARGS:0.0,2.0,0.0
 //EXEC-EPS:0.01
-//EXEC-RES:0.0
+//EXEC-RES:0.0,1.0,0.0
 //END-CONFIG
 
 entity Sphere(rad: s);
@@ -12,15 +12,14 @@ impl Sphere for Sdf(at){
     length(at) - rad
 }
 
+concept Gradient: vec3 -> vec3;
 operation MyAdOp();
-
-impl MyAdOp<sub> for Sdf(at){
+impl MyAdOp<sub> for Gradient(at){
     let sd = eval sub.Sdf(at);
-
-    length([diff(sd, at.x); 3])
+    diff(sd, at)
 }
 
 export mysdf(at: vec3){
     csg sphere = MyAdOp(){Sphere(1.0)};
-    eval sphere.Sdf(at)
+    eval sphere.Gradient(at)
 }
