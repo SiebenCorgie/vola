@@ -9,7 +9,7 @@
 //! Implements all canonicalization transformations
 
 use rvsdg::{
-    edge::{InportLocation, InputType},
+    edge::{InportLocation, InputType, OutputType},
     region::RegionLocation,
     NodeRef, SmallColl,
 };
@@ -429,5 +429,54 @@ impl Optimizer {
             //just panic, the handle_canon_node would be buggy in that case
             panic!("Buggy handle canon!")
         }
+    }
+
+    pub(crate) fn handle_canon_apply(&mut self, node: NodeRef) -> Result<(), OptError> {
+        //If we have an apply node, check, if there are several useres of the connected λ def.
+        //If so, we have to split them into several copies.
+        //
+        //This is needed, because the activity of each λ can differ based on the caller's state.
+        assert!(self.graph[node].node_type.is_apply());
+        let src = self.graph.inport_src(node.input(0)).unwrap();
+        let prod = self.graph.find_callabel_def(src).unwrap();
+        let prod_region = self.graph[prod.node].parent.unwrap();
+        let mut users = self.graph.find_caller(prod.node).unwrap();
+
+        if users.len() <= 1 {
+            //If there are no useres, we can take a shortcut
+            return Ok(());
+        }
+
+        //remove one user, in order to reuse the original one
+        let _last_user = users.pop();
+
+        //we simply deep-copy the λ, and then tell each user to reimport. This effectively will leave the last user,
+        //which we just popped, to use the original λ and all others a copy
+        for user in users {
+            let lmd_cpy = self.graph.deep_copy_node(prod.node, prod_region);
+            let lmd_cpy_port = lmd_cpy.as_outport_location(OutputType::LambdaDeclaration);
+            self.copy_input_connections(prod.node, lmd_cpy);
+            self.copy_node_attributes(prod.node, lmd_cpy);
+            //Append the copy attribute to the name
+            if let Some(name) = self.names.get_mut(&lmd_cpy.into()) {
+                *name = format!("{name} (autodiff-copy)");
+            }
+
+            //finally tell the user to import it and reconnect
+            let user_region = self.graph[user].parent.unwrap();
+            let new_src_port_in_region = if user_region == prod_region {
+                lmd_cpy_port
+            } else {
+                let (import_port, _) = self.graph.import_context(lmd_cpy_port, user_region)?;
+                import_port
+            };
+            let user_calledg_port = user.input(0);
+            let old_edg = self.graph[user_calledg_port].edge.unwrap();
+            let dissconnected = self.graph.disconnect(old_edg)?;
+            self.graph
+                .connect(new_src_port_in_region, user_calledg_port, dissconnected)
+                .unwrap();
+        }
+        Ok(())
     }
 }

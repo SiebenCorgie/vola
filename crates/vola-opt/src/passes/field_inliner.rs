@@ -6,13 +6,8 @@
  * 2024 Tendsin Mende
  */
 
-use rvsdg::{
-    edge::{InportLocation, InputType},
-    region::RegionLocation,
-    SmallColl,
-};
-
 use crate::{OptError, Optimizer};
+use rvsdg::{region::RegionLocation, SmallColl};
 
 impl Optimizer {
     ///Recursively inlines any apply-node thats _within_ a field_export.
@@ -87,7 +82,8 @@ impl Optimizer {
                 }
 
                 let apply_node_call_port = node.input(0);
-                let prod = self.graph.find_producer_inp(apply_node_call_port).unwrap();
+                let src = self.graph.inport_src(apply_node_call_port).unwrap();
+                let prod = self.graph.find_callabel_def(src).unwrap();
                 assert!(self.graph.node(prod.node).node_type.is_lambda());
                 //recursively inline anything in this producer λ
                 self.inline_region(RegionLocation {

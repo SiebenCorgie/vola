@@ -7,8 +7,7 @@
  */
 
 use crate::{OptError, Optimizer};
-use rvsdg::{region::RegionLocation, NodeRef, SmallColl};
-use vola_common::{ariadne::Label, error::error_reporter, report, Span};
+use rvsdg::region::RegionLocation;
 
 impl Optimizer {
     ///Inlines all apply nodes that are currently alive. Good if a backend doesn't implement call-def

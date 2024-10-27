@@ -11,7 +11,8 @@ use core::panic;
 use ahash::AHashMap;
 use rvsdg::{
     attrib::FlagStore,
-    edge::{InportLocation, InputType, OutportLocation},
+    edge::{InportLocation, InputType, OutportLocation, OutputType},
+    nodes::ApplyNode,
     region::RegionLocation,
     smallvec::smallvec,
     util::abstract_node_type::AbstractNodeType,
@@ -248,6 +249,84 @@ impl Activity {
                 //Set the node activ, if any output is active and return.
                 self.active.set(node.into(), any_output_active);
                 any_output_active
+            }
+            AbstractNodeType::Apply => {
+                //For apply nodes, find the called λ, and map the activity state of the inputs to the args in that λ.
+                //We then recurse, and finally map the activity state of the results to the outputs.
+                //NOTE:
+                //      The canonicalization pass makes sure that there is one λ per call. So we can really just tag the activity.
+                //      Otherwise that would have to be _call-site_ sensitive.
+                let apply_node_call_port = node.input(0);
+                let src = opt.graph.inport_src(apply_node_call_port).unwrap();
+                let prod = opt.graph.find_callabel_def(src).unwrap();
+
+                for input in opt.graph[node].inport_types() {
+                    //Ignore the λ activity
+                    let argument_index = match input {
+                        //Ignore λ call-def
+                        InputType::Input(0) => continue,
+                        //normal args
+                        InputType::Input(n) => n - 1,
+                        _ => panic!("Malformed λ"),
+                    };
+
+                    let input_src = opt
+                        .graph
+                        .inport_src(node.as_inport_location(input))
+                        .unwrap();
+                    let wrt_index_chain = self.wrt_producer.get(&input_src).cloned();
+                    let is_input_active = self.is_active_port(opt, input_src);
+
+                    let arg = prod
+                        .node
+                        .as_outport_location(OutputType::Argument(argument_index));
+                    //if that port hat a wrt_index chain, push that forward into the region
+                    if let Some(wrt_indices) = wrt_index_chain.clone() {
+                        let (seeds, new_prod_map) =
+                            opt.explore_producer_trace(arg.into(), wrt_indices);
+                        //and appply to this activity map
+                        for (k, v) in seeds.flags {
+                            self.active.flags.insert(k, v);
+                        }
+                        for (k, v) in new_prod_map {
+                            self.wrt_producer.insert(k, v);
+                        }
+                    } else {
+                        //set active
+                        self.active.set(arg.into(), is_input_active);
+                    }
+                }
+                let mut any_active = false;
+                //now trace all results of the λ node, and if any is active, set ourself's active as well
+                for result in opt.graph[prod.node].result_types(0) {
+                    let result_index = if let InputType::Result(i) = result {
+                        i
+                    } else {
+                        panic!("Malformed λ");
+                    };
+                    let src = opt
+                        .graph
+                        .inport_src(prod.node.as_inport_location(result))
+                        .unwrap();
+                    let is_src_active = self.is_active_port(opt, src);
+                    let output_port = node.output(result_index);
+                    if let Some(activity) = self.active.get_mut(&output_port.into()) {
+                        //only overwrite if currently not active, and we are active
+                        if !*activity && is_src_active {
+                            any_active = true;
+                            *activity = true;
+                        }
+                    } else {
+                        //no state set, always overwrite
+                        if is_src_active {
+                            any_active = true;
+                        }
+                        self.active.set(output_port.into(), is_src_active);
+                    }
+                }
+                //Set the node activ, if any output is active and return.
+                self.active.set(node.into(), any_active);
+                any_active
             }
             ty => panic!("unhandled activity for node type {ty:?}"),
         }
@@ -527,7 +606,22 @@ impl Optimizer {
             match self.graph[port.node].into_abstract() {
                 AbstractNodeType::Simple => {
                     //For simple nodes, this declares a _use_ of the active node,
-                    //therefore set node itself as active, and all outputs as well, then break the recursion
+                    //therefore set node itself as active, and all outputs as well
+                    activity.set(port.node.into(), true);
+                    for output in self.graph[port.node].outport_types() {
+                        activity.set(
+                            OutportLocation {
+                                node: port.node,
+                                output,
+                            }
+                            .into(),
+                            true,
+                        );
+                    }
+                }
+                AbstractNodeType::Apply => {
+                    //For apply nodes, this declares a _use_ of the active node,
+                    //therefore set node itself as active, and all outputs as well
                     activity.set(port.node.into(), true);
                     for output in self.graph[port.node].outport_types() {
                         activity.set(

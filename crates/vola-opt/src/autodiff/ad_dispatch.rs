@@ -14,7 +14,7 @@
 //!       mode AD are decided. But right now that is not implemented.
 
 use ahash::AHashSet;
-use rvsdg::{attrib::FlagStore, region::RegionLocation, NodeRef, SmallColl};
+use rvsdg::{region::RegionLocation, NodeRef, SmallColl};
 use vola_common::{ariadne::Label, error::error_reporter, report, Span};
 
 use crate::{autodiff::AutoDiff, OptError, Optimizer};
@@ -22,9 +22,12 @@ use crate::{autodiff::AutoDiff, OptError, Optimizer};
 impl Optimizer {
     pub fn dispatch_autodiff(&mut self) -> Result<(), OptError> {
         let mut dispatch_nodes = SmallColl::new();
-        let liveness = self.graph.liveness();
+        //Regardless, always dead-node elemination before that pass, since most of the algorithms assume that anything that is connected is
+        //also alive.
+        self.graph.dead_node_elimination()?;
+
         //First top-down exploration of AD nodes.
-        self.enque_ad_nodes_region(self.graph.toplevel_region(), &liveness, &mut dispatch_nodes);
+        self.enque_ad_nodes_region(self.graph.toplevel_region(), &mut dispatch_nodes);
 
         //Pre explore all touced regions.
         let touched_regions = dispatch_nodes
@@ -94,17 +97,8 @@ impl Optimizer {
     }
 
     //Recursive exploration of all sub region AD nodes.
-    fn enque_ad_nodes_region(
-        &self,
-        region: RegionLocation,
-        liveness: &FlagStore<bool>,
-        list: &mut SmallColl<NodeRef>,
-    ) {
+    fn enque_ad_nodes_region(&self, region: RegionLocation, list: &mut SmallColl<NodeRef>) {
         for node in self.graph.topological_order_region(region) {
-            //Ignore un-alive nodes
-            if !liveness.is_set(&node.into()) {
-                continue;
-            }
             let is_add = if self.is_node_type::<AutoDiff>(node) {
                 true
             } else {
@@ -118,7 +112,6 @@ impl Optimizer {
                             node,
                             region_index: region,
                         },
-                        liveness,
                         list,
                     );
                 }

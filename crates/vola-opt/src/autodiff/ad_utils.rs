@@ -184,6 +184,10 @@ impl Optimizer {
             return self.handle_canon_binary(&target_region, node);
         }
 
+        if self.graph[node].node_type.is_apply() {
+            return self.handle_canon_apply(node);
+        }
+
         if self.graph[node].node_type.is_theta() {
             let unroll_count = self.loop_count(node)?;
             self.graph.unroll_replace_theta(node, unroll_count)?;
