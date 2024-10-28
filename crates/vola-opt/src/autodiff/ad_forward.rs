@@ -321,7 +321,91 @@ impl Optimizer {
                 }
             }
             AbstractNodeType::Apply => {
-                todo!("Function calls not yet implemented!")
+                //Similar approach to γ/τ nodes. We deep copy the λ that is being called,
+                //copy over the activity state, then recurse into its region.
+                //this'll effectively create λ-derivative implementation for us. Finally we replace the call site
+                //with that expression.
+
+                let original_value_port = node.output(0);
+                let callsrc = self
+                    .graph
+                    .find_callabel_def(self.graph.inport_src(node.input(0)).unwrap())
+                    .unwrap();
+                let call_region = self.graph[callsrc.node].parent.unwrap();
+                //note we copy the λ into its parent region
+                let lmd_cpy = self.graph.deep_copy_node(callsrc.node, call_region);
+                self.copy_input_connections(callsrc.node, lmd_cpy);
+                self.copy_node_attributes(callsrc.node, lmd_cpy);
+                for attrib in self.graph.iter_node_attribs(callsrc.node) {
+                    let dst_attrib_loc = attrib.clone().change_node(lmd_cpy);
+                    let _ = ctx.activity.active.copy(&attrib, dst_attrib_loc);
+                }
+
+                //build a new call node that is connected to the lmd copy
+                let (in_region_cpy_src, _) = self.graph.import_context(
+                    lmd_cpy.as_outport_location(OutputType::LambdaDeclaration),
+                    region,
+                )?;
+
+                let apply_copy = self
+                    .graph
+                    .on_region(&region, |b| {
+                        let (node, _) = b.call(in_region_cpy_src, &[]).unwrap();
+                        node
+                    })
+                    .unwrap();
+
+                for inty in self.graph[node].inport_types().into_iter().skip(1) {
+                    if let Some(src_edg) = self.graph[node.as_inport_location(inty)].edge {
+                        let src = self.graph[src_edg].src().clone();
+                        let ty = self.graph[src_edg].ty.clone();
+                        self.graph
+                            .connect(src, apply_copy.as_inport_location(inty), ty)
+                            .unwrap();
+                    }
+                }
+
+                self.copy_node_attributes(node, apply_copy);
+                //Pre trace new λ node, by tracing the apply node
+                ctx.activity.trace_node_activity(self, apply_copy);
+                let lmd_region = RegionLocation {
+                    node: lmd_cpy,
+                    region_index: 0,
+                };
+                for resultty in self.graph[lmd_cpy].result_types(0) {
+                    let result_port = InportLocation {
+                        node: lmd_cpy,
+                        input: resultty,
+                    };
+                    if let Some(value_edge) = self.graph[result_port].edge {
+                        let src = *self.graph[value_edge].src();
+                        let output = self.forward_diff_in_region(lmd_region, ctx, src)?;
+                        //disconnect old edge, connect new edge
+                        let _old_value = self.graph.disconnect(value_edge).unwrap();
+                        //Don't know the type yet though
+                        self.graph
+                            .connect(output, result_port, OptEdge::value_edge_unset())?;
+                    }
+                }
+                //Post derive region after AD
+                self.derive_region(
+                    RegionLocation {
+                        node: lmd_cpy,
+                        region_index: 0,
+                    },
+                    Span::empty(),
+                )
+                .unwrap();
+
+                self.names
+                    .set(lmd_cpy.into(), format!("λ derivative of {}", callsrc.node));
+
+                let result_port = apply_copy.output(0);
+                //register the diffed output in the cache for the gamma-nodes output.
+                ctx.expr_cache.insert(original_value_port, result_port);
+
+                //finaly return the gamma's output as the diff value
+                Ok(AdResponse::new(original_value_port, result_port))
             }
             AbstractNodeType::Gamma => {
                 //We handle active gamma nodes by deep-copying them, and then recursing the forward-algorithm

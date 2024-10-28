@@ -12,7 +12,6 @@ use ahash::AHashMap;
 use rvsdg::{
     attrib::FlagStore,
     edge::{InportLocation, InputType, OutportLocation, OutputType},
-    nodes::ApplyNode,
     region::RegionLocation,
     smallvec::smallvec,
     util::abstract_node_type::AbstractNodeType,
