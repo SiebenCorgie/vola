@@ -265,7 +265,14 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
             //Notify src
             if let Some(port) = self.node_mut(src.node).outport_mut(&src.output) {
                 let before_count = port.edges.len();
-                port.edges.retain(|e| *e != edge);
+                //port.edges.retain(|e| *e != edge);
+                let edg_index = port
+                    .edges
+                    .iter()
+                    .enumerate()
+                    .find_map(|(idx, edg)| if *edg == edge { Some(idx) } else { None })
+                    .expect("Expected edge to be in port");
+                port.edges.remove(edg_index);
                 assert!(port.edges.len() == before_count - 1);
             } else {
                 err = Some(GraphError::InvalidNode(src.node));

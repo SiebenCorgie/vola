@@ -638,6 +638,33 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
         path.edges.reverse();
         path
     }
+
+    ///Collects the source port for each input of this node. Sets `None` if the input has no source
+    pub fn build_src_map(&self, node: NodeRef) -> SmallColl<Option<OutportLocation>> {
+        let mut srcs = SmallColl::default();
+        let noderef = &self[node];
+        for input in noderef.inport_types() {
+            if let Some(src) = self.inport_src(InportLocation { node, input }) {
+                srcs.push(Some(src))
+            } else {
+                srcs.push(None)
+            }
+        }
+
+        srcs
+    }
+
+    ///Collects the destination port for each output of this node. Empty if a por is not in use.
+    pub fn build_dst_map(&self, node: NodeRef) -> SmallColl<SmallColl<InportLocation>> {
+        let mut dsts = SmallColl::default();
+        let noderef = &self[node];
+        for output in noderef.outport_types() {
+            let portdsts = self.outport_dsts(node.as_outport_location(output));
+            dsts.push(portdsts);
+        }
+
+        dsts
+    }
 }
 
 pub struct DependencyGraph {
