@@ -37,7 +37,9 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
     }
 
     ///Does liveness analysis on `region` and all sub-regions of it. Returns a [FlagStore]
-    ///That flags all known _live_ ports with `true`. All ports that are not flagged, or flagged `false` are dead.
+    ///that flags all known _live_ ports with `true`. All ports that are not flagged, or flagged `false` are dead.
+    ///
+    ///If any outport of a node is live, then the node is flagged as live as well.
     ///
     ///Since we are seeding with this function, all results of this `region` are considered _live_.
     pub fn liveness_region(&self, region: RegionLocation) -> FlagStore<bool> {
@@ -45,6 +47,8 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
         //The _type of result_ depends on the region's node type. So we use that to explore the definitions
         let results = self.node(region.node).result_types(region.region_index);
         let mut flags = FlagStore::new();
+        //flag the region's node
+        flags.set(region.node.into(), true);
         for res in results.into_iter().map(|r| InportLocation {
             node: region.node,
             input: r,
@@ -62,6 +66,10 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
         //we basically do a breadth-first traversal on _edge_ / _port_ granularity.
         //to make things a little easier on the big-O, we checkout _simple-nodes_ and apply-nodes only once,
         //which is also the vast majority of nodes usually.
+
+        //NOTE: that we do not explicitly cross the region boundary. Instead, whenever mapping an _outside_ port to a _inside_
+        //      port below, we enque a port that is _in another region_, which implicitly will cross the region boundary _at some point_
+        //      later in the iteration.
 
         //seed by using all initially alive ports.
         let mut waiting_ports = flags
@@ -98,6 +106,8 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
 
             //mark the src_port
             flags.set(src_port.clone().into(), true);
+            //and the source node
+            flags.set(src_port.node.into(), true);
 
             //NOTE: by definition `waiting_ports` only contains _live-ports_.
             //      so `src_port` is live at that point as well.

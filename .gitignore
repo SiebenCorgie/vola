@@ -8,3 +8,7 @@ Cargo.lock
 *.json
 *.bib.sav
 *.json
+*.bin
+/*.svg
+crates/wasm-runtime/pkg*
+*.wasm

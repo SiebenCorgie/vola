@@ -23,7 +23,7 @@ pub mod dot;
 
 pub mod error;
 mod reporter;
-pub use reporter::{cache_file, report, reset_file_cache, Reportable};
+pub use reporter::{cache_file, report, reset_file_cache};
 
 pub type FileString = SmallString<[u8; 32]>;
 
@@ -57,7 +57,7 @@ impl Span {
         self
     }
 
-    ///Basically [with_file], but for an option. Makes it easy to combine `Span::from(Node).with_file_myabe(parser_context.get_file())`.
+    ///Basically [Self::with_file], but for an option. Makes it easy to combine `Span::from(Node).with_file_myabe(parser_context.get_file())`.
     pub fn with_file_maybe(self, file_name: Option<&str>) -> Self {
         if let Some(file) = file_name {
             self.with_file(file)

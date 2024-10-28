@@ -11,17 +11,93 @@ use ahash::{AHashMap, AHashSet};
 use smallvec::SmallVec;
 
 use crate::{
+    attrib::AttribLocation,
     edge::{InportLocation, InputType, LangEdge, OutportLocation, OutputType},
     err::GraphError,
     nodes::{LangNode, NodeType, StructuralNode},
     region::RegionLocation,
+    util::abstract_node_type::AbstractNodeType,
     NodeRef, Rvsdg, SmallColl,
 };
 
 impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
     //NOTE: At first I wanted to implement things like `remove_result` and `remove_argument` here,
-    //to make life easier. But this would make it easy to produce invalid graph. For instanec if you'd
+    //to make life easier. But this would make it easy to produce invalid graph. For instance if you'd
     //remove a result of a λ-Node's body, you'd have to update all apply node outputs as well.
+
+    ///Returns true, if any sub region of the node's `port` uses the port's value. Always returns true for
+    /// Result-like value, and inputs of nodes, that have no sub-region (eg. any input to a simple node is _in-use_).
+    pub fn is_input_in_use(&self, port: InportLocation) -> bool {
+        if port.input.is_result() || port.input == InputType::GammaPredicate {
+            return true;
+        }
+
+        let ty = self[port.node].into_abstract();
+        if ty == AbstractNodeType::Simple || ty == AbstractNodeType::Apply {
+            return true;
+        }
+
+        //otherwise, check the sub regions by trying  to map the port into the region, if any uses it, early return true,
+        //else end with false
+
+        for regixd in 0..self[port.node].regions().len() {
+            if let Some(mapped_into) = port.input.map_to_in_region(regixd) {
+                if self[OutportLocation {
+                    node: port.node,
+                    output: mapped_into,
+                }]
+                .edges
+                .len()
+                    > 0
+                {
+                    return true;
+                }
+            }
+        }
+
+        false
+    }
+
+    ///Removes all edges in that region, that lead to a node with sub-regions, but where the node doesn't use the
+    ///value or state.
+    ///
+    /// So for instance a gamma node with an entry variable `e`, where none of the branches uses `e`.
+    ///
+    /// # Note
+    /// `disconnected` can be used to store all disconnected edge-values. If `None` is supplied, disconected
+    /// edges are just dropped.
+    pub fn remove_unused_edges_in_region(
+        &mut self,
+        region: RegionLocation,
+        recursive: bool,
+        //mut disconnected: Option<&mut Vec<E>>,
+    ) -> Result<(), GraphError> {
+        for node in self[region].nodes.clone() {
+            //note: only work on node with sub regions
+            let subregions = self[node].regions().len();
+            if subregions > 0 {
+                if recursive {
+                    for region_index in 0..subregions {
+                        self.remove_unused_edges_in_region(
+                            RegionLocation { node, region_index },
+                            recursive,
+                        )?;
+                    }
+                }
+
+                for input in self[node].inport_types() {
+                    let port = InportLocation { node, input };
+                    if let Some(edg) = self[port].edge {
+                        if !self.is_input_in_use(port) {
+                            let _ = self.disconnect(edg)?;
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
 
     ///Removes all unused context variables of the lambda or Phi `node`.
     ///
@@ -216,7 +292,24 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
         Ok(replacee_ref)
     }
 
-    ///Replaces all uses of `replaced` with `replacee`. Contrary to [replace_node] this does not change inputs to `replacee`.
+    ///Replaces all connections from `replaced` to any input with connections from `replacee`.
+    ///
+    ///Also takes care of carrying over the edge-types
+    pub fn replace_outport_uses(
+        &mut self,
+        replaced: OutportLocation,
+        replacee: OutportLocation,
+    ) -> Result<(), GraphError> {
+        for edge in self[replaced].edges.clone() {
+            let dst = *self[edge].dst();
+            let ty = self.disconnect(edge)?;
+            self.connect(replacee, dst, ty)?;
+        }
+
+        Ok(())
+    }
+
+    ///Replaces all uses of `replaced` with `replacee`. Contrary to [replace_node](Rvsdg::replace_node) this does not change inputs to `replacee`.
     /// Instead all _output-connected-edges_ of `replaced` are routed to `replacee`.
     ///
     /// Assumes that:
@@ -229,10 +322,16 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
         replacee: NodeRef,
     ) -> Result<(), GraphError> {
         if !self.node(replaced).node_type.is_simple() {
-            return Err(GraphError::InvalidNode(replaced));
+            return Err(GraphError::UnexpectedNodeType(
+                AbstractNodeType::Simple,
+                self[replaced].into_abstract(),
+            ));
         }
         if !self.node(replacee).node_type.is_simple() {
-            return Err(GraphError::InvalidNode(replacee));
+            return Err(GraphError::UnexpectedNodeType(
+                AbstractNodeType::Simple,
+                self[replacee].into_abstract(),
+            ));
         }
 
         let reg_a = self.node(replaced).parent.clone();
@@ -269,17 +368,24 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
         Ok(())
     }
 
-    ///Utility that collects all node, that are `live`, so connected to any result
-    ///in some way.
+    ///Utility that collects all node, that are `live`, so connected to any result,
+    ///in that region.
     ///
-    /// Note that there is also a liveness analysis that builds a liveness lookuptable
-    /// for all ports, which is more precise.
-    pub fn live_nodes(&self, region: RegionLocation) -> Vec<NodeRef> {
+    /// Note that there is also a [liveness](Rvsdg::liveness) analysis that builds a liveness lookuptable
+    /// for all ports, which is more precise an recursively traverses sub regions.
+    ///
+    /// For the recursive version see [live_nodes](Rvsdg::live_nodes).
+    pub fn live_nodes_in_region(&self, region: RegionLocation) -> Vec<NodeRef> {
         let mut live_variables = AHashSet::default();
 
         let region_content = self.region(&region).unwrap();
         for resultidx in 0..region_content.results.len() {
             if let Some(src) = region_content.result_src(self, resultidx) {
+                //ignore if the result is connected directly to a argument
+                if src.node == region.node {
+                    continue;
+                }
+
                 //insert the seeding node. If this wasn't already in the map, walk the predecessors as well
                 if live_variables.insert(src.node) {
                     for pred in self.walk_predecessors_in_region(src.node) {
@@ -294,5 +400,159 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
         }
 
         live_variables.into_iter().collect()
+    }
+
+    ///Finds all nodes that are connected to any result of `region`. Recursively traverses any
+    ///sub-regions of nodes within that region.
+    ///
+    /// If you are only interested of live nodes _in this region_ see [live_nodes_in_region](Rvsdg::live_nodes_in_region).
+    /// For a port-wise analysis see [liveness](Rvsdg::liveness).
+    pub fn live_nodes(&self, region: RegionLocation) -> Vec<NodeRef> {
+        //NOTE: we can't take the nice shortcut of live_nodes_in_region, since we might _over-add_ nodes that are in a subregion
+        //      if we annotate all output ports _always_ as live. So we just use the standard liveness analysis, and filter for unique
+        //      nodes instead.
+        let live_ports = self.liveness_region(region);
+        let mut live_nodes = AHashSet::new();
+        for (attr, is_live) in live_ports.flags {
+            if is_live {
+                //NOTE: we only care about ports here
+                if let AttribLocation::InPort(InportLocation { node, .. })
+                | AttribLocation::OutPort(OutportLocation { node, .. }) = attr
+                {
+                    live_nodes.insert(node);
+                }
+            }
+        }
+
+        live_nodes.into_iter().collect()
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use rvsdg_derive_lang::LangNode;
+
+    use crate::{self as rvsdg, EdgeRef, NodeRef};
+    use crate::{
+        common::VSEdge,
+        region::{Input, Output},
+        Rvsdg,
+    };
+
+    #[derive(LangNode)]
+    struct TestNode {
+        #[input]
+        inp: Input,
+        #[output]
+        out: Output,
+    }
+
+    impl Default for TestNode {
+        fn default() -> Self {
+            TestNode {
+                inp: Input::default(),
+                out: Output::default(),
+            }
+        }
+    }
+
+    fn setup_test_rvsdg() -> (Rvsdg<TestNode, VSEdge>, NodeRef, EdgeRef) {
+        let mut rvsdg: Rvsdg<TestNode, VSEdge> = Rvsdg::new();
+
+        let (testnode, test_edge) = rvsdg
+            .on_region(&rvsdg.toplevel_region(), |reg| {
+                let test_node = reg.insert_node(TestNode::default());
+                let test_node2 = reg.insert_node(TestNode::default());
+
+                let edg = reg
+                    .ctx_mut()
+                    .connect(test_node.output(0), test_node2.input(0), VSEdge::State)
+                    .unwrap();
+
+                (test_node, edg)
+            })
+            .unwrap();
+
+        (rvsdg, testnode, test_edge)
+    }
+    #[test]
+    fn index_valid() {
+        let (mut rvsdg, testnode, test_edge) = setup_test_rvsdg();
+
+        let _t: &_ = &rvsdg[testnode];
+        let _t: &mut _ = &mut rvsdg[testnode];
+
+        let _e: &_ = &rvsdg[test_edge];
+        let _e: &mut _ = &mut rvsdg[test_edge];
+
+        let tlreg = rvsdg.toplevel_region();
+        let _r: &_ = &rvsdg[tlreg];
+        let _r: &mut _ = &mut rvsdg[tlreg];
+
+        let _ip: &_ = &rvsdg[testnode.input(0)];
+        let _ip: &mut _ = &mut rvsdg[testnode.input(0)];
+
+        let _op: &_ = &rvsdg[testnode.output(0)];
+        let _op: &mut _ = &mut rvsdg[testnode.output(0)];
+    }
+
+    #[test]
+    #[should_panic]
+    fn index_invalid_node_imm() {
+        let (mut rvsdg, testnode, _test_edge) = setup_test_rvsdg();
+        rvsdg.remove_node(testnode).unwrap();
+        let _t: &_ = &rvsdg[testnode];
+    }
+    #[test]
+    #[should_panic]
+    fn index_invalid_node_mut() {
+        let (mut rvsdg, testnode, _test_edge) = setup_test_rvsdg();
+        rvsdg.remove_node(testnode).unwrap();
+        let _t: &mut _ = &mut rvsdg[testnode];
+    }
+
+    #[test]
+    #[should_panic]
+    fn index_invalid_edge_imm() {
+        let (mut rvsdg, testnode, test_edge) = setup_test_rvsdg();
+        rvsdg.remove_node(testnode).unwrap();
+        let _t: &_ = &rvsdg[test_edge];
+    }
+    #[test]
+    #[should_panic]
+    fn index_invalid_edge_mut() {
+        let (mut rvsdg, testnode, test_edge) = setup_test_rvsdg();
+        rvsdg.remove_node(testnode).unwrap();
+        let _t: &mut _ = &mut rvsdg[test_edge];
+    }
+
+    #[test]
+    #[should_panic]
+    fn index_invalid_inport_imm() {
+        let (mut rvsdg, testnode, _test_edge) = setup_test_rvsdg();
+        rvsdg.remove_node(testnode).unwrap();
+        let _t: &_ = &rvsdg[testnode.input(0)];
+    }
+    #[test]
+    #[should_panic]
+    fn index_invalid_inport_mut() {
+        let (mut rvsdg, testnode, _test_edge) = setup_test_rvsdg();
+        rvsdg.remove_node(testnode).unwrap();
+        let _t: &mut _ = &mut rvsdg[testnode.input(0)];
+    }
+
+    #[test]
+    #[should_panic]
+    fn index_invalid_outport_imm() {
+        let (mut rvsdg, testnode, _test_edge) = setup_test_rvsdg();
+        rvsdg.remove_node(testnode).unwrap();
+        let _t: &_ = &rvsdg[testnode.output(0)];
+    }
+    #[test]
+    #[should_panic]
+    fn index_invalid_outport_mut() {
+        let (mut rvsdg, testnode, _test_edge) = setup_test_rvsdg();
+        rvsdg.remove_node(testnode).unwrap();
+        let _t: &mut _ = &mut rvsdg[testnode.output(0)];
     }
 }

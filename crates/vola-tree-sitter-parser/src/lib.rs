@@ -61,7 +61,7 @@ pub trait FromTreeSitter {
         Self: Sized;
 }
 
-///Parses `file`. Returns the [VolaAst](crate::VolaAst) on success, or a partially parsed AST, and the reported errors, if any
+///Parses `file`. Returns the [VolaAst] on success, or a partially parsed AST, and the reported errors, if any
 /// parsing errors happened.
 pub fn parse_file(file: impl AsRef<Path>) -> Result<VolaAst, (VolaAst, Vec<ParserError>)> {
     let dta = match std::fs::read(file.as_ref()) {
@@ -82,7 +82,7 @@ pub fn parse_file(file: impl AsRef<Path>) -> Result<VolaAst, (VolaAst, Vec<Parse
     parse_data(&dta, Some(file_src_str.into()))
 }
 
-///Parses `string`. Returns the [VolaAst](crate::VolaAst) on success, or a partially parsed AST, and the reported errors, if any
+///Parses `string`. Returns the [VolaAst] on success, or a partially parsed AST, and the reported errors, if any
 /// parsing errors happened.
 pub fn parse_string(string: String) -> Result<VolaAst, (VolaAst, Vec<ParserError>)> {
     let as_bytes = string.as_bytes();
@@ -110,7 +110,9 @@ impl vola_ast::VolaParser for VolaTreeSitterParser {
         src_file: Option<FileString>,
         byte: &[u8],
     ) -> Result<VolaAst, vola_ast::AstError> {
+        #[allow(unused_variables)]
         parse_data(byte, src_file.clone()).map_err(|(partial_ast, e)| {
+            #[cfg(feature = "dot")]
             if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("VOLA_DUMP_AST").is_ok() {
                 vola_ast::dot::ast_to_svg(&partial_ast, "partial_ast.svg");
             }

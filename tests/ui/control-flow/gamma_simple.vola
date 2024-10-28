@@ -1,0 +1,23 @@
+//BEGIN-CONFIG
+//EXEC-FN:myField
+//EXEC-ARGS:0.0,1.0,4.0
+//EXEC-EPS:0.0
+//EXEC-RES:42.0
+//END-CONFIG
+
+module std;
+
+entity Switch();
+
+impl Switch for SDF3D(at){
+    if at.x > 2.0{
+        2.0
+    }else{
+        42.0
+    }
+}
+
+export myField(at: vec3){
+	csg t = Switch();
+	eval t.SDF3D(at)
+}

@@ -9,7 +9,7 @@ use rvsdg::{
     edge::{InportLocation, InputType, OutportLocation, OutputType},
     nodes::{NodeType, StructuralNode},
     region::RegionLocation,
-    smallvec::{smallvec, SmallVec},
+    smallvec::smallvec,
     util::cfg::{Cfg, CfgNode, CfgRef},
     NodeRef, SmallColl,
 };
@@ -95,7 +95,7 @@ impl SpirvBackend {
         // NOTE: In theory you can forward declare function... but eh, its not that hard, and we don't have
         //       cyclic dependencies by definition.
 
-        let mut lmd_dependecies: AHashMap<OutportLocation, SmallVec<[OutportLocation; 3]>> =
+        let mut lmd_dependecies: AHashMap<OutportLocation, SmallColl<OutportLocation>> =
             AHashMap::default();
         for tlnode_ref in self
             .graph

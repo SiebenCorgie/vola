@@ -8,9 +8,9 @@ readme = "crates/vola-ast/README.md"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-default = ["dot", "serde"]
+default = ["serde"]
 serde = ["dep:serde"]
-dot = ["vola-common/dot"]
+dot = ["vola-common/dot", "graphviz-rust"]
 
 [dependencies]
 vola-common = { path = "../vola-common" }
@@ -25,3 +25,8 @@ serde = { workspace = true, optional = true }
 
 [dev-dependencies]
 vola-tree-sitter-parser = { path = "../vola-tree-sitter-parser" }
+
+
+[[example]]
+name = "simple_csg"
+required-features = ["serde", "dot"]

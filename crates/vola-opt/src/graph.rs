@@ -33,7 +33,10 @@ use vola_common::Span;
 
 use crate::OptGraph;
 
+pub(crate) mod attribute_copy;
+pub(crate) mod convention;
 pub(crate) mod impl_utils;
+pub(crate) mod splat_ty;
 
 ///A node of some dialect
 pub trait DialectNode: LangNode + Any + View {
@@ -258,6 +261,13 @@ impl OptEdge {
                 Some(new_type)
             }
             Self::State => None,
+        }
+    }
+
+    ///Creates a new ValueEdge with unset type state
+    pub fn value_edge_unset() -> Self {
+        Self::Value {
+            ty: TypeState::Unset,
         }
     }
 
@@ -523,5 +533,39 @@ impl Optimizer {
             }
         }
         Ok(out)
+    }
+
+    ///Returns true if `node` is of type `T`.
+    pub fn is_node_type<T: DialectNode + Send + Sync + 'static>(&self, node: NodeRef) -> bool {
+        if let NodeType::Simple(s) = &self.graph.node(node).node_type {
+            s.try_downcast_ref::<T>().is_some()
+        } else {
+            false
+        }
+    }
+
+    ///Tries to unwrap `node` into the given node type. Fails if `node` is either not a SimpleNode, or not of the
+    /// given type.
+    pub fn try_unwrap_node<T: DialectNode + Send + Sync + 'static>(
+        &self,
+        node: NodeRef,
+    ) -> Option<&T> {
+        if let NodeType::Simple(s) = &self.graph[node].node_type {
+            s.try_downcast_ref()
+        } else {
+            None
+        }
+    }
+    ///Tries to unwrap `node` into the given node type. Fails if `node` is either not a SimpleNode, or not of the
+    /// given type.
+    pub fn try_unwrap_node_mut<T: DialectNode + Send + Sync + 'static>(
+        &mut self,
+        node: NodeRef,
+    ) -> Option<&mut T> {
+        if let NodeType::Simple(s) = &mut self.graph[node].node_type {
+            s.try_downcast_mut()
+        } else {
+            None
+        }
     }
 }

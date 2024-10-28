@@ -1,11 +1,9 @@
-use rvsdg::{err::GraphError, util::cnf::CnfError};
-use vola_common::{
-    thiserror::{self, Error},
-    Reportable,
+use rvsdg::{
+    err::GraphError,
+    util::{cne::CneError, cnf::CnfError},
 };
+use vola_common::thiserror::{self, Error};
 use vola_opt::OptError;
-
-impl Reportable for PipelineError {}
 
 ///Error type collection that can happen at compile-time.
 ///Mostly transparent errors
@@ -19,10 +17,24 @@ pub enum PipelineError {
     ParserError(String),
     #[error(transparent)]
     RVSDGError(#[from] GraphError),
+    #[cfg(feature = "spirv")]
     #[error(transparent)]
     SpirvError(#[from] vola_backend_spirv::BackendSpirvError),
+    #[cfg(feature = "wasm")]
+    #[error(transparent)]
+    WasmError(#[from] vola_backend_wasm::WasmError),
+    #[cfg(feature = "native")]
+    #[error("Could not find native ISA: {0}")]
+    NativeIsaError(String),
+
     #[error(transparent)]
     AstError(#[from] vola_ast::AstError),
     #[error(transparent)]
     CnfError(#[from] CnfError),
+    #[error(transparent)]
+    CneError(#[from] CneError),
+    #[error("Failed to validate: {0}")]
+    ValidationFailed(String),
+    #[error("No backend configured!")]
+    IsStub,
 }

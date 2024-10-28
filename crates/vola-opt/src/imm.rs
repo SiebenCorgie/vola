@@ -17,7 +17,7 @@ use vola_ast::csg::{CSGConcept, CSGNodeDef};
 use crate::{common::Ty, DialectNode, OptError, OptGraph, OptNode};
 use rvsdg_viewer::Color;
 
-//Macro that implements the "View" trait for an AlgeDialect op
+//Macro that implements the "View" trait for the ImmDialect
 macro_rules! implViewImmOp {
     ($opname:ident, $str:expr, $($arg:ident),*) => {
         impl rvsdg_viewer::View for $opname {

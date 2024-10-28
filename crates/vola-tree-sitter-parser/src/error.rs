@@ -12,11 +12,9 @@ use std::{
 
 use thiserror::Error;
 use tree_sitter::Node;
-use vola_common::{ariadne::Label, error::error_reporter, report, Reportable, Span};
+use vola_common::{ariadne::Label, error::error_reporter, report, Span};
 
 use crate::ParserCtx;
-
-impl Reportable for ParserError {}
 
 #[derive(Debug, Error, Clone)]
 pub enum ParserError {

@@ -1,0 +1,25 @@
+//BEGIN-CONFIG
+//ERROR:Type derivation did not end successfully!
+//END-CONFIG
+
+module std;
+operation SubTest();
+
+impl SubTest<a, b> for SDF3D(at){
+    if at.x > 1.0{
+        [1.0; 2]
+    }else{
+        [1.0; 3]
+    }
+}
+
+
+export test(at: vec3){
+	csg t = SubTest(){
+		Sphere(1.0)
+	}{
+		Box([1.0, 2.0, 3.0])
+	};
+
+	eval t.SDF3D(at)
+}

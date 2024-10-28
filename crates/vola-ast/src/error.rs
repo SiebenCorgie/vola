@@ -8,9 +8,6 @@
 use std::path::PathBuf;
 
 use thiserror::Error;
-use vola_common::Reportable;
-
-impl Reportable for AstError {}
 
 ///Errors that happen while working on the AST.
 #[derive(Debug, Error, Clone, PartialEq)]

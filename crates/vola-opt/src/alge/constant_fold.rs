@@ -175,10 +175,8 @@ pub(crate) fn handle_constant_mul(a: &OptNode, b: &OptNode) -> Option<OptNode> {
             //a: column
             //b: row
             for n in 0..n {
-                println!("{} * {}", a.lit[n], b.lit[m][n]);
                 res[m] += a.lit[n] * b.lit[m][n];
             }
-            println!("= {}", res[m]);
         }
 
         return Some(OptNode::new(ImmVector::new(&res), Span::empty()));

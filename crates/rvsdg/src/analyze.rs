@@ -10,13 +10,12 @@
 //! Provides several tools to analyse an RVSDG. Including walker utilities
 //! that make gathering information easy, and finding dependencies or definitions of nodes.
 
-use std::collections::VecDeque;
-
-use ahash::{AHashMap, AHashSet};
-
 mod region_walker;
 pub use region_walker::{RegionLocationWalker, RegionWalker};
 mod topo_ord;
+
+mod predecessor;
+pub use predecessor::{PredWalker, PredWalkerNodes, PredWalkerNodesRegion, PredWalkerRegion};
 
 use crate::{
     edge::{InportLocation, InputType, LangEdge, OutportLocation, OutputType},
@@ -25,99 +24,8 @@ use crate::{
     util::Path,
     NodeRef, Rvsdg, SmallColl,
 };
-
-///Utility that walks the predecessors of a node in breadth-first style.
-///
-/// All node ports are traversed only once. So a node can be touched multiple times by the Iterator, but once all
-/// output ports are touched, the node won't occur anymore.
-///
-/// Note that this iterator traverses region boundaries. So for instance if a node is indirectly connected to a context variable
-/// of some λ-node, the iterator will break out of thea λ-node's body, and traverse the outside region.
-pub struct PredWalker<'a, N: LangNode + 'static, E: LangEdge + 'static> {
-    walked: AHashSet<OutportLocation>,
-    walker_stack: VecDeque<OutportLocation>,
-
-    ctx: &'a Rvsdg<N, E>,
-}
-
-impl<'a, N: LangNode + 'static, E: LangEdge + 'static> PredWalker<'a, N, E> {
-    fn new(ctx: &'a Rvsdg<N, E>, node: NodeRef) -> Self {
-        //Init stack
-        let stack = ctx.node(node).pred(ctx).collect();
-        PredWalker {
-            walked: AHashSet::default(),
-            walker_stack: stack,
-            ctx,
-        }
-    }
-}
-
-impl<'a, N: LangNode + 'static, E: LangEdge + 'static> Iterator for PredWalker<'a, N, E> {
-    type Item = OutportLocation;
-    fn next(&mut self) -> Option<Self::Item> {
-        if let Some(n) = self.walker_stack.pop_back() {
-            //collect this nodes predecessors
-            for pred in self.ctx.node(n.node).pred(self.ctx) {
-                if !self.walked.contains(&pred) {
-                    self.walker_stack.push_front(pred.clone());
-                    self.walked.insert(pred.clone());
-                }
-            }
-
-            Some(n)
-        } else {
-            None
-        }
-    }
-}
-
-///Utility that walks the predecessors of a node in breadth-first style. Stops at the region's boundaries of the seeding node.
-///
-/// If you don't want that, have a look at [PredWalker].
-///
-/// All node ports are traversed only once. So a node can be touched multiple times by the Iterator, but once all
-/// output ports are touched, the node won't occur anymore.
-pub struct PredWalkerRegion<'a, N: LangNode + 'static, E: LangEdge + 'static> {
-    walked: AHashSet<OutportLocation>,
-    walker_stack: VecDeque<OutportLocation>,
-    region_boundary_node: NodeRef,
-    ctx: &'a Rvsdg<N, E>,
-}
-
-impl<'a, N: LangNode + 'static, E: LangEdge + 'static> PredWalkerRegion<'a, N, E> {
-    //NOTE: assumes that `node` has a parent, so is not the OmegaNode.
-    fn new(ctx: &'a Rvsdg<N, E>, node: NodeRef) -> Self {
-        let region_boundary_node = ctx.node(node).parent.unwrap().node;
-        //Init stack
-        let stack = ctx.node(node).pred(ctx).collect();
-        PredWalkerRegion {
-            walked: AHashSet::default(),
-            walker_stack: stack,
-            ctx,
-            region_boundary_node,
-        }
-    }
-}
-
-impl<'a, N: LangNode + 'static, E: LangEdge + 'static> Iterator for PredWalkerRegion<'a, N, E> {
-    type Item = OutportLocation;
-    fn next(&mut self) -> Option<Self::Item> {
-        if let Some(n) = self.walker_stack.pop_back() {
-            //collect this nodes predecessors, but only if the node is _not_ the region_boundary_node.
-            if n.node != self.region_boundary_node {
-                for pred in self.ctx.node(n.node).pred(self.ctx) {
-                    if !self.walked.contains(&pred) {
-                        self.walker_stack.push_front(pred.clone());
-                        self.walked.insert(pred.clone());
-                    }
-                }
-            }
-            Some(n)
-        } else {
-            None
-        }
-    }
-}
+use ahash::{AHashMap, AHashSet};
+use std::collections::VecDeque;
 
 ///Utility that walks the successors of a node in breadth-first style.
 ///
@@ -343,6 +251,8 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
             }
         }
     }
+
+    ///See [Self::find_producer_out] for a detailed explaination on what this does.
     pub fn find_producer_inp(&self, input: InportLocation) -> Option<OutportLocation> {
         let start_out = if let Some(start_edge) = self.node(input.node).inport(&input.input)?.edge {
             self.edge(start_edge).src.clone()
@@ -519,6 +429,21 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
     ///Walks all predecessors of `node`, but stops at the region boundaries of the region `node` is in.
     pub fn walk_predecessors_in_region<'a>(&'a self, node: NodeRef) -> PredWalkerRegion<'a, N, E> {
         PredWalkerRegion::new(self, node)
+    }
+
+    ///Walks all predecessor nodes of `node` (excluding `node` itself). See [PredWalkerNodes] for more info.
+    pub fn walk_predecessor_nodes<'a>(&'a self, node: NodeRef) -> PredWalkerNodes<'a, N, E> {
+        PredWalkerNodes::new(self, node)
+    }
+
+    ///Walks all predecessor nodes of `node` (excluding `node` itself). Stops at `boundary`. This effectively lets you
+    /// constrain the walker to the node's region, or any super-region of it. See [PredWalkerNodesRegion] for more info.
+    pub fn walk_predecessor_nodes_region<'a>(
+        &'a self,
+        node: NodeRef,
+        boundary: RegionLocation,
+    ) -> PredWalkerNodesRegion<'a, N, E> {
+        PredWalkerNodesRegion::new(self, node, boundary)
     }
 
     ///Iterates over all successors of this node, see [SuccWalker] for more info.
@@ -712,6 +637,33 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
         //NOTE reverse the order of edges, since we start pushing from the end
         path.edges.reverse();
         path
+    }
+
+    ///Collects the source port for each input of this node. Sets `None` if the input has no source
+    pub fn build_src_map(&self, node: NodeRef) -> SmallColl<Option<OutportLocation>> {
+        let mut srcs = SmallColl::default();
+        let noderef = &self[node];
+        for input in noderef.inport_types() {
+            if let Some(src) = self.inport_src(InportLocation { node, input }) {
+                srcs.push(Some(src))
+            } else {
+                srcs.push(None)
+            }
+        }
+
+        srcs
+    }
+
+    ///Collects the destination port for each output of this node. Empty if a por is not in use.
+    pub fn build_dst_map(&self, node: NodeRef) -> SmallColl<SmallColl<InportLocation>> {
+        let mut dsts = SmallColl::default();
+        let noderef = &self[node];
+        for output in noderef.outport_types() {
+            let portdsts = self.outport_dsts(node.as_outport_location(output));
+            dsts.push(portdsts);
+        }
+
+        dsts
     }
 }
 

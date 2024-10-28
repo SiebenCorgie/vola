@@ -5,7 +5,7 @@ edition = "2021"
 license = "MPL-2.0"
 
 [features]
-default = ["log", "viewer", "dot"]
+default = ["log", "viewer"]
 log = ["dep:log"]
 viewer = ["rvsdg-viewer"]
 dot = ["graphviz-rust"]

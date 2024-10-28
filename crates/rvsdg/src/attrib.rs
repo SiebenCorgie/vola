@@ -12,11 +12,13 @@
 use std::fmt::Display;
 
 use ahash::AHashMap;
+use smallvec::SmallVec;
 
 use crate::{
-    edge::{InportLocation, OutportLocation},
+    edge::{InportLocation, LangEdge, OutportLocation},
+    nodes::LangNode,
     region::RegionLocation,
-    EdgeRef, NodeRef,
+    EdgeRef, NodeRef, Rvsdg,
 };
 
 #[derive(Debug, Hash, PartialEq, Eq, Clone)]
@@ -96,6 +98,121 @@ impl From<&EdgeRef> for AttribLocation {
     }
 }
 
+impl AttribLocation {
+    ///Exchanges the `node` field of any attribute location that is
+    /// not an EdgeRef.
+    /// For edges, it does nothing.
+    pub fn change_node(self, new_node: NodeRef) -> Self {
+        match self {
+            AttribLocation::Edge(e) => AttribLocation::Edge(e),
+            AttribLocation::Node(_n) => AttribLocation::Node(new_node),
+            AttribLocation::InPort(InportLocation { node: _, input }) => {
+                AttribLocation::InPort(InportLocation {
+                    node: new_node,
+                    input,
+                })
+            }
+            AttribLocation::OutPort(OutportLocation { node: _, output }) => {
+                AttribLocation::OutPort(OutportLocation {
+                    node: new_node,
+                    output,
+                })
+            }
+            AttribLocation::Region(RegionLocation {
+                node: _,
+                region_index,
+            }) => AttribLocation::Region(RegionLocation {
+                node: new_node,
+                region_index,
+            }),
+        }
+    }
+}
+
+pub struct AttribLocIter {
+    //Note since we don't want to borrow the Graph
+    //itself, which would make handling the whole thing kinda wonky,
+    //we pre allocate _all_ and to the iteration over the vec.
+    attribs: SmallVec<[AttribLocation; 32]>,
+    idx: usize,
+}
+
+impl Iterator for AttribLocIter {
+    type Item = AttribLocation;
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.idx >= self.attribs.len() {
+            None
+        } else {
+            let element = Some(self.attribs[self.idx].clone());
+            self.idx += 1;
+            element
+        }
+    }
+
+    fn nth(&mut self, n: usize) -> Option<Self::Item> {
+        let access = self.idx + n;
+        let element = self.attribs.get(access).cloned();
+        self.idx = access;
+        element
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let rest_size = self.attribs.len() - self.idx;
+        (rest_size, Some(rest_size))
+    }
+}
+
+impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
+    ///Iterates all [AttribLocation]s that are directly connected to this node.
+    ///
+    ///This includes (in that order):
+    ///
+    /// - The Node itself
+    /// - All input-ports
+    /// - All output-pors
+    /// - All sub-regions (if there are any)
+    /// - All Argument ports to any subregion
+    /// - All Result ports to any subregion
+    pub fn iter_node_attribs(&self, node: NodeRef) -> AttribLocIter {
+        let mut attribs = SmallVec::new();
+
+        attribs.push(node.into());
+        for input in self[node].inport_types() {
+            attribs.push(InportLocation { node, input }.into());
+        }
+        for output in self[node].outport_types() {
+            attribs.push(OutportLocation { node, output }.into());
+        }
+        let regcount = self[node].regions().len();
+        for regidx in 0..regcount {
+            attribs.push(
+                RegionLocation {
+                    node,
+                    region_index: regidx,
+                }
+                .into(),
+            );
+        }
+
+        if regcount > 0 {
+            //Push all arguments
+            for region_index in 0..regcount {
+                for output in self[node].argument_types(region_index) {
+                    attribs.push(OutportLocation { node, output }.into());
+                }
+            }
+            //Push all results
+            for region_index in 0..regcount {
+                for input in self[node].result_types(region_index) {
+                    attribs.push(InportLocation { node, input }.into());
+                }
+            }
+        }
+
+        AttribLocIter { attribs, idx: 0 }
+    }
+}
+
 ///Stores multiple attributes for any component of the RVSDG. If you only want to store
 /// one attribute. Have a look at [FlagStore].
 #[derive(Debug, Clone)]
@@ -149,5 +266,30 @@ impl<F: 'static> FlagStore<F> {
     ///Sets or overwrites the flag. If there was already one set, returns the old one.
     pub fn set(&mut self, location: AttribLocation, flag: F) -> Option<F> {
         self.flags.insert(location, flag)
+    }
+}
+
+impl<F: Clone + 'static> FlagStore<F> {
+    ///Copies the set, or unset attribute from one location to another. Note that
+    ///if the attribute is not set, then the `dst` won't be set as well.
+    ///
+    /// Returns a value if `dst`'s state was already set.
+    pub fn copy(&mut self, src: &AttribLocation, dst: AttribLocation) -> Option<F> {
+        if let Some(state) = self.get(src).cloned() {
+            self.set(dst, state)
+        } else {
+            None
+        }
+    }
+}
+
+impl FlagStore<bool> {
+    ///Returns true if the location is set, and the value is true.
+    pub fn is_set(&self, location: &AttribLocation) -> bool {
+        if let Some(val) = self.get(location) {
+            *val
+        } else {
+            false
+        }
     }
 }

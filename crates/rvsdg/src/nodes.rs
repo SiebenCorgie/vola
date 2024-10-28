@@ -80,6 +80,24 @@ pub enum NodeType<N: LangNode + 'static> {
     Omega(OmegaNode),
 }
 
+impl<N: LangNode + 'static> NodeType<N> {
+    ///True for Lambda, Delta, Phi and Omega nodes
+    pub fn is_inter_procedural(&self) -> bool {
+        match self {
+            Self::Lambda(_) | Self::Delta(_) | Self::Phi(_) | Self::Omega(_) => true,
+            _ => false,
+        }
+    }
+
+    ///True for Gamma and Theta nodes
+    pub fn is_intra_procedural(&self) -> bool {
+        match self {
+            Self::Gamma(_) | Self::Theta(_) => true,
+            _ => false,
+        }
+    }
+}
+
 macro_rules! impl_unwrap {
     ( NodeType:: $nodevar:tt ( $noderef:ident ) -> $node_type:ty, $asref:ident, $asmut:ident, $owning:ident, $is_def:ident) => {
         impl<N: LangNode + 'static> NodeType<N> {
@@ -520,11 +538,11 @@ impl<N: LangNode + 'static> Node<N> {
 
     ///Returns the input port's connected edges. This is guranteed to have the length
     /// (and order) of [Self::inputs].
-    pub fn input_edges(&self) -> SmallVec<[Option<EdgeRef>; 3]> {
+    pub fn input_edges(&self) -> SmallColl<Option<EdgeRef>> {
         self.inputs().iter().map(|inp| inp.edge.clone()).collect()
     }
 
-    pub fn output_edges(&self) -> SmallVec<[SmallVec<[EdgeRef; 3]>; 3]> {
+    pub fn output_edges(&self) -> SmallColl<SmallColl<EdgeRef>> {
         self.outputs().iter().map(|op| op.edges.clone()).collect()
     }
 

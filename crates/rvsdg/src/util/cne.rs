@@ -25,7 +25,7 @@ use crate::{
     nodes::{LangNode, Node, NodeType, StructuralNode},
     region::RegionLocation,
     util::{abstract_node_type::AbstractNodeType, node_equality::RegionEqNodeTracker},
-    NodeRef, Rvsdg, SmallColl,
+    NodeRef, Rvsdg,
 };
 
 use super::node_equality::NodeTypeEq;
@@ -77,17 +77,15 @@ impl<N: LangNode + NodeTypeEq + Debug + 'static, E: LangEdge + 'static> Rvsdg<N,
                     //
                     //      Different side-effects would be visible on the state edges, so those are taken care of
                     //      implicitly as well.
-                    let signature = self.build_src_map(node, self.node(node));
-                    //TODO: cache the signatures, so we don't have to _discover_ them everytime
+                    let signature = eq_tracker.get_input_srcs(node);
                     for candidate in eq_tracker.get_candidates(node) {
                         //Ignore self, or ignore if the candidate doesn't exist anymore
-                        if candidate == &node || !self.nodes.contains_key(*candidate) {
+                        if candidate.node == node || !self.nodes.contains_key(candidate.node) {
                             continue;
                         }
                         //build the candidates signature. If its matches, unify `node` to the candidate
-                        let candidate_sig = self.build_src_map(*candidate, self.node(*candidate));
-                        if candidate_sig == signature {
-                            let removed = self.unify_simple(node, *candidate)?;
+                        if &candidate.srcs == signature {
+                            let removed = self.unify_simple(node, candidate.node)?;
                             deleted_node.push(removed);
                             //and stop
                             break;
@@ -364,25 +362,6 @@ impl<N: LangNode + NodeTypeEq + Debug + 'static, E: LangEdge + 'static> Rvsdg<N,
         Ok(())
     }
 
-    ///Builds the input-src map, that is already unified to the currently known port sinks. So any port in the output
-    /// collection is in fact a sink
-    fn build_src_map(
-        &self,
-        node: NodeRef,
-        noderef: &Node<N>,
-    ) -> SmallColl<Option<OutportLocation>> {
-        let mut srcs = SmallColl::default();
-        for input in noderef.inport_types() {
-            if let Some(src) = self.inport_src(InportLocation { node, input }) {
-                srcs.push(Some(src))
-            } else {
-                srcs.push(None)
-            }
-        }
-
-        srcs
-    }
-
     fn divert(
         &mut self,
         to_port: OutportLocation,
@@ -390,13 +369,7 @@ impl<N: LangNode + NodeTypeEq + Debug + 'static, E: LangEdge + 'static> Rvsdg<N,
     ) -> Result<(), CneError> {
         //Diverting works by disconnecting all edges of `from_port`,
         // and reconnecting them to `to_port`.
-        for edge in self
-            .node(from_port.node)
-            .outport(&from_port.output)
-            .unwrap()
-            .edges
-            .clone()
-        {
+        for edge in self[from_port].edges.clone() {
             let dst = self.edge(edge).dst;
             let val = self.disconnect(edge)?;
             self.connect(to_port, dst, val)?;

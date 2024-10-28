@@ -125,3 +125,14 @@ pub struct ThetaExpr {
     pub bound_upper: Expr,
     pub body: Block,
 }
+
+impl ThetaExpr {
+    pub fn range_expr_span(&self) -> Span {
+        let mut span = self.bound_lower.span.clone();
+        let byte_end = span.byte_end.max(self.bound_upper.span.byte_end);
+        let end = span.to.max(self.bound_upper.span.to);
+        span.byte_end = byte_end;
+        span.to = end;
+        span
+    }
+}

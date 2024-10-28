@@ -12,12 +12,16 @@
 use std::path::PathBuf;
 
 use clap::{Parser, ValueEnum};
-use volac::{Backend, CraneliftTarget};
+use volac::{
+    backends::{BoxedBackend, Native, Spirv, Wasm},
+    Target,
+};
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug)]
 enum Format {
     Spirv,
-    X86,
+    ///The platform native format. For instance x86 for your Linux flavour.
+    Native,
     WASM,
 }
 
@@ -26,16 +30,20 @@ enum Format {
 #[command(version, about, long_about = "Vola's CLI interface!")]
 struct Args {
     ///disables optimizations
-    #[arg(short, long, default_value_t = false)]
+    #[arg(long, default_value_t = false)]
     no_opt: bool,
 
     ///Disables only the constant-node-folding passes
-    #[arg(short, long, default_value_t = false)]
+    #[arg(long, default_value_t = false)]
     no_cnf: bool,
 
     ///Disables only the common-node-elemination passes
-    #[arg(short, long, default_value_t = false)]
+    #[arg(long, default_value_t = false)]
     no_cne: bool,
+
+    ///Turns on validation of the output fragment. Note that spirv-tools or wasm-tools must be installed.
+    #[arg(long, default_value_t = false)]
+    validate: bool,
 
     ///Specifies the emitted format.
     #[arg(long, short, value_enum, default_value_t = Format::Spirv)]
@@ -54,19 +62,19 @@ fn main() {
     pretty_env_logger::init();
     let args = Args::parse();
 
-    let target_format = match args.format {
-        Format::Spirv => Backend::Spirv,
-        Format::X86 => Backend::Cranelift(CraneliftTarget::X86),
-        Format::WASM => Backend::Cranelift(CraneliftTarget::Wasm),
+    let backend: BoxedBackend = match args.format {
+        Format::Spirv => Box::new(Spirv::new(Target::file(&args.output_name))),
+        Format::Native => Box::new(Native::new(Target::file(&args.output_name))),
+        Format::WASM => Box::new(Wasm::new(Target::file(&args.output_name))),
     };
 
     //configure volac based on the args and execute
-    let pipeline = volac::Pipeline {
-        target_format,
-        target: volac::Target::File(args.output_name),
+    let mut pipeline = volac::Pipeline {
+        backend,
         late_cne: !args.no_opt && !args.no_cne,
         late_cnf: !args.no_opt && !args.no_cnf,
         early_cnf: !args.no_opt && !args.no_cnf,
+        validate_output: args.validate,
     };
 
     match pipeline.execute_on_file(&args.src_file) {

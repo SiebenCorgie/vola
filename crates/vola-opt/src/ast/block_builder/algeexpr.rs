@@ -585,8 +585,8 @@ impl<'a> BlockBuilder<'a> {
             g_result_value_out_port: OutportLocation,
         }
 
+        let range_span = theta.range_expr_span();
         let initial_assignment_src = self.setup_alge_expr(theta.initial_assignment.expr)?;
-
         let bound_lower = self.setup_alge_expr(theta.bound_lower)?;
         let bound_upper = self.setup_alge_expr(theta.bound_upper)?;
 
@@ -598,7 +598,7 @@ impl<'a> BlockBuilder<'a> {
                 let (node, _edges) = reg
                     .connect_node(
                         OptNode {
-                            span: Span::empty(),
+                            span: range_span,
                             node: Box::new(BinaryRel::new(BinaryRelOp::Lt)),
                         },
                         &[bound_lower, bound_upper],
@@ -666,13 +666,37 @@ impl<'a> BlockBuilder<'a> {
                                         //1. the Lt controll part that is routed to the theta-predicate
                                         //2. the idx+1 part that is routed to lv_res_bound_lower
                                         //3. routing of the upper bound
+
+                                        //now build the idx + 1 and route that to the lv_res_bound_lower
+                                        let litone = rg.insert_node(OptNode::new(
+                                            ImmNat::new(1),
+                                            Span::empty(),
+                                        ));
+                                        let (add_one, _) = rg
+                                            .connect_node(
+                                                OptNode::new(
+                                                    BinaryArith::new(BinaryArithOp::Add),
+                                                    Span::empty(),
+                                                ),
+                                                &[lv_arg_bound_lower, litone.output(0)],
+                                            )
+                                            .unwrap();
+                                        //route the increase lower bound to the loop-back argument
+                                        rg.ctx_mut()
+                                            .connect(
+                                                add_one.output(0),
+                                                lv_res_bound_lower,
+                                                OptEdge::value_edge(),
+                                            )
+                                            .unwrap();
+                                        //route the increased lower bound to the lt check, as well as the upper bound
                                         let (ltcheck, _) = rg
                                             .connect_node(
                                                 OptNode::new(
                                                     BinaryRel::new(BinaryRelOp::Lt),
                                                     Span::empty(),
                                                 ),
-                                                &[lv_arg_bound_lower, lv_arg_bound_higher],
+                                                &[add_one.output(0), lv_arg_bound_higher],
                                             )
                                             .unwrap();
                                         //connect the check to the predicate
@@ -683,29 +707,6 @@ impl<'a> BlockBuilder<'a> {
                                                     node: lv_inp_bound_higher.node,
                                                     input: InputType::ThetaPredicate,
                                                 },
-                                                OptEdge::value_edge(),
-                                            )
-                                            .unwrap();
-
-                                        //now build the idx + 1 and route that to the lv_res_bound_lower
-                                        let litone = rg.insert_node(OptNode::new(
-                                            ImmNat::new(1),
-                                            Span::empty(),
-                                        ));
-                                        let (subone, _) = rg
-                                            .connect_node(
-                                                OptNode::new(
-                                                    BinaryArith::new(BinaryArithOp::Add),
-                                                    Span::empty(),
-                                                ),
-                                                &[lv_arg_bound_lower, litone.output(0)],
-                                            )
-                                            .unwrap();
-
-                                        rg.ctx_mut()
-                                            .connect(
-                                                subone.output(0),
-                                                lv_res_bound_lower,
                                                 OptEdge::value_edge(),
                                             )
                                             .unwrap();

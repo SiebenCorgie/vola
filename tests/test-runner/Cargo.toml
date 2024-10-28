@@ -1,0 +1,13 @@
+[package]
+name = "test-runner"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+volac = { path = "../../crates/volac" }
+vola-common = { path = "../../crates/vola-common" }
+yansi.workspace = true
+smallvec.workspace = true
+clap.workspace = true
+pretty_env_logger.workspace = true
+wasmtime.workspace = true

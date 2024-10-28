@@ -1,6 +1,6 @@
-use rvsdg::util::cne::CneError;
+use rvsdg::{region::RegionLocation, util::cne::CneError};
 
-use crate::Optimizer;
+use crate::{OptError, Optimizer};
 
 impl Optimizer {
     fn remove_unused_toplevel_cvs(&mut self) {
@@ -20,6 +20,23 @@ impl Optimizer {
             }
         }
     }
+
+    ///Removes edges from the graph that are unused. This means all edges that
+    ///go into a _region-containing_ node, but aren't used within that region
+    pub fn remove_unused_edges(&mut self) -> Result<(), OptError> {
+        let tl = self.graph.toplevel_region();
+        let mut topo_ord = self.graph.topological_order_region(tl);
+        topo_ord.reverse();
+        for node in topo_ord {
+            for region_index in 0..self.graph[node].regions().len() {
+                self.graph
+                    .remove_unused_edges_in_region(RegionLocation { node, region_index }, true)?;
+            }
+        }
+
+        Ok(())
+    }
+
     ///Smoll pass that cleans up the export lambda declarations to not reference any _unused_ context.
     /// This should in fact also make the graph _purely_ in the alge dialect.
     pub fn cleanup_export_lmd(&mut self) {
@@ -29,7 +46,6 @@ impl Optimizer {
         log::info!("cleanup export λ-Nodes");
         self.remove_unused_toplevel_cvs();
 
-        self.remove_unused_toplevel_cvs();
         if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("DUMP_PRE_DNE").is_ok() {
             self.push_debug_state("pre dead node elemination");
         }
@@ -60,10 +76,10 @@ impl Optimizer {
         }
         //let mut deleted = Vec::new();
         //TODO: actually only do the exports, right now we just do _all_
-        //for export in self.export_fn.values() {
-        //    self.graph.cne_region(export.lambda_region, &mut deleted)?;
-        //}
-        let _deleted = self.graph.common_node_elemination()?;
+        let mut deleted = Vec::new();
+        for export in self.export_fn.values() {
+            self.graph.cne_region(export.lambda_region, &mut deleted)?;
+        }
 
         if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("DUMP_AFTER_CNE").is_ok() {
             self.push_debug_state("after cne");

@@ -9,7 +9,8 @@
 use ahash::AHashMap;
 use rvsdg::{
     edge::{InportLocation, InputType, LangEdge, OutportLocation, OutputType},
-    SmallColl,
+    util::unroll::UnrollError,
+    NodeRef, SmallColl,
 };
 use vola_ast::{
     common::Ident,
@@ -23,6 +24,7 @@ use crate::{
         EvalNode,
     },
     common::Ty,
+    imm::ImmNat,
     OptEdge, OptError, OptNode, Optimizer,
 };
 
@@ -235,5 +237,98 @@ impl Optimizer {
         assert!(old.is_none());
 
         Ok(())
+    }
+
+    ///Copies all input connections of `src` to `dst`. This means
+    /// for any input `I` of node `src` with an edge `E` from `src`'s output `O` an new connection from `src`'s output `O` to `dst`'s input `I` of the same type as `E` is made.
+    ///
+    /// Panics if the input signature of `src` is not a subset of `dst`.
+    ///
+    /// Panics if the node-type of both nodes does not match
+    ///
+    /// Meaning if src is a SimpleNode with 3 inputs, and dst a SimpleNode with 4 inputs, this works, but not the other way around.
+    pub fn copy_input_connections(&mut self, src: NodeRef, dst: NodeRef) {
+        assert!(self.graph[src].into_abstract() == self.graph[dst].into_abstract());
+
+        for input in self.graph[src].inport_types() {
+            if let Some(edg) = self.graph[InportLocation { node: src, input }].edge.clone() {
+                let ty = self.graph[edg].ty.clone();
+                let src = self.graph[edg].src().clone();
+
+                self.graph
+                    .connect(src, InportLocation { node: dst, input }, ty)
+                    .unwrap();
+            }
+        }
+    }
+
+    ///Analyses the `theta` node loop bound. Returns an error if this is not a theta node.
+    pub fn loop_count(&self, theta: NodeRef) -> Result<usize, UnrollError> {
+        if !self.graph[theta].node_type.is_theta() {
+            return Err(UnrollError::NotThetaNode);
+        }
+
+        //NOTE: This used to be a analysis from the criterion port
+        //      However, by definition we have the first input to the theta-node
+        //      as lower bound, and the second as higher bound, so we use those now.
+
+        let lower_src = self
+            .graph
+            .find_producer_inp(theta.as_inport_location(InputType::Input(0)));
+        let higher_src = self
+            .graph
+            .find_producer_inp(theta.as_inport_location(InputType::Input(1)));
+
+        if lower_src.is_none() || higher_src.is_none() {
+            return Err(UnrollError::NonStaticBounds);
+        }
+
+        //println!("Loopcount for {theta} ended at: \n    {low_src:?}\n    {high_src:?}");
+
+        //unwrap both bounds and check for natural numbers
+        let lower = if let Some(nat) = self.try_unwrap_node::<ImmNat>(lower_src.unwrap().node) {
+            nat.lit
+        } else {
+            return Err(UnrollError::NonStaticBounds);
+        };
+
+        let higher = if let Some(nat) = self.try_unwrap_node::<ImmNat>(higher_src.unwrap().node) {
+            nat.lit
+        } else {
+            return Err(UnrollError::NonStaticBounds);
+        };
+
+        assert!(lower <= higher);
+
+        Ok((higher - lower) as usize)
+    }
+
+    ///Tries to build a single unified type for all branches of `gamma` that make the `exit_variable`'s type.
+    ///
+    /// Returns None on missmatching types.
+    pub(crate) fn gamma_unified_type(&self, gamma: NodeRef, exit_variable: usize) -> Option<Ty> {
+        let mut candidate = None;
+        for branch in 0..self.graph[gamma].regions().len() {
+            if let Some(ty) = self.find_type(
+                &gamma
+                    .as_inport_location(InputType::ExitVariableResult {
+                        branch,
+                        exit_variable,
+                    })
+                    .into(),
+            ) {
+                if let Some(candidate) = &candidate {
+                    if *candidate != ty {
+                        //missmatch
+                        return None;
+                    }
+                } else {
+                    //no candidate yet, set it
+                    candidate = Some(ty);
+                }
+            }
+        }
+
+        candidate
     }
 }

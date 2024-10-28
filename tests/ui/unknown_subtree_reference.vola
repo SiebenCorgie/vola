@@ -1,0 +1,28 @@
+//BEGIN-CONFIG
+//ERROR:At least 1 errors occurred while running optimizer.
+//END-CONFIG
+
+
+module std;
+
+
+operation SubTest();
+
+
+impl SubTest<a, b> for SDF3D(at){
+	let a = eval abibas.SDF3D(at);
+	let b = eval b.SDF3D(at);
+
+	min(a,b)
+}
+
+
+export test(at: vec3){
+	csg t = SubTest(){
+		Sphere(1.0)
+	}{
+		Box([1.0, 2.0, 3.0])
+	};
+
+	eval t.SDF3D(at)
+}

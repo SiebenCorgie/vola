@@ -1,0 +1,22 @@
+//BEGIN-CONFIG
+//ERROR:At least 3 errors occurred while running optimizer.
+//END-CONFIG
+
+module std;
+
+
+fn test2(a: s) -> s{
+	test(a)
+}
+
+fn test(a: s) -> s{
+	test2(a)
+}
+
+
+export test(a: s){
+	let t = test(a);
+	csg r = Sphere(t);
+
+	eval r.SDF3D([a, 1.0, 1.0])
+}

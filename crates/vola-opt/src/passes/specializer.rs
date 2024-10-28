@@ -32,7 +32,7 @@ struct SpecCtx {
 }
 
 impl Optimizer {
-    /// Shortcut to call [specialize_export] for all exported λs
+    /// Shortcut to call [Self::specialize_export] for all exported λs
     pub fn specialize_all_exports(&mut self) -> Result<(), OptError> {
         let mut errors = SmallColl::new();
         //NOTE: somehow the compiler doesn't get that cloned keys would be okay?
@@ -115,8 +115,14 @@ impl Optimizer {
         // can be imported as a context variable. Same goes for any parameters from a used field-def. This
         // is, because we first inline all field-defs before specializing.
 
+        if !self.export_fn.contains_key(key) {
+            return Err(OptError::Any {
+                text: format!("Export key \"{key}\" does not exist!"),
+            });
+        }
+
         //NOTE inline takes care of bringing all CSG nodes into the same region
-        self.inline_export(key)?;
+        self.inline_all_region(self.export_fn.get(key).unwrap().lambda_region)?;
 
         if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("DUMP_BEFORE_SPECIALIZE").is_ok()
         {

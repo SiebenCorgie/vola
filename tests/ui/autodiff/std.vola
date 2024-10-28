@@ -1,0 +1,119 @@
+entity Sphere(radius: s);
+entity Box(extent: vec3);
+concept SDF3D: vec3 -> s;
+concept SDF2D: vec2 -> s;
+concept Color: vec3 -> vec3;
+
+///Simple union operation
+operation Union();
+///Translation operation, with explicitly no identity implementation
+#[define(no_identity)]
+operation Translate(trans: vec3);
+//SmoothUnion
+operation SmoothUnion(suradius: s);
+//Color overwrite operation
+operation ColorOw(owcol: vec3);
+operation Round(rad: s);
+
+
+fn rand(n: s) -> s{
+	fract(sin(n) * 43758.5453123)
+}
+
+fn noise(p: s) -> s{
+	let fl = floor(p);
+	let fc = fract(p);
+	mix(rand(fl), rand(fl + 1.0), fc)
+}
+
+
+
+//Declares that we need the parameter `@` to define SDF3D of Sphere
+impl Sphere for SDF3D(at){
+     length(at) - radius
+}
+
+impl Sphere for Color(at){
+	at
+}
+
+impl Box for SDF3D(at){
+     let q = abs(at) - extent;
+     length(max(q, [0.0, 0.0, 0.0])) + min(max(q.x, max(q.y, q.z)), 0.0)
+}
+
+
+//declares that `translate` takes a sub-expression and the
+//field
+impl Translate<sub> for SDF3D(at){
+    at = at - trans;
+    eval sub.SDF3D(at)
+}
+
+
+impl Union<l, r> for SDF3D(at) {
+    let left = eval l.SDF3D(at);
+    let right = eval r.SDF3D(at);
+    let new_result = min(left, right);
+    new_result
+}
+
+
+impl SmoothUnion<left, right> for SDF3D(at){
+    let l = eval left.SDF3D(at);
+    let r = eval right.SDF3D(at);
+    let h = clamp( 0.5 + 0.5 * (r-l) / suradius, 0.0, 1.0);
+    let dist = mix(l, r, h) * - suradius * h * (1.0 - h);
+    dist
+}
+
+entity Cylinder(radius: s, height: s);
+impl Cylinder for SDF3D(at){
+	let d = length([at.x, at.y]) - radius;
+	let bound = abs(at.z) - height;
+	min(max(d, bound), 0.0) + length(max([d, bound], [0.0, 0.0]))
+}
+
+
+
+
+fn rotmatrix_3d(axis: vec3, amount: s) -> mat3x3{
+
+	let l = length(axis);
+	let u = axis / [l, l, l];
+	let s = sin(amount);
+	let c = cos(amount);
+	let oc = 1.0 - c;
+
+	let rotmat = [
+		[
+			oc * u.x * u.x + c,
+			oc * u.x * u.y - u.z * s,
+			oc * u.z * u.x + u.y * s
+		],
+		[
+			oc * u.x * u.y + u.z * s,
+			oc * u.y * u.y + c,
+			oc * u.y * u.z - u.x * s
+		],
+		[
+			oc * u.z * u.x - u.y * s,
+			oc * u.y * u.z + u.x * s,
+			oc * u.z * u.z + c
+		]
+	];
+
+	rotmat
+}
+
+
+
+operation Rot3dAxis(axis: vec3, amount: s);
+
+//NOTE: shamelessly stolen from the wiki page for
+//      rotation matrix
+impl Rot3dAxis<sub> for SDF3D(at){
+	let rotmat = rotmatrix_3d(axis, amount);
+	let newat = at * rotmat;
+	eval sub.SDF3D(newat)
+}

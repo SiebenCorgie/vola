@@ -38,13 +38,14 @@ pub mod builder;
 pub mod common;
 pub mod edge;
 pub mod err;
+mod indexing;
 pub mod nodes;
 pub mod region;
 pub mod util;
 pub mod verify;
 
 ///SmallVec based collection for dynamically sized, but usually small collections through out the RVSDG.
-pub type SmallColl<T> = SmallVec<[T; 3]>;
+pub type SmallColl<T> = SmallVec<[T; 8]>;
 ///Smallmap based map using ahash for up to 32 elements on the stack.
 pub type SmallMap<K, V> = small_map::ASmallMap<32, K, V>;
 
@@ -114,6 +115,9 @@ impl EdgeRef {
 /// However, you are free to represent any kind of other dependency.
 ///
 /// For ease of use you can always type N as `Box<dyn SomeNodeTrait + 'static>`.
+///
+/// To access nodes, edges, regions, or ports of nodes, use either [node](Rvsdg::node), [edge](Rvsdg::edge), etc, or the index implementation for the
+/// respective handle.
 pub struct Rvsdg<N: LangNode + 'static, E: LangEdge + 'static> {
     pub(crate) nodes: SlotMap<NodeRef, Node<N>>,
     pub(crate) edges: SlotMap<EdgeRef, Edge<E>>,
@@ -261,7 +265,14 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
             //Notify src
             if let Some(port) = self.node_mut(src.node).outport_mut(&src.output) {
                 let before_count = port.edges.len();
-                port.edges.retain(|e| *e != edge);
+                //port.edges.retain(|e| *e != edge);
+                let edg_index = port
+                    .edges
+                    .iter()
+                    .enumerate()
+                    .find_map(|(idx, edg)| if *edg == edge { Some(idx) } else { None })
+                    .expect("Expected edge to be in port");
+                port.edges.remove(edg_index);
                 assert!(port.edges.len() == before_count - 1);
             } else {
                 err = Some(GraphError::InvalidNode(src.node));
@@ -503,5 +514,25 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
         } else {
             None
         }
+    }
+
+    ///Returns the connected dst-port(s) of `outport`.
+    ///
+    /// # Panic
+    ///
+    /// Panics if the ouport is invalid (either the node doesn't exist, or the port type).
+    pub fn outport_dsts(&self, outport: OutportLocation) -> SmallColl<InportLocation> {
+        let mut dsts = SmallColl::new();
+        for edg in &self
+            .node(outport.node)
+            .outport(&outport.output)
+            .unwrap()
+            .edges
+        {
+            let dst = self.edge(*edg).dst();
+            dsts.push(*dst);
+        }
+
+        dsts
     }
 }

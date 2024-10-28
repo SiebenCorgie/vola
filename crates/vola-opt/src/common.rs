@@ -1,5 +1,3 @@
-use std::fmt::Display;
-
 /*
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
@@ -7,6 +5,7 @@ use std::fmt::Display;
  *
  * 2024 Tendsin Mende
  */
+
 use ahash::AHashMap;
 use rvsdg::{
     attrib::FlagStore,
@@ -14,6 +13,7 @@ use rvsdg::{
     smallvec::SmallVec,
     NodeRef, SmallColl,
 };
+use std::fmt::Display;
 use vola_ast::{
     alge::ImplBlock,
     csg::{CSGConcept, CSGNodeDef},
@@ -102,6 +102,14 @@ impl Ty {
         }
     }
 
+    pub fn is_nat(&self) -> bool {
+        if let Self::Nat = self {
+            true
+        } else {
+            false
+        }
+    }
+
     pub fn is_vector(&self) -> bool {
         if let Self::Vector { .. } = self {
             true
@@ -133,6 +141,28 @@ impl Ty {
             false
         }
     }
+
+    ///If the type has a width, returns it. This is either the vector's or matrix's width,
+    ///or the tensors first dimension.
+    pub fn width(&self) -> Option<usize> {
+        match self {
+            Self::Vector { width } => Some(*width),
+            Self::Matrix { width, .. } => Some(*width),
+            Self::Tensor { dim } => dim.get(0).cloned(),
+            _ => None,
+        }
+    }
+
+    ///If the type has a height, returns it. This is either the matrix's height,
+    ///or the tensors second dimension.
+    pub fn height(&self) -> Option<usize> {
+        match self {
+            Self::Matrix { height, .. } => Some(*height),
+            Self::Tensor { dim } => dim.get(1).cloned(),
+            _ => None,
+        }
+    }
+
     ///Tries to derive a type that would be produced by indexing with `index` into the `Ty`.
     pub(crate) fn try_derive_access_index(&self, index: usize) -> Result<Ty, OptError> {
         match self {
