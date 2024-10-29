@@ -6,6 +6,7 @@
  * 2024 Tendsin Mende
  */
 use crate::NodeRef;
+use std::fmt::Display;
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -26,6 +27,25 @@ pub enum InputType {
     EntryVariableInput(usize),
     RecursionVariableResult(usize),
     ContextVariableInput(usize),
+}
+
+impl Display for InputType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Input(i) => write!(f, "In({i})"),
+            Self::Result(i) => write!(f, "Res({i})"),
+            Self::GammaPredicate => write!(f, "GammaPred"),
+            Self::ThetaPredicate => write!(f, "ThetaPred"),
+            Self::ExitVariableResult {
+                branch,
+                exit_variable,
+            } => write!(f, "EVRes[{branch}]({exit_variable})"),
+
+            Self::EntryVariableInput(i) => write!(f, "EVIn({i})"),
+            Self::RecursionVariableResult(i) => write!(f, "RVRes({i})"),
+            Self::ContextVariableInput(i) => write!(f, "CVIn({i})"),
+        }
+    }
 }
 
 impl InputType {
@@ -123,6 +143,25 @@ pub enum OutputType {
     },
     ExitVariableOutput(usize),
     ContextVariableArgument(usize),
+}
+
+impl Display for OutputType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Output(o) => write!(f, "Out({o})"),
+            Self::Argument(o) => write!(f, "Arg({o})"),
+            Self::LambdaDeclaration => write!(f, "LambdaDecl"),
+            Self::DeltaDeclaration => write!(f, "DeltaDecl"),
+            Self::RecursionVariableOutput(o) => write!(f, "RVOut({o})"),
+            Self::RecursionVariableArgument(o) => write!(f, "RVArg({o})"),
+            Self::EntryVariableArgument {
+                branch,
+                entry_variable,
+            } => write!(f, "EVArg[{branch}]({entry_variable})"),
+            Self::ExitVariableOutput(o) => write!(f, "EVOut({o})"),
+            Self::ContextVariableArgument(o) => write!(f, "CVArg({o})"),
+        }
+    }
 }
 
 impl OutputType {
