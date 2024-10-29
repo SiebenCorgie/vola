@@ -14,6 +14,8 @@
 //!
 //! Under the hood the module loads [vola-wasm-runtime]() crate's wasm module as a runtime. The crate implements special functions like `length`, `cross` etc, and loads functions like `sqrt`, `sin` etc.
 
+#![doc(html_logo_url = "https://gitlab.com/tendsinmende/vola/-/raw/main/resources/vola_icon.svg")]
+
 use graph::WasmTy;
 use rvsdg::{
     attrib::{AttribLocation, FlagStore},

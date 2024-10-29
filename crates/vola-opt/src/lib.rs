@@ -24,6 +24,7 @@
 
 //NOTE: We need that trait for the OptNode, so we can Upcast `DialectNode: Any` to `Any`.
 #![feature(trait_upcasting)]
+#![doc(html_logo_url = "https://gitlab.com/tendsinmende/vola/-/raw/main/resources/vola_icon.svg")]
 
 use ahash::AHashMap;
 use alge::{

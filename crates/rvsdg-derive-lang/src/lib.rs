@@ -8,12 +8,12 @@
 use proc_macro::TokenStream;
 use syn::{spanned::Spanned, Data, Fields, Ident};
 
-/// Implements the [LangNode](rvsdg::nodes::LangNode) trait for you.
+/// Implements the `LangNode` trait for you.
 ///
-/// Tag the input field with `[inputs]` if its a type that implements `as_slice` or `[input]` if its a single [Input](rvsdg::common::Input).
+/// Tag the input field with `[inputs]` if its a type that implements `as_slice` or `[input]` if its a single `Input`.
 /// Similarly tag the `output` / `outputs` field.
 ///
-/// In the case that you want to inherit the [LangNode](rvsdg::nodes::LangNode) implementation of some field, use `[expose]` on the field.
+/// In the case that you want to inherit the `LangNode` implementation of some field, use `[expose]` on the field.
 ///
 ///
 /// # Example

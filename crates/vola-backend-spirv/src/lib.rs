@@ -21,6 +21,8 @@
 //!
 //! Later on we should implement the RVSDG-Destruction algorithm described in the RVSDG-paper.
 
+#![doc(html_logo_url = "https://gitlab.com/tendsinmende/vola/-/raw/main/resources/vola_icon.svg")]
+
 use ahash::AHashSet;
 use graph::{BackendEdge, BackendNode};
 use rvsdg::{attrib::FlagStore, Rvsdg};

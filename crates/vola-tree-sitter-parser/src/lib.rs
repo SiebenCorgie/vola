@@ -5,13 +5,14 @@
  *
  * 2024 Tendsin Mende
  */
-use std::path::Path;
+
+#![doc(html_logo_url = "https://gitlab.com/tendsinmende/vola/-/raw/main/resources/vola_icon.svg")]
 
 use error::ParserError;
+use std::path::Path;
 use tree_sitter::{Node, Parser};
-use vola_common::{error::error_reporter, report, FileString, Span};
-
 use vola_ast::{common::CTArg, AstEntry, TopLevelNode, VolaAst};
+use vola_common::{error::error_reporter, report, FileString, Span};
 pub mod alge;
 pub mod block;
 pub mod common;

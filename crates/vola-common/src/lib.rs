@@ -7,15 +7,14 @@
  */
 //! Common diagnosis helper. This is mostly Span of nodes, as well their reporting.
 
-use std::fmt::Display;
-
-use serde::{Deserialize, Serialize};
-use smallstr::SmallString;
-
-pub use serde;
-pub use serde_lexpr;
+#![doc(html_logo_url = "https://gitlab.com/tendsinmende/vola/-/raw/main/resources/vola_icon.svg")]
 
 pub use ariadne;
+pub use serde;
+use serde::{Deserialize, Serialize};
+pub use serde_lexpr;
+use smallstr::SmallString;
+use std::fmt::Display;
 pub use thiserror;
 
 #[cfg(feature = "dot")]

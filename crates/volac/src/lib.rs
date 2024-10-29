@@ -5,6 +5,9 @@
  *
  * 2024 Tendsin Mende
  */
+
+#![doc(html_logo_url = "https://gitlab.com/tendsinmende/vola/-/raw/main/resources/vola_icon.svg")]
+
 //! # Volac
 //!
 //! The compiler crate. Ties together the parts of vola into a single compiler.

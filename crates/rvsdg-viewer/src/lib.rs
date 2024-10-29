@@ -21,6 +21,9 @@
 //!     view(rvsdg);
 //! }
 //! ```
+
+#![doc(html_logo_url = "https://gitlab.com/tendsinmende/vola/-/raw/main/resources/vola_icon.svg")]
+
 pub mod layout;
 pub mod primitives;
 

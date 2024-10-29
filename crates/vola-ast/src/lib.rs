@@ -16,6 +16,8 @@
 //! The AST-Parsers job is to split both (somewhat like a preprocessor I guess?) into independent trees, that reference each other
 //! _by name_.
 
+#![doc(html_logo_url = "https://gitlab.com/tendsinmende/vola/-/raw/main/resources/vola_icon.svg")]
+
 use ahash::AHashSet;
 use alge::{AlgeFunc, ImplBlock};
 use common::CTArg;

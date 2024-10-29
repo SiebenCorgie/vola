@@ -5,6 +5,9 @@
  *
  * 2024 Tendsin Mende
  */
+
+#![doc(html_logo_url = "https://gitlab.com/tendsinmende/vola/-/raw/main/resources/vola_icon.svg")]
+
 //! # RVSDG
 //!
 //! Vola's [RVSDG](https://dl.acm.org/doi/abs/10.1145/3391902) implementation.
