@@ -8,7 +8,7 @@
 use crate::NodeRef;
 use std::fmt::Display;
 
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+#[derive(Debug, Hash, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum InputType {
     ///Any input to the node. Could also be a exit variable etc.
@@ -44,6 +44,46 @@ impl Display for InputType {
             Self::EntryVariableInput(i) => write!(f, "EVIn({i})"),
             Self::RecursionVariableResult(i) => write!(f, "RVRes({i})"),
             Self::ContextVariableInput(i) => write!(f, "CVIn({i})"),
+        }
+    }
+}
+
+#[cfg(feature = "parse")]
+impl InputType {
+    ///Tries to parse the input type from a string. This is bijektive with the [Display] implementation.
+    ///
+    ///For any `a: InputType` the following holds true:
+    ///```
+    /// use rvsdg::edge::InputType;
+    /// let a = InputType::Input(1);
+    /// assert_eq!(a, InputType::try_parse(&format!("{}", a)).unwrap());
+    ///```
+    pub fn try_parse(value: &str) -> Option<Self> {
+        use crate::util::parse::{enum_with_usize, usize_parser};
+        use chumsky::prelude::*;
+        //Our parser just accepts exactly what we produce via display
+        let parser = choice((
+            just("GammaPred").map(|_| Self::GammaPredicate),
+            just("ThetaPred").map(|_| Self::ThetaPredicate),
+            just("EVRes")
+                .then(usize_parser().delimited_by(just('['), just(']')))
+                .then(usize_parser().delimited_by(just('('), just(')')))
+                .map(|((_, branch), exit_variable)| Self::ExitVariableResult {
+                    branch,
+                    exit_variable,
+                }),
+            enum_with_usize("In", Self::Input),
+            enum_with_usize("Res", Self::Result),
+            enum_with_usize("EVIn", Self::EntryVariableInput),
+            enum_with_usize("RVRes", Self::RecursionVariableResult),
+            enum_with_usize("CVIn", Self::ContextVariableInput),
+        ))
+        .then_ignore(end());
+
+        if let Ok(value) = parser.parse(value) {
+            Some(value)
+        } else {
+            None
         }
     }
 }
@@ -119,14 +159,20 @@ impl InputType {
     }
 }
 
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+#[derive(Debug, Hash, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct InportLocation {
     pub node: NodeRef,
     pub input: InputType,
 }
 
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+impl Display for InportLocation {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Inport[{}, {}]", self.node, self.input)
+    }
+}
+
+#[derive(Debug, Hash, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum OutputType {
     ///Any output of the node. Could be a lambda definition, or a exit-variable output.
@@ -160,6 +206,49 @@ impl Display for OutputType {
             } => write!(f, "EVArg[{branch}]({entry_variable})"),
             Self::ExitVariableOutput(o) => write!(f, "EVOut({o})"),
             Self::ContextVariableArgument(o) => write!(f, "CVArg({o})"),
+        }
+    }
+}
+
+#[cfg(feature = "parse")]
+impl OutputType {
+    ///Tries to parse the output type from a string. This is bijektive with the [Display] implementation.
+    ///
+    ///For any `a: OutputType` the following holds true:
+    ///```
+    /// use rvsdg::edge::OutputType;
+    /// let a = OutputType::Output(1);
+    /// assert_eq!(a, OutputType::try_parse(&format!("{}", a)).unwrap());
+    ///```
+    pub fn try_parse(value: &str) -> Option<Self> {
+        use crate::util::parse::{enum_with_usize, usize_parser};
+        use chumsky::prelude::*;
+        //Our parser just accepts exactly what we produce via display
+        let parser = choice((
+            just("LambdaDecl").map(|_| Self::LambdaDeclaration),
+            just("DeltaDecl").map(|_| Self::DeltaDeclaration),
+            just("EVArg")
+                .then(usize_parser().delimited_by(just('['), just(']')))
+                .then(usize_parser().delimited_by(just('('), just(')')))
+                .map(
+                    |((_, branch), entry_variable)| Self::EntryVariableArgument {
+                        branch,
+                        entry_variable,
+                    },
+                ),
+            enum_with_usize("Out", Self::Output),
+            enum_with_usize("Arg", Self::Argument),
+            enum_with_usize("RVOut", Self::RecursionVariableOutput),
+            enum_with_usize("RVArg", Self::RecursionVariableArgument),
+            enum_with_usize("EVOut", Self::ExitVariableOutput),
+            enum_with_usize("CVArg", Self::ContextVariableArgument),
+        ))
+        .then_ignore(end());
+
+        if let Ok(value) = parser.parse(value) {
+            Some(value)
+        } else {
+            None
         }
     }
 }
@@ -227,11 +316,17 @@ impl OutputType {
     }
 }
 
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+#[derive(Debug, Hash, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct OutportLocation {
     pub node: NodeRef,
     pub output: OutputType,
+}
+
+impl Display for OutportLocation {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Outport[{}, {}]", self.node, self.output)
+    }
 }
 
 ///An edge in a RVSDG is always a directed edge from `src` to `dst`. It contains a language specific
@@ -240,6 +335,7 @@ pub struct OutportLocation {
 ///
 /// `dst` and `src` are exposed read only, because _by hand_ change of those can lead to an invalid RVSDG.
 /// If you want to change those, consider using [connect](crate::Rvsdg::connect) / [disconnect](crate::Rvsdg::disconnect).
+#[derive(Debug, Hash, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
 pub struct Edge<E: LangEdge + 'static> {
     pub(crate) src: OutportLocation,
     pub(crate) dst: InportLocation,
@@ -261,4 +357,115 @@ pub trait LangEdge {
     fn state_edge() -> Self;
     fn is_value_edge(&self) -> bool;
     fn is_state_edge(&self) -> bool;
+}
+
+#[cfg(test)]
+mod test {
+    use crate::edge::OutputType;
+
+    use super::InputType;
+
+    #[test]
+    fn input_type_parse_gamma_predicate() {
+        let a = InputType::GammaPredicate;
+        assert_eq!(a, InputType::try_parse(&format!("{a}")).unwrap());
+    }
+    #[test]
+    fn input_type_parse_theta_predicate() {
+        let a = InputType::ThetaPredicate;
+        assert_eq!(a, InputType::try_parse(&format!("{a}")).unwrap());
+    }
+    #[test]
+    fn input_type_parse_input() {
+        let a = InputType::Input(42);
+        assert_eq!(a, InputType::try_parse(&format!("{a}")).unwrap());
+    }
+    #[test]
+    fn input_type_parse_result() {
+        let a = InputType::Result(420);
+        assert_eq!(a, InputType::try_parse(&format!("{a}")).unwrap());
+    }
+    #[test]
+    fn input_type_parse_exit_var_result() {
+        let a = InputType::ExitVariableResult {
+            branch: 65,
+            exit_variable: 87,
+        };
+        assert_eq!(a, InputType::try_parse(&format!("{a}")).unwrap());
+    }
+    #[test]
+    fn input_type_parse_entry_variable_input() {
+        let a = InputType::EntryVariableInput(56321);
+        assert_eq!(a, InputType::try_parse(&format!("{a}")).unwrap());
+    }
+    #[test]
+    fn input_type_parse_recursion_variable_result() {
+        let a = InputType::RecursionVariableResult(654);
+        assert_eq!(a, InputType::try_parse(&format!("{a}")).unwrap());
+    }
+    #[test]
+    fn input_type_parse_context_variable_input() {
+        let a = InputType::ContextVariableInput(6548);
+        assert_eq!(a, InputType::try_parse(&format!("{a}")).unwrap());
+    }
+
+    #[test]
+    fn input_type_parse_fails() {
+        let a = InputType::ContextVariableInput(6548);
+        assert!(InputType::try_parse(&format!("{a}something")).is_none())
+    }
+
+    #[test]
+    fn output_type_parse_output() {
+        let a = OutputType::Output(645);
+        assert_eq!(a, OutputType::try_parse(&format!("{a}")).unwrap());
+    }
+    #[test]
+    fn output_type_parse_argument() {
+        let a = OutputType::Argument(545);
+        assert_eq!(a, OutputType::try_parse(&format!("{a}")).unwrap());
+    }
+    #[test]
+    fn output_type_parse_lambda_decl() {
+        let a = OutputType::LambdaDeclaration;
+        assert_eq!(a, OutputType::try_parse(&format!("{a}")).unwrap());
+    }
+    #[test]
+    fn output_type_parse_delta_decl() {
+        let a = OutputType::DeltaDeclaration;
+        assert_eq!(a, OutputType::try_parse(&format!("{a}")).unwrap());
+    }
+    #[test]
+    fn output_type_parse_recursion_output() {
+        let a = OutputType::RecursionVariableOutput(32198);
+        assert_eq!(a, OutputType::try_parse(&format!("{a}")).unwrap());
+    }
+    #[test]
+    fn output_type_parse_recursion_arg() {
+        let a = OutputType::RecursionVariableArgument(9324);
+        assert_eq!(a, OutputType::try_parse(&format!("{a}")).unwrap());
+    }
+    #[test]
+    fn output_type_parse_ev_arg() {
+        let a = OutputType::EntryVariableArgument {
+            branch: 64,
+            entry_variable: 128,
+        };
+        assert_eq!(a, OutputType::try_parse(&format!("{a}")).unwrap());
+    }
+    #[test]
+    fn output_type_parse_ev_out() {
+        let a = OutputType::ExitVariableOutput(654);
+        assert_eq!(a, OutputType::try_parse(&format!("{a}")).unwrap());
+    }
+    #[test]
+    fn output_type_parse_cv_arg() {
+        let a = OutputType::ContextVariableArgument(654);
+        assert_eq!(a, OutputType::try_parse(&format!("{a}")).unwrap());
+    }
+    #[test]
+    fn output_type_parse_wrong() {
+        let a = OutputType::Output(645);
+        assert!(OutputType::try_parse(&format!("berg{a}")).is_none());
+    }
 }

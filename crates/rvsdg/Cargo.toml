@@ -10,10 +10,15 @@ categories = ["compilers"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-default = ["derive", "log", "serde"]
+default = ["derive", "log", "serde", "egg"]
 derive = ["rvsdg-derive-lang"]
 log = ["dep:log"]
 serde = ["dep:serde", "slotmap/serde"]
+#Enables the Egg rewriting implementation(s). Needs the parsing feature to
+#repersent some data as string and back.
+egg = ["dep:egg", "parse"]
+#Enables parsing of some datatypes via chumsky.
+parse = ["chumsky"]
 
 [dependencies]
 thiserror.workspace = true
@@ -25,6 +30,8 @@ rvsdg-derive-lang = { path = "../rvsdg-derive-lang", optional = true }
 log = { workspace = true, optional = true }
 serde = { workspace = true, optional = true, features = ["derive"] }
 small-map = { workspace = true, features = ["hashes"] }
+egg = { workspace = true, optional = true }
+chumsky = { workspace = true, optional = true }
 
 [dev-dependencies]
 rvsdg-viewer = { path = "../rvsdg-viewer" }
