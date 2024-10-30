@@ -1,3 +1,5 @@
+use chumsky::error::Simple;
+
 /*
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
@@ -6,7 +8,7 @@
  * 2024 Tendsin Mende
  */
 use crate::NodeRef;
-use std::fmt::Display;
+use std::{fmt::Display, str::FromStr};
 
 #[derive(Debug, Hash, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -49,16 +51,17 @@ impl Display for InputType {
 }
 
 #[cfg(feature = "parse")]
-impl InputType {
+impl FromStr for InputType {
+    type Err = Vec<Simple<char>>;
     ///Tries to parse the input type from a string. This is bijektive with the [Display] implementation.
     ///
     ///For any `a: InputType` the following holds true:
     ///```
     /// use rvsdg::edge::InputType;
     /// let a = InputType::Input(1);
-    /// assert_eq!(a, InputType::try_parse(&format!("{}", a)).unwrap());
+    /// assert_eq!(a, format!("{}", a).parse().unwrap());
     ///```
-    pub fn try_parse(value: &str) -> Option<Self> {
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         use crate::util::parse::{enum_with_usize, usize_parser};
         use chumsky::prelude::*;
         //Our parser just accepts exactly what we produce via display
@@ -80,11 +83,7 @@ impl InputType {
         ))
         .then_ignore(end());
 
-        if let Ok(value) = parser.parse(value) {
-            Some(value)
-        } else {
-            None
-        }
+        parser.parse(s)
     }
 }
 
@@ -211,16 +210,17 @@ impl Display for OutputType {
 }
 
 #[cfg(feature = "parse")]
-impl OutputType {
+impl FromStr for OutputType {
+    type Err = Vec<Simple<char>>;
     ///Tries to parse the output type from a string. This is bijektive with the [Display] implementation.
     ///
     ///For any `a: OutputType` the following holds true:
     ///```
     /// use rvsdg::edge::OutputType;
     /// let a = OutputType::Output(1);
-    /// assert_eq!(a, OutputType::try_parse(&format!("{}", a)).unwrap());
+    /// assert_eq!(a, format!("{}",a).parse().unwrap());
     ///```
-    pub fn try_parse(value: &str) -> Option<Self> {
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         use crate::util::parse::{enum_with_usize, usize_parser};
         use chumsky::prelude::*;
         //Our parser just accepts exactly what we produce via display
@@ -245,11 +245,7 @@ impl OutputType {
         ))
         .then_ignore(end());
 
-        if let Ok(value) = parser.parse(value) {
-            Some(value)
-        } else {
-            None
-        }
+        parser.parse(s)
     }
 }
 
@@ -368,22 +364,22 @@ mod test {
     #[test]
     fn input_type_parse_gamma_predicate() {
         let a = InputType::GammaPredicate;
-        assert_eq!(a, InputType::try_parse(&format!("{a}")).unwrap());
+        assert_eq!(a, format!("{a}").parse::<InputType>().unwrap());
     }
     #[test]
     fn input_type_parse_theta_predicate() {
         let a = InputType::ThetaPredicate;
-        assert_eq!(a, InputType::try_parse(&format!("{a}")).unwrap());
+        assert_eq!(a, format!("{a}").parse::<InputType>().unwrap());
     }
     #[test]
     fn input_type_parse_input() {
         let a = InputType::Input(42);
-        assert_eq!(a, InputType::try_parse(&format!("{a}")).unwrap());
+        assert_eq!(a, format!("{a}").parse::<InputType>().unwrap());
     }
     #[test]
     fn input_type_parse_result() {
         let a = InputType::Result(420);
-        assert_eq!(a, InputType::try_parse(&format!("{a}")).unwrap());
+        assert_eq!(a, format!("{a}").parse::<InputType>().unwrap());
     }
     #[test]
     fn input_type_parse_exit_var_result() {
@@ -391,59 +387,59 @@ mod test {
             branch: 65,
             exit_variable: 87,
         };
-        assert_eq!(a, InputType::try_parse(&format!("{a}")).unwrap());
+        assert_eq!(a, format!("{a}").parse::<InputType>().unwrap());
     }
     #[test]
     fn input_type_parse_entry_variable_input() {
         let a = InputType::EntryVariableInput(56321);
-        assert_eq!(a, InputType::try_parse(&format!("{a}")).unwrap());
+        assert_eq!(a, format!("{a}").parse::<InputType>().unwrap());
     }
     #[test]
     fn input_type_parse_recursion_variable_result() {
         let a = InputType::RecursionVariableResult(654);
-        assert_eq!(a, InputType::try_parse(&format!("{a}")).unwrap());
+        assert_eq!(a, format!("{a}").parse::<InputType>().unwrap());
     }
     #[test]
     fn input_type_parse_context_variable_input() {
         let a = InputType::ContextVariableInput(6548);
-        assert_eq!(a, InputType::try_parse(&format!("{a}")).unwrap());
+        assert_eq!(a, format!("{a}").parse::<InputType>().unwrap());
     }
 
     #[test]
     fn input_type_parse_fails() {
         let a = InputType::ContextVariableInput(6548);
-        assert!(InputType::try_parse(&format!("{a}something")).is_none())
+        assert!(format!("{a}something").parse::<InputType>().is_err());
     }
 
     #[test]
     fn output_type_parse_output() {
         let a = OutputType::Output(645);
-        assert_eq!(a, OutputType::try_parse(&format!("{a}")).unwrap());
+        assert_eq!(a, format!("{a}").parse::<OutputType>().unwrap());
     }
     #[test]
     fn output_type_parse_argument() {
         let a = OutputType::Argument(545);
-        assert_eq!(a, OutputType::try_parse(&format!("{a}")).unwrap());
+        assert_eq!(a, format!("{a}").parse::<OutputType>().unwrap());
     }
     #[test]
     fn output_type_parse_lambda_decl() {
         let a = OutputType::LambdaDeclaration;
-        assert_eq!(a, OutputType::try_parse(&format!("{a}")).unwrap());
+        assert_eq!(a, format!("{a}").parse::<OutputType>().unwrap());
     }
     #[test]
     fn output_type_parse_delta_decl() {
         let a = OutputType::DeltaDeclaration;
-        assert_eq!(a, OutputType::try_parse(&format!("{a}")).unwrap());
+        assert_eq!(a, format!("{a}").parse::<OutputType>().unwrap());
     }
     #[test]
     fn output_type_parse_recursion_output() {
         let a = OutputType::RecursionVariableOutput(32198);
-        assert_eq!(a, OutputType::try_parse(&format!("{a}")).unwrap());
+        assert_eq!(a, format!("{a}").parse::<OutputType>().unwrap());
     }
     #[test]
     fn output_type_parse_recursion_arg() {
         let a = OutputType::RecursionVariableArgument(9324);
-        assert_eq!(a, OutputType::try_parse(&format!("{a}")).unwrap());
+        assert_eq!(a, format!("{a}").parse::<OutputType>().unwrap());
     }
     #[test]
     fn output_type_parse_ev_arg() {
@@ -451,21 +447,21 @@ mod test {
             branch: 64,
             entry_variable: 128,
         };
-        assert_eq!(a, OutputType::try_parse(&format!("{a}")).unwrap());
+        assert_eq!(a, format!("{a}").parse::<OutputType>().unwrap());
     }
     #[test]
     fn output_type_parse_ev_out() {
         let a = OutputType::ExitVariableOutput(654);
-        assert_eq!(a, OutputType::try_parse(&format!("{a}")).unwrap());
+        assert_eq!(a, format!("{a}").parse::<OutputType>().unwrap());
     }
     #[test]
     fn output_type_parse_cv_arg() {
         let a = OutputType::ContextVariableArgument(654);
-        assert_eq!(a, OutputType::try_parse(&format!("{a}")).unwrap());
+        assert_eq!(a, format!("{a}").parse::<OutputType>().unwrap());
     }
     #[test]
     fn output_type_parse_wrong() {
         let a = OutputType::Output(645);
-        assert!(OutputType::try_parse(&format!("berg{a}")).is_none());
+        assert!(format!("berg{a}").parse::<OutputType>().is_err());
     }
 }

@@ -26,11 +26,15 @@ pub mod cne;
 pub mod cnf;
 pub mod copy;
 pub mod dead_node_elimination;
+#[cfg(feature = "egg")]
+pub mod egg;
 pub mod gamma_utils;
 pub mod graph_type_transform;
 pub mod inline;
 pub mod liveness;
 pub mod node_equality;
+#[cfg(feature = "parse")]
+pub mod parse;
 pub mod region_utils;
 pub mod unroll;
 
