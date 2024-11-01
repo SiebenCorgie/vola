@@ -10,13 +10,12 @@ categories = ["compilers"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-default = ["derive", "log", "serde", "egg"]
+default = ["derive", "log", "serde", "parse"]
 derive = ["rvsdg-derive-lang"]
 log = ["dep:log"]
 serde = ["dep:serde", "slotmap/serde"]
 #Enables the Egg rewriting implementation(s). Needs the parsing feature to
 #repersent some data as string and back.
-egg = ["dep:egg", "parse"]
 #Enables parsing of some datatypes via chumsky.
 parse = ["chumsky"]
 

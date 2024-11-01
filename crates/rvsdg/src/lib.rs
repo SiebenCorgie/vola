@@ -22,7 +22,7 @@
 #![doc(html_logo_url = "https://gitlab.com/tendsinmende/vola/-/raw/main/resources/vola_icon.svg")]
 #![feature(iterator_try_collect)]
 
-use std::{fmt::Display, str::FromStr};
+use std::fmt::Display;
 
 use builder::{OmegaBuilder, RegionBuilder};
 use edge::{Edge, InportLocation, InputType, LangEdge, OutportLocation, OutputType};

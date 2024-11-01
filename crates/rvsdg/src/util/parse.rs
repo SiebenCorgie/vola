@@ -10,12 +10,7 @@
 //!
 //! Those are used to build parsers for structures that need a way back from [Display] into their original representation.
 
-use chumsky::{
-    error::Simple,
-    prelude::{just, none_of},
-    text::TextParser,
-    Parser,
-};
+use chumsky::{error::Simple, prelude::just, text::TextParser, Parser};
 
 ///Accepts a radix10 usize
 pub fn usize_parser() -> impl Parser<char, usize, Error = Simple<char>> {

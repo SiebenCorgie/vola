@@ -12,6 +12,9 @@
 
 mod region_walker;
 pub use region_walker::{RegionLocationWalker, RegionWalker};
+mod simple_expr;
+mod successor;
+pub use successor::{SuccWalker, SuccWalkerRegion};
 mod topo_ord;
 
 mod predecessor;
@@ -26,48 +29,6 @@ use crate::{
 };
 use ahash::{AHashMap, AHashSet};
 use std::collections::VecDeque;
-
-///Utility that walks the successors of a node in breadth-first style.
-///
-/// All node ports are traversed only once. So a node can be touched multiple times by the Iterator, but once all
-/// input ports are touched, the node won't occur anymore.
-pub struct SuccWalker<'a, N: LangNode + 'static, E: LangEdge + 'static> {
-    walked: AHashSet<InportLocation>,
-    walker_stack: VecDeque<InportLocation>,
-
-    ctx: &'a Rvsdg<N, E>,
-}
-
-impl<'a, N: LangNode + 'static, E: LangEdge + 'static> SuccWalker<'a, N, E> {
-    fn new(ctx: &'a Rvsdg<N, E>, node: NodeRef) -> Self {
-        //Init stack
-        let stack = ctx.node(node).succ(ctx).collect();
-        SuccWalker {
-            walked: AHashSet::default(),
-            walker_stack: stack,
-            ctx,
-        }
-    }
-}
-
-impl<'a, N: LangNode + 'static, E: LangEdge + 'static> Iterator for SuccWalker<'a, N, E> {
-    type Item = InportLocation;
-    fn next(&mut self) -> Option<Self::Item> {
-        if let Some(n) = self.walker_stack.pop_back() {
-            //collect this nodes predecessors
-            for succ in self.ctx.node(n.node).succ(self.ctx) {
-                if !self.walked.contains(&succ) {
-                    self.walker_stack.push_front(succ.clone());
-                    self.walked.insert(succ);
-                }
-            }
-
-            Some(n)
-        } else {
-            None
-        }
-    }
-}
 
 ///An iterator that emits all reachable nodes for the entrypoint of a graph. The iterator is breadth-first and top down style.
 ///
@@ -449,6 +410,15 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
     ///Iterates over all successors of this node, see [SuccWalker] for more info.
     pub fn walk_successors<'a>(&'a self, node: NodeRef) -> SuccWalker<'a, N, E> {
         SuccWalker::new(self, node)
+    }
+
+    ///Iterates all successors of `node`, but never leaves the `bound` region.
+    pub fn walk_successors_region<'a>(
+        &'a self,
+        node: NodeRef,
+        region: RegionLocation,
+    ) -> SuccWalkerRegion<'a, N, E> {
+        SuccWalkerRegion::new(self, node, region)
     }
 
     ///Builds an iterator that emits all reachable nodes for the entrypoint of this graph. The iterator is breadth-first and top down style.
