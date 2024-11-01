@@ -10,12 +10,23 @@
 //!
 //! Those are used to build parsers for structures that need a way back from [Display] into their original representation.
 
-use chumsky::{error::Simple, prelude::just, text::TextParser, Parser};
+use chumsky::{
+    error::Simple,
+    prelude::{just, none_of},
+    text::TextParser,
+    Parser,
+};
 
 ///Accepts a radix10 usize
 pub fn usize_parser() -> impl Parser<char, usize, Error = Simple<char>> {
     chumsky::text::int(10)
         .map(|s: String| s.parse::<usize>().unwrap())
+        .padded()
+}
+
+pub fn u64_parser() -> impl Parser<char, u64, Error = Simple<char>> {
+    chumsky::text::int(10)
+        .map(|s: String| s.parse::<u64>().unwrap())
         .padded()
 }
 
@@ -27,4 +38,12 @@ pub fn enum_with_usize<T: 'static, U: Fn(usize) -> T + 'static>(
     just(prefix)
         .then(usize_parser().delimited_by(just('('), just(')')))
         .map(move |(_, index)| t(index))
+}
+
+pub fn any_string() -> impl Parser<char, String, Error = Simple<char>> {
+    chumsky::prelude::any().repeated().map(|chars| {
+        let mut s = String::new();
+        s.extend(chars);
+        s
+    })
 }

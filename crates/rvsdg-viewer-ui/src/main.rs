@@ -5,6 +5,9 @@
  *
  * 2024 Tendsin Mende
  */
+
+#![doc(html_logo_url = "https://gitlab.com/tendsinmende/vola/-/raw/main/resources/vola_icon.svg")]
+
 use graph_canvas::{GraphCanvas, GraphCanvasMessage};
 use iced::widget::{column, container, row, slider, text, Column, Rule, Scrollable, Toggler};
 use iced::{Alignment, Element, Length, Sandbox, Settings, Theme};

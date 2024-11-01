@@ -4,7 +4,7 @@ version = "0.2.0"
 edition = "2021"
 license = "MPL-2.0"
 readme = "README.md"
-description = "Generic SOA based implementation of an RVSDG that is generic over dialect-nodes and edges."
+description = "SOA based implementation of an RVSDG that is generic over dialect-nodes and edges."
 keywords = ["compiler", "rvsdg", "ir", "graph"]
 categories = ["compilers"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html

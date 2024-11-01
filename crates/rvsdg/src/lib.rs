@@ -5,9 +5,6 @@
  *
  * 2024 Tendsin Mende
  */
-
-#![doc(html_logo_url = "https://gitlab.com/tendsinmende/vola/-/raw/main/resources/vola_icon.svg")]
-
 //! # RVSDG
 //!
 //! Vola's [RVSDG](https://dl.acm.org/doi/abs/10.1145/3391902) implementation.
@@ -21,14 +18,18 @@
 //! We expose some helper types and functions to get up to speed easily for *normal* languages. This includes
 //! a generic type system for nodes and edges as well builder for common constructs like loops, if-else nodes and function
 //! calls. Those things reside in the [common] module.
-use std::fmt::Display;
+
+#![doc(html_logo_url = "https://gitlab.com/tendsinmende/vola/-/raw/main/resources/vola_icon.svg")]
+#![feature(iterator_try_collect)]
+
+use std::{fmt::Display, str::FromStr};
 
 use builder::{OmegaBuilder, RegionBuilder};
 use edge::{Edge, InportLocation, InputType, LangEdge, OutportLocation, OutputType};
 use err::GraphError;
 use nodes::{LangNode, Node, NodeType, OmegaNode};
 use region::{Region, RegionLocation};
-use slotmap::{new_key_type, SlotMap};
+use slotmap::{new_key_type, KeyData, SlotMap};
 pub use smallvec;
 use smallvec::SmallVec;
 
@@ -84,8 +85,18 @@ impl NodeRef {
         self.as_outport_location(OutputType::Output(idx))
     }
 
+    ///Serializes the reference into a ffi value obtained by [KeyData::as_ffi].
+    ///
+    /// Have a look at [KeyData::as_ffi] and [KeyData::from_ffi] for more infomation.
     pub fn as_ffi(&self) -> u64 {
         self.0.as_ffi()
+    }
+
+    ///Builds a node ref from a ffi value obtained by [Self::as_ffi]. Is undefined if that is not the case.
+    ///
+    /// Have a look at [KeyData::as_ffi] and [KeyData::from_ffi] for more infomation.
+    pub fn from_ffi(ffi: u64) -> Self {
+        NodeRef::from(KeyData::from_ffi(ffi))
     }
 }
 
@@ -537,5 +548,40 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
         }
 
         dsts
+    }
+
+    ///Builds a all output OutportLocations of this `node`.
+    pub fn outports(&self, node: NodeRef) -> SmallColl<OutportLocation> {
+        self[node]
+            .outport_types()
+            .into_iter()
+            .map(|output| OutportLocation { node, output })
+            .collect()
+    }
+
+    ///Builds a all argument locations for the `region_index`-th inner region of `node`.
+    pub fn argument_ports(&self, node: NodeRef, region_index: usize) -> SmallColl<OutportLocation> {
+        self[node]
+            .argument_types(region_index)
+            .into_iter()
+            .map(|output| OutportLocation { node, output })
+            .collect()
+    }
+
+    ///Builds a all input InportLocations of this `node`.
+    pub fn inports(&self, node: NodeRef) -> SmallColl<InportLocation> {
+        self[node]
+            .inport_types()
+            .into_iter()
+            .map(|input| InportLocation { node, input })
+            .collect()
+    }
+    ///Builds a all result locations for the `region_index`-th inner region of `node`.
+    pub fn result_ports(&self, node: NodeRef, region_index: usize) -> SmallColl<InportLocation> {
+        self[node]
+            .result_types(region_index)
+            .into_iter()
+            .map(|input| InportLocation { node, input })
+            .collect()
     }
 }

@@ -21,7 +21,7 @@ use crate::{
     EdgeRef, NodeRef, Rvsdg,
 };
 
-#[derive(Debug, Hash, PartialEq, Eq, Clone)]
+#[derive(Debug, Hash, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum AttribLocation {
     InPort(InportLocation),
@@ -34,9 +34,9 @@ pub enum AttribLocation {
 impl Display for AttribLocation {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::InPort(p) => write!(f, "Inport - {p:?}"),
-            Self::OutPort(p) => write!(f, "Outport - {p:?}"),
-            Self::Region(r) => write!(f, "{r:?}"),
+            Self::InPort(p) => write!(f, "{p}"),
+            Self::OutPort(p) => write!(f, "{p}"),
+            Self::Region(r) => write!(f, "{r}"),
             Self::Node(n) => write!(f, "{n}"),
             Self::Edge(e) => write!(f, "{e}"),
         }

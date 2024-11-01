@@ -1,4 +1,4 @@
-use chumsky::error::Simple;
+use chumsky::{error::Simple, Parser};
 
 /*
  * This Source Code Form is subject to the terms of the Mozilla Public
@@ -51,17 +51,8 @@ impl Display for InputType {
 }
 
 #[cfg(feature = "parse")]
-impl FromStr for InputType {
-    type Err = Vec<Simple<char>>;
-    ///Tries to parse the input type from a string. This is bijektive with the [Display] implementation.
-    ///
-    ///For any `a: InputType` the following holds true:
-    ///```
-    /// use rvsdg::edge::InputType;
-    /// let a = InputType::Input(1);
-    /// assert_eq!(a, format!("{}", a).parse().unwrap());
-    ///```
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
+impl InputType {
+    pub fn parser() -> impl Parser<char, Self, Error = Simple<char>> {
         use crate::util::parse::{enum_with_usize, usize_parser};
         use chumsky::prelude::*;
         //Our parser just accepts exactly what we produce via display
@@ -82,8 +73,23 @@ impl FromStr for InputType {
             enum_with_usize("CVIn", Self::ContextVariableInput),
         ))
         .then_ignore(end());
+        parser
+    }
+}
 
-        parser.parse(s)
+#[cfg(feature = "parse")]
+impl FromStr for InputType {
+    type Err = Vec<Simple<char>>;
+    ///Tries to parse the input type from a string. This is bijektive with the [Display] implementation.
+    ///
+    ///For any `a: InputType` the following holds true:
+    ///```
+    /// use rvsdg::edge::InputType;
+    /// let a = InputType::Input(1);
+    /// assert_eq!(a, format!("{}", a).parse().unwrap());
+    ///```
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        InputType::parser().parse(s)
     }
 }
 
@@ -210,17 +216,8 @@ impl Display for OutputType {
 }
 
 #[cfg(feature = "parse")]
-impl FromStr for OutputType {
-    type Err = Vec<Simple<char>>;
-    ///Tries to parse the output type from a string. This is bijektive with the [Display] implementation.
-    ///
-    ///For any `a: OutputType` the following holds true:
-    ///```
-    /// use rvsdg::edge::OutputType;
-    /// let a = OutputType::Output(1);
-    /// assert_eq!(a, format!("{}",a).parse().unwrap());
-    ///```
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
+impl OutputType {
+    pub fn parser() -> impl Parser<char, Self, Error = Simple<char>> {
         use crate::util::parse::{enum_with_usize, usize_parser};
         use chumsky::prelude::*;
         //Our parser just accepts exactly what we produce via display
@@ -244,8 +241,23 @@ impl FromStr for OutputType {
             enum_with_usize("CVArg", Self::ContextVariableArgument),
         ))
         .then_ignore(end());
+        parser
+    }
+}
 
-        parser.parse(s)
+#[cfg(feature = "parse")]
+impl FromStr for OutputType {
+    type Err = Vec<Simple<char>>;
+    ///Tries to parse the output type from a string. This is bijektive with the [Display] implementation.
+    ///
+    ///For any `a: OutputType` the following holds true:
+    ///```
+    /// use rvsdg::edge::OutputType;
+    /// let a = OutputType::Output(1);
+    /// assert_eq!(a, format!("{}",a).parse().unwrap());
+    ///```
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        OutputType::parser().parse(s)
     }
 }
 

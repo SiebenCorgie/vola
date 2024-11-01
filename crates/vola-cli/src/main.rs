@@ -9,9 +9,10 @@
 //!
 //! CLI interface to `volac`
 
-use std::path::PathBuf;
+#![doc(html_logo_url = "https://gitlab.com/tendsinmende/vola/-/raw/main/resources/vola_icon.svg")]
 
 use clap::{Parser, ValueEnum};
+use std::path::PathBuf;
 use volac::{
     backends::{BoxedBackend, Native, Spirv, Wasm},
     Target,

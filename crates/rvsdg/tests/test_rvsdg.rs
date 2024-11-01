@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use rvsdg::{
     common::VSEdge,
     nodes::LangNode,
@@ -28,6 +30,12 @@ impl StructuralClone for LNode {
             inputs: vec![Input::default(); self.inputs.len()],
             outputs: vec![Output::default(); self.outputs.len()],
         }
+    }
+}
+
+impl Display for LNode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.name)
     }
 }
 
@@ -89,6 +97,15 @@ impl View for LNode {
 pub fn dump_graph_to_svg(graph: &Rvsdg<LNode, VSEdge>, name: &str) {
     let config = rvsdg_viewer::layout::LayoutConfig {
         ignore_dead_node: false,
+        ..Default::default()
+    };
+    rvsdg_viewer::into_svg_with_config(graph, name, &config)
+}
+
+#[allow(unused)]
+pub fn dump_graph_svg_no_dead(graph: &Rvsdg<LNode, VSEdge>, name: &str) {
+    let config = rvsdg_viewer::layout::LayoutConfig {
+        ignore_dead_node: true,
         ..Default::default()
     };
     rvsdg_viewer::into_svg_with_config(graph, name, &config)
