@@ -28,13 +28,22 @@ pub struct Ident(pub String);
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Ty {
-    CSGTree,
-    Scalar,
-    //Similar to the scalar, but always positive and whole numbers.
-    Nat,
-    Vec { width: usize },
-    Matrix { width: usize, height: usize },
-    Tensor { dim: SmallVec<[usize; 3]> },
+    Csg,
+    Real,
+    Integer,
+    Complex,
+    Quaternion,
+}
+
+///Describes a the shape of a [Ty].
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum TyShape {
+    Vec { width: usize, ty: Ty },
+    Matrix { width: usize, height: usize, ty: Ty },
+    Tensor { sizes: SmallVec<[usize; 8]>, ty: Ty },
+    Tuple { types: SmallVec<[Ty; 4]> },
+    Interval { ty: Ty },
 }
 
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
@@ -91,10 +100,14 @@ pub struct Call {
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Clone, Debug)]
 pub enum Stmt {
+    ///Binding of an expression value to an identifier
     Let(LetStmt),
+    ///Assignment to an already existing identifier
     Assign(AssignStmt),
+    ///Binding of a csg expression to an identifier.
     Csg(CsgStmt),
-    ThetaExpr,
+    Loop(Loop),
+    Branch(Branch),
 }
 
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
@@ -107,26 +120,26 @@ pub struct Block {
 
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Clone, Debug)]
-pub struct GammaExpr {
+pub struct Branch {
     pub span: Span,
-    //_if_ / _else if_ branches. The Expr is the condition, that _should_ be a
-    //boolean output, the block... is the block :D
-    pub conditionals: SmallVec<[(Expr, Block); 3]>,
+    //The "if" expression, and the block that is executed, if the expression is true.
+    pub conditional: (Expr, Box<Block>),
     // _else_ branch, if there is any
-    pub unconditional: Option<Block>,
+    pub unconditional: Option<Box<Block>>,
 }
 
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Clone, Debug)]
-pub struct ThetaExpr {
+pub struct Loop {
     pub span: Span,
-    pub initial_assignment: AssignStmt,
+    ///Identifier of the iteration variable, that ranges from _bound_lower_ to _bound_upper_-1
+    pub iteration_variable_iden: Ident,
     pub bound_lower: Expr,
     pub bound_upper: Expr,
-    pub body: Block,
+    pub body: Box<Block>,
 }
 
-impl ThetaExpr {
+impl Loop {
     pub fn range_expr_span(&self) -> Span {
         let mut span = self.bound_lower.span.clone();
         let byte_end = span.byte_end.max(self.bound_upper.span.byte_end);
