@@ -133,7 +133,7 @@ pub struct Branch {
 pub struct Loop {
     pub span: Span,
     ///Identifier of the iteration variable, that ranges from _bound_lower_ to _bound_upper_-1
-    pub iteration_variable_iden: Ident,
+    pub iteration_variable_ident: Ident,
     pub bound_lower: Expr,
     pub bound_upper: Expr,
     pub body: Box<Block>,

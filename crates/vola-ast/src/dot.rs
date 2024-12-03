@@ -15,9 +15,9 @@ use vola_common::dot::{
 };
 
 use crate::{
-    alge::{AlgeFunc, AssignStmt, EvalExpr, Expr, ExprTy, FieldAccessor, ImplBlock, LetStmt},
-    common::{Block, CTArg, Call, GammaExpr, Stmt, ThetaExpr, TypedIdent},
-    csg::{AccessDesc, CSGConcept, CSGNodeDef, CSGNodeTy, CsgStmt, ExportFn, FieldDef, ScopedCall},
+    alge::{AssignStmt, EvalExpr, Expr, ExprTy, FieldAccessor, Func, LetStmt},
+    common::{Block, Branch, CTArg, Call, Loop, Stmt, TypedIdent},
+    csg::{CSGConcept, CsgDef, CsgStmt, CsgTy, ImplBlock, ScopedCall},
     AstEntry, TopLevelNode, VolaAst,
 };
 
@@ -69,39 +69,33 @@ impl DotNode for AstEntry {
     fn id(&self) -> String {
         match self {
             AstEntry::Comment(s) => format!("Comment {:?}..{:?}", s.from, s.to),
-            AstEntry::CSGNodeDef(def) => def.id(),
+            AstEntry::CsgDef(def) => def.id(),
             AstEntry::Concept(def) => def.id(),
             AstEntry::ImplBlock(b) => b.id(),
-            AstEntry::FieldDefine(fd) => fd.id(),
-            AstEntry::ExportFn(ef) => ef.id(),
             AstEntry::Module(m) => format!("Module {:?}..{:?}", m.span.from.0, m.span.to.0),
-            AstEntry::AlgeFunc(f) => f.id(),
+            AstEntry::Func(f) => f.id(),
         }
     }
 
     fn content(&self) -> String {
         match self {
             AstEntry::Comment(_s) => format!("Comment"),
-            AstEntry::CSGNodeDef(def) => def.content(),
+            AstEntry::CsgDef(def) => def.content(),
             AstEntry::Concept(s) => s.content(),
             AstEntry::ImplBlock(b) => b.content(),
-            AstEntry::FieldDefine(fd) => fd.content(),
-            AstEntry::ExportFn(ef) => ef.content(),
             AstEntry::Module(_m) => format!("Module"),
-            AstEntry::AlgeFunc(f) => f.content(),
+            AstEntry::Func(f) => f.content(),
         }
     }
 
     fn build_children(&self, builder: GraphvizBuilder) -> GraphvizBuilder {
         match self {
             AstEntry::Comment(_s) => builder,
-            AstEntry::CSGNodeDef(def) => def.build_children(builder),
+            AstEntry::CsgDef(def) => def.build_children(builder),
             AstEntry::Concept(s) => s.build_children(builder),
             AstEntry::ImplBlock(b) => b.build_children(builder),
-            AstEntry::FieldDefine(fd) => fd.build_children(builder),
-            AstEntry::ExportFn(ef) => ef.build_children(builder),
             AstEntry::Module(_m) => builder,
-            AstEntry::AlgeFunc(f) => f.build_children(builder),
+            AstEntry::Func(f) => f.build_children(builder),
         }
     }
 }
@@ -134,57 +128,7 @@ impl DotNode for Block {
     }
 }
 
-impl DotNode for FieldDef {
-    fn id(&self) -> String {
-        format!("FieldDef {:?}..{:?}", self.span.from, self.span.to)
-    }
-
-    fn content(&self) -> String {
-        self.name.0.clone()
-    }
-
-    fn build_children(&self, mut builder: GraphvizBuilder) -> GraphvizBuilder {
-        for inp in &self.args {
-            builder.add_node(inp);
-            builder.connect(self, inp);
-
-            //now recurse
-            builder = inp.build_children(builder)
-        }
-
-        builder.add_node(&self.block);
-        builder.connect(self, &self.block);
-        //now recurse
-        self.block.build_children(builder)
-    }
-}
-
-impl DotNode for ExportFn {
-    fn id(&self) -> String {
-        format!("ExportFn {:?}..{:?}", self.span.from, self.span.to)
-    }
-
-    fn content(&self) -> String {
-        self.name.0.clone()
-    }
-
-    fn build_children(&self, mut builder: GraphvizBuilder) -> GraphvizBuilder {
-        for inp in &self.args {
-            builder.add_node(inp);
-            builder.connect(self, inp);
-
-            //now recurse
-            builder = inp.build_children(builder)
-        }
-
-        builder.add_node(&self.block);
-        builder.connect(self, &self.block);
-        //now recurse
-        self.block.build_children(builder)
-    }
-}
-
-impl DotNode for AlgeFunc {
+impl DotNode for Func {
     fn id(&self) -> String {
         format!("AlgeFunc {:?}..{:?}", self.span.from, self.span.to)
     }
@@ -207,31 +151,6 @@ impl DotNode for AlgeFunc {
         //now recurse
         builder = self.block.build_children(builder);
 
-        builder
-    }
-}
-
-impl DotNode for AccessDesc {
-    fn id(&self) -> String {
-        format!("AccessDecs {:?}..{:?}", self.span.from, self.span.to)
-    }
-    fn content(&self) -> String {
-        format!("AccessDesc")
-    }
-    fn color(&self) -> vola_common::dot::graphviz_rust::attributes::color_name {
-        vola_common::dot::graphviz_rust::attributes::color_name::red
-    }
-    fn shape(&self) -> vola_common::dot::graphviz_rust::attributes::shape {
-        vola_common::dot::graphviz_rust::attributes::shape::rarrow
-    }
-    fn build_children(&self, mut builder: GraphvizBuilder) -> GraphvizBuilder {
-        for sib in &self.evals {
-            builder.add_node(sib);
-            builder.connect(self, sib);
-
-            //now recurse
-            builder = sib.build_children(builder)
-        }
         builder
     }
 }
@@ -267,7 +186,8 @@ impl DotNode for Stmt {
             Self::Assign(a) => a.id(),
             Self::Let(l) => l.id(),
             Self::Csg(c) => c.id(),
-            Self::ThetaExpr => todo!(),
+            Self::Loop(l) => l.id(),
+            Self::Branch(b) => b.id(),
         }
     }
     fn content(&self) -> String {
@@ -275,7 +195,8 @@ impl DotNode for Stmt {
             Self::Assign(a) => a.content(),
             Self::Let(a) => a.content(),
             Self::Csg(c) => c.content(),
-            Self::ThetaExpr => todo!(),
+            Self::Loop(l) => l.content(),
+            Self::Branch(b) => b.content(),
         }
     }
     fn build_children(&self, builder: GraphvizBuilder) -> GraphvizBuilder {
@@ -283,7 +204,8 @@ impl DotNode for Stmt {
             Self::Assign(a) => a.build_children(builder),
             Self::Let(l) => l.build_children(builder),
             Self::Csg(c) => c.build_children(builder),
-            Self::ThetaExpr => todo!(),
+            Self::Loop(l) => l.build_children(builder),
+            Self::Branch(b) => b.build_children(builder),
         }
     }
 }
@@ -357,17 +279,13 @@ impl DotNode for EvalExpr {
     }
 }
 
-impl DotNode for GammaExpr {
+impl DotNode for Branch {
     fn id(&self) -> String {
         format!("GammaExpr {:?}..{:?}", self.span.from, self.span.to)
     }
 
     fn content(&self) -> String {
-        format!(
-            "if-then<{}>-else<{}>",
-            self.conditionals.len() - 1,
-            self.unconditional.is_some()
-        )
+        format!("if-then<{}>-else<{}>", 1, self.unconditional.is_some())
     }
 
     fn color(&self) -> vola_common::dot::graphviz_rust::attributes::color_name {
@@ -375,18 +293,16 @@ impl DotNode for GammaExpr {
     }
 
     fn build_children(&self, mut builder: GraphvizBuilder) -> GraphvizBuilder {
-        for (expr, block) in &self.conditionals {
-            builder.add_node(expr);
-            builder.add_node(block);
-            builder.connect(self, expr);
-            builder.connect(self, block);
-            builder = expr.build_children(builder);
-            builder = block.build_children(builder);
-        }
+        builder.add_node(&self.conditional.0);
+        builder.add_node(self.conditional.1.as_ref());
+        builder.connect(self, &self.conditional.0);
+        builder.connect(self, self.conditional.1.as_ref());
+        builder = self.conditional.0.build_children(builder);
+        builder = self.conditional.1.build_children(builder);
 
         if let Some(uncond) = &self.unconditional {
-            builder.add_node(uncond);
-            builder.connect(self, uncond);
+            builder.add_node(uncond.as_ref());
+            builder.connect(self, uncond.as_ref());
             builder = uncond.build_children(builder);
         }
 
@@ -394,13 +310,13 @@ impl DotNode for GammaExpr {
     }
 }
 
-impl DotNode for ThetaExpr {
+impl DotNode for Loop {
     fn id(&self) -> String {
         format!("ThetaExpr {:?}..{:?}", self.span.from, self.span.to)
     }
 
     fn content(&self) -> String {
-        format!("theta-over-{}", self.initial_assignment.dst.0)
+        format!("theta-over-{}", self.iteration_variable_ident.0)
     }
 
     fn color(&self) -> vola_common::dot::graphviz_rust::attributes::color_name {
@@ -408,10 +324,6 @@ impl DotNode for ThetaExpr {
     }
 
     fn build_children(&self, mut builder: GraphvizBuilder) -> GraphvizBuilder {
-        builder.add_node(&self.initial_assignment);
-        builder.connect(self, &self.initial_assignment);
-        builder = self.initial_assignment.build_children(builder);
-
         builder.add_node(&self.bound_lower);
         builder.connect(self, &self.bound_lower);
         builder = self.bound_lower.build_children(builder);
@@ -420,9 +332,11 @@ impl DotNode for ThetaExpr {
         builder.connect(self, &self.bound_upper);
         builder = self.bound_upper.build_children(builder);
 
-        builder.add_node(&self.body);
-        builder.connect(self, &self.body);
+        builder.add_node(self.body.as_ref());
+        builder.connect(self, self.body.as_ref());
+        //now recurse
         builder = self.body.build_children(builder);
+
         builder
     }
 }
@@ -461,7 +375,7 @@ impl DotNode for Expr {
             ExprTy::EvalExpr(e) => e.id(),
             ExprTy::Call(c) => c.id(),
             ExprTy::ScopedCall(s) => s.id(),
-            ExprTy::GammaExpr(e) => e.id(),
+            ExprTy::BranchExpr(e) => e.id(),
             _ => format!("AlgeExpr {:?}..{:?}", self.span.from, self.span.to),
         }
     }
@@ -487,9 +401,7 @@ impl DotNode for Expr {
             ExprTy::List(_l) => format!("List"),
             ExprTy::Literal(lit) => format!("Lit: {:?}", lit),
             ExprTy::ScopedCall(s) => s.content(),
-            ExprTy::AccessExpr(_e) => format!("AccessDesc"),
-            ExprTy::GammaExpr(e) => e.content(),
-            ExprTy::ThetaExpr(t) => t.content(),
+            ExprTy::BranchExpr(e) => e.content(),
             ExprTy::SplatExpr { expr: _, count } => format!("Splat<{count}>"),
         }
     }
@@ -522,14 +434,6 @@ impl DotNode for Expr {
                 }
                 builder
             }
-            ExprTy::AccessExpr(ae) => {
-                for expr in &ae.evals {
-                    builder.add_node(expr);
-                    builder.connect(self, expr);
-                    builder = expr.build_children(builder);
-                }
-                builder
-            }
             ExprTy::List(l) => {
                 for li in l {
                     builder.add_node(li);
@@ -538,8 +442,7 @@ impl DotNode for Expr {
                 }
                 builder
             }
-            ExprTy::GammaExpr(e) => e.build_children(builder),
-            ExprTy::ThetaExpr(t) => t.build_children(builder),
+            ExprTy::BranchExpr(e) => e.build_children(builder),
             ExprTy::Ident(_) | ExprTy::Literal(_) => builder,
             ExprTy::SplatExpr { expr, count: _ } => expr.build_children(builder),
         }
@@ -622,14 +525,14 @@ impl DotNode for CTArg {
     }
 }
 
-impl DotNode for CSGNodeDef {
+impl DotNode for CsgDef {
     fn id(&self) -> String {
         format!("CSGDef {:?}..{:?}", self.span.from, self.span.to)
     }
     fn content(&self) -> String {
         match self.ty {
-            CSGNodeTy::Entity => format!("entity {}", self.name.0),
-            CSGNodeTy::Operation => format!("operation {}", self.name.0),
+            CsgTy::Entity => format!("entity {}", self.name.0),
+            CsgTy::Operation => format!("operation {}", self.name.0),
         }
     }
 
