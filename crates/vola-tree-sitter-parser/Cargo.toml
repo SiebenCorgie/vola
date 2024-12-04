@@ -8,7 +8,7 @@ default = []
 dot = ["vola-common/dot", "graphviz-rust"]
 
 [dependencies]
-tree-sitter-vola = { git = "https://gitlab.com/tendsinmende/tree-sitter-vola.git" }
+tree-sitter-vola = { git = "https://gitlab.com/tendsinmende/tree-sitter-vola.git", rev = "08e93115313ecd92f692d1920916464429b56e01" }
 vola-ast = { path = "../vola-ast" }
 vola-common = { path = "../vola-common" }
 thiserror.workspace = true
