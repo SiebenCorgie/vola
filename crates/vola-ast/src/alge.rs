@@ -90,6 +90,7 @@ impl Expr {
             ExprTy::FieldAccess { .. } => self.span.clone(),
             ExprTy::Ident(_i) => self.span.clone(),
             ExprTy::List(_) => self.span.clone(),
+            ExprTy::Tuple(_) => self.span.clone(),
             ExprTy::Literal(_) => self.span.clone(),
             ExprTy::ScopedCall(c) => c.head_span(),
             ExprTy::BranchExpr(e) => e.span.clone(),
@@ -150,6 +151,7 @@ pub enum ExprTy {
     Call(Box<Call>),
     ScopedCall(Box<ScopedCall>),
     List(Vec<Expr>),
+    Tuple(Vec<Expr>),
     Literal(Literal),
     BranchExpr(Box<Branch>),
     SplatExpr {

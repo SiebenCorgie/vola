@@ -1,15 +1,15 @@
 
 
-entity SomeScalar(t: s);
+entity SomeScalar(t: real);
 
-entity SomeNat(t: i);
+entity SomeNat(t: int);
 
 entity SomeVector(t: vec3);
 entity SomeBigVector(t: vec2342);
 
 
-entity SomeMatrix(t: mat3x3);
+entity SomeMatrix(t: mat3x3<int>);
 entity SomeBigMatrix(t: mat123x456);
 
 entity SomeTensor(t: tensor<3,3,3>);
-entity SomeBigTensor(t: tensor<123,123,2987,9879>);
+entity SomeBigTensor(t: tensor<123,123,2987,9879><quat>);

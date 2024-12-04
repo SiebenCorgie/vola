@@ -2,7 +2,7 @@
 module sub_module;
 
 
-export myField(t: vec3){
+export fn myField(t: vec3) -> real{
 	csg a = some_sub_field();
 	eval a.Con(t)
 }

@@ -1,5 +1,5 @@
 
-concept Con: vec3 -> s;
+concept Con: vec3 -> real;
 
 entity Prim();
 
@@ -7,6 +7,6 @@ impl Prim for Con(t){
 	t.x
 }
 
-define some_sub_field(){
+fn some_sub_field() -> csg{
 	Prim()
 }

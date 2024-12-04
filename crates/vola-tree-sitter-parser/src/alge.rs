@@ -11,11 +11,9 @@ use smallvec::SmallVec;
 use vola_common::{ariadne::Label, error::error_reporter, report, Span};
 
 use vola_ast::{
-    alge::{
-        AssignStmt, BinaryOp, EvalExpr, Expr, ExprTy, FieldAccessor, ImplBlock, LetStmt, UnaryOp,
-    },
-    common::{Block, Call, Digit, GammaExpr, Ident, Literal, Stmt, ThetaExpr},
-    csg::{AccessDesc, CsgStmt, ScopedCall},
+    alge::{AssignStmt, BinaryOp, EvalExpr, Expr, ExprTy, FieldAccessor, LetStmt, UnaryOp},
+    common::{Block, Branch, Call, Digit, Ident, Literal, Loop, Stmt},
+    csg::{CsgStmt, ImplBlock, ScopedCall},
 };
 
 use super::{FromTreeSitter, ParserCtx};
@@ -184,12 +182,17 @@ impl FromTreeSitter for Expr {
             "identifier" => ExprTy::Ident(Ident::parse(ctx, dta, &child_node)?),
             "fn_call" => ExprTy::Call(Box::new(Call::parse(ctx, dta, &child_node)?)),
             "scope_call" => ExprTy::ScopedCall(Box::new(ScopedCall::parse(ctx, dta, &child_node)?)),
-            "access_desc" => ExprTy::AccessExpr(AccessDesc::parse(ctx, dta, &child_node)?),
-            "list" => {
+            "list" | "tuple" => {
+                let (open, close, is_tuple) = match child_node.kind() {
+                    "list" => ("[", "]", false),
+                    "tuple" => ("(", ")", true),
+                    _ => panic!(),
+                };
+
                 let mut walker = child_node.walk();
                 let mut children = child_node.children(&mut walker);
 
-                ParserError::consume_expected_node_string(ctx, dta, children.next(), "[")?;
+                ParserError::consume_expected_node_string(ctx, dta, children.next(), open)?;
 
                 let mut list = Vec::new();
                 while let Some(next_node) = children.next() {
@@ -218,20 +221,21 @@ impl FromTreeSitter for Expr {
                     match next_node.utf8_text(dta).unwrap() {
                         //ignore seperator
                         "," => {}
-                        "]" => break,
+                        "]" | ")" => break,
                         _ => {
                             let err = ParserError::UnexpectedNodeValue {
                                 val: next_node
                                     .utf8_text(dta)
                                     .unwrap_or("couldn't parse")
                                     .to_owned(),
-                                exp: ", or ] ".to_owned(),
+                                exp: format!(", or {close} "),
                             };
                             report(
                                 error_reporter(err.clone(), ctx.span(&next_node))
                                     .with_label(
-                                        Label::new(ctx.span(&next_node))
-                                            .with_message("Should be \",\" or \"]\""),
+                                        Label::new(ctx.span(&next_node)).with_message(&format!(
+                                            "Should be \",\" or \"{close}\""
+                                        )),
                                     )
                                     .finish(),
                             );
@@ -241,10 +245,13 @@ impl FromTreeSitter for Expr {
                 }
 
                 ParserError::assert_ast_level_empty(ctx, children.next())?;
-                ExprTy::List(list)
+                if is_tuple {
+                    ExprTy::Tuple(list)
+                } else {
+                    ExprTy::List(list)
+                }
             }
-            "gamma_expr" => ExprTy::GammaExpr(Box::new(GammaExpr::parse(ctx, dta, &child_node)?)),
-            "theta_expr" => ExprTy::ThetaExpr(Box::new(ThetaExpr::parse(ctx, dta, &child_node)?)),
+            "gamma_expr" => ExprTy::BranchExpr(Box::new(Branch::parse(ctx, dta, &child_node)?)),
             "splat_expr" => {
                 let mut walker = child_node.walk();
                 let mut children = child_node.children(&mut walker);
@@ -583,6 +590,9 @@ impl FromTreeSitter for Stmt {
                 ParserError::consume_expected_node_string(ctx, dta, node.child(1), ";")?;
                 stmt
             }
+
+            "theta_expr" => Stmt::Loop(Loop::parse(ctx, dta, node.child(0).as_ref().unwrap())?),
+            "gamma_expr" => Stmt::Branch(Branch::parse(ctx, dta, node.child(0).as_ref().unwrap())?),
             _ => {
                 let err = ParserError::UnexpectedAstNode {
                     kind: stmtnode.kind().to_owned(),

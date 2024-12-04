@@ -85,6 +85,14 @@ impl AstEntry {
             false
         }
     }
+
+    pub fn is_export_fn(&self) -> bool {
+        if let Self::Func(f) = self {
+            f.is_export
+        } else {
+            false
+        }
+    }
 }
 
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]

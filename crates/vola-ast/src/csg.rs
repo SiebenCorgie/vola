@@ -68,7 +68,7 @@ pub struct CsgDef {
 pub struct CSGConcept {
     pub span: Span,
     pub name: Ident,
-    pub src_ty: SmallVec<[Ty; 1]>,
+    pub src_ty: Ty,
     pub dst_ty: Ty,
 }
 

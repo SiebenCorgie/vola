@@ -27,23 +27,37 @@ pub struct Ident(pub String);
 
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum Ty {
+pub enum DataTy {
     Csg,
+    Void,
     Real,
     Integer,
+    Bool,
     Complex,
     Quaternion,
 }
 
-///Describes a the shape of a [Ty].
+///The shape of _some_ value.
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum TyShape {
-    Vec { width: usize, ty: Ty },
-    Matrix { width: usize, height: usize, ty: Ty },
-    Tensor { sizes: SmallVec<[usize; 8]>, ty: Ty },
-    Tuple { types: SmallVec<[Ty; 4]> },
-    Interval { ty: Ty },
+pub enum Shape {
+    Vec { width: usize },
+    Matrix { width: usize, height: usize },
+    Tensor { sizes: SmallVec<[usize; 8]> },
+    Interval,
+}
+
+///Describes the shape and data-type of a value.
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum Ty {
+    Simple(DataTy),
+    Shaped {
+        ty: DataTy,
+        shape: Shape,
+    },
+    ///Aggregate type in the form of a tuple
+    Tuple(Vec<Self>),
 }
 
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]

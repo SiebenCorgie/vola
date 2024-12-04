@@ -1,4 +1,7 @@
-use vola_ast::{common::Ty, AstEntry, TopLevelNode};
+use vola_ast::{
+    common::{DataTy, Shape, Ty},
+    AstEntry, TopLevelNode,
+};
 
 mod simple_parser;
 use simple_parser::parse_file;
@@ -11,19 +14,28 @@ fn test_parse_fn() {
     if let TopLevelNode {
         span: _,
         ct_args: _,
-        entry: AstEntry::AlgeFunc(f),
+        entry: AstEntry::Func(f),
     } = &ast.entries[0]
     {
-        assert!(f.args[0].ty == Ty::Vec { width: 3 });
+        assert!(
+            f.args[0].ty
+                == Ty::Shaped {
+                    ty: DataTy::Real,
+                    shape: Shape::Vec { width: 3 }
+                }
+        );
         assert!(
             f.args[1].ty
-                == Ty::Matrix {
-                    width: 3,
-                    height: 3
+                == Ty::Shaped {
+                    ty: DataTy::Real,
+                    shape: Shape::Matrix {
+                        width: 3,
+                        height: 3
+                    }
                 }
         );
 
-        assert!(f.return_type == Ty::Scalar);
+        assert!(f.return_type == Ty::Simple(DataTy::Real));
         assert!(f.block.stmts.len() == 1);
     } else {
         panic!("Expected algefn");

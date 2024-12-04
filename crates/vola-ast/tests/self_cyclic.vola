@@ -1,7 +1,7 @@
 
 module self_cyclic;
 
-export teddys_test(){
+export fn teddys_test() -> real{
 	csg t = Test();
 
 	eval t.MyConcept()
