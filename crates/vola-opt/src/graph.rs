@@ -28,7 +28,7 @@ use rvsdg::{
 };
 
 use rvsdg_viewer::{Color, View};
-use vola_ast::csg::{CSGConcept, CSGNodeDef};
+use vola_ast::csg::{CSGConcept, CsgDef};
 use vola_common::Span;
 
 use crate::OptGraph;
@@ -52,7 +52,7 @@ pub trait DialectNode: LangNode + Any + View {
         _typemap: &FlagStore<Ty>,
         _graph: &OptGraph,
         _concepts: &AHashMap<String, CSGConcept>,
-        _csg_defs: &AHashMap<String, CSGNodeDef>,
+        _csg_defs: &AHashMap<String, CsgDef>,
     ) -> Result<Option<Ty>, OptError> {
         Err(OptError::Any {
             text: format!("Type resolution not implemented for {}", self.name()),

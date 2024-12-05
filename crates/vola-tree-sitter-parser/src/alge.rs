@@ -511,45 +511,10 @@ impl FromTreeSitter for ImplBlock {
         let concept = Ident::parse(ctx, dta, children.next().as_ref().unwrap())?;
 
         ParserError::consume_expected_node_string(ctx, dta, children.next(), "(")?;
-        let mut concept_arg_naming = SmallVec::new();
-        while let Some(next_node) = children.next() {
-            match next_node.kind() {
-                //break the arg regnaming
-                ")" => break,
-                "identifier" => concept_arg_naming.push(Ident::parse(ctx, dta, &next_node)?),
-                _ => {
-                    let err = ParserError::UnexpectedAstNode {
-                        kind: next_node.kind().to_owned(),
-                        expected: " ) or identifier ".to_owned(),
-                    };
-                    report(
-                        error_reporter(err.clone(), ctx.span(&next_node))
-                            .with_label(Label::new(ctx.span(&next_node)).with_message("here"))
-                            .finish(),
-                    );
-                    return Err(err);
-                }
-            }
 
-            //now there should be either a "," or end to the identifier list
-            let next_node = children.next().unwrap();
-            match next_node.kind() {
-                ")" => break,
-                "," => ParserError::consume_expected_node_string(ctx, dta, Some(next_node), ",")?,
-                _ => {
-                    let err = ParserError::UnexpectedAstNode {
-                        kind: next_node.kind().to_owned(),
-                        expected: " ) or , ".to_owned(),
-                    };
-                    report(
-                        error_reporter(err.clone(), ctx.span(&next_node))
-                            .with_label(Label::new(ctx.span(&next_node)).with_message("here"))
-                            .finish(),
-                    );
-                    return Err(err);
-                }
-            }
-        }
+        let naming = Ident::parse(ctx, dta, children.next().as_ref().unwrap())?;
+
+        ParserError::consume_expected_node_string(ctx, dta, children.next(), ")")?;
 
         //Now parse the block
         let block = Block::parse(ctx, dta, &children.next().unwrap())?;
@@ -561,7 +526,7 @@ impl FromTreeSitter for ImplBlock {
             dst,
             operands,
             concept,
-            concept_arg_naming,
+            concept_arg_name: naming,
             block,
         })
     }

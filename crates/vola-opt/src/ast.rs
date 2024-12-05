@@ -59,7 +59,7 @@ impl Optimizer {
                     Ok(None)
                 }
             }
-            AstEntry::CSGNodeDef(csgnd) => {
+            AstEntry::CsgDef(csgnd) => {
                 //similar to the concept case, test if there is already one, if not, push
                 if let Some(existing_csg) = self.csg_node_defs.get(&csgnd.name.0) {
                     let err = OptError::Any {
@@ -86,9 +86,7 @@ impl Optimizer {
                 }
             }
             AstEntry::ImplBlock(implblock) => self.add_impl_block(implblock).map(|t| Some(t)),
-            AstEntry::FieldDefine(fdef) => self.add_field_def(fdef).map(|t| Some(t)),
-            AstEntry::ExportFn(expfn) => self.add_export_fn(expfn).map(|t| Some(t)),
-            AstEntry::AlgeFunc(algefn) => self.add_alge_fn(algefn).map(|t| Some(t)),
+            AstEntry::Func(algefn) => self.add_alge_fn(algefn).map(|t| Some(t)),
         }
     }
 }

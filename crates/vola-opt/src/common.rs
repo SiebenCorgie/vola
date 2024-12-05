@@ -14,7 +14,7 @@ use rvsdg::{
     NodeRef, SmallColl,
 };
 use std::fmt::Display;
-use vola_ast::csg::CSGConcept;
+use vola_ast::csg::{CSGConcept, CsgDef, ImplBlock};
 
 use crate::{error::OptError, OptGraph};
 
@@ -96,7 +96,7 @@ impl Shape {
                         text: format!("Matrix {width}x{height} cannot be indexed with {index}"),
                     })
                 } else {
-                    Ok(Ty::Vec { width: *height })
+                    Ok(Self::Vec { width: *height })
                 }
             }
             Self::Tensor { sizes } => match sizes.len() {
@@ -119,7 +119,7 @@ impl Shape {
                         })
                     } else {
                         let new_dim = sizes[1..].iter().map(|d| *d).collect();
-                        Ok(Self::Tensor { dim: new_dim })
+                        Ok(Self::Tensor { sizes: new_dim })
                     }
                 }
             },
@@ -225,6 +225,26 @@ impl Display for Ty {
 }
 
 impl Ty {
+    pub const SCALAR_REAL: Self = Self::Shaped {
+        ty: DataType::Real,
+        shape: Shape::Scalar,
+    };
+    pub const SCALAR_INT: Self = Self::Shaped {
+        ty: DataType::Integer,
+        shape: Shape::Scalar,
+    };
+    pub const CSG: Self = Self::Shaped {
+        ty: DataType::Csg,
+        shape: Shape::Scalar,
+    };
+
+    pub fn scalar_type(data_ty: DataType) -> Self {
+        Self::Shaped {
+            ty: data_ty,
+            shape: Shape::Scalar,
+        }
+    }
+
     ///Returns the singular data-type, if this is either `Simple` or `Shaped`.
     pub fn data_type(&self) -> Option<DataType> {
         match self {
@@ -395,7 +415,7 @@ impl LmdContext {
         type_map: &mut FlagStore<Ty>,
         lmd: NodeRef,
         block: &ImplBlock,
-        entity_or_op: &CSGNodeDef,
+        entity_or_op: &CsgDef,
         concept_def: &CSGConcept,
     ) -> Self {
         let mut defmap = AHashMap::default();
@@ -424,32 +444,29 @@ impl LmdContext {
             type_map.set(argport.into(), arg.ty.clone().into());
         }
 
-        for (arg_local_idx, renamed) in block.concept_arg_naming.iter().enumerate() {
-            //lookup type in the concept definition
-            let ty = concept_def.src_ty[arg_local_idx].clone();
-            //now add to the node as argument as well
+        //lookup type in the concept definition
+        let ty = concept_def.src_ty.clone();
+        //now add to the node as argument as well
+        let arg_idx = graph
+            .node_mut(lmd)
+            .node_type
+            .unwrap_lambda_mut()
+            .add_argument();
+        let argport = OutportLocation {
+            node: lmd,
+            output: rvsdg::edge::OutputType::Argument(arg_idx),
+        };
 
-            let arg_idx = graph
-                .node_mut(lmd)
-                .node_type
-                .unwrap_lambda_mut()
-                .add_argument();
-            let argport = OutportLocation {
-                node: lmd,
-                output: rvsdg::edge::OutputType::Argument(arg_idx),
-            };
-
-            //TODO use the actual correct span.
-            defmap.insert(
-                renamed.0.clone(),
-                VarDef {
-                    port: argport.clone(),
-                    span: block.span.clone(),
-                },
-            );
-            //tag the type as well
-            type_map.set(argport.into(), ty.into());
-        }
+        //TODO use the actual correct span.
+        defmap.insert(
+            block.concept_arg_name.0.clone(),
+            VarDef {
+                port: argport.clone(),
+                span: block.span.clone(),
+            },
+        );
+        //tag the type as well
+        type_map.set(argport.into(), ty.into());
 
         LmdContext {
             defined_vars: defmap,
@@ -457,91 +474,11 @@ impl LmdContext {
         }
     }
 
-    pub fn new_for_exportfn(
+    pub fn new_for_fn(
         graph: &mut OptGraph,
         type_map: &mut FlagStore<Ty>,
         lmd: NodeRef,
-        exportfn: &vola_ast::csg::ExportFn,
-    ) -> Self {
-        //exportfn are basically a normal function call. So we don't have to do any
-        // _context_ analysis.
-
-        let mut defined_vars = AHashMap::new();
-
-        for arg in exportfn.args.iter() {
-            let arg_idx = graph
-                .node_mut(lmd)
-                .node_type
-                .unwrap_lambda_mut()
-                .add_argument();
-            let argport = OutportLocation {
-                node: lmd,
-                output: rvsdg::edge::OutputType::Argument(arg_idx),
-            };
-
-            //TODO use the actual correct span.
-            defined_vars.insert(
-                arg.ident.0.clone(),
-                VarDef {
-                    port: argport.clone(),
-                    span: arg.span.clone(),
-                },
-            );
-            //tag the type as well
-            type_map.set(argport.into(), arg.ty.clone().into());
-        }
-
-        LmdContext {
-            defined_vars,
-            imported_functions: AHashMap::with_capacity(0),
-        }
-    }
-
-    pub fn new_for_fielddef(
-        graph: &mut OptGraph,
-        type_map: &mut FlagStore<Ty>,
-        lmd: NodeRef,
-        fielddef: &vola_ast::csg::FieldDef,
-    ) -> Self {
-        //fielddef are basically a normal function call. So we don't have to do any
-        // _context_ analysis.
-
-        let mut defined_vars = AHashMap::new();
-
-        for arg in fielddef.args.iter() {
-            let arg_idx = graph
-                .node_mut(lmd)
-                .node_type
-                .unwrap_lambda_mut()
-                .add_argument();
-            let argport = OutportLocation {
-                node: lmd,
-                output: OutputType::Argument(arg_idx),
-            };
-
-            //TODO use the actual correct span.
-            defined_vars.insert(
-                arg.ident.0.clone(),
-                VarDef {
-                    port: argport.clone(),
-                    span: arg.span.clone(),
-                },
-            );
-            //tag the type as well
-            type_map.set(argport.into(), arg.ty.clone().into());
-        }
-
-        LmdContext {
-            defined_vars,
-            imported_functions: AHashMap::with_capacity(0),
-        }
-    }
-
-    pub fn new_for_alge_fn(
-        graph: &mut OptGraph,
-        type_map: &mut FlagStore<Ty>,
-        lmd: NodeRef,
-        alge_fn: &vola_ast::alge::AlgeFunc,
+        alge_fn: &vola_ast::alge::Func,
     ) -> Self {
         let mut defined_vars = AHashMap::new();
         //Build the argument map, and setup the λ-Context

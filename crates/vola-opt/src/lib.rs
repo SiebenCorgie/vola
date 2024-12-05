@@ -38,7 +38,7 @@ use rvsdg::{attrib::FlagStore, Rvsdg};
 
 use rvsdg_viewer::layout::LayoutConfig;
 use vola_ast::{
-    csg::{CSGConcept, CSGNodeDef},
+    csg::{CSGConcept, CsgDef},
     VolaAst,
 };
 use vola_common::Span;
@@ -70,7 +70,7 @@ pub struct Optimizer {
     //NOTE: using the name, since thats how we reference them all the time.
     pub(crate) concepts: AHashMap<String, CSGConcept>,
     ///All known entity and operation defs
-    pub(crate) csg_node_defs: AHashMap<String, CSGNodeDef>,
+    pub(crate) csg_node_defs: AHashMap<String, CsgDef>,
 
     ///lookup table for the λ-Nodes of entity implementation of concepts
     pub(crate) concept_impl: AHashMap<ConceptImplKey, ConceptImpl>,
@@ -125,120 +125,6 @@ impl Optimizer {
             #[cfg(feature = "viewer")]
             viewer_state: rvsdg_viewer::ViewerState::new(),
             config: Config::default(),
-        }
-    }
-
-    ///Adds a [VolaAst] to the optimizer. Might emit errors if the
-    /// semantic analysis fails immediately while adding.
-    pub fn add_ast(&mut self, ast: VolaAst) -> Result<(), OptError> {
-        //NOTE we first add all def nodes, since those don't depend on anything else, and without those
-        // some of the other nodes might not build, even though they could.
-        //
-        // After that we add all impl-blocks, since they only depend on the defs,
-        // then all field-def, since they need the impl-blocks, and last are all exportfn.
-
-        #[cfg(feature = "profile")]
-        let ast_add_start = std::time::Instant::now();
-
-        #[cfg(feature = "log")]
-        log::info!("Adding Ast to Optimizer");
-
-        let mut errors = Vec::with_capacity(0);
-
-        //NOTE yes collecting into a big'ol Vec all the time is kinda wasteful, but since
-        // we use `self` in the filter, we can't just connect multiple filter_maps :O .
-
-        //concept loop
-        let sans_defs = ast
-            .entries
-            .into_iter()
-            .filter_map(|ast_entry| {
-                if ast_entry.entry.is_def_node() {
-                    //Early add def
-                    if let Err(e) = self.add_tl_node(ast_entry) {
-                        errors.push(e);
-                    }
-                    None
-                } else {
-                    Some(ast_entry)
-                }
-            })
-            .collect::<Vec<_>>();
-
-        //algefunction loop
-        let sans_alge_fn = sans_defs
-            .into_iter()
-            .filter_map(|ast_entry| {
-                if ast_entry.entry.is_alge_fn() {
-                    //Early add def
-                    if let Err(e) = self.add_tl_node(ast_entry) {
-                        errors.push(e)
-                    }
-                    None
-                } else {
-                    Some(ast_entry)
-                }
-            })
-            .collect::<Vec<_>>();
-
-        //implblock loop
-        let sans_impl_block = sans_alge_fn
-            .into_iter()
-            .filter_map(|ast_entry| {
-                if ast_entry.entry.is_impl_block() {
-                    //Early add def
-                    if let Err(e) = self.add_tl_node(ast_entry) {
-                        errors.push(e);
-                    }
-                    None
-                } else {
-                    Some(ast_entry)
-                }
-            })
-            .collect::<Vec<_>>();
-
-        //fielddefs
-        let sans_fielddef = sans_impl_block
-            .into_iter()
-            .filter_map(|ast_entry| {
-                if ast_entry.entry.is_field_def() {
-                    //Early add def
-                    if let Err(e) = self.add_tl_node(ast_entry) {
-                        errors.push(e);
-                    }
-                    None
-                } else {
-                    Some(ast_entry)
-                }
-            })
-            .collect::<Vec<_>>();
-
-        //now _the_rest_ which _should_ be only export_fn
-
-        for tl in sans_fielddef {
-            if !tl.entry.is_exportfn() {
-                println!("warning: found non-field-def in last top-level-node iterator");
-            }
-            if let Err(e) = self.add_tl_node(tl) {
-                errors.push(e);
-            }
-        }
-
-        #[cfg(feature = "profile")]
-        println!(
-            "Adding AST took {}ms / {}ns",
-            ast_add_start.elapsed().as_millis(),
-            ast_add_start.elapsed().as_nanos()
-        );
-
-        if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("VOLA_DUMP_AST").is_ok() {
-            self.push_debug_state("AST to Opt");
-        }
-
-        if errors.len() > 0 {
-            Err(OptError::ErrorsOccurred(errors.len()))
-        } else {
-            Ok(())
         }
     }
 

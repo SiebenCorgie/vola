@@ -12,9 +12,12 @@ use ahash::AHashMap;
 use rvsdg::{
     attrib::FlagStore, region::Output, rvsdg_derive_lang::LangNode, smallvec::SmallVec, SmallColl,
 };
-use vola_ast::csg::{CSGConcept, CSGNodeDef};
+use vola_ast::csg::{CSGConcept, CsgDef};
 
-use crate::{common::Ty, DialectNode, OptError, OptGraph, OptNode};
+use crate::{
+    common::{DataType, Shape, Ty},
+    DialectNode, OptError, OptGraph, OptNode,
+};
 use rvsdg_viewer::Color;
 
 //Macro that implements the "View" trait for the ImmDialect
@@ -81,10 +84,10 @@ impl DialectNode for ImmScalar {
         _typemap: &FlagStore<Ty>,
         _graph: &OptGraph,
         _concepts: &AHashMap<String, CSGConcept>,
-        _csg_defs: &AHashMap<String, CSGNodeDef>,
+        _csg_defs: &AHashMap<String, CsgDef>,
     ) -> Result<Option<Ty>, OptError> {
         //NOTE: all literals are translated to a _scalar_
-        Ok(Some(Ty::Scalar))
+        Ok(Some(Ty::scalar_type(DataType::Real)))
     }
 
     fn is_operation_equal(&self, other: &OptNode) -> bool {
@@ -136,11 +139,14 @@ impl DialectNode for ImmVector {
         _typemap: &FlagStore<Ty>,
         _graph: &OptGraph,
         _concepts: &AHashMap<String, CSGConcept>,
-        _csg_defs: &AHashMap<String, CSGNodeDef>,
+        _csg_defs: &AHashMap<String, CsgDef>,
     ) -> Result<Option<Ty>, OptError> {
         //NOTE: all literals are translated to a _scalar_
-        Ok(Some(Ty::Vector {
-            width: self.lit.len(),
+        Ok(Some(Ty::Shaped {
+            ty: DataType::Real,
+            shape: Shape::Vec {
+                width: self.lit.len(),
+            },
         }))
     }
 
@@ -207,12 +213,15 @@ impl DialectNode for ImmMatrix {
         _typemap: &FlagStore<Ty>,
         _graph: &OptGraph,
         _concepts: &AHashMap<String, CSGConcept>,
-        _csg_defs: &AHashMap<String, CSGNodeDef>,
+        _csg_defs: &AHashMap<String, CsgDef>,
     ) -> Result<Option<Ty>, OptError> {
         //NOTE: all literals are translated to a _scalar_
-        Ok(Some(Ty::Matrix {
-            width: self.width,
-            height: self.height,
+        Ok(Some(Ty::Shaped {
+            ty: DataType::Real,
+            shape: Shape::Matrix {
+                width: self.width,
+                height: self.height,
+            },
         }))
     }
 
@@ -266,10 +275,10 @@ impl DialectNode for ImmNat {
         _typemap: &FlagStore<Ty>,
         _graph: &OptGraph,
         _concepts: &AHashMap<String, CSGConcept>,
-        _csg_defs: &AHashMap<String, CSGNodeDef>,
+        _csg_defs: &AHashMap<String, CsgDef>,
     ) -> Result<Option<Ty>, OptError> {
         //NOTE: all literals are translated to a _scalar_
-        Ok(Some(Ty::Nat))
+        Ok(Some(Ty::scalar_type(DataType::Integer)))
     }
 
     fn is_operation_equal(&self, other: &OptNode) -> bool {
@@ -320,10 +329,10 @@ impl DialectNode for ImmBool {
         _typemap: &FlagStore<Ty>,
         _graph: &OptGraph,
         _concepts: &AHashMap<String, CSGConcept>,
-        _csg_defs: &AHashMap<String, CSGNodeDef>,
+        _csg_defs: &AHashMap<String, CsgDef>,
     ) -> Result<Option<Ty>, OptError> {
         //NOTE: all literals are translated to a _scalar_
-        Ok(Some(Ty::Bool))
+        Ok(Some(Ty::scalar_type(DataType::Bool)))
     }
 
     fn is_operation_equal(&self, other: &OptNode) -> bool {

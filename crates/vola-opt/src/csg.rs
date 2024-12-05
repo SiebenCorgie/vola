@@ -7,7 +7,11 @@
  */
 //! # CSG Dialect
 
-use crate::{common::Ty, error::OptError, DialectNode, OptNode};
+use crate::{
+    common::{DataType, Ty},
+    error::OptError,
+    DialectNode, OptNode,
+};
 use rvsdg::{
     attrib::FlagStore,
     region::{Input, Output},
@@ -16,7 +20,7 @@ use rvsdg::{
     EdgeRef,
 };
 use rvsdg_viewer::Color;
-use vola_ast::{common::Ident, csg::CSGNodeDef};
+use vola_ast::{common::Ident, csg::CsgDef};
 
 pub(crate) mod exportfn;
 pub(crate) mod fielddef;
@@ -111,7 +115,7 @@ impl DialectNode for CsgOp {
         _typemap: &FlagStore<crate::common::Ty>,
         graph: &crate::OptGraph,
         _concepts: &ahash::AHashMap<String, vola_ast::csg::CSGConcept>,
-        csg_defs: &ahash::AHashMap<String, CSGNodeDef>,
+        csg_defs: &ahash::AHashMap<String, CsgDef>,
     ) -> Result<Option<crate::common::Ty>, crate::error::OptError> {
         //We resole the CSG op by checking, that all inputs adher to the op's specification.
         // Which means the arguments that are connected are equal to the one specified by the
@@ -129,7 +133,7 @@ impl DialectNode for CsgOp {
             })
             .collect::<SmallVec<[Ty; 3]>>();
         //we always output a _CSGTree_ component.
-        let output: Ty = Ty::CSGTree;
+        let output: Ty = Ty::scalar_type(DataType::Csg);
 
         //In practice we now iterate all connected inputs. The first 0..n migth be CSGTrees
         // already, which are our sub_trees. We verify those against the `subtree_count`.
@@ -140,7 +144,7 @@ impl DialectNode for CsgOp {
                     match graph.edge(edg).ty.get_type() {
                         Some(ty) => {
                             //Check that its actually a csg tree
-                            if ty != &Ty::CSGTree {
+                            if ty != &Ty::scalar_type(DataType::Csg) {
                                 return Err(OptError::Any {
                                     text: format!(
                                         "Subtree {i} was not of type CSGTree for CSGOp {}",
@@ -263,7 +267,7 @@ impl DialectNode for TreeAccess {
         _typemap: &FlagStore<Ty>,
         graph: &crate::OptGraph,
         _concepts: &ahash::AHashMap<String, vola_ast::csg::CSGConcept>,
-        _csg_defs: &ahash::AHashMap<String, CSGNodeDef>,
+        _csg_defs: &ahash::AHashMap<String, CsgDef>,
     ) -> Result<Option<Ty>, OptError> {
         //We know the expected signature. Just check each input
 

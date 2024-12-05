@@ -1,4 +1,3 @@
-use ahash::AHashMap;
 /*
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
@@ -6,6 +5,8 @@ use ahash::AHashMap;
  *
  * 2024 Tendsin Mende
  */
+
+use ahash::AHashMap;
 use rvsdg::{
     edge::{InportLocation, InputType, OutportLocation, OutputType},
     region::RegionLocation,

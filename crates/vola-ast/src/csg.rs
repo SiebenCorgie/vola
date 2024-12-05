@@ -84,6 +84,6 @@ pub struct ImplBlock {
     ///The concept on which we implement
     pub concept: Ident,
     ///(Re)naming of the concepts input argument.
-    pub concept_arg_naming: SmallVec<[Ident; 1]>,
+    pub concept_arg_name: Ident,
     pub block: Block,
 }
