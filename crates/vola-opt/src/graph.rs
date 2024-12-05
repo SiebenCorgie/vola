@@ -34,6 +34,7 @@ use vola_common::Span;
 use crate::OptGraph;
 
 pub(crate) mod attribute_copy;
+pub(crate) mod auxiliary;
 pub(crate) mod convention;
 pub(crate) mod impl_utils;
 pub(crate) mod splat_ty;

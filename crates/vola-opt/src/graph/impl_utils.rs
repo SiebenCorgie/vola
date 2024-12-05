@@ -12,10 +12,7 @@ use rvsdg::{
     util::unroll::UnrollError,
     NodeRef, SmallColl,
 };
-use vola_ast::{
-    common::Ident,
-    csg::{CSGNodeDef, CSGNodeTy},
-};
+use vola_ast::common::Ident;
 use vola_common::Span;
 
 use crate::{

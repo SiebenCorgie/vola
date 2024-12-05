@@ -11,7 +11,7 @@
 use std::ops::Neg;
 
 use crate::{
-    common::Ty,
+    common::{DataType, Shape, Ty},
     imm::{ImmMatrix, ImmScalar, ImmVector},
     DialectNode, OptError, OptNode,
 };
@@ -137,21 +137,33 @@ impl BinaryArith {
 
                 match (&sig[0], &sig[1]) {
                     //In that case, use the vector as return type
-                    (Ty::Vector { width: _ }, Ty::Scalar) => Ok(Some(sig[0].clone())),
+                    (
+                        Ty::Shaped {
+                            ty: DataType::Real,
+                            shape: Shape::Vec { width: _ },
+                        },
+                        &Ty::SCALAR_REAL,
+                    ) => Ok(Some(sig[0].clone())),
                     //In that case, we return the same-sized
                     //matrix
                     (
-                        Ty::Matrix {
-                            width: _,
-                            height: _,
+                        Ty::Shaped {
+                            ty: DataType::Real,
+                            shape: Shape::Matrix { .. },
                         },
-                        Ty::Scalar,
+                        &Ty::SCALAR_REAL,
                     ) => Ok(Some(sig[0].clone())),
                     (
-                        Ty::Vector { width: vecwidth },
-                        Ty::Matrix {
-                            width: num_columns,
-                            height: _,
+                        Ty::Shaped {
+                            ty: DataType::Real,
+                            shape: Shape::Vec { width: vecwidth },
+                        },
+                        Ty::Shaped {
+                            ty: DataType::Real,
+                            shape:
+                                Shape::Matrix {
+                                    width: num_columns, ..
+                                },
                         },
                     ) => {
                         //NOTE: we can only do that, if the Vector::width
@@ -167,11 +179,17 @@ impl BinaryArith {
                         }
                     }
                     (
-                        Ty::Matrix {
-                            width: num_columns,
-                            height: _,
+                        Ty::Shaped {
+                            ty: DataType::Real,
+                            shape:
+                                Shape::Matrix {
+                                    width: num_columns, ..
+                                },
                         },
-                        Ty::Vector { width: vecwidth },
+                        Ty::Shaped {
+                            ty: DataType::Real,
+                            shape: Shape::Vec { width: vecwidth },
+                        },
                     ) => {
                         //Similar to above.
                         if num_columns != vecwidth {
@@ -210,7 +228,7 @@ impl DialectNode for BinaryArith {
         _typemap: &rvsdg::attrib::FlagStore<Ty>,
         graph: &crate::OptGraph,
         _concepts: &ahash::AHashMap<String, vola_ast::csg::CSGConcept>,
-        _csg_defs: &ahash::AHashMap<String, vola_ast::csg::CSGNodeDef>,
+        _csg_defs: &ahash::AHashMap<String, vola_ast::csg::CsgDef>,
     ) -> Result<Option<Ty>, OptError> {
         //For all WKOps we first collect all inputs, then let the op check itself.
         // For now we already bail if any type is unset, since we currently don't have any ops that
@@ -351,7 +369,7 @@ impl DialectNode for UnaryArith {
         _typemap: &rvsdg::attrib::FlagStore<Ty>,
         graph: &crate::OptGraph,
         _concepts: &ahash::AHashMap<String, vola_ast::csg::CSGConcept>,
-        _csg_defs: &ahash::AHashMap<String, vola_ast::csg::CSGNodeDef>,
+        _csg_defs: &ahash::AHashMap<String, vola_ast::csg::CsgDef>,
     ) -> Result<Option<Ty>, OptError> {
         let input_ty = if let Some(edg) = &self.inputs.edge {
             //resolve if there is a type set
@@ -384,8 +402,11 @@ impl DialectNode for UnaryArith {
             | UnaryArithOp::Ceil
             | UnaryArithOp::Floor => {
                 match input_ty {
-                    Ty::Scalar => {}
-                    Ty::Vector { .. } => {}
+                    Ty::SCALAR_REAL => {}
+                    Ty::Shaped {
+                        ty: DataType::Real,
+                        shape: Shape::Vec { .. },
+                    } => {}
                     _ => {
                         return Err(OptError::Any {
                             text: format!(

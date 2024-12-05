@@ -17,7 +17,7 @@ use rvsdg_viewer::{Color, View};
 use vola_common::Span;
 
 use crate::{
-    common::Ty,
+    common::{DataType, Shape, Ty},
     imm::{ImmScalar, ImmVector},
     DialectNode, OptError, OptNode,
 };
@@ -73,7 +73,7 @@ impl DialectNode for Trig {
         _typemap: &rvsdg::attrib::FlagStore<Ty>,
         graph: &crate::OptGraph,
         _concepts: &ahash::AHashMap<String, vola_ast::csg::CSGConcept>,
-        _csg_defs: &ahash::AHashMap<String, vola_ast::csg::CSGNodeDef>,
+        _csg_defs: &ahash::AHashMap<String, vola_ast::csg::CsgDef>,
     ) -> Result<Option<Ty>, OptError> {
         let input_ty = if let Some(edg) = &self.inputs.edge {
             //resolve if there is a type set
@@ -88,8 +88,11 @@ impl DialectNode for Trig {
         };
 
         match input_ty {
-            Ty::Scalar => {}
-            Ty::Vector { .. } => {}
+            Ty::SCALAR_REAL => {}
+            Ty::Shaped {
+                ty: DataType::Real,
+                shape: Shape::Vec { .. },
+            } => {}
             _ => {
                 return Err(OptError::Any {
                     text: format!(

@@ -17,11 +17,11 @@ use rvsdg::{
     SmallColl,
 };
 use rvsdg_viewer::{Color, View};
-use vola_ast::csg::{CSGConcept, CSGNodeDef};
+use vola_ast::csg::{CSGConcept, CsgDef};
 use vola_common::Span;
 
 use crate::{
-    common::Ty,
+    common::{DataType, Shape, Ty},
     imm::{ImmScalar, ImmVector},
     DialectNode, OptError, OptGraph, OptNode,
 };
@@ -288,7 +288,7 @@ impl BuildinOp {
                     });
                 }
 
-                Ok(Some(Ty::Scalar))
+                Ok(Some(Ty::SCALAR_REAL))
             }
             Self::Cross => {
                 if sig.len() != 2 {
@@ -322,7 +322,10 @@ impl BuildinOp {
                     });
                 }
                 match &sig[0] {
-                    Ty::Vector { .. } => {}
+                    Ty::Shaped {
+                        ty: DataType::Real,
+                        shape: Shape::Vec { width: _ },
+                    } => {}
                     _ => {
                         return Err(OptError::Any {
                             text: format!(
@@ -334,7 +337,7 @@ impl BuildinOp {
                 }
 
                 //seems to be alright, return scalar
-                Ok(Some(Ty::Scalar))
+                Ok(Some(Ty::SCALAR_REAL))
             }
 
             Self::SquareRoot => {
@@ -344,8 +347,11 @@ impl BuildinOp {
                     });
                 }
                 match &sig[0] {
-                    Ty::Scalar => Ok(Some(Ty::Scalar)),
-                    Ty::Vector { width } => Ok(Some(Ty::Vector { width: *width })),
+                    &Ty::SCALAR_REAL => Ok(Some(Ty::SCALAR_REAL)),
+                    Ty::Shaped {
+                        ty: DataType::Real,
+                        shape: Shape::Vec { width },
+                    } => Ok(Some(Ty::vector_type(DataType::Real, *width))),
                     _ => {
                         return Err(OptError::Any {
                             text: format!(
@@ -363,8 +369,11 @@ impl BuildinOp {
                     });
                 }
                 match &sig[0] {
-                    Ty::Scalar => Ok(Some(Ty::Scalar)),
-                    Ty::Vector { width } => Ok(Some(Ty::Vector { width: *width })),
+                    &Ty::SCALAR_REAL => Ok(Some(Ty::SCALAR_REAL)),
+                    Ty::Shaped {
+                        ty: DataType::Real,
+                        shape: Shape::Vec { width },
+                    } => Ok(Some(Ty::vector_type(DataType::Real, *width))),
                     _ => {
                         return Err(OptError::Any {
                             text: format!("Exp expects operands of type scalar, got {:?}", sig[0]),
@@ -404,8 +413,12 @@ impl BuildinOp {
                     });
                 }
                 match (&sig[0], &sig[1], &sig[2]) {
-                    (Ty::Scalar, Ty::Scalar, Ty::Scalar) => {},
-                    (Ty::Vector{width: w0}, Ty::Vector{width: w1}, Ty::Vector{width: w2}) => {
+                    (&Ty::SCALAR_REAL, &Ty::SCALAR_REAL, &Ty::SCALAR_REAL) => {},
+                    (
+                        Ty::Shaped{ty: DataType::Real, shape: Shape::Vec{width: w0}},
+                        Ty::Shaped{ty: DataType::Real, shape: Shape::Vec{width: w1}},
+                        Ty::Shaped{ty: DataType::Real, shape: Shape::Vec{width: w2}}
+                    ) => {
                         if w0 != w1 || w0 != w2{
                             return Err(OptError::Any {
                                 text: format!("{:?} expects operands of type scalar or vector (of equal width), got {:?}", self, sig),
@@ -481,7 +494,7 @@ impl DialectNode for Buildin {
         _typemap: &FlagStore<Ty>,
         graph: &OptGraph,
         _concepts: &AHashMap<String, CSGConcept>,
-        _csg_defs: &AHashMap<String, CSGNodeDef>,
+        _csg_defs: &AHashMap<String, CsgDef>,
     ) -> Result<Option<Ty>, OptError> {
         //For all WKOps we first collect all inputs, then let the op check itself.
         // For now we already bail if any type is unset, since we currently don't have any ops that

@@ -87,3 +87,15 @@ pub struct ImplBlock {
     pub concept_arg_name: Ident,
     pub block: Block,
 }
+
+impl ImplBlock {
+    pub fn head_span(&self) -> Span {
+        Span {
+            file: self.span.file.clone(),
+            from: self.span.from,
+            to: self.block.span.from,
+            byte_start: self.span.byte_start,
+            byte_end: self.block.span.byte_start,
+        }
+    }
+}

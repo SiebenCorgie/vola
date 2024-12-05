@@ -10,7 +10,7 @@ use rvsdg::{edge::OutportLocation, smallvec::smallvec, SmallColl};
 use vola_ast::{
     alge::{Expr, ExprTy},
     common::Block,
-    csg::CSGNodeTy,
+    csg::CsgTy,
 };
 use vola_common::{ariadne::Label, error::error_reporter, report};
 
@@ -66,7 +66,7 @@ impl<'a> BlockBuilder<'a> {
                         ),
                     };
                     if let Some(localcsgty) = self.opt.typemap.get(&localcsg.port.into()) {
-                        if localcsgty != &Ty::CSGTree {
+                        if localcsgty != &Ty::CSG {
                             report(
                                 error_reporter(err.clone(), tree.span.clone())
                                     .with_label(
@@ -105,7 +105,7 @@ impl<'a> BlockBuilder<'a> {
                 //Must be an entity call, or a field call. Try to find an entity with that name, and make
                 // sure the parameter count matches the entity
                 if let Some(csgdef) = self.opt.csg_node_defs.get(&c.ident.0) {
-                    if csgdef.ty != CSGNodeTy::Entity {
+                    if csgdef.ty != CsgTy::Entity {
                         //Is not an entity definition
                         let err = OptError::Any {
                             text: format!("{} is not an entity", c.ident.0),
@@ -155,19 +155,23 @@ impl<'a> BlockBuilder<'a> {
                         .unwrap();
                     Ok(opnode)
                 } else {
-                    //Is not defined as csg_op, so try to find a field def with that name
-
-                    if let Some(fdef) = self.opt.field_def.get(&c.ident.0).cloned() {
+                    //Is not defined as csg_op, so try to find a function that returns a CSG with that name
+                    if let Some(fdef) = self.opt.functions.get(&c.ident.0).cloned() {
                         //In the case that we have an field definition, import the field definition as
                         //context variable, and call it
 
-                        if fdef.input_signature.len() != c.args.len() {
+                        if fdef.args.len() != c.args.len() {
                             return Err(OptError::report_argument_missmatch(
                                 &fdef.span,
-                                fdef.input_signature.len(),
+                                fdef.args.len(),
                                 &c.span,
                                 c.args.len(),
                             ));
+                        }
+
+                        //make sure this function returns a csg
+                        if fdef.retty != Ty::CSG {
+                            return Err(OptError::Any { text: format!("Cannot call {} as a CSG, because it returns {}. Should return a Csg value", fdef.name.0, fdef.retty) });
                         }
 
                         //build the apply node and early return
@@ -210,10 +214,10 @@ impl<'a> BlockBuilder<'a> {
                 }
             }
             ExprTy::ScopedCall(sc) => {
+                //Scoped calls can only be to operations/entities, by definition.
                 let subcount = sc.blocks.len();
-
                 if let Some(opdef) = self.opt.csg_node_defs.get(&sc.call.ident.0) {
-                    if opdef.ty == CSGNodeTy::Operation {
+                    if opdef.ty == CsgTy::Operation {
                         //found an operation with that name. So make sure the parameter count matches
                         if opdef.args.len() != sc.call.args.len() {
                             return Err(OptError::report_argument_missmatch(

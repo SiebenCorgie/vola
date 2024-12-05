@@ -1,7 +1,3 @@
-use vola_ast::VolaAst;
-
-use crate::{OptError, Optimizer};
-
 /*
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
@@ -9,16 +5,23 @@ use crate::{OptError, Optimizer};
  *
  * 2024 Tendsin Mende
  */
+use crate::{OptError, Optimizer};
+use vola_ast::{AstEntry, TopLevelNode, VolaAst};
+mod ast_to_graph;
+mod block_build;
+mod expr_build;
+mod unresolved;
 
 impl Optimizer {
     ///Adds a [VolaAst] to the optimizer. Might emit errors if the
     /// semantic analysis fails immediately while adding.
     pub fn add_ast(&mut self, ast: VolaAst) -> Result<(), OptError> {
-        //NOTE we first add all def nodes, since those don't depend on anything else, and without those
-        // some of the other nodes might not build, even though they could.
-        //
-        // After that we add all impl-blocks, since they only depend on the defs,
-        // then all field-def, since they need the impl-blocks, and last are all exportfn.
+        //Interning the ast works in three steps:
+        // 1. Serialize all entry-points into the graph
+        //    For any function-like _call_ insert a unresolved node
+        // 2. Launche resolve pass, that finds, all inter-procedurale calls. We do this based on the _at some point_
+        //    inserted CsgDefs/impl-blocks
+        // 3. Launch initial type-resolver.
 
         #[cfg(feature = "profile")]
         let ast_add_start = std::time::Instant::now();
@@ -28,60 +31,47 @@ impl Optimizer {
 
         let mut errors = Vec::with_capacity(0);
 
-        //NOTE yes collecting into a big'ol Vec all the time is kinda wasteful, but since
-        // we use `self` in the filter, we can't just connect multiple filter_maps :O .
+        //NOTE: we first inter all defines, then the actual code.
+        //      needed so we can already infer some basic stuff at interning time.
+        for entry in &ast.entries {
+            let TopLevelNode {
+                span,
+                ct_args,
+                entry,
+            } = entry.clone();
+            let result = match entry {
+                AstEntry::Concept(c) => self.add_concept(span, ct_args, c),
+                AstEntry::CsgDef(def) => self.add_csgdef(span, ct_args, def),
+                _ => Ok(()),
+            };
 
-        //concept loop
-        let sans_defs = ast
-            .entries
-            .into_iter()
-            .filter_map(|ast_entry| {
-                if ast_entry.entry.is_def_node() {
-                    //Early add def
-                    if let Err(e) = self.add_tl_node(ast_entry) {
-                        errors.push(e);
-                    }
-                    None
-                } else {
-                    Some(ast_entry)
-                }
-            })
-            .collect::<Vec<_>>();
+            if let Err(e) = result {
+                errors.push(e);
+            }
+        }
 
-        //functions
-        let sans_alge_fn = sans_defs
-            .into_iter()
-            .filter_map(|ast_entry| {
-                if ast_entry.entry.is_fn() {
-                    //Early add def
-                    if let Err(e) = self.add_tl_node(ast_entry) {
-                        errors.push(e)
-                    }
-                    None
-                } else {
-                    Some(ast_entry)
-                }
-            })
-            .collect::<Vec<_>>();
+        for entry in ast.entries {
+            let TopLevelNode {
+                span,
+                ct_args,
+                entry,
+            } = entry;
+            let result = match entry {
+                AstEntry::Func(f) => self.add_func(span, ct_args, f),
+                AstEntry::ImplBlock(implblock) => self.add_implblock(span, ct_args, implblock),
+                AstEntry::Module(m) => Err(OptError::Internal(format!(
+                    "Found module, those should be resolved already!"
+                ))),
+                _ => Ok(()),
+            };
 
-        //implblock loop
-        let sans_impl_block = sans_alge_fn
-            .into_iter()
-            .filter_map(|ast_entry| {
-                if ast_entry.entry.is_impl_block() {
-                    //Early add def
-                    if let Err(e) = self.add_tl_node(ast_entry) {
-                        errors.push(e);
-                    }
-                    None
-                } else {
-                    Some(ast_entry)
-                }
-            })
-            .collect::<Vec<_>>();
+            if let Err(e) = result {
+                errors.push(e);
+            }
+        }
 
-        //Should be empty except for comments and stuff?
-        assert!(sans_impl_block.is_empty());
+        todo!("launch resolver");
+        todo!("launch type-resolver");
 
         #[cfg(feature = "profile")]
         println!(

@@ -1,10 +1,10 @@
-/*
- * This Source Code Form is subject to the terms of the Mozilla Public
+/* * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * 2024 Tendsin Mende
  */
+
 //! Module that handles the opt-graph building based on [AST](vola-ast) nodes.
 
 use rvsdg::NodeRef;
@@ -14,6 +14,8 @@ use vola_common::{ariadne::Label, error::error_reporter, report};
 use crate::{error::OptError, Optimizer};
 
 pub(crate) mod block_builder;
+pub(crate) mod function_intern;
+pub(crate) mod implblock;
 
 impl Optimizer {
     ///Adds the top-level node to the optimizer graph. If it applies, it returns a reference to the created node.
@@ -86,7 +88,7 @@ impl Optimizer {
                 }
             }
             AstEntry::ImplBlock(implblock) => self.add_impl_block(implblock).map(|t| Some(t)),
-            AstEntry::Func(algefn) => self.add_alge_fn(algefn).map(|t| Some(t)),
+            AstEntry::Func(algefn) => self.add_fn(algefn).map(|t| Some(t)),
         }
     }
 }

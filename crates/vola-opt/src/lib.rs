@@ -27,26 +27,18 @@
 #![doc(html_logo_url = "https://gitlab.com/tendsinmende/vola/-/raw/main/resources/vola_icon.svg")]
 
 use ahash::AHashMap;
-use alge::{
-    algefn::AlgeFn,
-    implblock::{ConceptImpl, ConceptImplKey},
-};
 use common::Ty;
 use config::Config;
-use csg::{exportfn::ExportFn, fielddef::FieldDef};
+use graph::auxiliary::{Function, Impl, ImplKey};
 use rvsdg::{attrib::FlagStore, Rvsdg};
 
 use rvsdg_viewer::layout::LayoutConfig;
-use vola_ast::{
-    csg::{CSGConcept, CsgDef},
-    VolaAst,
-};
+use vola_ast::csg::{CSGConcept, CsgDef};
 use vola_common::Span;
 
 pub mod alge;
-mod ast;
+//mod ast;
 pub mod common;
-pub mod csg;
 mod error;
 pub use error::OptError;
 mod autodiff;
@@ -73,16 +65,10 @@ pub struct Optimizer {
     pub(crate) csg_node_defs: AHashMap<String, CsgDef>,
 
     ///lookup table for the λ-Nodes of entity implementation of concepts
-    pub(crate) concept_impl: AHashMap<ConceptImplKey, ConceptImpl>,
-
-    ///Lookup table for all λ-Nodes that are export_fn.
-    pub(crate) export_fn: AHashMap<String, ExportFn>,
-
-    ///Lookup table for all field-defs
-    pub(crate) field_def: AHashMap<String, FieldDef>,
+    pub(crate) concept_impl: AHashMap<ImplKey, Impl>,
 
     ///Lookup table for all alge functions.
-    pub(crate) alge_fn: AHashMap<String, AlgeFn>,
+    pub(crate) functions: AHashMap<String, Function>,
 
     ///All known type tags of ports and nodes. Can be used to do type checking, or infer edge types.
     pub typemap: FlagStore<Ty>,
@@ -115,9 +101,7 @@ impl Optimizer {
             concepts: AHashMap::default(),
             csg_node_defs: AHashMap::default(),
             concept_impl: AHashMap::default(),
-            export_fn: AHashMap::default(),
-            field_def: AHashMap::default(),
-            alge_fn: AHashMap::default(),
+            functions: AHashMap::default(),
             typemap: FlagStore::new(),
             span_tags: FlagStore::new(),
             names: FlagStore::new(),

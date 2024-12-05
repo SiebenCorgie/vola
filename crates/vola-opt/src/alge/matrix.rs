@@ -14,7 +14,10 @@ use rvsdg::{
 };
 use rvsdg_viewer::View;
 
-use crate::{common::Ty, DialectNode, OptError, OptNode};
+use crate::{
+    common::{DataType, Shape, Ty},
+    DialectNode, OptError, OptNode,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UnaryMatrixOp {
@@ -62,7 +65,7 @@ impl DialectNode for UnaryMatrix {
         _typemap: &rvsdg::attrib::FlagStore<Ty>,
         graph: &crate::OptGraph,
         _concepts: &ahash::AHashMap<String, vola_ast::csg::CSGConcept>,
-        _csg_defs: &ahash::AHashMap<String, vola_ast::csg::CSGNodeDef>,
+        _csg_defs: &ahash::AHashMap<String, vola_ast::csg::CsgDef>,
     ) -> Result<Option<Ty>, OptError> {
         let input_ty = if let Some(edg) = &self.inputs.edge {
             //resolve if there is a type set
@@ -79,7 +82,10 @@ impl DialectNode for UnaryMatrix {
         match &self.op {
             UnaryMatrixOp::Invert => {
                 match &input_ty {
-                    Ty::Matrix { width, height } => {
+                    Ty::Shaped {
+                        ty: DataType::Real,
+                        shape: Shape::Matrix { width, height },
+                    } => {
                         if width != height {
                             return Err(OptError::Any { text: format!("Inverse operation expects quadratic matrix, got one with width={width} & height={height}") });
                         }

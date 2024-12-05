@@ -7,6 +7,7 @@
  */
 //! # Alge dialect
 //!
+//! Implements anything related to algebraic operations
 
 use ahash::AHashMap;
 use arithmetic::{BinaryArith, BinaryArithOp, UnaryArith, UnaryArithOp};
@@ -24,22 +25,20 @@ use rvsdg::{
 };
 use rvsdg_viewer::Color;
 use trigonometric::{Trig, TrigOp};
-use vola_ast::csg::{CSGConcept, CSGNodeDef};
+use vola_ast::csg::{CSGConcept, CsgDef};
 use vola_common::Span;
 
 use crate::{
     autodiff::AutoDiff,
-    common::Ty,
+    common::{DataType, Shape, Ty},
     error::OptError,
     imm::{ImmMatrix, ImmScalar, ImmVector},
     DialectNode, OptEdge, OptGraph, OptNode, TypeState,
 };
 
-pub mod algefn;
 pub mod arithmetic;
 pub mod buildin;
 pub mod constant_fold;
-pub mod implblock;
 pub mod logical;
 pub mod matrix;
 pub mod relational;
@@ -263,7 +262,7 @@ impl DialectNode for EvalNode {
         _typemap: &FlagStore<Ty>,
         graph: &OptGraph,
         concepts: &AHashMap<String, CSGConcept>,
-        _csg_defs: &AHashMap<String, CSGNodeDef>,
+        _csg_defs: &AHashMap<String, CsgDef>,
     ) -> Result<Option<Ty>, OptError> {
         //For eval nodes, the first type must be a callable, and all following must addher to the called concept's definition
         let mut signature: SmallVec<[Ty; 2]> = SmallVec::new();
@@ -298,16 +297,12 @@ impl DialectNode for EvalNode {
         }
 
         //Build the expected signature type
-        let (expected_signature, output_ty, concept_name): (SmallVec<[Ty; 3]>, Ty, String) =
-            if let Ty::CSGTree = &signature[0] {
+        let (expected_signature, output_ty, concept_name): (Ty, Ty, String) =
+            if Ty::CSG == signature[0] {
                 let concept = concepts.get(self.concept()).unwrap();
 
                 (
-                    concept
-                        .src_ty
-                        .iter()
-                        .map(|astty| astty.clone().into())
-                        .collect(),
+                    concept.src_ty.clone().into(),
                     concept.dst_ty.clone().into(),
                     concept.name.0.clone(),
                 )
@@ -319,30 +314,23 @@ impl DialectNode for EvalNode {
 
         //Now check that the signature (except for the callabel, is the one we expect. If so, return the output_ty)
         let argcount = signature.len() - 1;
-        if argcount != expected_signature.len() {
+        if argcount != 1 {
             return Err(OptError::Any {
                 text: format!(
-                    "Concept {} expected {} arguments, but got {}",
-                    concept_name,
-                    expected_signature.len(),
-                    argcount
+                    "Concept {} expected 1 argument, but got {}",
+                    concept_name, argcount
                 ),
             });
         }
 
-        for i in 0..argcount {
-            //NOTE shift, since the first one is the concept we are calling (by definition).
-            if expected_signature[i] != signature[i + 1] {
-                return Err(OptError::Any {
-                    text: format!(
-                        "Concept {} expected {}-th argument to be {:?}, but was {:?}",
-                        concept_name,
-                        i,
-                        expected_signature[i],
-                        signature[i + 1]
-                    ),
-                });
-            }
+        //NOTE shift, since the first one is the concept we are calling (by definition).
+        if expected_signature != signature[1] {
+            return Err(OptError::Any {
+                text: format!(
+                    "Concept {} expected argument to be of type {:?}, but was {:?}",
+                    concept_name, expected_signature, signature[1]
+                ),
+            });
         }
 
         //If we made it till here, we actually passed, therfore return the right type
@@ -401,7 +389,7 @@ impl DialectNode for Construct {
         _typemap: &FlagStore<Ty>,
         graph: &OptGraph,
         _concepts: &AHashMap<String, CSGConcept>,
-        _csg_defs: &AHashMap<String, CSGNodeDef>,
+        _csg_defs: &AHashMap<String, CsgDef>,
     ) -> Result<Option<Ty>, OptError> {
         //For the list constructor, we check that all inputs are of the same (algebraic) type, and then derive the
         // algebraic super(?)-type. So a list of scalars becomes a vector, a list of vectors a matrix, and a list of
@@ -441,26 +429,45 @@ impl DialectNode for Construct {
         //Passed the equality check, therefore derive next list->Algebraic type
         let listlen = signature.len();
         match &signature[0] {
-            Ty::Scalar => Ok(Some(Ty::Vector { width: listlen })),
-            //NOTE:
-            // This creates a column-major matrix. So each vector is a _column_ of this matrix. This is somewhat unintuitive
-            // since maths do it the other way around, but glsl / spirv do it like that. So we keep that convention
-            Ty::Vector { width } => Ok(Some(Ty::Matrix {
-                width: listlen,
-                height: *width,
-            })),
-            Ty::Matrix { width, height } => {
-                let mut tensor_sizes = SmallVec::new();
-                tensor_sizes.push(*width);
-                tensor_sizes.push(*height);
-                tensor_sizes.push(listlen);
-                Ok(Some(Ty::Tensor { dim: tensor_sizes }))
-            }
-            Ty::Tensor { dim } => {
-                let mut dim = dim.clone();
-                dim.push(listlen);
-                Ok(Some(Ty::Tensor { dim }))
-            }
+            Ty::Shaped {
+                ty: DataType::Real,
+                shape,
+            } => match &shape {
+                Shape::Scalar => Ok(Some(Ty::vector_type(DataType::Real, listlen))),
+                //NOTE:
+                // This creates a column-major matrix. So each vector is a _column_ of this matrix. This is somewhat unintuitive
+                // since maths do it the other way around, but glsl / spirv do it like that. So we keep that convention
+                Shape::Vec { width } => Ok(Some(Ty::shaped(
+                    DataType::Real,
+                    Shape::Matrix {
+                        width: listlen,
+                        height: *width,
+                    },
+                ))),
+                Shape::Matrix { width, height } => {
+                    let mut tensor_sizes = SmallVec::new();
+                    tensor_sizes.push(*width);
+                    tensor_sizes.push(*height);
+                    tensor_sizes.push(listlen);
+                    Ok(Some(Ty::shaped(
+                        DataType::Real,
+                        Shape::Tensor {
+                            sizes: tensor_sizes,
+                        },
+                    )))
+                }
+                Shape::Tensor { sizes } => {
+                    let mut dim = sizes.clone();
+                    dim.push(listlen);
+                    Ok(Some(Ty::shaped(
+                        DataType::Real,
+                        Shape::Tensor { sizes: dim },
+                    )))
+                }
+                _ => Err(OptError::TypeDeriveError {
+                    text: format!("Cannot construct list from {} elements", signature[0]),
+                }),
+            },
             _ => Err(OptError::TypeDeriveError {
                 text: format!("Cannot construct \"List\" from \"{}\"", signature[0]),
             }),
@@ -574,7 +581,7 @@ impl DialectNode for ConstantIndex {
         _typemap: &FlagStore<Ty>,
         graph: &OptGraph,
         _concepts: &AHashMap<String, CSGConcept>,
-        _csg_defs: &AHashMap<String, CSGNodeDef>,
+        _csg_defs: &AHashMap<String, CsgDef>,
     ) -> Result<Option<Ty>, OptError> {
         if let Some(edg) = self.input.edge {
             //List access can only be done on algebraic types. The type can decide itself if it fits the access pattern.

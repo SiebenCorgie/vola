@@ -225,6 +225,7 @@ impl Display for Ty {
 }
 
 impl Ty {
+    pub const SCALAR_BOOL: Self = Self::scalar_type(DataType::Bool);
     pub const SCALAR_REAL: Self = Self::Shaped {
         ty: DataType::Real,
         shape: Shape::Scalar,
@@ -238,10 +239,28 @@ impl Ty {
         shape: Shape::Scalar,
     };
 
-    pub fn scalar_type(data_ty: DataType) -> Self {
+    pub const fn shaped(data_ty: DataType, shape: Shape) -> Self {
+        Self::Shaped { ty: data_ty, shape }
+    }
+
+    pub const fn scalar_type(data_ty: DataType) -> Self {
         Self::Shaped {
             ty: data_ty,
             shape: Shape::Scalar,
+        }
+    }
+
+    pub const fn vector_type(data_ty: DataType, width: usize) -> Self {
+        Self::Shaped {
+            ty: data_ty,
+            shape: Shape::Vec { width },
+        }
+    }
+
+    pub const fn matrix_type(data_ty: DataType, width: usize, height: usize) -> Self {
+        Self::Shaped {
+            ty: data_ty,
+            shape: Shape::Matrix { width, height },
         }
     }
 

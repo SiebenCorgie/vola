@@ -15,7 +15,7 @@ use rvsdg_viewer::View;
 use vola_common::Span;
 
 use crate::{
-    common::Ty,
+    common::{DataType, Ty},
     imm::{ImmBool, ImmNat, ImmScalar},
     DialectNode, OptError, OptNode,
 };
@@ -71,7 +71,7 @@ impl DialectNode for BinaryRel {
         _typemap: &rvsdg::attrib::FlagStore<Ty>,
         graph: &crate::OptGraph,
         _concepts: &ahash::AHashMap<String, vola_ast::csg::CSGConcept>,
-        _csg_defs: &ahash::AHashMap<String, vola_ast::csg::CSGNodeDef>,
+        _csg_defs: &ahash::AHashMap<String, vola_ast::csg::CsgDef>,
     ) -> Result<Option<Ty>, OptError> {
         let t0 = if let Some(edg) = &self.inputs[0].edge {
             //resolve if there is a type set
@@ -107,7 +107,7 @@ impl DialectNode for BinaryRel {
         }
 
         match &t0{
-            Ty::Nat | Ty::Scalar  =>  Ok(Some(Ty::Bool)),
+            &Ty::SCALAR_INT | &Ty::SCALAR_REAL => Ok(Some(Ty::scalar_type(DataType::Bool))),
             any => {
                 Err(OptError::Any { text: format!("Cannot use comperator {:?} on {}. Consider breaking it down to either a simple scalar or natural value", self.op, any) })
             }

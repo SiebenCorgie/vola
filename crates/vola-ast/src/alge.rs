@@ -7,7 +7,7 @@
  */
 //! The Algebraic AST
 
-use std::fmt::Display;
+use std::{arch::asm, fmt::Display};
 
 use crate::{
     common::{Block, Branch, Call, Ident, Literal, Ty, TypedIdent},
@@ -197,4 +197,16 @@ pub struct Func {
     pub args: SmallVec<[TypedIdent; 3]>,
     pub return_type: Ty,
     pub block: Block,
+}
+
+impl Func {
+    pub fn head_span(&self) -> Span {
+        Span {
+            file: self.span.file.clone(),
+            from: self.span.from,
+            to: self.block.span.from,
+            byte_start: self.span.byte_start,
+            byte_end: self.block.span.byte_start,
+        }
+    }
 }

@@ -63,7 +63,7 @@ impl DialectNode for UnaryBool {
         _typemap: &rvsdg::attrib::FlagStore<Ty>,
         graph: &crate::OptGraph,
         _concepts: &ahash::AHashMap<String, vola_ast::csg::CSGConcept>,
-        _csg_defs: &ahash::AHashMap<String, vola_ast::csg::CSGNodeDef>,
+        _csg_defs: &ahash::AHashMap<String, vola_ast::csg::CsgDef>,
     ) -> Result<Option<Ty>, OptError> {
         let input_ty = if let Some(edg) = &self.inputs.edge {
             //resolve if there is a type set
@@ -183,7 +183,7 @@ impl DialectNode for BinaryBool {
         _typemap: &rvsdg::attrib::FlagStore<Ty>,
         graph: &crate::OptGraph,
         _concepts: &ahash::AHashMap<String, vola_ast::csg::CSGConcept>,
-        _csg_defs: &ahash::AHashMap<String, vola_ast::csg::CSGNodeDef>,
+        _csg_defs: &ahash::AHashMap<String, vola_ast::csg::CsgDef>,
     ) -> Result<Option<Ty>, OptError> {
         let t0 = if let Some(edg) = &self.inputs[0].edge {
             //resolve if there is a type set
@@ -219,7 +219,7 @@ impl DialectNode for BinaryBool {
         }
 
         match t0{
-            Ty::Bool  =>  Ok(Some(Ty::Bool)),
+            Ty::SCALAR_BOOL  =>  Ok(Some(Ty::SCALAR_BOOL)),
             any => {
                 Err(OptError::Any { text: format!("Cannot use comperator {:?} on {}. Consider breaking it down into a single bool value", self.op, any) })
             }
