@@ -29,11 +29,15 @@ use vola_ast::csg::{CSGConcept, CsgDef};
 use vola_common::Span;
 
 use crate::{
-    autodiff::AutoDiff,
+    //autodiff::AutoDiff,
     common::{DataType, Shape, Ty},
     error::OptError,
     imm::{ImmMatrix, ImmScalar, ImmVector},
-    DialectNode, OptEdge, OptGraph, OptNode, TypeState,
+    DialectNode,
+    OptEdge,
+    OptGraph,
+    OptNode,
+    TypeState,
 };
 
 pub mod arithmetic;
@@ -135,7 +139,7 @@ impl OptNode {
                 UnaryMatrix::new(UnaryMatrixOp::Invert),
                 Span::empty(),
             )),
-            "diff" => Some(OptNode::new(AutoDiff::default(), Span::empty())),
+            //"diff" => Some(OptNode::new(AutoDiff::default(), Span::empty())),
             _ => None,
         }
     }

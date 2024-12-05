@@ -70,6 +70,10 @@ impl Optimizer {
             }
         }
 
+        if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("DUMP_AFTER_INTERN").is_ok() {
+            self.push_debug_state("AST interned");
+        }
+
         todo!("launch resolver");
         todo!("launch type-resolver");
 

@@ -12,16 +12,9 @@ use rvsdg::{region::RegionLocation, SmallColl};
 impl Optimizer {
     ///Recursively inlines any apply-node thats _within_ a field_export.
     pub fn inline_field_exports(&mut self) -> Result<(), OptError> {
-        let keys = self
-            .export_fn
-            .keys()
-            .cloned()
-            .collect::<SmallColl<String>>();
         let mut errs = SmallColl::new();
-        for exp in keys {
-            if let Err(e) = self.inline_export(&exp) {
-                errs.push(e);
-            }
+        for exp in self.exported_functions() {
+            self.inline_region(exp)?;
         }
 
         if std::env::var("VOLA_DUMP_ALL").is_ok()
@@ -35,10 +28,6 @@ impl Optimizer {
         } else {
             Ok(())
         }
-    }
-
-    pub fn inline_export(&mut self, export: &str) -> Result<(), OptError> {
-        self.inline_region(self.export_fn.get(export).unwrap().lambda_region)
     }
 
     //Recursive helper that explores all Apply nodes, and inlines their call-defs base on our [convention](Optimizer::should_inline_apply), before

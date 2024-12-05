@@ -77,6 +77,9 @@ impl Optimizer {
                 Ok(opnode)
             }
             ExprTy::Call(c) => {
+                //Try to build a call-like node, if that doesn't work,
+                //defere with a UnresolvedCall node
+
                 //Deffer call resolution by building all arg expression, then inserting a "UnresolvedCall"
                 //node
                 let args: SmallVec<_> = c
@@ -85,22 +88,36 @@ impl Optimizer {
                     .map(|arg| self.build_expr(arg, region, ctx))
                     .collect::<Result<SmallColl<_>, OptError>>()?;
 
-                let ucall = self
-                    .graph
-                    .on_region(&region, |reg| {
-                        let (usolev, _) = reg
-                            .connect_node(
-                                OptNode::new(
-                                    UnresolvedCall::new_with_args(c.ident.0.clone(), args.len()),
-                                    c.span.clone(),
-                                ),
-                                &args,
-                            )
-                            .unwrap();
-                        usolev.output(0)
-                    })
-                    .unwrap();
-                Ok(ucall)
+                let call = if let Some(parsed_opt) = OptNode::try_parse(&c.ident.0) {
+                    self.graph
+                        .on_region(&region, |reg| {
+                            let (n, _) = reg
+                                .connect_node(parsed_opt.with_span(c.span.clone()), &args)
+                                .unwrap();
+                            n.output(0)
+                        })
+                        .unwrap()
+                } else {
+                    self.graph
+                        .on_region(&region, |reg| {
+                            let (usolev, _) = reg
+                                .connect_node(
+                                    OptNode::new(
+                                        UnresolvedCall::new_with_args(
+                                            c.ident.0.clone(),
+                                            args.len(),
+                                        ),
+                                        c.span.clone(),
+                                    ),
+                                    &args,
+                                )
+                                .unwrap();
+                            usolev.output(0)
+                        })
+                        .unwrap()
+                };
+
+                Ok(call)
             }
             ExprTy::EvalExpr(evalexpr) => {
                 //for eval, hookup the operand, then all arguments, to a unresolved eval node

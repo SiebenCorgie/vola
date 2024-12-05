@@ -5,7 +5,7 @@
  * 2024 Tendsin Mende
  */
 
-use rvsdg::{NodeRef, SmallColl};
+use rvsdg::{region::RegionLocation, NodeRef, SmallColl};
 use vola_common::Span;
 
 use crate::common::Ty;
@@ -26,8 +26,17 @@ pub struct Impl {
     pub lambda: NodeRef,
     pub subtrees: SmallColl<String>,
     //The argument and its type
-    pub arg: (String, Ty),
+    pub args: SmallColl<(String, Ty)>,
     pub return_type: Ty,
+}
+
+impl Impl {
+    pub fn region(&self) -> RegionLocation {
+        RegionLocation {
+            node: self.lambda,
+            region_index: 0,
+        }
+    }
 }
 
 ///An implemented function
@@ -38,4 +47,13 @@ pub struct Function {
     pub lambda: NodeRef,
     pub args: SmallColl<(String, Ty)>,
     pub return_type: Ty,
+}
+
+impl Function {
+    pub fn region(&self) -> RegionLocation {
+        RegionLocation {
+            node: self.lambda,
+            region_index: 0,
+        }
+    }
 }

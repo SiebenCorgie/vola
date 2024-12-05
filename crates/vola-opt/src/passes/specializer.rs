@@ -16,10 +16,8 @@ use rvsdg::{
 use vola_common::{ariadne::Label, error::error_reporter, report, Span};
 
 use crate::{
-    alge::{implblock::ConceptImplKey, EvalNode},
-    common::Ty,
-    csg::{CsgOp, TreeAccess},
-    OptEdge, OptError, OptNode, Optimizer,
+    alge::EvalNode, common::Ty, csg::CsgOp, graph::auxiliary::ImplKey, OptEdge, OptError, OptNode,
+    Optimizer,
 };
 
 struct SpecCtx {
@@ -36,8 +34,7 @@ impl Optimizer {
     pub fn specialize_all_exports(&mut self) -> Result<(), OptError> {
         let mut errors = SmallColl::new();
         //NOTE: somehow the compiler doesn't get that cloned keys would be okay?
-        let keys = self.export_fn.keys().cloned().collect::<SmallColl<_>>();
-        for exp in keys {
+        for exp in self.exported_functions() {
             //NOTE: defer breaking to _after_ all exports are specialized (or not^^).
             if let Err(e) = self.specialize_export(&exp) {
                 errors.push(e);
@@ -257,9 +254,9 @@ impl Optimizer {
             .op
             .clone();
 
-        let implkey = ConceptImplKey {
-            concept_name: concept_name.clone(),
-            node_name: csg_name.clone(),
+        let implkey = ImplKey {
+            concept: concept_name.clone(),
+            node: csg_name.clone(),
         };
 
         let subtree_count = self
@@ -325,7 +322,7 @@ impl Optimizer {
                     .clone();
                 let subtree_src = self.graph.edge(edg).src().clone();
                 let opt_edge = self.graph.edge(edg).ty.clone();
-                assert!(opt_edge.get_type() == Some(&Ty::CSGTree));
+                assert!(opt_edge.get_type() == Some(&Ty::CSG));
                 self.graph
                     .connect(
                         subtree_src,
@@ -640,7 +637,7 @@ impl Optimizer {
         let csg_tree = if let Some(edg) = self.graph.node(eval).inputs()[0].edge {
             let edge = self.graph.edge(edg);
             match edge.ty.get_type() {
-                Some(Ty::CSGTree) => self
+                Some(&Ty::CSG) => self
                     .graph
                     .find_producer_out(edge.src().clone())
                     .expect("Expected a producer for the eval's CSG-Tree"),
@@ -679,7 +676,7 @@ impl Optimizer {
             if let Some(edg) = inport.edge {
                 let edge = self.graph.edge(edg);
                 match edge.ty.get_type() {
-                    Some(crate::common::Ty::CSGTree) => {
+                    Some(&Ty::CSG) => {
                         let err = OptError::Internal(
                             "Eval wrongly typed argument. Expected anything but CSGTree!"
                                 .to_owned(),

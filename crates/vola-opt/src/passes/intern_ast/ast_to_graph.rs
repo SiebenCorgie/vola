@@ -147,7 +147,7 @@ impl Optimizer {
         )?;
 
         //At this point everything should be hooked-up and typed. therfore we can return
-
+        self.names.set(lambda.into(), format!("fn {}", func.name.0));
         let interned = Function {
             name: func.name.0,
             region_span,
@@ -214,8 +214,24 @@ impl Optimizer {
             return Err(err);
         };
 
-        let mut initial_context = BlockCtx::empty();
+        let csgdef = if let Some(csgdef) = self.csg_node_defs.get(&implblock.dst.0) {
+            csgdef
+        } else {
+            let err = OptError::Any {
+                text: format!("CSG \"{}\" was undefined!", implkey.node),
+            };
+            report(
+                error_reporter(err.clone(), span.clone().into())
+                    .with_label(
+                        Label::new(implblock.head_span()).with_message("For this implementation"),
+                    )
+                    .finish(),
+            );
+            return Err(err);
+        };
 
+        let mut initial_context = BlockCtx::empty();
+        let mut args = SmallColl::new();
         //setup the lambda node accordingly, as well as the block context, then launch the block builder.
         let lambda = self.graph.on_omega_node(|omg| {
             let (lmd, _) = omg.new_function(false, |lmd| {
@@ -230,6 +246,19 @@ impl Optimizer {
                     self.typemap.set(within.into(), Ty::CSG);
                 }
 
+                //setup all implicit variables
+                for arg in &csgdef.args {
+                    let port = lmd.add_argument();
+                    let exisiting = initial_context
+                        .defined_vars
+                        .insert(arg.ident.0.clone(), port);
+                    assert!(exisiting.is_none());
+                    //setup type
+                    self.typemap.set(port.into(), arg.ty.clone().into());
+                    //and push into args collection
+                    args.push((arg.ident.0.clone(), arg.ty.clone().into()));
+                }
+
                 let port = lmd.add_argument();
                 let existing = initial_context
                     .defined_vars
@@ -241,6 +270,8 @@ impl Optimizer {
                 );
                 //Also tag with the correct type already
                 self.typemap.set(port.into(), arg_ty.clone().into());
+                //Push the concept's arg as the last in the row
+                args.push((implblock.concept_arg_name.0.clone(), arg_ty.into()));
 
                 //setup result
                 let result_port = lmd.add_result();
@@ -264,13 +295,18 @@ impl Optimizer {
 
         //At this point everything should be hooked-up and typed. therfore we can return
 
+        self.names.set(
+            lambda.into(),
+            format!("impl {} for {}", implkey.node, implkey.concept),
+        );
+
         let interned = Impl {
             region_span: span,
             def_span,
             concept: implblock.concept.0.clone(),
             lambda,
             subtrees: implblock.operands.into_iter().map(|a| a.0).collect(),
-            arg: (implblock.concept_arg_name.0, arg_ty.into()),
+            args,
             return_type: return_ty.into(),
         };
         self.concept_impl.insert(implkey, interned);

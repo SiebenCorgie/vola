@@ -14,7 +14,8 @@
 use clap::{Parser, ValueEnum};
 use std::path::PathBuf;
 use volac::{
-    backends::{BoxedBackend, Native, Spirv, Wasm},
+    //backends::{BoxedBackend, Native, Spirv, Wasm},
+    backends::StubBackend,
     Target,
 };
 
@@ -63,11 +64,14 @@ fn main() {
     pretty_env_logger::init();
     let args = Args::parse();
 
+    /*
     let backend: BoxedBackend = match args.format {
         Format::Spirv => Box::new(Spirv::new(Target::file(&args.output_name))),
         Format::Native => Box::new(Native::new(Target::file(&args.output_name))),
         Format::WASM => Box::new(Wasm::new(Target::file(&args.output_name))),
     };
+    */
+    let backend = Box::new(StubBackend::default());
 
     //configure volac based on the args and execute
     let mut pipeline = volac::Pipeline {

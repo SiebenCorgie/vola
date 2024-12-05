@@ -18,5 +18,5 @@ mod field_inliner;
 mod imm_scalarizer;
 mod inline_all;
 mod intern_ast;
-mod specializer;
+//mod specializer;
 mod type_derive;

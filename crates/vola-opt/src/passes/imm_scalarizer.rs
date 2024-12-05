@@ -14,7 +14,7 @@ use vola_common::Span;
 
 use crate::{
     alge::Construct,
-    common::Ty,
+    common::{DataType, Ty},
     imm::{ImmMatrix, ImmScalar, ImmVector},
     OptError, OptNode, Optimizer,
 };
@@ -127,7 +127,10 @@ impl Optimizer {
                     )
                     .unwrap();
                 for connection in connections {
-                    reg.ctx_mut().edge_mut(connection).ty.set_type(Ty::Scalar);
+                    reg.ctx_mut()
+                        .edge_mut(connection)
+                        .ty
+                        .set_type(Ty::SCALAR_REAL);
                 }
 
                 node
@@ -164,7 +167,7 @@ impl Optimizer {
             self.graph
                 .edge_mut(edge)
                 .ty
-                .set_type(Ty::Vector { width: vec_width })
+                .set_type(Ty::vector_type(DataType::Real, vec_width))
                 .unwrap();
         }
 

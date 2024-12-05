@@ -5,7 +5,10 @@
  *
  * 2024 Tendsin Mende
  */
-use crate::{autodiff::AutoDiffError, common::Ty};
+use crate::{
+    //autodiff::AutoDiffError,
+    common::Ty,
+};
 use rvsdg::{
     err::GraphError,
     util::{dead_node_elimination::DneError, inline::InlineError, unroll::UnrollError},
@@ -66,9 +69,8 @@ pub enum OptError {
     #[error("Failed to generate identitiy-implementation: {0}")]
     AIIFailed(String),
 
-    #[error(transparent)]
-    AutoDiffError(#[from] AutoDiffError),
-
+    //#[error(transparent)]
+    //AutoDiffError(#[from] AutoDiffError),
     #[error(transparent)]
     UnrollError(#[from] UnrollError),
 }

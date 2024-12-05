@@ -5,14 +5,14 @@
 //EXEC-RES:4.1
 //END-CONFIG
 
-concept Sdf3d: vec3 -> s;
-entity Sphere(rad: s);
+concept Sdf3d: vec3 -> real;
+entity Sphere(rad: real);
 
 impl Sphere for Sdf3d(at){
     length(at) - rad
 }
 
-export myfield(at: vec3){
+export fn myfield(at: vec3) -> real{
     csg s = Sphere(1.0);
 
     eval s.Sdf3d(at)

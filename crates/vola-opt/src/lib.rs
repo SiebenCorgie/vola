@@ -37,11 +37,11 @@ use vola_ast::csg::{CSGConcept, CsgDef};
 use vola_common::Span;
 
 pub mod alge;
-//mod ast;
 pub mod common;
+mod csg;
 mod error;
 pub use error::OptError;
-mod autodiff;
+//mod autodiff;
 pub mod config;
 mod graph;
 pub mod imm;
@@ -143,7 +143,7 @@ impl Optimizer {
         }
 
         let layout_config = LayoutConfig {
-            ignore_dead_node: true,
+            ignore_dead_node: false,
             ..Default::default()
         };
 

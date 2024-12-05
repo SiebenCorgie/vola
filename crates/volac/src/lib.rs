@@ -174,7 +174,8 @@ impl Pipeline {
         }
         //do mandatory type derivation
         opt.type_derive()?;
-        opt.specialize_all_exports()?;
+        todo!("Reimplement Rest lol");
+        //opt.specialize_all_exports()?;
 
         //At this point any used nodes are hooked up. Therfore clean up
         //any unused garbage
@@ -191,7 +192,8 @@ impl Pipeline {
         }
 
         //dispatch autodiff nodes
-        opt.dispatch_autodiff()?;
+        todo!("reimplement autodiff");
+        //opt.dispatch_autodiff()?;
 
         //Call _before-finalize-hook_.
         self.backend.opt_pre_finalize(&mut opt)?;

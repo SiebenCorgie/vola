@@ -22,9 +22,6 @@ use rvsdg::{
 use rvsdg_viewer::Color;
 use vola_ast::{common::Ident, csg::CsgDef};
 
-pub(crate) mod exportfn;
-pub(crate) mod fielddef;
-
 //Macro that implements the "View" trait for an AlgeDialect op
 macro_rules! implViewCsgOp {
     ($opname:ident, $str:expr, $($arg:ident),*) => {
@@ -191,113 +188,5 @@ impl DialectNode for CsgOp {
         }
 
         Ok(Some(output))
-    }
-}
-
-///Access description for a tree.
-#[derive(LangNode, Debug)]
-pub struct TreeAccess {
-    ///The concept that is being called by the description.
-    pub called_concept: String,
-
-    ///Expected signature for this call.
-    pub input_signature: SmallVec<[Ty; 2]>,
-    pub return_type: Ty,
-    #[inputs]
-    pub inputs: SmallVec<[Input; 3]>,
-    #[output]
-    pub output: Output,
-}
-
-impl TreeAccess {
-    pub fn new(called_concept: Ident, signature: SmallVec<[Ty; 2]>, return_type: Ty) -> Self {
-        TreeAccess {
-            called_concept: called_concept.0,
-            inputs: smallvec![Input::default(); signature.len()],
-            return_type,
-            input_signature: signature,
-            output: Output::default(),
-        }
-    }
-    #[allow(unused)]
-    pub fn get_op_edge(&self) -> Option<EdgeRef> {
-        self.inputs[0].edge.clone()
-    }
-    #[allow(unused)]
-    pub fn get_args(&self) -> SmallVec<[Option<EdgeRef>; 3]> {
-        self.inputs[1..]
-            .iter()
-            .map(|arg| arg.edge.clone())
-            .collect()
-    }
-}
-
-implViewCsgOp!(TreeAccess, "TreeAccess({})", called_concept);
-impl DialectNode for TreeAccess {
-    fn dialect(&self) -> &'static str {
-        "csg"
-    }
-
-    fn structural_copy(&self, span: vola_common::Span) -> OptNode {
-        OptNode {
-            span,
-            node: Box::new(TreeAccess {
-                called_concept: self.called_concept.clone(),
-                input_signature: self.input_signature.clone(),
-                return_type: self.return_type.clone(),
-                inputs: smallvec![Input::default(); self.inputs.len()],
-                output: Output::default(),
-            }),
-        }
-    }
-
-    fn is_operation_equal(&self, other: &OptNode) -> bool {
-        //NOTE: Two construct nodes are always equal
-        if let Some(other_cop) = other.try_downcast_ref::<TreeAccess>() {
-            other_cop.called_concept == self.called_concept
-                && other_cop.input_signature == self.input_signature
-                && other_cop.return_type == self.return_type
-        } else {
-            false
-        }
-    }
-
-    fn try_derive_type(
-        &self,
-        _typemap: &FlagStore<Ty>,
-        graph: &crate::OptGraph,
-        _concepts: &ahash::AHashMap<String, vola_ast::csg::CSGConcept>,
-        _csg_defs: &ahash::AHashMap<String, CsgDef>,
-    ) -> Result<Option<Ty>, OptError> {
-        //We know the expected signature. Just check each input
-
-        for i in 0..self.input_signature.len() {
-            if let Some(port) = self.inputs.get(i) {
-                if let Some(edg) = port.edge {
-                    match graph.edge(edg).ty.get_type() {
-                        Some(ty) => {
-                            if ty != &self.input_signature[i] {
-                                return Err(OptError::Any {
-                                    text: format!(
-                                        "Field argument {i} was {:?} but expected {:?}",
-                                        ty, self.input_signature[i]
-                                    ),
-                                });
-                            }
-                        }
-                        None => {
-                            //Not set
-                            return Ok(None);
-                        }
-                    }
-                }
-            } else {
-                //edge not yet set
-                return Ok(None);
-            }
-        }
-
-        //If we are here, all went well, return the actual return type
-        Ok(Some(self.return_type.clone()))
     }
 }
