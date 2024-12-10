@@ -17,16 +17,14 @@
 //! The pass itself just tries to find a fix-point style resolution, which basically comes down to calling try-derive on all _just changed nodes_ till
 //! either all are resolved, or nothing changes and we end in an _unresolved_ state.
 
-use ahash::{AHashMap, AHashSet};
 use rvsdg::{
     edge::{InportLocation, InputType, OutportLocation, OutputType},
     nodes::{ApplyNode, NodeType},
     region::RegionLocation,
-    smallvec::SmallVec,
+    smallvec::{smallvec, SmallVec},
     util::abstract_node_type::AbstractNodeType,
-    NodeRef,
+    NodeRef, SmallColl,
 };
-use rvsdg_viewer::View;
 use vola_common::{ariadne::Label, error::error_reporter, report, Span};
 
 use crate::{
@@ -51,7 +49,41 @@ impl Optimizer {
             self.push_debug_state("pre type derive");
         }
 
-        todo!("reimplement type derive");
+        let mut last_error = None;
+
+        //we first build the topological order of all nodes in Omega, then
+        //we enter eac
+        let toplevel = self.graph.toplevel_region();
+        let topoord = self.graph.topological_order_region(toplevel);
+
+        for node in topoord {
+            if let Err(e) = self.try_node_type_derive(node) {
+                last_error = Some(e);
+            }
+        }
+
+        for implblock in self.concept_impl.values() {
+            if let Err(e) = self.verify_imblblock(implblock) {
+                last_error = Some(e);
+            }
+        }
+
+        for f in self.functions.values() {
+            if let Err(e) = self.verify_fn(f) {
+                last_error = Some(e);
+            }
+        }
+
+        if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("DUMP_POST_TYPE_DERIVE").is_ok()
+        {
+            self.push_debug_state("post type derive");
+        }
+
+        if let Some(err) = last_error {
+            return Err(err);
+        } else {
+            Ok(())
+        }
     }
 
     //Verifies that the implblock has the correct input and output signature set on all edges
@@ -271,7 +303,7 @@ impl Optimizer {
         node: NodeRef,
         apply: &ApplyNode,
         region_src_span: &Span,
-    ) -> Result<Option<Ty>, OptError> {
+    ) -> Result<(Ty, OutportLocation), OptError> {
         #[cfg(feature = "log")]
         log::info!("Type derive Apply node");
 
@@ -345,7 +377,23 @@ impl Optimizer {
                                 ty
                             } else {
                                 //type of argument not yet derived
-                                return Ok(None);
+                                let err = OptError::TypeDeriveError {
+                                    text: format!("argument {i} of this call has no type"),
+                                };
+
+                                if let Some(span) = self.find_span(node.into()) {
+                                    report(
+                                        error_reporter(err.clone(), span.clone())
+                                            .with_label(
+                                                Label::new(span).with_message("for this call"),
+                                            )
+                                            .finish(),
+                                    );
+                                } else {
+                                    report(error_reporter(err.clone(), Span::empty()).finish());
+                                }
+
+                                return Err(err);
                             };
                             apply_sig.push(ty.clone());
                         } else {
@@ -389,7 +437,8 @@ impl Optimizer {
                     }
                 }
                 //If we finished till here, then its all-right
-                Ok(Some(result_type))
+
+                Ok((result_type, node.output(0)))
             } else {
                 let err = OptError::Any {
                     text: format!("apply node's call-edge hat no callable producer."),
@@ -416,7 +465,10 @@ impl Optimizer {
         }
     }
 
-    fn gamma_derive(&mut self, gamma: NodeRef) -> Result<(), OptError> {
+    fn gamma_derive(
+        &mut self,
+        gamma: NodeRef,
+    ) -> Result<SmallColl<(Ty, OutportLocation)>, OptError> {
         //Check that the condional port is a boolean, then
         //map all connected (and used) ports into both regions
         //
@@ -522,13 +574,15 @@ impl Optimizer {
 
         //finally, map all set outport out of the region, and error if either they are not of unified type,
         //or unset, but in use
+        let mut result_sig = SmallColl::default();
         for output in self.graph[gamma].outport_types() {
             let outport = gamma.as_outport_location(output);
             match output {
                 OutputType::ExitVariableOutput(idx) => {
                     if let Some(ty) = self.gamma_unified_type(gamma, idx) {
                         //set the output
-                        self.typemap.set(outport.into(), ty);
+                        self.typemap.set(outport.into(), ty.clone());
+                        result_sig.push((ty, outport));
                     } else {
                         //ignore for unused values
                         if self.graph[outport].edges.len() == 0 {
@@ -607,11 +661,14 @@ impl Optimizer {
                 _ => panic!("Malformed Gamma output: {output:?}"),
             }
         }
-        Ok(())
+        Ok(result_sig)
     }
 
     ///Does theta type derive, assuming that all used inputs are type set.
-    fn theta_type_derive(&mut self, theta: NodeRef) -> Result<(), OptError> {
+    fn theta_type_derive(
+        &mut self,
+        theta: NodeRef,
+    ) -> Result<SmallColl<(Ty, OutportLocation)>, OptError> {
         let theta_span = self.find_span(theta.into()).unwrap_or(Span::empty());
         //at the start, check input types.
         //we must be sure that the loop bounds (input 0 & 1) are natural numbers.
@@ -739,7 +796,8 @@ impl Optimizer {
             return Err(err);
         }
 
-        //now map all results out of the theta
+        //now map all results out of the theta node and build the signature
+        let mut output_sig = SmallColl::default();
         for output in self.graph[theta].outport_types() {
             let result_port = theta.as_outport_location(output);
             let in_region_port = theta.as_inport_location(output.map_to_in_region(0).unwrap());
@@ -763,6 +821,9 @@ impl Optimizer {
                     return Err(err);
                 }
             };
+
+            output_sig.push((result_ty.clone(), result_port));
+
             //result has a type. Find the equivalent argument port, and also make sure that they match.
             let argument_port = if let OutputType::Output(t) = output {
                 OutputType::Argument(t)
@@ -798,62 +859,7 @@ impl Optimizer {
             self.typemap.set(result_port.into(), set_ty);
         }
 
-        Ok(())
-    }
-
-    pub fn try_node_type_derive(
-        &mut self,
-        node: NodeRef,
-    ) -> Result<(Option<Ty>, OutportLocation), OptError> {
-        //gather all inputs and let the node try to resolve itself
-        let payload = match &self.graph.node(node).node_type {
-            NodeType::Simple(s) => {
-                let ty = s.node.try_derive_type(
-                    &self.typemap,
-                    &self.graph,
-                    &self.concepts,
-                    &self.csg_node_defs,
-                );
-
-                (ty?, node.output(0))
-            }
-            NodeType::Apply(a) => {
-                let region_span = self
-                    .find_span(self.graph[node].parent.unwrap().into())
-                    .unwrap_or(Span::empty());
-                let ty = self.try_apply_derive(node, a, &region_span);
-                (ty?, node.output(0))
-            }
-            NodeType::Gamma(_g) => {
-                self.gamma_derive(node)?;
-                let output_port = self.value_producer_port(node).unwrap();
-                let ty = self.find_type(&output_port.into());
-                (ty, node.output(0))
-            }
-            //NOTE: by convention the θ-Node resolves to output 2
-            NodeType::Theta(_t) => {
-                self.theta_type_derive(node)?;
-                let output_port = self.value_producer_port(node).unwrap();
-                let ty = self.find_type(&output_port.into());
-                (ty, output_port)
-            }
-            NodeType::Lambda(_l) => {
-                self.derive_lambda(node)?;
-                //lambdas alwas return a single callable
-                (
-                    Some(Ty::Callable),
-                    node.as_outport_location(OutputType::LambdaDeclaration),
-                )
-            }
-            t => {
-                let err = OptError::Any {
-                    text: format!("Unexpected node type {t} in graph while doing type resolution."),
-                };
-                return Err(err);
-            }
-        };
-
-        Ok(payload)
+        Ok(output_sig)
     }
 
     fn derive_lambda(&mut self, lambda: NodeRef) -> Result<(), OptError> {
@@ -939,6 +945,23 @@ impl Optimizer {
             }
         }
 
+        //declare all λ-decl edges as "callable"
+        self.typemap.set(
+            lambda
+                .as_outport_location(OutputType::LambdaDeclaration)
+                .into(),
+            Ty::Callable,
+        );
+
+        let consumers = self
+            .graph
+            .find_consumer_out(lambda.as_outport_location(OutputType::LambdaDeclaration));
+        for consumer in consumers {
+            let path = self.graph.trace_path(consumer);
+            let t = self.type_path(&path)?;
+            assert_eq!(t, Ty::Callable);
+        }
+
         //now do internal type derivative
         self.derive_region(
             RegionLocation {
@@ -949,6 +972,86 @@ impl Optimizer {
         )?;
 
         Ok(())
+    }
+
+    pub fn try_node_type_derive(
+        &mut self,
+        node: NodeRef,
+    ) -> Result<SmallColl<(Ty, OutportLocation)>, OptError> {
+        //gather input types, those must be present, by definition
+        let mut input_config = SmallColl::default();
+        for input in self.graph.inports(node) {
+            let ty = if let Some(near_type) = self.find_type(&input.into()) {
+                near_type
+            } else {
+                //NOTE: there is this special case, if we _use_ a λ that was not yet type derived.
+                if self.graph.find_producer_inp(input).map(|port| port.output)
+                    == Some(OutputType::LambdaDeclaration)
+                {
+                    Ty::Callable
+                } else {
+                    let err = OptError::TypeDeriveError {
+                        text: format!(
+                        "Argument {} ({node:?}) is not connected, but also not type-set, which is an error",
+                        input.input
+                    ),
+                    };
+                    if let Some(span) = self.find_span(node.into()) {
+                        report(
+                            error_reporter(err.clone(), span.clone())
+                                .with_label(Label::new(span).with_message("here"))
+                                .finish(),
+                        );
+                    } else {
+                        report(error_reporter(err.clone(), Span::empty()).finish());
+                    }
+                    return Err(err);
+                }
+            };
+            input_config.push(ty);
+        }
+
+        //gather all inputs and let the node try to resolve itself
+        let payload: SmallColl<(Ty, OutportLocation)> = match &self.graph.node(node).node_type {
+            NodeType::Simple(s) => {
+                let ty =
+                    s.node
+                        .try_derive_type(&input_config, &self.concepts, &self.csg_node_defs)?;
+                smallvec![(ty, node.output(0))]
+            }
+            NodeType::Apply(a) => {
+                let region_span = self
+                    .find_span(self.graph[node].parent.unwrap().into())
+                    .unwrap_or(Span::empty());
+                let res = self.try_apply_derive(node, a, &region_span)?;
+                smallvec![res]
+            }
+            NodeType::Gamma(_g) => {
+                let result = self.gamma_derive(node)?;
+                result
+            }
+            //NOTE: by convention the θ-Node resolves to output 2
+            NodeType::Theta(_t) => {
+                let result = self.theta_type_derive(node)?;
+                result
+            }
+            NodeType::Lambda(_l) => {
+                self.derive_lambda(node)?;
+                //lambdas alwas return a single callable
+                smallvec![(
+                    Ty::Callable,
+                    node.as_outport_location(OutputType::LambdaDeclaration),
+                )]
+            }
+            t => {
+                let err = OptError::Any {
+                    text: format!("Unexpected node type {t} in graph while doing type resolution."),
+                };
+                return Err(err);
+            }
+        };
+
+        Ok(payload)
     }
 
     ///Derives the type for all live nodes in the region.
@@ -998,8 +1101,8 @@ impl Optimizer {
         let topoord = self.graph.topological_order_region(reg);
 
         for node in topoord {
-            let (type_resolve_try, resolved_port) = match self.try_node_type_derive(node) {
-                Ok(t) => t,
+            let resolved_values = match self.try_node_type_derive(node) {
+                Ok(values) => values,
                 Err(e) => {
                     let span = self.find_span(node.into()).unwrap_or(Span::empty());
                     report(
@@ -1013,39 +1116,46 @@ impl Optimizer {
                 }
             };
 
-            match type_resolve_try {
-                Some(ty) => {
-                    //now assign that type to the nodes's output.
-                    self.typemap.set(resolved_port.into(), ty.clone());
-
-                    //And propagate to all edges
-                    for edg in self.graph[resolved_port].edges.clone().iter() {
-                        if let Err(e) = self.graph[*edg].ty.set_derived_state(ty.clone()) {
-                            if let Some(span) = self.find_span(resolved_port.node.into()) {
-                                report(
-                                    error_reporter(e.clone(), span.clone())
-                                        .with_label(
-                                            Label::new(span.clone()).with_message("On this node"),
-                                        )
-                                        .finish(),
-                                );
-                            } else {
-                                report(error_reporter(e.clone(), Span::empty()).finish());
-                            }
-
-                            return Err(e);
+            for (ty, port) in resolved_values {
+                //typset all edges and ports that are resolved
+                if let Some(old) = self.typemap.set(port.into(), ty.clone()) {
+                    if old != ty {
+                        let err = OptError::TypeDeriveError {
+                            text: format!(
+                                "Type collision, declared as {old:?}, but derived to {ty:?}"
+                            ),
+                        };
+                        if let Some(span) = self.find_span(port.node.into()) {
+                            report(
+                                error_reporter(err.clone(), span.clone())
+                                    .with_label(Label::new(span))
+                                    .with_message(format!("Sould be {old:?}"))
+                                    .finish(),
+                            );
+                        } else {
+                            report(error_reporter(err.clone(), Span::empty()).finish());
                         }
+
+                        return Err(err);
                     }
                 }
-                None => {
-                    //This was a soft error before, but now we assume that it is a hard erro
-                    return Err(OptError::TypeDeriveError {
-                        text: format!(
-                            "Could not derive type for node: {} ({})",
-                            self.graph[node].name(),
-                            node
-                        ),
-                    });
+                //And propagate to all edges
+                for edg in self.graph[port].edges.clone().iter() {
+                    if let Err(e) = self.graph[*edg].ty.set_derived_state(ty.clone()) {
+                        if let Some(span) = self.find_span(port.node.into()) {
+                            report(
+                                error_reporter(e.clone(), span.clone())
+                                    .with_label(
+                                        Label::new(span.clone()).with_message("On this node"),
+                                    )
+                                    .finish(),
+                            );
+                        } else {
+                            report(error_reporter(e.clone(), Span::empty()).finish());
+                        }
+
+                        return Err(e);
+                    }
                 }
             }
         }

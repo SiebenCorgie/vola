@@ -172,10 +172,7 @@ impl Pipeline {
         if self.early_cnf {
             opt.full_graph_cnf()?;
         }
-        //do mandatory type derivation
-        opt.type_derive()?;
-        todo!("Reimplement Rest lol");
-        //opt.specialize_all_exports()?;
+        opt.specialize_all_exports()?;
 
         //At this point any used nodes are hooked up. Therfore clean up
         //any unused garbage
@@ -192,7 +189,7 @@ impl Pipeline {
         }
 
         //dispatch autodiff nodes
-        todo!("reimplement autodiff");
+        println!("reimplement autodiff");
         //opt.dispatch_autodiff()?;
 
         //Call _before-finalize-hook_.

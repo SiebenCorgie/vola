@@ -19,6 +19,7 @@ use rspirv::{
 };
 use rvsdg::smallvec::SmallVec;
 use spirv_grammar_rules::{GrammarRules, Rule};
+use vola_opt::common::{DataType, Shape};
 
 use crate::{passes::EmitCtx, BackendSpirvError};
 
@@ -581,26 +582,32 @@ impl TryFrom<vola_opt::common::Ty> for SpvType {
     fn try_from(value: vola_opt::common::Ty) -> Result<Self, Self::Error> {
         //FIXME: Currently those are all hard coded, since the optimizer currently does not track resolution.
         let res = match value {
-            vola_opt::common::Ty::Void => Self::Void,
-            vola_opt::common::Ty::Nat => Self::Arith(ArithTy {
+            vola_opt::common::Ty::VOID => Self::Void,
+            vola_opt::common::Ty::SCALAR_INT => Self::Arith(ArithTy {
                 base: ArithBaseTy::Integer { signed: false },
                 shape: TyShape::Scalar,
                 resolution: 32,
             }),
 
-            vola_opt::common::Ty::Scalar => Self::Arith(ArithTy {
+            vola_opt::common::Ty::SCALAR_REAL => Self::Arith(ArithTy {
                 base: ArithBaseTy::Float,
                 shape: TyShape::Scalar,
                 resolution: 32,
             }),
-            vola_opt::common::Ty::Vector { width } => Self::Arith(ArithTy {
+            vola_opt::common::Ty::Shaped {
+                ty: DataType::Real,
+                shape: Shape::Vec { width },
+            } => Self::Arith(ArithTy {
                 base: ArithBaseTy::Float,
                 shape: TyShape::Vector {
                     width: width as u32,
                 },
                 resolution: 32,
             }),
-            vola_opt::common::Ty::Matrix { width, height } => Self::Arith(ArithTy {
+            vola_opt::common::Ty::Shaped {
+                ty: DataType::Real,
+                shape: Shape::Matrix { width, height },
+            } => Self::Arith(ArithTy {
                 base: ArithBaseTy::Float,
                 shape: TyShape::Matrix {
                     width: width as u32,
@@ -609,14 +616,17 @@ impl TryFrom<vola_opt::common::Ty> for SpvType {
                 resolution: 32,
             }),
 
-            vola_opt::common::Ty::Tensor { dim } => Self::Arith(ArithTy {
+            vola_opt::common::Ty::Shaped {
+                ty: DataType::Real,
+                shape: Shape::Tensor { sizes },
+            } => Self::Arith(ArithTy {
                 base: ArithBaseTy::Float,
                 shape: TyShape::Tensor {
-                    dim: dim.into_iter().map(|d| d as u32).collect(),
+                    dim: sizes.into_iter().map(|d| d as u32).collect(),
                 },
                 resolution: 32,
             }),
-            vola_opt::common::Ty::Bool => Self::Arith(ArithTy {
+            vola_opt::common::Ty::SCALAR_BOOL => Self::Arith(ArithTy {
                 base: ArithBaseTy::Bool,
                 shape: TyShape::Scalar,
                 resolution: 1,

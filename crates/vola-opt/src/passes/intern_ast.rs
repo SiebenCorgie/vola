@@ -61,7 +61,7 @@ impl Optimizer {
             let result = match entry {
                 AstEntry::Func(f) => self.build_func_block(span, ct_args, f),
                 AstEntry::ImplBlock(implblock) => self.add_implblock(span, ct_args, implblock),
-                AstEntry::Module(m) => Err(OptError::Internal(format!(
+                AstEntry::Module(_m) => Err(OptError::Internal(format!(
                     "Found module, those should be resolved already!"
                 ))),
                 _ => Ok(()),
@@ -76,7 +76,8 @@ impl Optimizer {
             self.push_debug_state("AST interned");
         }
 
-        todo!("launch type-resolver");
+        //do initial type resolving
+        self.type_derive()?;
 
         #[cfg(feature = "profile")]
         println!(

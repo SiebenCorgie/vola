@@ -6,7 +6,6 @@
  * 2024 Tendsin Mende
  */
 
-use ahash::AHashMap;
 use rvsdg::{
     edge::{InputType, OutportLocation, OutputType},
     region::RegionLocation,
@@ -122,7 +121,7 @@ impl Optimizer {
                     CallResult::Call(call_source) => self
                         .graph
                         .on_region(&region, |reg| {
-                            let (call, edges) = reg.call(call_source, &args).unwrap();
+                            let (call, _edges) = reg.call(call_source, &args).unwrap();
                             assert!(
                                 reg.ctx()[call].outputs().len() == 1,
                                 "No multi, or none-result functions supported atm."
@@ -408,8 +407,8 @@ impl Optimizer {
             .graph
             .on_region(&region, |reg| {
                 let (g, (if_idx, else_idx)) = reg.new_decission(|g| {
-                    let (bidx_if, _) = g.new_branch(|b, idx| {});
-                    let (bidx_else, _) = g.new_branch(|b, idx| {});
+                    let (bidx_if, _) = g.new_branch(|_b, _idx| {});
+                    let (bidx_else, _) = g.new_branch(|_b, _idx| {});
                     (bidx_if, bidx_else)
                 });
                 //connect the criterion

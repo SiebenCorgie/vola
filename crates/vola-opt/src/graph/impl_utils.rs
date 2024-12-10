@@ -6,17 +6,13 @@
  * 2024 Tendsin Mende
  */
 
-use ahash::AHashMap;
 use rvsdg::{
     edge::{InportLocation, InputType, LangEdge, OutportLocation, OutputType},
     region::RegionLocation,
     util::unroll::UnrollError,
     NodeRef, SmallColl,
 };
-use vola_ast::{
-    common::Ident,
-    csg::{CsgDef, CsgTy},
-};
+use vola_ast::csg::{CsgDef, CsgTy};
 use vola_common::Span;
 
 use crate::{

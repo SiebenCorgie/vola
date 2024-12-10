@@ -26,6 +26,7 @@ use vola_opt::{
         trigonometric::Trig,
         ConstantIndex,
     },
+    common::{DataType, Shape},
     imm::{ImmMatrix, ImmNat, ImmScalar, ImmVector},
     OptNode,
 };
@@ -75,13 +76,13 @@ impl WasmNode {
         if let Some(imm) = value.try_downcast_ref::<ImmNat>() {
             assert!(input_sig.len() == 0);
             assert!(output_sig.len() == 1);
-            assert!(output_sig[0] == Some(vola_opt::common::Ty::Nat));
+            assert!(output_sig[0] == Some(vola_opt::common::Ty::SCALAR_INT));
             return Ok(WasmNode::from(imm));
         }
         if let Some(imm) = value.try_downcast_ref::<ImmScalar>() {
             assert!(input_sig.len() == 0);
             assert!(output_sig.len() == 1);
-            assert!(output_sig[0] == Some(vola_opt::common::Ty::Scalar));
+            assert!(output_sig[0] == Some(vola_opt::common::Ty::SCALAR_REAL));
             return Ok(WasmNode::from(imm));
         }
 
@@ -166,11 +167,11 @@ impl WasmNode {
         if let Some(bi) = value.try_downcast_ref::<Buildin>() {
             let inputs = input_sig
                 .into_iter()
-                .map(|i| i.clone().unwrap_or(vola_opt::common::Ty::Void))
+                .map(|i| i.clone().unwrap_or(vola_opt::common::Ty::VOID))
                 .collect::<SmallColl<_>>();
             let outputs = output_sig
                 .into_iter()
-                .map(|o| o.clone().unwrap_or(vola_opt::common::Ty::Void))
+                .map(|o| o.clone().unwrap_or(vola_opt::common::Ty::VOID))
                 .collect::<SmallColl<_>>();
             return WasmNode::try_from_opt_buildin(bi, &inputs, &outputs);
         }
@@ -278,18 +279,23 @@ impl TryFrom<vola_opt::common::Ty> for WasmTy {
     type Error = WasmError;
     fn try_from(value: vola_opt::common::Ty) -> Result<Self, Self::Error> {
         let (shape, ty) = match value {
-            vola_opt::common::Ty::Bool => (TyShape::Scalar, walrus::ValType::I32),
-            vola_opt::common::Ty::Nat => (TyShape::Scalar, walrus::ValType::I32),
-            vola_opt::common::Ty::Scalar => (TyShape::Scalar, walrus::ValType::F32),
-            vola_opt::common::Ty::Vector { width } => {
-                (TyShape::Vector { width }, walrus::ValType::F32)
-            }
-            vola_opt::common::Ty::Matrix { width, height } => {
-                (TyShape::Matrix { width, height }, walrus::ValType::F32)
-            }
-            vola_opt::common::Ty::Tensor { dim } => (
+            vola_opt::common::Ty::SCALAR_BOOL => (TyShape::Scalar, walrus::ValType::I32),
+            vola_opt::common::Ty::SCALAR_INT => (TyShape::Scalar, walrus::ValType::I32),
+            vola_opt::common::Ty::SCALAR_REAL => (TyShape::Scalar, walrus::ValType::F32),
+            vola_opt::common::Ty::Shaped {
+                ty: DataType::Real,
+                shape: Shape::Vec { width },
+            } => (TyShape::Vector { width }, walrus::ValType::F32),
+            vola_opt::common::Ty::Shaped {
+                ty: DataType::Real,
+                shape: Shape::Matrix { width, height },
+            } => (TyShape::Matrix { width, height }, walrus::ValType::F32),
+            vola_opt::common::Ty::Shaped {
+                ty: DataType::Real,
+                shape: Shape::Tensor { sizes },
+            } => (
                 TyShape::Tensor {
-                    dim: dim.into_iter().collect(),
+                    dim: sizes.into_iter().collect(),
                 },
                 walrus::ValType::F32,
             ),

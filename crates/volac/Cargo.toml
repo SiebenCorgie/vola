@@ -6,18 +6,18 @@ license = "MPL-2.0"
 
 
 [features]
-default = []
+default = ["wasm", "spirv", "native"]
 dot = ["vola-ast/dot", "vola-common/dot"]
-#native = ["vola-backend-wasm", "wasm", "wasmtime"]
-#wasm = ["vola-backend-wasm"]
-#spirv = ["vola-backend-spirv"]
+native = ["vola-backend-wasm", "wasm", "wasmtime"]
+wasm = ["vola-backend-wasm"]
+spirv = ["vola-backend-spirv"]
 
 [dependencies]
 vola-ast = { path = "../vola-ast" }
 vola-tree-sitter-parser = { path = "../vola-tree-sitter-parser" }
 vola-opt = { path = "../vola-opt" }
-#vola-backend-spirv = { path = "../vola-backend-spirv", optional = true }
-#vola-backend-wasm = { path = "../vola-backend-wasm", optional = true }
+vola-backend-spirv = { path = "../vola-backend-spirv", optional = true }
+vola-backend-wasm = { path = "../vola-backend-wasm", optional = true }
 vola-common = { path = "../vola-common" }
 rvsdg = { path = "../rvsdg" }
 bytemuck.workspace = true

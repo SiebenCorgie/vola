@@ -13,11 +13,14 @@ use rvsdg::{
     rvsdg_derive_lang::LangNode,
     smallvec::smallvec,
 };
-use vola_opt::alge::{
-    arithmetic::{UnaryArith, UnaryArithOp},
-    logical::{UnaryBool, UnaryBoolOp},
-    matrix::{UnaryMatrix, UnaryMatrixOp},
-    trigonometric::{Trig, TrigOp},
+use vola_opt::{
+    alge::{
+        arithmetic::{UnaryArith, UnaryArithOp},
+        logical::{UnaryBool, UnaryBoolOp},
+        matrix::{UnaryMatrix, UnaryMatrixOp},
+        trigonometric::{Trig, TrigOp},
+    },
+    common::{DataType, Shape},
 };
 
 use crate::{graph::WasmNode, WasmError};
@@ -83,7 +86,7 @@ impl WasmNode {
         }
 
         let node = match input_sig {
-            vola_opt::common::Ty::Nat => {
+            vola_opt::common::Ty::SCALAR_INT => {
                 //Not in WASM, and we don't (yet?) have implementations for those
                 return Err(WasmError::UnsupportedNode(format!(
                     "{:?} for natural number",
@@ -91,7 +94,7 @@ impl WasmNode {
                 )));
             }
             //NOTE: We can dispatch those to _buildin_ ops mostly
-            vola_opt::common::Ty::Scalar => match value.op {
+            vola_opt::common::Ty::SCALAR_REAL => match value.op {
                 UnaryArithOp::Abs => WasmNode::Unary(WasmUnaryOp::new(walrus::ir::UnaryOp::F32Abs)),
                 UnaryArithOp::Ceil => {
                     WasmNode::Unary(WasmUnaryOp::new(walrus::ir::UnaryOp::F32Ceil))
@@ -108,7 +111,10 @@ impl WasmNode {
                 }
             },
             //For externs, we have runtime calls
-            vola_opt::common::Ty::Vector { .. } => match value.op {
+            vola_opt::common::Ty::Shaped {
+                ty: DataType::Real,
+                shape: Shape::Vec { .. },
+            } => match value.op {
                 UnaryArithOp::Abs => {
                     WasmNode::Runtime(WasmRuntimeOp::new_with_signature(1, ExternOp::Abs))
                 }
@@ -150,7 +156,7 @@ impl WasmNode {
         //only works on Nat / bools which are both wrapped as i32
 
         if input_sig != output_sig
-            || !(input_sig.is_bool() || input_sig == vola_opt::common::Ty::Nat)
+            || !(input_sig.is_bool() || input_sig == vola_opt::common::Ty::SCALAR_INT)
         {
             return Err(WasmError::UnexpectedSignature {
                 node: format!("{:?}", value.op),

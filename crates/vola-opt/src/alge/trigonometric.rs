@@ -8,12 +8,14 @@
 
 //! Trigonometric operations
 
+use ahash::AHashMap;
 use rvsdg::{
     region::{Input, Output},
     rvsdg_derive_lang::LangNode,
     SmallColl,
 };
 use rvsdg_viewer::{Color, View};
+use vola_ast::csg::{CSGConcept, CsgDef};
 use vola_common::Span;
 
 use crate::{
@@ -70,22 +72,12 @@ impl DialectNode for Trig {
     }
     fn try_derive_type(
         &self,
-        _typemap: &rvsdg::attrib::FlagStore<Ty>,
-        graph: &crate::OptGraph,
-        _concepts: &ahash::AHashMap<String, vola_ast::csg::CSGConcept>,
-        _csg_defs: &ahash::AHashMap<String, vola_ast::csg::CsgDef>,
-    ) -> Result<Option<Ty>, OptError> {
-        let input_ty = if let Some(edg) = &self.inputs.edge {
-            //resolve if there is a type set
-            if let Some(t) = graph.edge(*edg).ty.get_type() {
-                t.clone()
-            } else {
-                return Ok(None);
-            }
-        } else {
-            //input not set atm. so return None as well
-            return Ok(None);
-        };
+        input_types: &[Ty],
+        _concepts: &AHashMap<String, CSGConcept>,
+        _csg_defs: &ahash::AHashMap<String, CsgDef>,
+    ) -> Result<Ty, OptError> {
+        assert_eq!(input_types.len(), 1);
+        let input_ty = input_types[0].clone();
 
         match input_ty {
             Ty::SCALAR_REAL => {}
@@ -104,7 +96,7 @@ impl DialectNode for Trig {
         }
 
         //seems to be alright, return scalar
-        Ok(Some(input_ty))
+        Ok(input_ty)
     }
 
     fn structural_copy(&self, span: vola_common::Span) -> crate::OptNode {

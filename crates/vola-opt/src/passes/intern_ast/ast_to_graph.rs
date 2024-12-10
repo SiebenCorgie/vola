@@ -45,8 +45,8 @@ impl Optimizer {
 
     pub(crate) fn add_concept(
         &mut self,
-        span: Span,
-        ct_args: Vec<CTArg>,
+        _span: Span,
+        _ct_args: Vec<CTArg>,
         concept: CSGConcept,
     ) -> Result<(), OptError> {
         if let Some(existing_concept) = self.concepts.get(&concept.name.0) {
@@ -74,8 +74,8 @@ impl Optimizer {
 
     pub(crate) fn add_csgdef(
         &mut self,
-        span: Span,
-        ct_args: Vec<CTArg>,
+        _span: Span,
+        _ct_args: Vec<CTArg>,
         csgdef: CsgDef,
     ) -> Result<(), OptError> {
         //similar to the concept case, test if there is already one, if not, push
@@ -172,8 +172,8 @@ impl Optimizer {
     ///Uses the (already defined) λ-node and builds the code of the body.
     pub(crate) fn build_func_block(
         &mut self,
-        span: Span,
-        ct_args: Vec<CTArg>,
+        _span: Span,
+        _ct_args: Vec<CTArg>,
         func: Func,
     ) -> Result<(), OptError> {
         //Parse the function signature, then launch block building
@@ -240,7 +240,7 @@ impl Optimizer {
     pub(crate) fn add_implblock(
         &mut self,
         span: Span,
-        ct_args: Vec<CTArg>,
+        _ct_args: Vec<CTArg>,
         implblock: ImplBlock,
     ) -> Result<(), OptError> {
         //Impl blocks function similar to normal functions, but
@@ -319,12 +319,13 @@ impl Optimizer {
             let (lmd, result_port) = omg.new_function(false, |lmd| {
                 //setup all operands as CV-Vars, and the arg as ... arg
                 for operand in &implblock.operands {
-                    let (_, within) = lmd.add_context_variable();
+                    let (outside, within) = lmd.add_context_variable();
                     initial_context
                         .define_var(operand.0.clone(), within)
                         .unwrap();
                     //Directly set to CSG type
                     self.typemap.set(within.into(), Ty::CSG);
+                    self.typemap.set(outside.into(), Ty::CSG);
                 }
 
                 //setup all implicit variables

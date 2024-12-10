@@ -15,14 +15,15 @@ use crate::{
     imm::{ImmMatrix, ImmScalar, ImmVector},
     DialectNode, OptError, OptNode,
 };
+use ahash::AHashMap;
 use rvsdg::{
     nodes::NodeType,
     region::{Input, Output},
     rvsdg_derive_lang::LangNode,
-    smallvec::SmallVec,
     SmallColl,
 };
 use rvsdg_viewer::{Color, View};
+use vola_ast::csg::{CSGConcept, CsgDef};
 use vola_common::Span;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -77,7 +78,7 @@ impl BinaryArith {
         }
     }
 
-    pub fn derive_type(&self, sig: [Ty; 2]) -> Result<Option<Ty>, OptError> {
+    pub fn derive_type(&self, sig: [Ty; 2]) -> Result<Ty, OptError> {
         match &self.op {
             BinaryArithOp::Add | BinaryArithOp::Sub | BinaryArithOp::Div | BinaryArithOp::Mod => {
                 if sig[0] != sig[1] {
@@ -99,7 +100,7 @@ impl BinaryArith {
                 }
 
                 //Is okay, for these we return the _same_ type that we got
-                Ok(Some(sig[0].clone()))
+                Ok(sig[0].clone())
             }
             BinaryArithOp::Mul => {
                 //Multiplication works on:
@@ -143,7 +144,7 @@ impl BinaryArith {
                             shape: Shape::Vec { width: _ },
                         },
                         &Ty::SCALAR_REAL,
-                    ) => Ok(Some(sig[0].clone())),
+                    ) => Ok(sig[0].clone()),
                     //In that case, we return the same-sized
                     //matrix
                     (
@@ -152,7 +153,7 @@ impl BinaryArith {
                             shape: Shape::Matrix { .. },
                         },
                         &Ty::SCALAR_REAL,
-                    ) => Ok(Some(sig[0].clone())),
+                    ) => Ok(sig[0].clone()),
                     (
                         Ty::Shaped {
                             ty: DataType::Real,
@@ -175,7 +176,7 @@ impl BinaryArith {
                             Err(OptError::Any { text: format!("Vector-Matrix multiplication expects the Matrix's \"width\" to be equal to Vector's \"width\". Matrix width = {num_columns} & vector_width = {vecwidth}") })
                         } else {
                             //Use the vector's type.
-                            Ok(Some(sig[0].clone()))
+                            Ok(sig[0].clone())
                         }
                     }
                     (
@@ -196,7 +197,7 @@ impl BinaryArith {
                             Err(OptError::Any { text: format!("Matrix-Vector multiplication expects the Matrix's \"width\" to be equal to Vector's \"width\". Matrix width = {num_columns} & vector_width = {vecwidth}") })
                         } else {
                             //Use the vector's type.
-                            Ok(Some(sig[1].clone()))
+                            Ok(sig[1].clone())
                         }
                     }
                     //if none of those was used, check that
@@ -209,7 +210,7 @@ impl BinaryArith {
                             })
                         } else {
                             //thats okay
-                            Ok(Some(sig[0].clone()))
+                            Ok(sig[0].clone())
                         }
                     }
                 }
@@ -225,36 +226,24 @@ impl DialectNode for BinaryArith {
 
     fn try_derive_type(
         &self,
-        _typemap: &rvsdg::attrib::FlagStore<Ty>,
-        graph: &crate::OptGraph,
-        _concepts: &ahash::AHashMap<String, vola_ast::csg::CSGConcept>,
-        _csg_defs: &ahash::AHashMap<String, vola_ast::csg::CsgDef>,
-    ) -> Result<Option<Ty>, OptError> {
+        input_types: &[Ty],
+        _concepts: &AHashMap<String, CSGConcept>,
+        _csg_defs: &AHashMap<String, CsgDef>,
+    ) -> Result<Ty, OptError> {
         //For all WKOps we first collect all inputs, then let the op check itself.
         // For now we already bail if any type is unset, since we currently don't have any ops that
         // _don't_ care about any input.
-        let mut signature: SmallVec<[Ty; 2]> = SmallVec::new();
-        for (idx, inp) in self.inputs.iter().enumerate() {
-            if let Some(edg) = inp.edge {
-                //resolve if there is a type set
-                if let Some(t) = graph.edge(edg).ty.get_type() {
-                    signature.insert(idx, t.clone());
-                } else {
-                    return Ok(None);
-                }
-            } else {
-                //input not set atm. so return None as well
-                return Ok(None);
-            }
-        }
 
-        if signature.len() != 2 {
+        if input_types.len() != 2 {
             return Err(OptError::TypeDeriveError {
-                text: format!("Binary operation expects 2 inputs, had {}", signature.len()),
+                text: format!(
+                    "Binary operation expects 2 inputs, had {}",
+                    input_types.len()
+                ),
             });
         }
 
-        let signature = [signature[0].clone(), signature[1].clone()];
+        let signature = [input_types[0].clone(), input_types[1].clone()];
         self.derive_type(signature)
     }
 
@@ -364,24 +353,15 @@ impl DialectNode for UnaryArith {
     fn dialect(&self) -> &'static str {
         "alge"
     }
+
     fn try_derive_type(
         &self,
-        _typemap: &rvsdg::attrib::FlagStore<Ty>,
-        graph: &crate::OptGraph,
-        _concepts: &ahash::AHashMap<String, vola_ast::csg::CSGConcept>,
-        _csg_defs: &ahash::AHashMap<String, vola_ast::csg::CsgDef>,
-    ) -> Result<Option<Ty>, OptError> {
-        let input_ty = if let Some(edg) = &self.inputs.edge {
-            //resolve if there is a type set
-            if let Some(t) = graph.edge(*edg).ty.get_type() {
-                t.clone()
-            } else {
-                return Ok(None);
-            }
-        } else {
-            //input not set atm. so return None as well
-            return Ok(None);
-        };
+        input_types: &[Ty],
+        _concepts: &AHashMap<String, CSGConcept>,
+        _csg_defs: &AHashMap<String, CsgDef>,
+    ) -> Result<Ty, OptError> {
+        assert_eq!(input_types.len(), 1);
+        let input_ty = input_types[0].clone();
 
         match &self.op {
             UnaryArithOp::Neg => {
@@ -394,7 +374,7 @@ impl DialectNode for UnaryArith {
                     });
                 }
                 //seem allright, for neg, we return the _same_ datatype as we get
-                Ok(Some(input_ty))
+                Ok(input_ty)
             }
             UnaryArithOp::Abs
             | UnaryArithOp::Fract
@@ -418,7 +398,7 @@ impl DialectNode for UnaryArith {
                 }
 
                 //seems to be alright, return scalar
-                Ok(Some(input_ty))
+                Ok(input_ty)
             }
         }
     }

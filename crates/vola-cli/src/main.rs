@@ -14,17 +14,21 @@
 use clap::{Parser, ValueEnum};
 use std::path::PathBuf;
 use volac::{
-    //backends::{BoxedBackend, Native, Spirv, Wasm},
     backends::StubBackend,
+    backends::{BoxedBackend, Native, Spirv, Wasm},
     Target,
 };
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug)]
 enum Format {
+    ///Emits Vulkan specific SPIR-V
     Spirv,
     ///The platform native format. For instance x86 for your Linux flavour.
     Native,
+    ///Emits a web-assembly module
     WASM,
+    ///Stops after optimizing the code, does-not emit anything
+    Stub,
 }
 
 #[derive(Parser, Debug)]
@@ -64,14 +68,14 @@ fn main() {
     pretty_env_logger::init();
     let args = Args::parse();
 
-    /*
     let backend: BoxedBackend = match args.format {
         Format::Spirv => Box::new(Spirv::new(Target::file(&args.output_name))),
         Format::Native => Box::new(Native::new(Target::file(&args.output_name))),
         Format::WASM => Box::new(Wasm::new(Target::file(&args.output_name))),
+        Format::Stub => Box::new(StubBackend::default()),
     };
-    */
-    let backend = Box::new(StubBackend::default());
+
+    //let backend = Box::new(StubBackend::default());
 
     //configure volac based on the args and execute
     let mut pipeline = volac::Pipeline {

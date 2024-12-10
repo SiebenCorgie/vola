@@ -11,8 +11,8 @@ members = [
     "crates/vola-cli",
     "crates/rvsdg-viewer-ui",
     "crates/vola-tree-sitter-parser",
-    #"crates/vola-backend-spirv",
-    #"crates/vola-backend-wasm",
+    "crates/vola-backend-spirv",
+    "crates/vola-backend-wasm",
     "crates/wasm-runtime",
     "tests/test-runner",
 ]

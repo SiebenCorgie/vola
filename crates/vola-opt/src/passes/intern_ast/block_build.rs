@@ -15,7 +15,7 @@ use crate::{
 };
 use ahash::AHashMap;
 use rvsdg::{
-    edge::{InportLocation, InputType, LangEdge, OutportLocation, OutputType},
+    edge::{InportLocation, InputType, OutportLocation, OutputType},
     region::RegionLocation,
     smallvec::SmallVec,
     SmallColl,
@@ -577,7 +577,7 @@ impl Optimizer {
         //written to as well. We know this, if the last-use port is not the import port, of the registered variable.
         //
         //otherwise we don't have to export it, since the old _out-of-gamma_ value is still valid.
-        for (used_var, ev) in used_vars_import {
+        for (used_var, _ev) in used_vars_import {
             if Self::is_read_write_branch(&post_if_scope, &post_else_block, used_var.as_str()) {
                 let exit_var_idx = self.graph[gamma]
                     .node_type

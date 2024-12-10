@@ -7,7 +7,7 @@
  */
 //! The Algebraic AST
 
-use std::{arch::asm, fmt::Display};
+use std::fmt::Display;
 
 use crate::{
     common::{Block, Branch, Call, Ident, Literal, Ty, TypedIdent},

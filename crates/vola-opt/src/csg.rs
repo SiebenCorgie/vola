@@ -12,15 +12,17 @@ use crate::{
     error::OptError,
     DialectNode, OptNode,
 };
+use ahash::AHashMap;
 use rvsdg::{
-    attrib::FlagStore,
     region::{Input, Output},
     rvsdg_derive_lang::LangNode,
     smallvec::{smallvec, SmallVec},
-    EdgeRef,
 };
 use rvsdg_viewer::Color;
-use vola_ast::{common::Ident, csg::CsgDef};
+use vola_ast::{
+    common::Ident,
+    csg::{CSGConcept, CsgDef},
+};
 
 //Macro that implements the "View" trait for an AlgeDialect op
 macro_rules! implViewCsgOp {
@@ -107,13 +109,13 @@ impl DialectNode for CsgOp {
             false
         }
     }
+
     fn try_derive_type(
         &self,
-        _typemap: &FlagStore<crate::common::Ty>,
-        graph: &crate::OptGraph,
-        _concepts: &ahash::AHashMap<String, vola_ast::csg::CSGConcept>,
-        csg_defs: &ahash::AHashMap<String, CsgDef>,
-    ) -> Result<Option<crate::common::Ty>, crate::error::OptError> {
+        inputs: &[Ty],
+        _concepts: &AHashMap<String, CSGConcept>,
+        csg_defs: &AHashMap<String, CsgDef>,
+    ) -> Result<Ty, OptError> {
         //We resole the CSG op by checking, that all inputs adher to the op's specification.
         // Which means the arguments that are connected are equal to the one specified by the
         // implemented operation or entity
@@ -129,6 +131,15 @@ impl DialectNode for CsgOp {
                     .expect("Could not convert ty opt-type")
             })
             .collect::<SmallVec<[Ty; 3]>>();
+
+        if inputs.len() != expected_signature.len() + self.subtree_count {
+            panic!(
+                "Unexpected argcount: {} != {}",
+                expected_signature.len() + self.subtree_count,
+                inputs.len()
+            );
+        }
+
         //we always output a _CSGTree_ component.
         let output: Ty = Ty::scalar_type(DataType::Csg);
 
@@ -136,57 +147,25 @@ impl DialectNode for CsgOp {
         // already, which are our sub_trees. We verify those against the `subtree_count`.
         // All following connected nodes must be part of the `expected_signature`.
         for i in 0..self.subtree_count {
-            if let Some(port) = self.inputs.get(i) {
-                if let Some(edg) = port.edge {
-                    match graph.edge(edg).ty.get_type() {
-                        Some(ty) => {
-                            //Check that its actually a csg tree
-                            if ty != &Ty::scalar_type(DataType::Csg) {
-                                return Err(OptError::Any {
-                                    text: format!(
-                                        "Subtree {i} was not of type CSGTree for CSGOp {}",
-                                        self.op
-                                    ),
-                                });
-                            }
-                        }
-                        None => {
-                            //Not set
-                            return Ok(None);
-                        }
-                    }
-                }
-            } else {
-                //edge not yet set
-                return Ok(None);
+            //should be CSG typed
+            if inputs[i] != Ty::CSG {
+                return Err(OptError::Any {
+                    text: format!("Subtree {i} was not of type CSGTree for CSGOp {}", self.op),
+                });
             }
         }
 
-        //NOTE that there is the right amount of args is already checked at the building procedure!
-        let mut algearg = 0;
-        while let Some(arg) = self.inputs.get(self.subtree_count + algearg) {
-            if let Some(edg) = arg.edge {
-                match graph.edge(edg).ty.get_type() {
-                    Some(ty) => {
-                        //Check that its actually a csg tree
-                        if ty != &expected_signature[algearg] {
-                            return Err(OptError::Any {
-                                text: format!(
-                                    "expected {algearg}-th argument to be {:?} not {:?} for CSGOp {}",
-                                    expected_signature[algearg], ty, self.op
-                                ),
-                            });
-                        }
-                    }
-                    None => {
-                        //Not set
-                        return Ok(None);
-                    }
-                }
+        for (idx, alge_arg_ty) in inputs[self.subtree_count..].iter().enumerate() {
+            if alge_arg_ty != &expected_signature[idx] {
+                return Err(OptError::Any {
+                    text: format!(
+                        "expected {idx}-th argument to be {:?} not {:?} for CSGOp {}",
+                        expected_signature[idx], alge_arg_ty, self.op
+                    ),
+                });
             }
-            algearg += 1;
         }
 
-        Ok(Some(output))
+        Ok(output)
     }
 }

@@ -24,9 +24,12 @@ pub struct Impl {
     pub def_span: Span,
     pub concept: String,
     pub lambda: NodeRef,
+    #[allow(unused)]
     pub subtrees: SmallColl<String>,
     //The argument and its type
+    #[allow(unused)]
     pub args: SmallColl<(String, Ty)>,
+    #[allow(unused)]
     pub return_type: Ty,
 }
 

@@ -16,7 +16,6 @@ use logical::{BinaryBool, BinaryBoolOp, UnaryBool, UnaryBoolOp};
 use matrix::{UnaryMatrix, UnaryMatrixOp};
 use relational::{BinaryRel, BinaryRelOp};
 use rvsdg::{
-    attrib::FlagStore,
     nodes::NodeType,
     region::{Input, Output},
     rvsdg_derive_lang::LangNode,
@@ -34,10 +33,7 @@ use crate::{
     error::OptError,
     imm::{ImmMatrix, ImmScalar, ImmVector},
     DialectNode,
-    OptEdge,
-    OptGraph,
     OptNode,
-    TypeState,
 };
 
 pub mod arithmetic;
@@ -229,7 +225,7 @@ impl EvalNode {
     pub fn new(argount: usize, concept: String) -> Self {
         EvalNode {
             called_concept: concept,
-            inputs: smallvec![Input::default(); argount + 1],
+            inputs: smallvec![Input::default(); argount],
             out: Output::default(),
         }
     }
@@ -263,32 +259,11 @@ impl DialectNode for EvalNode {
     }
     fn try_derive_type(
         &self,
-        _typemap: &FlagStore<Ty>,
-        graph: &OptGraph,
+        input_types: &[Ty],
         concepts: &AHashMap<String, CSGConcept>,
         _csg_defs: &AHashMap<String, CsgDef>,
-    ) -> Result<Option<Ty>, OptError> {
+    ) -> Result<Ty, OptError> {
         //For eval nodes, the first type must be a callable, and all following must addher to the called concept's definition
-        let mut signature: SmallVec<[Ty; 2]> = SmallVec::new();
-        for (idx, inp) in self.inputs.iter().enumerate() {
-            if let Some(edg) = inp.edge {
-                //resolve if there is a type set
-                if let Some(t) = graph.edge(edg).ty.get_type() {
-                    signature.insert(idx, t.clone());
-                } else {
-                    return Ok(None);
-                }
-            } else {
-                //input not set atm. so return None as well
-                return Ok(None);
-            }
-        }
-
-        if signature.len() == 0 {
-            return Err(OptError::Any {
-                text: format!("Eval must have at least a callable input, had none at all."),
-            });
-        }
 
         //Make sure that the concept that is being called exists at all
         if !concepts.get(self.concept()).is_some() {
@@ -302,7 +277,7 @@ impl DialectNode for EvalNode {
 
         //Build the expected signature type
         let (expected_signature, output_ty, concept_name): (Ty, Ty, String) =
-            if Ty::CSG == signature[0] {
+            if Ty::CSG == input_types[0] {
                 let concept = concepts.get(self.concept()).unwrap();
 
                 (
@@ -312,12 +287,12 @@ impl DialectNode for EvalNode {
                 )
             } else {
                 return Err(OptError::Any {
-                    text: format!("Expected a CSGTree as first input, got {:?}", signature[0]),
+                    text: format!("Expected a CSG as first input, got {:?}", input_types[0]),
                 });
             };
 
         //Now check that the signature (except for the callabel, is the one we expect. If so, return the output_ty)
-        let argcount = signature.len() - 1;
+        let argcount = input_types.len() - 1;
         if argcount != 1 {
             return Err(OptError::Any {
                 text: format!(
@@ -328,17 +303,17 @@ impl DialectNode for EvalNode {
         }
 
         //NOTE shift, since the first one is the concept we are calling (by definition).
-        if expected_signature != signature[1] {
+        if expected_signature != input_types[1] {
             return Err(OptError::Any {
                 text: format!(
                     "Concept {} expected argument to be of type {:?}, but was {:?}",
-                    concept_name, expected_signature, signature[1]
+                    concept_name, expected_signature, input_types[1]
                 ),
             });
         }
 
         //If we made it till here, we actually passed, therfore return the right type
-        Ok(Some(output_ty))
+        Ok(output_ty)
     }
 }
 
@@ -390,90 +365,72 @@ impl DialectNode for Construct {
     }
     fn try_derive_type(
         &self,
-        _typemap: &FlagStore<Ty>,
-        graph: &OptGraph,
+        input_types: &[Ty],
         _concepts: &AHashMap<String, CSGConcept>,
         _csg_defs: &AHashMap<String, CsgDef>,
-    ) -> Result<Option<Ty>, OptError> {
+    ) -> Result<Ty, OptError> {
         //For the list constructor, we check that all inputs are of the same (algebraic) type, and then derive the
         // algebraic super(?)-type. So a list of scalars becomes a vector, a list of vectors a matrix, and a list of
         // matrices a tensor. Tensors then just grow by pushing the next dimension size.
-        let mut signature: SmallVec<[Ty; 2]> = SmallVec::new();
-        for (idx, inp) in self.inputs.iter().enumerate() {
-            if let Some(edg) = inp.edge {
-                //resolve if there is a type set
-                if let Some(t) = graph.edge(edg).ty.get_type() {
-                    signature.insert(idx, t.clone());
-                } else {
-                    return Ok(None);
-                }
-            } else {
-                //input not set atm. so return None as well
-                return Ok(None);
-            }
-        }
 
-        if signature.len() == 0 {
+        if input_types.len() == 0 {
             return Err(OptError::Any {
                 text: format!("Cannot create an empty list (there is no void type in Vola)."),
             });
         }
 
-        if !signature[0].is_algebraic() {
-            return Err(OptError::Any { text: format!("List can only be created from algebraic types (scalar, vector, matrix, tensor), but first element was of type {:?}", signature[0]) });
+        if !input_types[0].is_algebraic() {
+            return Err(OptError::Any { text: format!("List can only be created from algebraic types (scalar, vector, matrix, tensor), but first element was of type {:?}", input_types[0]) });
         }
 
         //Check that all have the same type
-        for s in 1..signature.len() {
-            if signature[s] != signature[0] {
-                return Err(OptError::Any { text: format!("List must be created from equal types. But first element is of type {:?} and {}-th element is of type {:?}", signature[0], s, signature[s]) });
+        for s in 1..input_types.len() {
+            if input_types[s] != input_types[0] {
+                return Err(OptError::Any { text: format!("List must be created from equal types. But first element is of type {:?} and {}-th element is of type {:?}", input_types[0], s, input_types[s]) });
             }
         }
 
         //Passed the equality check, therefore derive next list->Algebraic type
-        let listlen = signature.len();
-        match &signature[0] {
+        let listlen = input_types.len();
+        match &input_types[0] {
             Ty::Shaped {
                 ty: DataType::Real,
                 shape,
             } => match &shape {
-                Shape::Scalar => Ok(Some(Ty::vector_type(DataType::Real, listlen))),
+                Shape::Scalar => Ok(Ty::vector_type(DataType::Real, listlen)),
                 //NOTE:
                 // This creates a column-major matrix. So each vector is a _column_ of this matrix. This is somewhat unintuitive
                 // since maths do it the other way around, but glsl / spirv do it like that. So we keep that convention
-                Shape::Vec { width } => Ok(Some(Ty::shaped(
+                Shape::Vec { width } => Ok(Ty::shaped(
                     DataType::Real,
                     Shape::Matrix {
                         width: listlen,
                         height: *width,
                     },
-                ))),
+                )),
                 Shape::Matrix { width, height } => {
                     let mut tensor_sizes = SmallVec::new();
                     tensor_sizes.push(*width);
                     tensor_sizes.push(*height);
                     tensor_sizes.push(listlen);
-                    Ok(Some(Ty::shaped(
+                    Ok(Ty::shaped(
                         DataType::Real,
                         Shape::Tensor {
                             sizes: tensor_sizes,
                         },
-                    )))
+                    ))
                 }
                 Shape::Tensor { sizes } => {
                     let mut dim = sizes.clone();
                     dim.push(listlen);
-                    Ok(Some(Ty::shaped(
-                        DataType::Real,
-                        Shape::Tensor { sizes: dim },
-                    )))
+                    Ok(Ty::shaped(DataType::Real, Shape::Tensor { sizes: dim }))
                 }
                 _ => Err(OptError::TypeDeriveError {
-                    text: format!("Cannot construct list from {} elements", signature[0]),
+                    text: format!("Cannot construct list from {} elements", input_types[0]),
                 }),
             },
             _ => Err(OptError::TypeDeriveError {
-                text: format!("Cannot construct \"List\" from \"{}\"", signature[0]),
+                text: format!("Cannot construct \"List\" from \"{}\"", input_types[0]),
             }),
         }
     }
@@ -582,25 +539,14 @@ impl DialectNode for ConstantIndex {
 
     fn try_derive_type(
         &self,
-        _typemap: &FlagStore<Ty>,
-        graph: &OptGraph,
+        input_types: &[Ty],
         _concepts: &AHashMap<String, CSGConcept>,
         _csg_defs: &AHashMap<String, CsgDef>,
-    ) -> Result<Option<Ty>, OptError> {
-        if let Some(edg) = self.input.edge {
-            //List access can only be done on algebraic types. The type can decide itself if it fits the access pattern.
-            if let OptEdge::Value {
-                ty: TypeState::Derived(t) | TypeState::Set(t),
-            } = &graph.edge(edg).ty
-            {
-                t.try_derive_access_index(self.access).map(|r| Some(r))
-            } else {
-                Ok(None)
-            }
-        } else {
-            Ok(None)
-        }
+    ) -> Result<Ty, OptError> {
+        assert_eq!(input_types.len(), 1);
+        input_types[0].try_derive_access_index(self.access)
     }
+
     fn is_operation_equal(&self, other: &OptNode) -> bool {
         //NOTE: Two construct nodes are always equal
         if let Some(other_cop) = other.try_downcast_ref::<ConstantIndex>() {
