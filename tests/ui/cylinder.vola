@@ -8,7 +8,7 @@
 module std;
 
 //NOTE: In this case we know, that the cylinder lies on the z axis, and is 3 _away_ form z=4.
-export myfield(at: vec3){
+export fn myfield(at: vec3) -> real{
     csg s = Cylinder(1.0, 1.0);
     eval s.SDF3D(at)
 }

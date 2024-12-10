@@ -16,7 +16,7 @@ impl MyAdOp<sub> for FieldGrad(at){
     res
 }
 
-export mysdf(at: vec3){
+export fn mysdf(at: vec3) -> vec3{
     //The gradient should point to the negative -x at that location, when rotated by 90deg
     csg sphere = MyAdOp(){
         Rot3dAxis([0.0, 1.0, 0.0], 3.141 / 2.0){

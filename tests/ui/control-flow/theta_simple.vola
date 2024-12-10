@@ -10,14 +10,15 @@ module std;
 entity Loopy();
 
 impl Loopy for SDF3D(at){
-    let d = for t = 0.0 in 0..10{
+    let t = 0.0;
+    for i in 0..10{
         t = t + at.x;
     };
 
-    d
+    t
 }
 
-export myField(at: vec3){
+export fn myField(at: vec3) -> real{
 	csg t = Loopy();
 	eval t.SDF3D(at)
 }

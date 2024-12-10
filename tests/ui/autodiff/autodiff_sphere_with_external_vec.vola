@@ -1,7 +1,7 @@
 
 
-entity Sphere(rad: s);
-concept Sdf: vec3 -> s;
+entity Sphere(rad: real);
+concept Sdf: vec3 -> real;
 
 impl Sphere for Sdf(at){
     length(at) - rad
@@ -15,7 +15,7 @@ impl MyAdOp<sub> for Sdf(at){
     length(diff(sd, at))
 }
 
-export mysdf(at: vec3, time: s){
+export fn mysdf(at: vec3, time: real) -> real{
     csg sphere = MyAdOp(){Sphere(time)};
     eval sphere.Sdf(at)
 }

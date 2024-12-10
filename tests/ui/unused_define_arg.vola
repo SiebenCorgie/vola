@@ -1,6 +1,5 @@
 module std;
 
-
 define common(at: vec3, offset: vec3){
 	SmoothUnion(1.0){
 		Sphere(1.0)
@@ -11,8 +10,7 @@ define common(at: vec3, offset: vec3){
 	}
 }
 
-
-export eval_std(at: vec3, offset: vec3){
+export fn eval_std(at: vec3, offset: vec3) -> real{
 	csg myfield = common(at, offset);
 	eval myfield.SDF3D(at)
 }

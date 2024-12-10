@@ -1,7 +1,7 @@
 module std;
 
 
-operation Weather(amount: s);
+operation Weather(amount: real);
 
 impl Weather<sub> for SDF3D(at){
 	let subat = eval sub.SDF3D(at);
@@ -11,7 +11,7 @@ impl Weather<sub> for SDF3D(at){
 }
 
 
-export myFn(at: vec3){
+export fn myFn(at: vec3) -> real{
 	csg f = Union(){
 		Weather(1.0){
 			Sphere(1.0)
@@ -22,4 +22,3 @@ export myFn(at: vec3){
 
 	eval f.SDF3D(at)
 }
-

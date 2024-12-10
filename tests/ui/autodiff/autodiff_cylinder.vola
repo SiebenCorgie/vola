@@ -7,7 +7,6 @@
 
 module std;
 
-
 concept FieldGrad: vec3 -> vec3;
 operation MyAdOp();
 impl MyAdOp<sub> for FieldGrad(at){
@@ -16,7 +15,7 @@ impl MyAdOp<sub> for FieldGrad(at){
     res
 }
 
-export mysdf(at: vec3){
+export fn mysdf(at: vec3) -> vec3{
     //The gradient should point to the negative z at that location
     csg sphere = MyAdOp(){Cylinder(1.0, 1.0)};
     eval sphere.FieldGrad(at)

@@ -13,7 +13,7 @@ impl ColorFlip<sub> for Color(at){
 	}
 }
 
-export myField(at: vec3){
+export fn myField(at: vec3) -> vec3{
 	csg t = ColorFlip(){
 		Box([10.0, 10.0, 10.0])
 	};

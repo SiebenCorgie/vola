@@ -2,12 +2,10 @@
 //ERROR:At least 1 errors occurred while running optimizer.
 //END-CONFIG
 
-concept Sdf3d: vec3 -> s;
+concept Sdf3d: vec3 -> real;
 
-export myExport(at: vec3){
+export fn myExport(at: vec3) -> real{
 	let t = eval sub.Sdf3d(at);
-
 	csg a = Sphere(1.0);
-
 	eval a.Sdf3d(at)
 }

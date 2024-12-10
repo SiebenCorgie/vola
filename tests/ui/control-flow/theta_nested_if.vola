@@ -10,8 +10,6 @@ impl nSpheres for SDF3D(at){
         }else{
             1.0
         };
-
-
         let local_d = min(min(t, d), length(at - [w, t, t]) - 3.0);
         d = local_d;
         w = w - 1.0;

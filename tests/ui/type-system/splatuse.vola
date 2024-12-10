@@ -2,7 +2,7 @@
 module std;
 
 
-fn step(edge: s, x: s) -> s{
+fn step(edge: real, x: real) -> real{
 	if x < edge{
 		0.0
 	}else{
@@ -10,7 +10,7 @@ fn step(edge: s, x: s) -> s{
 	}
 }
 
-fn sign(a: s) -> s{
+fn sign(a: real) -> real{
 	if a > 0.0{
 		1.0
 	}else if a < 0.0{
@@ -40,14 +40,14 @@ fn sign_v2(a: vec2) -> vec2{
 }
 
 
-//A bezier spline from point p0 to p2 guided by p1. 
-entity Bezier(p0: vec2, p1: vec2, p2: vec2, thickness: s);
+//A bezier spline from point p0 to p2 guided by p1.
+entity Bezier(p0: vec2, p1: vec2, p2: vec2, thickness: real);
 
 
-fn test_cross(a: vec2, b: vec2, p: vec2) -> s{
+fn test_cross(a: vec2, b: vec2, p: vec2) -> real{
 	sign((b.y - a.y) * (p.x - a.x) - (b.x - a.x)*(p.y - a.y))
 }
-fn sign_bezier(A: vec2, B: vec2, C: vec2, p: vec2) -> s{
+fn sign_bezier(A: vec2, B: vec2, C: vec2, p: vec2) -> real{
 	let a = C - A;
 	let b = B - A;
 	let c = p - A;
@@ -61,7 +61,7 @@ fn sign_bezier(A: vec2, B: vec2, C: vec2, p: vec2) -> s{
 	mix(
 		sign(d.x * d.x - d.y),
 		mix(
-			-1.0, 
+			-1.0,
 			1.0,
 			step(test_cross(A, B, p) * test_cross(B, C, p), 0.0)
 		),
@@ -70,7 +70,7 @@ fn sign_bezier(A: vec2, B: vec2, C: vec2, p: vec2) -> s{
 }
 
 
-fn solve_cubic(a: s, b: s, c: s) -> vec3{
+fn solve_cubic(a: real, b: real, c: real) -> vec3{
 	let p = b - a*a / 3.0;
 	let p3 = p*p*p;
 	let q = a * (2.0 * a * a - 9.0 * b) / 27.0 + c;
@@ -94,7 +94,7 @@ fn solve_cubic(a: s, b: s, c: s) -> vec3{
 
 //Credits to Inigo Quilez: https://iquilezles.org/articles/distfunctions2d/
 //
-// There are also some ideas in this 
+// There are also some ideas in this
 // presentation: https://www.cl.cam.ac.uk/teaching//1718/FGraphics/4.%20Beziers%20Curves%20and%20Surfaces.pdf
 //
 // Also note to self: Once auto-diff has landed
@@ -126,7 +126,7 @@ impl Bezier for SDF2D(at){
 
 
 
-export myfn(at: vec2){
+export fn myfn(at: vec2) -> real{
 	csg t = Bezier([0.0, 1.0], [1.0, 0.0], [2.0, 2.0], 0.1);
 
 	eval t.SDF2D(at)

@@ -5,12 +5,12 @@
 module std;
 
 
-fn test(a: s) -> s{
+fn test(a: real) -> real{
 	test(a)
 }
 
 
-export test(a: s){
+export fn test(a: real) -> real{
 	let t = test(a);
 	csg r = Sphere(t);
 

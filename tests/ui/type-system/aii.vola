@@ -1,6 +1,6 @@
 module std;
 
-//Uses the automatic identity impelementation feature to derive SetColor for 
+//Uses the automatic identity impelementation feature to derive SetColor for
 // SDF3D
 
 
@@ -13,14 +13,14 @@ impl SetColor<sub> for Color(at){
 }
 
 
-define myTree(at: vec3){
+fn myTree(at: vec3) -> csg{
 	SetColor([1.0, 1.0, 1.0]){
 		Sphere(1.0)
 	}
 }
 
 
-export expBoth(at: vec3){
+export fn expBoth(at: vec3) -> (real, vec3){
 	csg t = myTree(at);
 	(eval t.SDF3D(at), eval t.Color(at))
 }

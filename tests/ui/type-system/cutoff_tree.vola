@@ -13,13 +13,13 @@ impl SmoothUnion<a, b> for Color(at){
 }
 
 
-//This is the cuttoff node. It will not evaluate the sub tree, 
+//This is the cuttoff node. It will not evaluate the sub tree,
 //but always return _blue_.
 impl Translate<sub> for Color(at){
 	[0.0, 0.0, 1.0]
 }
 
-export myField(at: vec3){
+export fn myField(at: vec3) -> (real, vec3){
 	csg t = SmoothUnion(1.0){
 		Translate([0.0, 1.0, 0.0]){
 			Sphere(1.0)

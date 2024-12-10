@@ -2,10 +2,9 @@ module std;
 
 operation MyAdOp();
 
-entity MySwitch(t: s);
+entity MySwitch(t: real);
 
 impl MySwitch for SDF3D(at){
-
     if t < 0.0{
         //sphere
         length(at) - 1.0
@@ -20,7 +19,7 @@ impl MyAdOp<sub> for SDF3D(at){
     length(diff(sd, at))
 }
 
-export mysdf(at: vec3){
+export fn mysdf(at: vec3) -> real{
     csg sphere = MyAdOp(){MySwitch(at.x)};
     eval sphere.SDF3D(at)
 }

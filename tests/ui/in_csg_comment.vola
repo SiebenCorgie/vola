@@ -1,7 +1,7 @@
 //Based on this report: https://gitlab.com/tendsinmende/vola/-/issues/14
 module std;
 
-define test(at: vec3, offset: vec3) {
+fn test(at: vec3, offset: vec3) -> csg{
      // this comment is fine
      Translate([20.0,0.0,0.0]) {
          // works
@@ -12,7 +12,7 @@ define test(at: vec3, offset: vec3) {
 }
 
 
-export myField(at: vec3, offset: vec3){
+export fn myField(at: vec3, offset: vec3) -> real{
 	csg t = test(at, offset);
 	eval t.SDF3D(at)
 }

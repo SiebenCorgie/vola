@@ -2,22 +2,23 @@ module std;
 
 entity nSpheres(n: i);
 impl nSpheres for SDF3D(at){
-    let d = for d_off = [10000.0, 0.0] in 0..n{
+    let d = 100000.0;
+    let off = [0.0; 2];
+    for x in 0..n{
+        off = [off.x + 1.0, 0.0];
 		//inner loop
-		let inner_d = for ind = [10000.0, 0.0] in 0..n{
-			let local_d = min(ind.x, length(at - [d_off.y, ind.y, 0.0]) - 3.0);
-			ind = [local_d, ind.y - 1.0];
+		for y in 0..n{
+		    off = [off.x, off.y + 1.0];
+			d = min(d, length(at - [off.x, off.y, 0.0]) - 3.0);
 		};
-        let local_d = min(min(inner_d.x, d_off.x), length(at - [d_off.y, inner_d.y, 0.0]) - 3.0);
-        d_off = [local_d, d_off.y - 1.0];
+        d = min(d, length(at - [d_off.y, inner_d.y, 0.0]) - 3.0);
     };
 
-    d.x
+    d
 }
 
 
-export myFn(at: vec3){
+export fn myFn(at: vec3) -> real{
 	csg t = nSpheres(3);
 	eval t.SDF3D(at)
 }
-

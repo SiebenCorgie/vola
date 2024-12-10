@@ -14,7 +14,7 @@ impl SubTest<a, b> for SDF3D(at){
 }
 
 
-export test(at: vec3){
+export fn test(at: vec3) -> real{
 	csg t = SubTest(){
 		Sphere(1.0)
 	}{

@@ -5,15 +5,14 @@
 //EXEC-RES:66.85
 //END-CONFIG
 
-concept Sdf3d: vec3 -> s;
-entity Something(rad: s);
+concept Sdf3d: vec3 -> real;
+entity Something(rad: real);
 
 impl Something for Sdf3d(at){
     length(at)
 }
 
-export myfield(at: vec3){
+export fn myfield(at: vec3) -> real{
     csg s = Something(1.0);
-
     eval s.Sdf3d(at)
 }
