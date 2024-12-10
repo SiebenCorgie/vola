@@ -1,0 +1,14 @@
+
+
+
+export fn nouse() -> int{
+    let a = 10;
+    if a == a + 1{
+        a = 19;
+        1.0
+    }else{
+        a = 80;
+        4.0
+    }
+    a
+}

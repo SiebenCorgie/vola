@@ -5,7 +5,11 @@
  *
  * 2024 Tendsin Mende
  */
-use rvsdg::{region::RegionLocation, SmallColl};
+use rvsdg::{
+    edge::{InputType, OutputType},
+    region::RegionLocation,
+    SmallColl,
+};
 use vola_ast::{
     alge::Func,
     common::CTArg,
@@ -16,12 +20,29 @@ use vola_common::{ariadne::Label, error::error_reporter, report, Span};
 use crate::{
     common::Ty,
     graph::auxiliary::{Function, Impl, ImplKey},
-    OptError, Optimizer,
+    OptEdge, OptError, Optimizer,
 };
 
 use super::block_build::BlockCtx;
 
 impl Optimizer {
+    ///Builds the block context for the omega node. This basically appends all named
+    ///static data, as well as callable (i.e. non-impl) functions.
+    fn omega_context(&self) -> Result<BlockCtx, OptError> {
+        //NOTE: we currently have no static data, but there will be ~data~ at some point.
+        let mut ctx = BlockCtx::empty(self.graph.toplevel_region());
+        for func in self.functions.values() {
+            //define the function as plain old value
+            ctx.define_var(
+                func.name.clone(),
+                func.lambda
+                    .as_outport_location(OutputType::LambdaDeclaration),
+            )?;
+        }
+
+        Ok(ctx)
+    }
+
     pub(crate) fn add_concept(
         &mut self,
         span: Span,
@@ -80,20 +101,16 @@ impl Optimizer {
         }
     }
 
-    pub(crate) fn add_func(
-        &mut self,
-        span: Span,
-        ct_args: Vec<CTArg>,
-        func: Func,
-    ) -> Result<(), OptError> {
-        //Parse the function signature, then launch block building
+    ///Creates the λ node in the omega region,  but does not fill it (yet).
+    pub(crate) fn define_func(&mut self, func: &Func) -> Result<(), OptError> {
+        //Parse the function signature, and build the entry in the lookup table
         let name = func.name.0.clone();
         if let Some(existing) = self.functions.get(&name) {
             let err = OptError::Any {
                 text: format!("function \"{name}\" already exists!"),
             };
             report(
-                error_reporter(err.clone(), span)
+                error_reporter(err.clone(), func.span.clone())
                     .with_label(
                         Label::new(existing.def_span.clone().into())
                             .with_message("first defined here"),
@@ -103,6 +120,15 @@ impl Optimizer {
             );
         }
 
+        //Also make sure that no concept or csg-def with that name exists
+        if self.concepts.contains_key(&name) || self.csg_node_defs.contains_key(&name) {
+            let err = OptError::Any {
+                text: format!("function \"{name}\" can not be named after a concept, or CSG-Operation/Entitiy!"),
+            };
+            report(error_reporter(err.clone(), func.span.clone()).finish());
+            return Err(err);
+        }
+
         let args: SmallColl<(String, Ty)> = func
             .args
             .iter()
@@ -110,9 +136,7 @@ impl Optimizer {
             .collect();
         let region_span = func.span.clone();
         let def_span = func.head_span();
-        let return_type: Ty = func.return_type.into();
-
-        let mut initial_context = BlockCtx::empty();
+        let return_type: Ty = func.return_type.clone().into();
 
         //setup the lambda node accordingly, as well as the block context, then launch the block builder.
         let lambda = self.graph.on_omega_node(|omg| {
@@ -120,36 +144,20 @@ impl Optimizer {
                 //setup the args an results
                 for arg in &args {
                     let port = lmd.add_argument();
-                    let existing = initial_context.defined_vars.insert(arg.0.clone(), port);
-                    assert!(
-                        existing.is_none(),
-                        "encountered duplicated argument name: {}",
-                        arg.0
-                    );
                     //Also tag with the correct type already
                     self.typemap.set(port.into(), arg.1.clone());
                 }
                 //setup result
                 let result_port = lmd.add_result();
                 self.typemap.set(result_port.into(), return_type.clone());
-                initial_context.result_connector = Some(result_port);
             });
             lmd
         });
 
-        self.build_block(
-            RegionLocation {
-                node: lambda,
-                region_index: 0,
-            },
-            func.block,
-            initial_context,
-        )?;
-
         //At this point everything should be hooked-up and typed. therfore we can return
         self.names.set(lambda.into(), format!("fn {}", func.name.0));
         let interned = Function {
-            name: func.name.0,
+            name: func.name.0.clone(),
             region_span,
             def_span,
             lambda,
@@ -161,6 +169,74 @@ impl Optimizer {
         Ok(())
     }
 
+    ///Uses the (already defined) λ-node and builds the code of the body.
+    pub(crate) fn build_func_block(
+        &mut self,
+        span: Span,
+        ct_args: Vec<CTArg>,
+        func: Func,
+    ) -> Result<(), OptError> {
+        //Parse the function signature, then launch block building
+        let name = func.name.0.clone();
+        //build the omega context
+        let mut ctx = self.omega_context()?;
+
+        //Find the λ-node, the open the context and define all args in terms of the λ's body-scope
+        let lambda = {
+            let existing = self
+                .functions
+                .get(&name)
+                .expect("Function should have been defined already!");
+            //parse all args into the ctx's scope. This scope won't be closed, so we also don't mutate.
+            ctx.open_new_scope(existing.region(), false);
+            //NOTE: on paper there shouldn't be any CVs _yet_
+            for (argidx, arg) in existing.args.iter().enumerate() {
+                let port = existing
+                    .lambda
+                    .as_outport_location(OutputType::Argument(argidx));
+                let found_type = self
+                    .typemap
+                    .get(&port.into())
+                    .expect("Expected port's type to be set already!");
+                assert!(found_type == &arg.1);
+                //matches, so setup
+                ctx.define_var(arg.0.to_owned(), port)?;
+            }
+            //set the active's scope writeout port
+            assert!(self.graph[existing.lambda].result_types(0).len() == 1);
+            //also setup the span we are working in
+            ctx.block_span = existing.region_span.clone();
+            existing.lambda
+        };
+
+        //At this point we are finished setting up all context info, so we can start
+        //building the actual code
+
+        self.build_block(
+            RegionLocation {
+                node: lambda,
+                region_index: 0,
+            },
+            func.block,
+            &mut ctx,
+        )?;
+
+        let function_body_scope = ctx.close_scope();
+        //post_serialize, make sure there is a result, and hook it up
+        if let Some(result_src) = function_body_scope.result {
+            self.graph.connect(
+                result_src,
+                lambda.as_inport_location(InputType::Result(0)),
+                OptEdge::value_edge_unset(),
+            )?;
+        } else {
+            todo!("No result in function :(");
+        }
+
+        //if that didn't fail, we now hve actual working code *_*
+        Ok(())
+    }
+
     pub(crate) fn add_implblock(
         &mut self,
         span: Span,
@@ -169,6 +245,9 @@ impl Optimizer {
     ) -> Result<(), OptError> {
         //Impl blocks function similar to normal functions, but
         //we additionally import all operands at the first n-cvs
+        //
+        //They are also not _simply_ callable, which is why we do λ-creation and
+        //code emission in one go.
 
         //The concept that is implemented
         let concept = implblock.concept.0.clone();
@@ -230,18 +309,20 @@ impl Optimizer {
             return Err(err);
         };
 
-        let mut initial_context = BlockCtx::empty();
+        //setup the omega context, then directly open the scope for our function
+        let mut initial_context = self.omega_context()?;
+        //NOTE: Use the toplevel region, but overwrite, once λ-creation is done
+        initial_context.open_new_scope(self.graph.toplevel_region(), false);
         let mut args = SmallColl::new();
         //setup the lambda node accordingly, as well as the block context, then launch the block builder.
-        let lambda = self.graph.on_omega_node(|omg| {
-            let (lmd, _) = omg.new_function(false, |lmd| {
+        let (lambda, result_port) = self.graph.on_omega_node(|omg| {
+            let (lmd, result_port) = omg.new_function(false, |lmd| {
                 //setup all operands as CV-Vars, and the arg as ... arg
                 for operand in &implblock.operands {
                     let (_, within) = lmd.add_context_variable();
-                    let old = initial_context
-                        .defined_vars
-                        .insert(operand.0.clone(), within);
-                    assert!(old.is_none());
+                    initial_context
+                        .define_var(operand.0.clone(), within)
+                        .unwrap();
                     //Directly set to CSG type
                     self.typemap.set(within.into(), Ty::CSG);
                 }
@@ -249,10 +330,9 @@ impl Optimizer {
                 //setup all implicit variables
                 for arg in &csgdef.args {
                     let port = lmd.add_argument();
-                    let exisiting = initial_context
-                        .defined_vars
-                        .insert(arg.ident.0.clone(), port);
-                    assert!(exisiting.is_none());
+                    initial_context
+                        .define_var(arg.ident.0.clone(), port)
+                        .unwrap();
                     //setup type
                     self.typemap.set(port.into(), arg.ty.clone().into());
                     //and push into args collection
@@ -260,14 +340,10 @@ impl Optimizer {
                 }
 
                 let port = lmd.add_argument();
-                let existing = initial_context
-                    .defined_vars
-                    .insert(implblock.concept_arg_name.0.clone(), port);
-                assert!(
-                    existing.is_none(),
-                    "encountered duplicated argument name: {}",
-                    implblock.concept_arg_name.0
-                );
+                initial_context
+                    .define_var(implblock.concept_arg_name.0.clone(), port)
+                    .unwrap();
+
                 //Also tag with the correct type already
                 self.typemap.set(port.into(), arg_ty.clone().into());
                 //Push the concept's arg as the last in the row
@@ -277,10 +353,15 @@ impl Optimizer {
                 let result_port = lmd.add_result();
                 self.typemap
                     .set(result_port.into(), return_ty.clone().into());
-                initial_context.result_connector = Some(result_port);
+                result_port
             });
-            lmd
+            (lmd, result_port)
         });
+        //Correct the region-location as metioned above
+        initial_context.active_scope.region = RegionLocation {
+            node: lambda,
+            region_index: 0,
+        };
 
         let def_span = implblock.head_span();
 
@@ -290,8 +371,17 @@ impl Optimizer {
                 region_index: 0,
             },
             implblock.block,
-            initial_context,
+            &mut initial_context,
         )?;
+
+        let function_body_scope = initial_context.close_scope();
+        //post_serialize, make sure there is a result, and hook it up
+        if let Some(result_src) = function_body_scope.result {
+            self.graph
+                .connect(result_src, result_port, OptEdge::value_edge_unset())?;
+        } else {
+            todo!("No result in function :(");
+        }
 
         //At this point everything should be hooked-up and typed. therfore we can return
 

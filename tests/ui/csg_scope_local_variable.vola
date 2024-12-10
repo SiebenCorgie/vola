@@ -1,7 +1,7 @@
 module std;
 
 
-export myField(at: vec3){
+export fn myField(at: vec3) -> real{
 	let a = at * 123.0;
 
 	csg r = SmoothUnion(1.0){

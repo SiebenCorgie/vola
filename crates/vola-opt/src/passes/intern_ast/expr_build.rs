@@ -6,19 +6,22 @@
  * 2024 Tendsin Mende
  */
 
-use rvsdg::{edge::OutportLocation, region::RegionLocation, smallvec::SmallVec};
-
-use crate::Optimizer;
-
-use super::{
-    block_build::BlockCtx,
-    unresolved::{UnresolvedCall, UnresolvedEval},
+use ahash::AHashMap;
+use rvsdg::{
+    edge::{InputType, OutportLocation, OutputType},
+    region::RegionLocation,
+    smallvec::SmallVec,
 };
+
+use crate::{csg::CsgOp, passes::intern_ast::block_build::VarDef, OptEdge, Optimizer};
+
+use super::block_build::BlockCtx;
 
 use rvsdg::{region::Input, smallvec::smallvec, SmallColl};
 use vola_ast::{
     alge::{Expr, ExprTy},
     common::Branch,
+    csg::CsgTy,
 };
 use vola_common::{ariadne::Label, error::error_reporter, report};
 
@@ -77,54 +80,66 @@ impl Optimizer {
                 Ok(opnode)
             }
             ExprTy::Call(c) => {
-                //Try to build a call-like node, if that doesn't work,
-                //defere with a UnresolvedCall node
-
-                //Deffer call resolution by building all arg expression, then inserting a "UnresolvedCall"
-                //node
+                //for calls we frist try to build a entity or csg-operation, if the name exist for one of those.
+                //If not, we build a unresolved call
+                enum CallResult {
+                    Node(OptNode),
+                    Call(OutportLocation),
+                }
                 let args: SmallVec<_> = c
                     .args
                     .into_iter()
                     .map(|arg| self.build_expr(arg, region, ctx))
                     .collect::<Result<SmallColl<_>, OptError>>()?;
 
-                let call = if let Some(parsed_opt) = OptNode::try_parse(&c.ident.0) {
-                    self.graph
-                        .on_region(&region, |reg| {
-                            let (n, _) = reg
-                                .connect_node(parsed_opt.with_span(c.span.clone()), &args)
-                                .unwrap();
-                            n.output(0)
-                        })
-                        .unwrap()
+                let res = if let Some(ooe) = self.csg_node_defs.get(&c.ident.0) {
+                    //found one, use that as a CSG op
+                    let node =
+                        OptNode::new(CsgOp::new(ooe.name.clone(), 0, args.len()), c.span.clone());
+                    CallResult::Node(node)
                 } else {
-                    self.graph
-                        .on_region(&region, |reg| {
-                            let (usolev, _) = reg
-                                .connect_node(
-                                    OptNode::new(
-                                        UnresolvedCall::new_with_args(
-                                            c.ident.0.clone(),
-                                            args.len(),
-                                        ),
-                                        c.span.clone(),
-                                    ),
-                                    &args,
-                                )
-                                .unwrap();
-                            usolev.output(0)
-                        })
-                        .unwrap()
+                    //Either a building _special_ call, or an actual call to a λ.
+                    //The latter is resolved as a simple _call_
+                    if let Some(intr) = OptNode::try_parse(&c.ident.0) {
+                        CallResult::Node(intr)
+                    } else {
+                        //must be some kind of function, try to import it, and place a call
+                        let call_output = ctx.find_variable(&mut self.graph, &c.ident.0)?;
+                        CallResult::Call(call_output)
+                    }
                 };
 
-                Ok(call)
+                let call_result = match res {
+                    //Serialize as simple node
+                    CallResult::Node(n) => self
+                        .graph
+                        .on_region(&region, |reg| {
+                            let (usolev, _) = reg.connect_node(n, &args).unwrap();
+                            usolev.output(0)
+                        })
+                        .unwrap(),
+                    //As apply node
+                    CallResult::Call(call_source) => self
+                        .graph
+                        .on_region(&region, |reg| {
+                            let (call, edges) = reg.call(call_source, &args).unwrap();
+                            assert!(
+                                reg.ctx()[call].outputs().len() == 1,
+                                "No multi, or none-result functions supported atm."
+                            );
+                            call.output(0)
+                        })
+                        .unwrap(),
+                };
+
+                Ok(call_result)
             }
             ExprTy::EvalExpr(evalexpr) => {
                 //for eval, hookup the operand, then all arguments, to a unresolved eval node
 
                 let mut args = SmallColl::new();
                 //first arg is, by definition the _hopefull_ defined var
-                let operand = ctx.find_variable(&evalexpr.evaluator.0)?;
+                let operand = ctx.find_variable(&mut self.graph, &evalexpr.evaluator.0)?;
                 args.push(operand);
 
                 for arg in evalexpr.params.into_iter() {
@@ -138,10 +153,7 @@ impl Optimizer {
                         let (opnode, _) = regbuilder
                             .connect_node(
                                 OptNode::new(
-                                    UnresolvedEval::new_with_args(
-                                        evalexpr.concept.0.clone(),
-                                        args.len(),
-                                    ),
+                                    EvalNode::new(args.len(), evalexpr.concept.0.clone()),
                                     expr_span,
                                 ),
                                 &args,
@@ -157,11 +169,10 @@ impl Optimizer {
                 //Try to find the access source, if successful, hook the source up to this and
                 // return the value
 
-                let src = ctx.find_variable(&src.0)?;
+                let mut src = ctx.find_variable(&mut self.graph, &src.0)?;
 
                 //Unwrap the `accessors` list into a chain of `ConstantIndex`, each feeding into its
                 //successor.
-                let mut src = src;
                 for accessor in accessors {
                     let idx = if let Some(idx) = accessor.try_to_index() {
                         idx
@@ -195,7 +206,7 @@ impl Optimizer {
             }
             ExprTy::Ident(i) => {
                 //try to resolve the ident, or throw an error if not possible
-                let ident_node = ctx.find_variable(&i.0)?;
+                let ident_node = ctx.find_variable(&mut self.graph, &i.0)?;
                 Ok(ident_node)
             }
             ExprTy::List(lst) => {
@@ -247,18 +258,95 @@ impl Optimizer {
                 todo!("implement tuple")
             }
             ExprTy::ScopedCall(sc) => {
-                let err = OptError::Any {
-                    text: format!("Unexpected scoped-call in algebraic expression"),
-                };
-                report(
-                    error_reporter(err.clone(), sc.span.clone())
-                        .with_label(
-                            Label::new(sc.span.clone())
-                                .with_message("this patter can only be used in a csg-context"),
-                        )
-                        .finish(),
+                if let Some(operation) = self.csg_node_defs.get(&sc.call.ident.0) {
+                    if operation.ty == CsgTy::Entity {
+                        let err = OptError::Any { text: format!("Using Entity with sub-trees. Only CSG-Operations can use subtrees!") };
+                        report(
+                            error_reporter(err.clone(), sc.call.span.clone())
+                                .with_label(
+                                    Label::new(sc.call.span.clone()).with_message("called here"),
+                                )
+                                .with_label(
+                                    Label::new(operation.span.clone())
+                                        .with_message("Entity defined here"),
+                                )
+                                .finish(),
+                        );
+                        return Err(err);
+                    }
+                } else {
+                    //No such entity or operation
+                    let err = OptError::Any {
+                        text: format!(
+                            "No CSG-Entity or CSG-Operation named \"{}\" found",
+                            sc.call.ident.0
+                        ),
+                    };
+                    report(
+                        error_reporter(err.clone(), sc.call.span.clone())
+                            .with_label(
+                                Label::new(sc.call.span.clone()).with_message("called here"),
+                            )
+                            .finish(),
+                    );
+                    return Err(err);
+                }
+
+                //setup the subtree-results
+                let mut csg_node_args = SmallColl::new();
+                let block_count = sc.blocks.len();
+                for subtree in sc.blocks {
+                    //open new scope, serialize the bloch, then read out the return value.
+                    //if there is no return value, bail
+
+                    //NOTE: we stay in the same region, only open a AST scope.
+                    //      CSG-Scopes can only caputer values, but not modify them, so this is false
+                    ctx.open_new_scope(region, false);
+                    //build the block
+                    let subtree_span = subtree.span.clone();
+                    self.build_block(region, subtree, ctx)?;
+                    let after_finish_scope = ctx.close_scope();
+                    //now try to feed the result back
+                    if let Some(result) = after_finish_scope.result {
+                        csg_node_args.push(result);
+                    } else {
+                        //No such entity or operation
+                        let err = OptError::Any {
+                            text: format!("The call's subtree must have a (csg) result"),
+                        };
+                        report(
+                            error_reporter(err.clone(), sc.call.span.clone())
+                                .with_label(
+                                    Label::new(sc.call.span.clone()).with_message("called here"),
+                                )
+                                .with_label(
+                                    Label::new(subtree_span.clone()).with_message("This region"),
+                                )
+                                .finish(),
+                        );
+                        return Err(err);
+                    }
+                }
+
+                //now append all regular arguments
+                let argcount = sc.call.args.len();
+                for arg in sc.call.args {
+                    let expr = self.build_expr(arg, region, ctx)?;
+                    csg_node_args.push(expr);
+                }
+                let n = OptNode::new(
+                    CsgOp::new(sc.call.ident.clone(), block_count, argcount + block_count),
+                    sc.span,
                 );
-                return Err(err);
+                //finally setup the CSGOp
+                let output = self
+                    .graph
+                    .on_region(&region, |reg| {
+                        let (usolev, _) = reg.connect_node(n, &csg_node_args).unwrap();
+                        usolev.output(0)
+                    })
+                    .unwrap();
+                Ok(output)
             }
             ExprTy::SplatExpr { expr, count } => {
                 //The splat expression is a shortcut for
@@ -312,6 +400,107 @@ impl Optimizer {
         region: RegionLocation,
         ctx: &mut BlockCtx,
     ) -> Result<OutportLocation, OptError> {
-        todo!()
+        let (condition, if_branch) = branch.conditional;
+        //First build the condition in this region
+        let condition = self.build_expr(condition, region, ctx)?;
+        //now build the condition block.
+        let (gamma, if_idx, else_idx) = self
+            .graph
+            .on_region(&region, |reg| {
+                let (g, (if_idx, else_idx)) = reg.new_decission(|g| {
+                    let (bidx_if, _) = g.new_branch(|b, idx| {});
+                    let (bidx_else, _) = g.new_branch(|b, idx| {});
+                    (bidx_if, bidx_else)
+                });
+                //connect the criterion
+                let _ = reg
+                    .ctx_mut()
+                    .connect(
+                        condition,
+                        g.as_inport_location(InputType::GammaPredicate),
+                        OptEdge::value_edge_unset(),
+                    )
+                    .unwrap();
+                (g, if_idx, else_idx)
+            })
+            .unwrap();
+
+        //setup the _if_ branch
+        let if_region = RegionLocation {
+            node: gamma,
+            region_index: if_idx,
+        };
+        ctx.open_new_scope(
+            RegionLocation {
+                node: gamma,
+                region_index: if_idx,
+            },
+            true,
+        );
+        self.build_block(if_region, *if_branch, ctx)?;
+        let post_if_scope = ctx.close_scope();
+
+        //After building the if-branch, build the _else_ branch. We initialize the else branch with all imported
+        //context of the _if-branch_.
+        let else_region = RegionLocation {
+            node: gamma,
+            region_index: else_idx,
+        };
+        ctx.open_new_scope(else_region, true);
+        for (varkey, var) in post_if_scope.vars.into_iter() {
+            if let VarDef::Imported {
+                mut import_port,
+                last_use: _,
+            } = var
+            {
+                let _ = import_port.output.change_region_index(else_idx).unwrap();
+                let in_region_insert = VarDef::Imported {
+                    import_port,
+                    last_use: import_port,
+                };
+                ctx.active_scope.vars.insert(varkey, in_region_insert);
+            }
+        }
+        if let Some(else_block) = branch.unconditional {
+            self.build_block(else_region, *else_block, ctx)?;
+        }
+        let post_else_scope = ctx.close_scope();
+        //Since this is the _expr_ flavour of a branch, we only need to feed bach the results of both branches.
+
+        let result_idx = self.graph[gamma]
+            .node_type
+            .unwrap_gamma_mut()
+            .add_exit_var();
+
+        for (region_index, result_port) in [
+            (if_idx, post_if_scope.result),
+            (else_idx, post_else_scope.result),
+        ] {
+            let result_ev = gamma.as_inport_location(InputType::ExitVariableResult {
+                branch: region_index,
+                exit_variable: result_idx,
+            });
+            if let Some(value_src) = result_port {
+                //connect the result
+                self.graph
+                    .connect(value_src, result_ev, OptEdge::value_edge_unset())
+                    .unwrap();
+            } else {
+                let err = OptError::Any {
+                    text: format!("All branches must have an result if used as an expression!"),
+                };
+                report(
+                    error_reporter(err.clone(), branch.span.clone())
+                        .with_label(
+                            Label::new(branch.span.clone()).with_message("on this expression"),
+                        )
+                        .finish(),
+                );
+                return Err(err);
+            }
+        }
+
+        //successfully connected results, return the value_src port
+        Ok(gamma.as_outport_location(OutputType::ExitVariableOutput(result_idx)))
     }
 }

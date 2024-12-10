@@ -10,7 +10,6 @@ use vola_ast::{AstEntry, TopLevelNode, VolaAst};
 mod ast_to_graph;
 mod block_build;
 mod expr_build;
-mod unresolved;
 
 impl Optimizer {
     ///Adds a [VolaAst] to the optimizer. Might emit errors if the
@@ -38,10 +37,13 @@ impl Optimizer {
                 span,
                 ct_args,
                 entry,
-            } = entry.clone();
+            } = entry;
             let result = match entry {
-                AstEntry::Concept(c) => self.add_concept(span, ct_args, c),
-                AstEntry::CsgDef(def) => self.add_csgdef(span, ct_args, def),
+                AstEntry::Concept(c) => self.add_concept(span.clone(), ct_args.clone(), c.clone()),
+                AstEntry::CsgDef(def) => {
+                    self.add_csgdef(span.clone(), ct_args.clone(), def.clone())
+                }
+                AstEntry::Func(f) => self.define_func(f),
                 _ => Ok(()),
             };
 
@@ -57,7 +59,7 @@ impl Optimizer {
                 entry,
             } = entry;
             let result = match entry {
-                AstEntry::Func(f) => self.add_func(span, ct_args, f),
+                AstEntry::Func(f) => self.build_func_block(span, ct_args, f),
                 AstEntry::ImplBlock(implblock) => self.add_implblock(span, ct_args, implblock),
                 AstEntry::Module(m) => Err(OptError::Internal(format!(
                     "Found module, those should be resolved already!"
@@ -74,7 +76,6 @@ impl Optimizer {
             self.push_debug_state("AST interned");
         }
 
-        todo!("launch resolver");
         todo!("launch type-resolver");
 
         #[cfg(feature = "profile")]

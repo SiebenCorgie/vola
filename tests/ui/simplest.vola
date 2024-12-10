@@ -14,6 +14,5 @@ impl Sphere for Sdf3d(at){
 
 export fn myfield(at: vec3) -> real{
     csg s = Sphere(1.0);
-
     eval s.Sdf3d(at)
 }

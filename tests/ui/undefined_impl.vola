@@ -6,7 +6,7 @@ module std;
 
 entity InnerEntity();
 
-export myFn(at: vec3){
+export fn myFn(at: vec3) -> real{
 	csg s = Union(){
 		Translate(at){
 			InnerEntity()
