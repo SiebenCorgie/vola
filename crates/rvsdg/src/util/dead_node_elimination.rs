@@ -26,7 +26,7 @@ use crate::{
     err::GraphError,
     nodes::{LangNode, Node},
     region::RegionLocation,
-    NodeRef, Rvsdg,
+    EdgeRef, NodeRef, Rvsdg,
 };
 impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
     ///Applies dead-node-elimination to the whole graph. Returns all nodes that
@@ -69,6 +69,15 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
         false
     }
 
+    fn edge_alive(&self, liveness: &FlagStore<bool>, edge: EdgeRef) -> bool {
+        let src = self[edge].src();
+        let dst = self[edge].dst();
+
+        //NOTE: We only delete edge, if we _know_ that they are dead. So we don't, if we don't know the liveness
+        liveness.get(&src.into()).cloned().unwrap_or(true)
+            || liveness.get(&dst.into()).cloned().unwrap_or(true)
+    }
+
     fn dne_dfs_sweep(
         &mut self,
         liveness: &FlagStore<bool>,
@@ -80,6 +89,15 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
         for node in &all_nodes {
             if !self.node_is_live(liveness, *node) {
                 deleted_buffer.push(self.remove_node(*node)?);
+            }
+        }
+
+        //Also disconnect all edges, where both ports are dead.
+        //this takes care of deleting edges that are _between_ regions, but which
+        //are ultimately not used
+        for edg in self[region].edges.clone() {
+            if !self.edge_alive(liveness, edg) {
+                self.disconnect(edg)?;
             }
         }
 

@@ -9,10 +9,9 @@ impl nRepeat<sub> for SDF3D(at){
     let s = 0.0;
     for i in 0..n{
 		let t = at.x - s + 1.0;
-		let d_off_x = min(d, eval sub.SDF3D([s, 0.0, t]));
-		d = d_off_x
-		s = d_off.y - 3.0;
-    };
+		d = min(d, eval sub.SDF3D([s, 0.0, t]));
+		s = s - 3.0;
+    }
 
     d
 }

@@ -1,6 +1,6 @@
 module std;
 
-define common(at: vec3, offset: vec3){
+fn common(at: vec3, offset: vec3) -> csg{
 	SmoothUnion(1.0){
 		Sphere(1.0)
 	}{

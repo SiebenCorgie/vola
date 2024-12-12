@@ -161,7 +161,7 @@ impl Optimizer {
         //add the eval node to the body, then connect all arguments
         self.graph.on_region(&lmd_region, |reg| {
             let eval_node = reg.insert_node(OptNode::new(
-                EvalNode::new(eval_arg_ports.len(), key.concept.clone()),
+                EvalNode::new(eval_arg_ports.len() + 1, key.concept.clone()),
                 Span::empty(),
             ));
             //connect subtree to first arg

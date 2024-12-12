@@ -28,7 +28,7 @@ use rvsdg::{
 use vola_common::{ariadne::Label, error::error_reporter, report, Span};
 
 use crate::{
-    common::Ty,
+    common::{DataType, Shape, Ty},
     error::OptError,
     graph::auxiliary::{Function, Impl},
     OptEdge, Optimizer, TypeState,
@@ -49,7 +49,7 @@ impl Optimizer {
             self.push_debug_state("pre type derive");
         }
 
-        let mut last_error = None;
+        let mut errors = SmallColl::new();
 
         //we first build the topological order of all nodes in Omega, then
         //we enter eac
@@ -58,19 +58,19 @@ impl Optimizer {
 
         for node in topoord {
             if let Err(e) = self.try_node_type_derive(node) {
-                last_error = Some(e);
+                errors.push(e)
             }
         }
 
         for implblock in self.concept_impl.values() {
             if let Err(e) = self.verify_imblblock(implblock) {
-                last_error = Some(e);
+                errors.push(e)
             }
         }
 
         for f in self.functions.values() {
             if let Err(e) = self.verify_fn(f) {
-                last_error = Some(e);
+                errors.push(e)
             }
         }
 
@@ -79,8 +79,8 @@ impl Optimizer {
             self.push_debug_state("post type derive");
         }
 
-        if let Some(err) = last_error {
-            return Err(err);
+        if errors.len() > 0 {
+            return Err(OptError::ErrorsOccurred(errors.len()));
         } else {
             Ok(())
         }
@@ -248,9 +248,9 @@ impl Optimizer {
         {
             if let Some(ty) = self.graph.edge(*edg).ty.get_type() {
                 if ty != &algefn.return_type {
-                    let err = OptError::Any {
+                    let err = OptError::TypeDeriveError {
                         text: format!(
-                            "Result type was \"{ty:?}\", but expected {:?}!",
+                            "Result type was \"{ty}\", but expected {}!",
                             algefn.return_type
                         ),
                     };
@@ -258,7 +258,7 @@ impl Optimizer {
                         error_reporter(err.clone(), algefn.def_span.clone())
                             .with_label(Label::new(algefn.region_span.clone()).with_message(
                                 &format!(
-                                    "result producer in this region should be {:?}",
+                                    "result producer in this region should be {}",
                                     algefn.return_type
                                 ),
                             ))
@@ -267,8 +267,11 @@ impl Optimizer {
                     return Err(err);
                 }
             } else {
-                let err = OptError::Any {
-                    text: format!("Result is of type \"{:?}\", but connected edge was untyped. This is a compiler bug!", algefn.return_type),
+                let err = OptError::TypeDeriveError {
+                    text: format!(
+                        "Result is of type \"{}\", but result was untyped. This is a compiler bug!",
+                        algefn.return_type
+                    ),
                 };
                 report(
                     error_reporter(err.clone(), algefn.def_span.clone())
@@ -636,22 +639,31 @@ impl Optimizer {
                             .cloned()
                             .unwrap_or(Span::empty());
 
+                        let if_branch_ty = if_branch_ty.clone().unwrap_or(Ty::Shaped {
+                            ty: DataType::Void,
+                            shape: Shape::Scalar,
+                        });
+                        let else_branch_ty = else_branch_ty.clone().unwrap_or(Ty::Shaped {
+                            ty: DataType::Void,
+                            shape: Shape::Scalar,
+                        });
+
                         let err = OptError::Any {
                             text: format!(
-                                "Return type conflict. If branch returns {:?}, but else branch returns {:?}",
+                                "Return type conflict. If branch returns {}, but else branch returns {}",
                                 if_branch_ty, else_branch_ty
                             ),
                         };
                         report(
                             error_reporter(err.clone(), head_span)
                                 .with_label(
-                                    Label::new(if_branch_span.clone())
-                                        .with_message(format!("This returns {if_branch_ty:?}")),
+                                    Label::new(if_branch_span.clone()).with_message(format!(
+                                        "\"If\"-branch returns {if_branch_ty}"
+                                    )),
                                 )
-                                .with_label(
-                                    Label::new(else_branch_span.clone())
-                                        .with_message(format!("This returns {else_branch_ty:?}")),
-                                )
+                                .with_label(Label::new(else_branch_span.clone()).with_message(
+                                    format!("\"Else\"-branch returns {else_branch_ty}"),
+                                ))
                                 .finish(),
                         );
 
@@ -841,7 +853,7 @@ impl Optimizer {
                     if ty != argty {
                         //type missmatch
                         let err = OptError::TypeDeriveError {
-                            text: format!("Loop-Variable[{argument_port:?}] type missmatch. Argument was {argty}, but Result was {ty}!"),
+                            text: format!("Loop-Variable type missmatch: Argument was imported as {argty}, but resulted in {ty}!"),
                         };
                         report(
                             error_reporter(err.clone(), theta_span.clone())
@@ -1104,12 +1116,17 @@ impl Optimizer {
             let resolved_values = match self.try_node_type_derive(node) {
                 Ok(values) => values,
                 Err(e) => {
-                    let span = self.find_span(node.into()).unwrap_or(Span::empty());
-                    report(
-                        error_reporter(e.clone(), span.clone())
-                            .with_label(Label::new(span.clone()).with_message("on this operation"))
-                            .finish(),
-                    );
+                    if let Some(span) = self.find_span(node.into()) {
+                        report(
+                            error_reporter(e.clone(), span.clone())
+                                .with_label(
+                                    Label::new(span.clone()).with_message("on this operation"),
+                                )
+                                .finish(),
+                        )
+                    } else {
+                        report(error_reporter(e.clone(), Span::empty()).finish());
+                    }
                     //Immediately abort, since we have no way of finishing.
                     // TODO: We could also collect all error at this point...
                     return Err(e);

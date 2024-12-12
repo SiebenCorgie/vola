@@ -83,7 +83,10 @@ impl Optimizer {
                 //If not, we build a unresolved call
                 enum CallResult {
                     Node(OptNode),
-                    Call(OutportLocation),
+                    Call {
+                        original_source: OutportLocation,
+                        imported_at: OutportLocation,
+                    },
                 }
                 let args: SmallVec<_> = c
                     .args
@@ -104,7 +107,11 @@ impl Optimizer {
                     } else {
                         //must be some kind of function, try to import it, and place a call
                         let call_output = ctx.find_variable(&mut self.graph, &c.ident.0)?;
-                        CallResult::Call(call_output)
+                        let producer = self.graph.find_producer_out(call_output).unwrap();
+                        CallResult::Call {
+                            original_source: producer,
+                            imported_at: call_output,
+                        }
                     }
                 };
 
@@ -113,15 +120,18 @@ impl Optimizer {
                     CallResult::Node(n) => self
                         .graph
                         .on_region(&region, |reg| {
-                            let (usolev, _) = reg.connect_node(n, &args).unwrap();
-                            usolev.output(0)
+                            let (result, _) = reg.connect_node(n, &args).unwrap();
+                            result.output(0)
                         })
                         .unwrap(),
                     //As apply node
-                    CallResult::Call(call_source) => self
+                    CallResult::Call {
+                        original_source,
+                        imported_at,
+                    } => self
                         .graph
                         .on_region(&region, |reg| {
-                            let (call, _edges) = reg.call(call_source, &args).unwrap();
+                            let (call, _edges) = reg.call(imported_at, &args).unwrap();
                             assert!(
                                 reg.ctx()[call].outputs().len() == 1,
                                 "No multi, or none-result functions supported atm."

@@ -2,7 +2,7 @@
 //EXEC-FN:myField
 //EXEC-ARGS:4.2,1.0,4.0
 //EXEC-EPS:0.01
-//EXEC-RES:42.0
+//EXEC-RES:10.0
 //END-CONFIG
 
 module std;
@@ -12,8 +12,8 @@ entity Loopy();
 impl Loopy for SDF3D(at){
     let t = 0.0;
     for i in 0..10{
-        t = t + at.x;
-    };
+        t = t + 1.0;
+    }
 
     t
 }

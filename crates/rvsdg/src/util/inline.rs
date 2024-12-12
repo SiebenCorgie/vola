@@ -172,6 +172,14 @@ impl<
                 output: OutputType::ContextVariableArgument(cvidx),
             };
             if let Some(connected_callable) = self.find_producer_out(src_cv_port) {
+                //Edge-Case: If the producer is in the dst_region, we don't need to import it.
+                //           in that case we just register the producer in the cv remapping
+                if self[connected_callable.node].parent == Some(dst_region) {
+                    let is_new = cv_remapping.insert(src_cv_port, connected_callable);
+                    assert!(is_new.is_none());
+                    continue;
+                }
+
                 //was connected, import the callable into the dst region and add the remapping
                 match self.import_context(connected_callable, dst_region) {
                     Ok((dst_cv, path)) => {
@@ -225,8 +233,8 @@ impl<
             //remap src.
             //We first check if its a context variable, if so we use that
             //map to do the remapping. Otherwise we check if its some _other_
-            //kind of region argument. For that we use the _argumenti_ remapping. And finally
-            //if it ain't that, its some kind of _normal_ region-internal sourec port, so we use that.
+            //kind of region argument. For that we use the _argument_ remapping. And finally
+            //if it ain't that, its some kind of _normal_ region-internal source port, so we use that.
             if let OutputType::ContextVariableArgument(_) = src.output {
                 let new_src_port = cv_remapping.get(&src).unwrap();
                 src = new_src_port.clone();

@@ -695,6 +695,27 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
 
         dsts
     }
+
+    ///Returns true if `node` is either the same as `parent` or if `node` is _withing_ a subregion of `node`.
+    pub fn is_in_parent(&self, mut node: NodeRef, parent: NodeRef) -> bool {
+        if node == parent {
+            return true;
+        }
+
+        //Walk "up" the region-hierachy, until we end at the omega node.
+        //if we don't cross `parent`, we are not _part_ of the parent
+        let toplevel_node = self.toplevel_region().node;
+        while node != toplevel_node {
+            let new_parent = self[node].parent.unwrap();
+            if new_parent.node == parent {
+                return true;
+            } else {
+                node = new_parent.node
+            }
+        }
+
+        false
+    }
 }
 
 pub struct DependencyGraph {

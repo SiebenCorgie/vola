@@ -52,6 +52,12 @@ impl Optimizer {
             }
         }
 
+        //if we already had an error, we can-not continue, since
+        //nothing is valid anyways
+        if errors.len() > 0 {
+            return Err(OptError::ErrorsOccurred(errors.len()));
+        }
+
         for entry in ast.entries {
             let TopLevelNode {
                 span,
@@ -75,6 +81,9 @@ impl Optimizer {
         if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("DUMP_AFTER_INTERN").is_ok() {
             self.push_debug_state("AST interned");
         }
+
+        //try to detect recurisve calls
+        self.detect_recursive_calls()?;
 
         //do initial type resolving
         self.type_derive()?;

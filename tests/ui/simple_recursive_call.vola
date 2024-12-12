@@ -1,5 +1,5 @@
 //BEGIN-CONFIG
-//ERROR:At least 2 errors occurred while running optimizer.
+//ERROR:At least 1 errors occurred while running optimizer.
 //END-CONFIG
 
 module std;
@@ -10,7 +10,7 @@ fn test(a: real) -> real{
 }
 
 
-export fn test(a: real) -> real{
+export fn testexp(a: real) -> real{
 	let t = test(a);
 	csg r = Sphere(t);
 

@@ -13,7 +13,7 @@ impl Loopy for SDF3D(at){
     let t = 0.0;
     for i in 0..0{
         t = t + at.x;
-    };
+    }
 
     t
 }

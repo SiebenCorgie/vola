@@ -1,18 +1,18 @@
 module std;
 
-entity nSpheres(n: i);
+entity nSpheres(n: int);
 impl nSpheres for SDF3D(at){
     let d = 100000.0;
     let off = [0.0; 2];
-    for x in 0..n{
+    for x in 10..n{
         off = [off.x + 1.0, 0.0];
 		//inner loop
 		for y in 0..n{
 		    off = [off.x, off.y + 1.0];
 			d = min(d, length(at - [off.x, off.y, 0.0]) - 3.0);
-		};
-        d = min(d, length(at - [d_off.y, inner_d.y, 0.0]) - 3.0);
-    };
+		}
+        d = min(d, length(at - [off.y, d, 0.0]) - 3.0);
+    }
 
     d
 }

@@ -144,6 +144,39 @@ impl BlockCtx {
         }
     }
 
+    pub fn write_or_define_var(
+        &mut self,
+        graph: &mut OptGraph,
+        name: &str,
+        new_origin: OutportLocation,
+    ) -> Result<(), OptError> {
+        //try to write to an existing
+        if self.write_var(name, new_origin).is_ok() {
+            return Ok(());
+        }
+
+        //otherwise import (since this must have existed before),
+        //and immediatly redefine last use at this port
+        let _ = self.try_import(graph, name)?;
+        self.write_var(name, new_origin)
+            .expect("Writing must work after importing");
+        Ok(())
+    }
+
+    ///Returns true, if this port shouldn't be considered for any
+    ///port-merging. Mostly prevents us from using loop-bounds as
+    /// variables at the moment.
+    ///
+    pub(crate) fn is_anonym_port(graph: &mut OptGraph, port: OutportLocation) -> bool {
+        if graph[port.node].node_type.is_theta()
+            && (port.output == OutputType::Argument(0) || port.output == OutputType::Argument(1))
+        {
+            true
+        } else {
+            false
+        }
+    }
+
     ///Tries to find the variable in any of the parent scopes, if successful, imports it into this scope
     fn try_import(
         &mut self,
@@ -196,8 +229,45 @@ impl BlockCtx {
         } else {
             //NOTE: we decide the _import_ path, based on the producer _type_. λs are imported as context, everything else as
             //      as arguments
-            let producer_port = graph.find_producer_out(port).unwrap();
-            if graph[producer_port.node].node_type.is_lambda() {
+            let producer_port = if let Some(prod) = graph.find_producer_out(port) {
+                prod
+            } else {
+                //If we can't find the producer, check if it is a context variable. In that case, we are likely trying to import
+                //unset context (for instance when building an impl block).
+                //for those its okay to _just use_ that port, without having a producer
+                if let OutputType::ContextVariableArgument(_i) = port.output {
+                    port
+                } else {
+                    let err = OptError::Internal(format!(
+                        "Could not route \"{name}\" into region. This is a bug!"
+                    ));
+                    report(error_reporter(err.clone(), Span::empty()).finish());
+                    return Err(err);
+                }
+            };
+
+            //Note: We import Lambda-Declerations as context, everything else as arguments
+            if producer_port.output == OutputType::LambdaDeclaration {
+                if graph.is_in_parent(self.active_scope.region.node, producer_port.node) {
+                    //this would create a recursive call, which is not allowed.
+                    //
+                    //bail in that case
+                    let err = OptError::Any {
+                        text: format!(
+                            "Cannot use \"{}\", as this would create a recursivecall",
+                            name
+                        ),
+                    };
+                    report(
+                        error_reporter(err.clone(), self.block_span.clone())
+                            .with_label(
+                                Label::new(self.block_span.clone()).with_message("In this region"),
+                            )
+                            .finish(),
+                    );
+                    return Err(err);
+                }
+
                 let (port, _path) = graph.import_context(port, self.active_scope.region)?;
                 port
             } else {
@@ -278,6 +348,9 @@ impl Optimizer {
         //results, and no return_expression is given, assume that this _is_
         //the return expression instead. This is a shortcoming of the current tree-sitter parser.
         // if any parse _does this righ_, it shouldn't happen anyways.
+
+        //always mark the region's span
+        self.span_tags.set(region.into(), block.span);
 
         if block.retexpr.is_none() {
             if let Some(Stmt::Branch(b)) = block.stmts.last().cloned() {
@@ -649,6 +722,8 @@ impl Optimizer {
                 let (node, _edgs) = reg
                     .connect_node(condition, &[lower_bound, upper_bound])
                     .unwrap();
+
+                self.span_tags.set(node.into(), rangespan.clone());
                 node
             })
             .unwrap();
@@ -694,15 +769,10 @@ impl Optimizer {
 
                     //build the index-increaser and feed out the new-value
                     t.on_loop(|reg| {
-                        let (condition, _) = reg
-                            .connect_node(
-                                OptNode::new(BinaryRel::new(BinaryRelOp::Lt), rangespan.clone()),
-                                &[lower_arg, upper_arg],
-                            )
-                            .unwrap();
-                        //connect the condition to the theta's condition port
-                        reg.connect_to_result(condition.output(0), InputType::ThetaPredicate)
-                            .unwrap();
+                        //NOTE: we have to increase the lower bound, before testing,
+                        //      since the condition decides if we take
+                        //      the "next" loop.
+
                         //increase the lower bound and connect it to its loop-variable
                         let one = reg.insert_node(OptNode::new(ImmNat::new(1), rangespan.clone()));
                         let (added, _) = reg
@@ -714,6 +784,18 @@ impl Optimizer {
                                 &[lower_arg, one.output(0)],
                             )
                             .unwrap();
+
+                        let (condition, _) = reg
+                            .connect_node(
+                                OptNode::new(BinaryRel::new(BinaryRelOp::Lt), rangespan.clone()),
+                                &[added.output(0), upper_arg],
+                            )
+                            .unwrap();
+                        self.span_tags.set(condition.into(), rangespan.clone());
+                        //connect the condition to the theta's condition port
+                        reg.connect_to_result(condition.output(0), InputType::ThetaPredicate)
+                            .unwrap();
+
                         //Connect increased lower bound
                         reg.connect_to_result(added.output(0), lower_res.input)
                             .unwrap();
@@ -788,6 +870,12 @@ impl Optimizer {
             loop_variable_port.into(),
             loopstmt.iteration_variable_ident.0.clone(),
         );
+        self.names.set(lower.0.into(), "lower-bound".to_owned());
+        self.names.set(lower.1.into(), "lower-bound".to_owned());
+        self.names.set(upper.0.into(), "upper-bound".to_owned());
+        self.names.set(upper.1.into(), "upper-bound".to_owned());
+        self.span_tags.set(theta.into(), loopstmt.span.clone());
+        self.span_tags.set(gamma.into(), loopstmt.span.clone());
         let old = ctx.active_scope.vars.insert(
             loopstmt.iteration_variable_ident.0,
             VarDef::FirstDef {
@@ -819,6 +907,24 @@ impl Optimizer {
             {
                 assert_eq!(import_port.node, theta);
                 let result_lv = if let OutputType::Argument(idx) = import_port.output {
+                    //Lower and upper bound are already self-connected accordingly in the theta-building procedure, so ignore those
+                    //we also don't want to redefine the lower-bound in the loop
+                    if idx < 2 {
+                        if import_port != last_use {
+                            let err = OptError::Any { text: format!("Tried to redefine loop bound \"{var}\" in loop,  which is not allowed!") };
+                            report(
+                                error_reporter(err.clone(), rangespan.clone())
+                                    .with_label(
+                                        Label::new(rangespan.clone())
+                                            .with_message("for this bound"),
+                                    )
+                                    .finish(),
+                            );
+                            return Err(err);
+                        }
+                        continue;
+                    }
+
                     theta.as_inport_location(InputType::Result(idx))
                 } else {
                     panic!("assumed argument port!");
@@ -902,7 +1008,8 @@ impl Optimizer {
                 .set(no_run_src.into(), format!("No-Run value: {ident}"));
 
             //finally redefine the variable in the theta-parent (AST) scope
-            ctx.write_var(
+            ctx.write_or_define_var(
+                &mut self.graph,
                 &ident,
                 gamma.as_outport_location(OutputType::ExitVariableOutput(export_ex)),
             )

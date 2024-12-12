@@ -1,0 +1,14 @@
+//BEGIN-CONFIG
+//EXEC-FN:eval_in_alge
+//EXEC-ARGS:1.0
+//EXEC-EPS:0.01
+//EXEC-RES:0.732
+//END-CONFIG
+
+module std;
+
+export fn eval_in_alge(someattr: real) -> real{
+    csg sub = Sphere(someattr);
+	let t = eval sub.SDF3D([1.0, 1.0, 1.0]);
+	t
+}

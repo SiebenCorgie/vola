@@ -24,9 +24,9 @@ it possible to patch code that targets GPU execution at runtime in an efficient 
 An example field that describes a sphere translated by one unit on `X` might look like this:
 
 ```
-entity Sphere(radius: s);
+entity Sphere(radius: real);
 operation Translate(trans: vec3);
-concept SDF3D: vec3 -> s;
+concept SDF3D: vec3 -> real;
 
 //Implements the SDF3D Concept for the Sphere
 impl Sphere for SDF3D(at){
@@ -38,7 +38,7 @@ impl Translate<sub> for SDF3D(at){
     eval sub.SDF3D(at)
 }
 
-export myField(pos: vec3){
+export fn myField(pos: vec3) -> real{
     csg field = Translate([1, 0, 0]){
         Sphere(1.0)
     };
@@ -46,7 +46,7 @@ export myField(pos: vec3){
     //Returns the result of `field` evaluated for the
     //signed distance field concept SDF3D at the location
     // `pos`.
-    field.SDF3D(pos)
+    eval field.SDF3D(pos)
 }
 ```
 
@@ -78,11 +78,11 @@ by using this as a library. Servers as interface between the Vola frontend, and 
 
 ## Status
 
-Working on automatic differentiation support.
+📖 Reworking the Syntax 📖
 
 ## Building & Running
 
-Make sure that you are on rust-nightly (eg. `rustup default nightly`). Then just build ✨ `cargo build`_ ✨.
+Make sure that you are on rust-nightly (eg. `rustup default nightly`). Then just build ✨ `cargo build` ✨.
 
 ### vola-cli
 
@@ -135,7 +135,7 @@ If you are interested in the runtime SPIR-V patching, have a look at [spv-patche
 
 - ✨More [stdlib](https://gitlab.com/tendsinmende/vola-sdf-stdlib) features ✨
 - Refactor optimization passes based on [egg](https://github.com/egraphs-good/egg)
-
+- Interval arithmetic, similar to auto differentiation by _reinterpreting_ given code.
 
 ## License
 

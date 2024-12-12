@@ -118,6 +118,7 @@ impl Optimizer {
                     .with_label(Label::new(func.head_span().into()).with_message("redefined here"))
                     .finish(),
             );
+            return Err(err);
         }
 
         //Also make sure that no concept or csg-def with that name exists
@@ -155,7 +156,8 @@ impl Optimizer {
         });
 
         //At this point everything should be hooked-up and typed. therfore we can return
-        self.names.set(lambda.into(), format!("fn {}", func.name.0));
+        self.names.set(lambda.into(), func.name.0.clone());
+        self.span_tags.set(lambda.into(), func.head_span());
         let interned = Function {
             name: func.name.0.clone(),
             region_span,

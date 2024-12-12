@@ -272,6 +272,7 @@ impl View for WasmNode {
 #[derive(Debug, Clone, PartialEq)]
 pub enum WasmTy {
     Defined { shape: TyShape, ty: walrus::ValType },
+    Callabale,
     Undefined,
 }
 
@@ -299,6 +300,7 @@ impl TryFrom<vola_opt::common::Ty> for WasmTy {
                 },
                 walrus::ValType::F32,
             ),
+            vola_opt::common::Ty::Callable => return Ok(WasmTy::Callabale),
             other => return Err(WasmError::UnexpectedType(other)),
         };
 
@@ -338,6 +340,7 @@ impl WasmTy {
                 }
                 TyShape::Tensor { .. } => panic!("Tensor not yet supported"),
             },
+            WasmTy::Callabale => SmallColl::new(),
             WasmTy::Undefined => SmallColl::new(),
         }
     }
@@ -397,6 +400,7 @@ impl WasmTy {
                 ValType::F64 | ValType::I64 => 8,
                 ValType::V128 => 16,
             },
+            Self::Callabale => 0,
             Self::Undefined => 0,
         }
     }
@@ -409,6 +413,7 @@ impl WasmTy {
                 let element_count = shape.element_count();
                 base_type_size * element_count
             }
+            WasmTy::Callabale => 0,
             WasmTy::Undefined => 0,
         }
     }
@@ -420,6 +425,7 @@ impl WasmTy {
     pub fn element_count(&self) -> usize {
         match self {
             Self::Defined { shape, ty: _ } => shape.element_count(),
+            Self::Callabale => 0,
             Self::Undefined => 0,
         }
     }
@@ -434,6 +440,7 @@ impl WasmTy {
 
     pub fn append_elements_to_signature(&self, signature: &mut SmallColl<walrus::ValType>) {
         match self {
+            Self::Callabale => {}
             Self::Undefined => {}
             Self::Defined { shape, ty } => {
                 for _ in 0..shape.element_count() {
@@ -522,6 +529,7 @@ impl View for WasmEdge {
             Self::State => format!("State"),
             Self::Value(WasmTy::Defined { shape, ty }) => format!("{shape}<{ty:?}>"),
             Self::Value(WasmTy::Undefined) => format!("Undefined"),
+            Self::Value(WasmTy::Callabale) => format!("Callable"),
         }
     }
 

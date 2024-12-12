@@ -1,3 +1,7 @@
+//BEGIN-CONFIG
+//ERROR:At least 1 errors occurred while running optimizer.
+//END-CONFIG
+
 module std;
 
 export fn test(a: real) -> real{

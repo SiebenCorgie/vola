@@ -6,10 +6,10 @@ impl Box for Color(at){
 }
 
 impl SmoothUnion<a, b> for Color(at){
-	let a = eval a.Color(at);
-	let b = eval b.Color(at);
+	let l = eval a.Color(at);
+	let r = eval b.Color(at);
 
-	mix(a, b, [0.5, 0.5, 0.5])
+	mix(l, r, [0.5, 0.5, 0.5])
 }
 
 

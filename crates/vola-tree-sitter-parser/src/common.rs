@@ -254,7 +254,12 @@ impl FromTreeSitter for Ty {
         //  3.2 shaped with data_type
         // 4. tuple with sub-types
 
-        let root_node = node.child(0).unwrap();
+        //Might have to unwrap the node, if its the _type_ kind.
+        let root_node = if node.kind() == "type" {
+            &node.child(0).unwrap()
+        } else {
+            node
+        };
         match root_node.kind() {
             "data_type" => Ok(Self::Simple(DataTy::parse(ctx, dta, &root_node)?)),
             //NOTE: this way we make sure that CSGs are never shaped
@@ -308,10 +313,14 @@ impl FromTreeSitter for Ty {
             }
             _ => {
                 let err = ParserError::UnexpectedAstNode {
-                    kind: node.kind().to_string(),
-                    expected: "type".to_owned(),
+                    kind: root_node.kind().to_string(),
+                    expected: "data_type | shape | csg | (".to_owned(),
                 };
-                report(error_reporter(err.clone(), ctx.span(node)).finish());
+                report(
+                    error_reporter(err.clone(), ctx.span(&root_node))
+                        .with_label(Label::new(ctx.span(&root_node)).with_message("here"))
+                        .finish(),
+                );
                 Err(err)
             }
         }
@@ -374,7 +383,11 @@ impl FromTreeSitter for Literal {
                     kind: node.kind().to_string(),
                     expected: "integer_literal | float_literal".to_owned(),
                 };
-                report(error_reporter(err.clone(), ctx.span(node)).finish());
+                report(
+                    error_reporter(err.clone(), ctx.span(node))
+                        .with_label(Label::new(ctx.span(node)).with_message("here"))
+                        .finish(),
+                );
                 Err(err)
             }
         }

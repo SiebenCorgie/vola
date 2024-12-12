@@ -7,8 +7,8 @@ impl nRepeat<sub> for SDF3D(at){
     let d = 100000.0;
     let dy = 0.0;
     for offset in 0..n{
-        let t = at.x - d_off.y + 1.0;
-		d = min(d, eval sub.SDF3D([d.y, 0.0, t]));
+        let t = at.x - dy + 1.0;
+		d = min(d, eval sub.SDF3D([dy, 0.0, t]));
 		let color = eval sub.Color(at);
 		dy = dy - color.x;
     }

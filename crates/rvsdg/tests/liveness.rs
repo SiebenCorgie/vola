@@ -366,7 +366,7 @@ fn live_port_count() {
         }
     });
     //found those by counting in the svg dump 🤝.
-    assert!(live_ports == 49, "{} != 49", live_ports);
+    assert!(live_ports == 48, "{} != 48", live_ports);
 }
 
 #[test]

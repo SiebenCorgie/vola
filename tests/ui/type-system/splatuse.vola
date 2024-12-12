@@ -13,27 +13,33 @@ fn step(edge: real, x: real) -> real{
 fn sign(a: real) -> real{
 	if a > 0.0{
 		1.0
-	}else if a < 0.0{
-		-1.0
 	}else{
-		0.0
+        if a < 0.0{
+		  -1.0
+	    }else{
+		  0.0
+		}
 	}
 }
 
 fn sign_v2(a: vec2) -> vec2{
 	let x = if a.x > 0.0{
 		1.0
-	}else if a.x < 0.0{
-		-1.0
 	}else{
-		0.0
+	   if a.x < 0.0{
+		  -1.0
+		}else{
+	       	0.0
+		}
 	};
 	let y = if a.y > 0.0{
 		1.0
-	}else if a.y < 0.0{
-		-1.0
 	}else{
-		0.0
+        if a.y < 0.0{
+	       -1.0
+		}else{
+		   0.0
+        }
 	};
 
 	[x,y]
