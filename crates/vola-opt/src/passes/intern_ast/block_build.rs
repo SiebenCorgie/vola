@@ -163,20 +163,6 @@ impl BlockCtx {
         Ok(())
     }
 
-    ///Returns true, if this port shouldn't be considered for any
-    ///port-merging. Mostly prevents us from using loop-bounds as
-    /// variables at the moment.
-    ///
-    pub(crate) fn is_anonym_port(graph: &mut OptGraph, port: OutportLocation) -> bool {
-        if graph[port.node].node_type.is_theta()
-            && (port.output == OutputType::Argument(0) || port.output == OutputType::Argument(1))
-        {
-            true
-        } else {
-            false
-        }
-    }
-
     ///Tries to find the variable in any of the parent scopes, if successful, imports it into this scope
     fn try_import(
         &mut self,

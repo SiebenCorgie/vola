@@ -83,10 +83,7 @@ impl Optimizer {
                 //If not, we build a unresolved call
                 enum CallResult {
                     Node(OptNode),
-                    Call {
-                        original_source: OutportLocation,
-                        imported_at: OutportLocation,
-                    },
+                    Call(OutportLocation),
                 }
                 let args: SmallVec<_> = c
                     .args
@@ -107,11 +104,7 @@ impl Optimizer {
                     } else {
                         //must be some kind of function, try to import it, and place a call
                         let call_output = ctx.find_variable(&mut self.graph, &c.ident.0)?;
-                        let producer = self.graph.find_producer_out(call_output).unwrap();
-                        CallResult::Call {
-                            original_source: producer,
-                            imported_at: call_output,
-                        }
+                        CallResult::Call(call_output)
                     }
                 };
 
@@ -125,10 +118,7 @@ impl Optimizer {
                         })
                         .unwrap(),
                     //As apply node
-                    CallResult::Call {
-                        original_source,
-                        imported_at,
-                    } => self
+                    CallResult::Call(imported_at) => self
                         .graph
                         .on_region(&region, |reg| {
                             let (call, _edges) = reg.call(imported_at, &args).unwrap();
