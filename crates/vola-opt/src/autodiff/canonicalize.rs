@@ -21,10 +21,10 @@ use crate::{
     alge::{
         arithmetic::{BinaryArith, BinaryArithOp, UnaryArith, UnaryArithOp},
         buildin::{Buildin, BuildinOp},
-        ConstantIndex,
     },
     common::{DataType, Shape, Ty},
     imm::ImmScalar,
+    typelevel::ConstantIndex,
     OptError, OptNode, Optimizer,
 };
 

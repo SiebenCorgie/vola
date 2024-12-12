@@ -2,9 +2,9 @@ use rvsdg::{edge::OutportLocation, region::RegionLocation, smallvec::smallvec, S
 use vola_common::Span;
 
 use crate::{
-    alge::Construct,
     common::{DataType, Shape, Ty},
     imm::ImmScalar,
+    typelevel::UniformConstruct,
     Optimizer,
 };
 
@@ -47,7 +47,10 @@ impl Optimizer {
                         let src_array: SmallColl<OutportLocation> = smallvec![scalar_src; width];
                         let (constructor, _) = g
                             .connect_node(
-                                OptNode::new(Construct::new().with_inputs(width), Span::empty()),
+                                OptNode::new(
+                                    UniformConstruct::new().with_inputs(width),
+                                    Span::empty(),
+                                ),
                                 &src_array,
                             )
                             .unwrap();
@@ -69,7 +72,10 @@ impl Optimizer {
                         let src_array: SmallColl<_> = smallvec![column_src; width];
                         let (constructor, _) = g
                             .connect_node(
-                                OptNode::new(Construct::new().with_inputs(width), Span::empty()),
+                                OptNode::new(
+                                    UniformConstruct::new().with_inputs(width),
+                                    Span::empty(),
+                                ),
                                 &src_array,
                             )
                             .unwrap();
@@ -108,7 +114,7 @@ impl Optimizer {
                             let (constructor, _) = g
                                 .connect_node(
                                     OptNode::new(
-                                        Construct::new().with_inputs(poped_dim),
+                                        UniformConstruct::new().with_inputs(poped_dim),
                                         Span::empty(),
                                     ),
                                     &src_array,

@@ -12,11 +12,9 @@ use rvsdg::{edge::OutportLocation, region::RegionLocation, NodeRef, SmallColl};
 use vola_common::Span;
 
 use crate::{
-    alge::{
-        buildin::{Buildin, BuildinOp},
-        ConstantIndex, Construct,
-    },
+    alge::buildin::{Buildin, BuildinOp},
     common::{DataType, Shape, Ty},
+    typelevel::{ConstantIndex, UniformConstruct},
     OptError, OptNode, Optimizer,
 };
 
@@ -141,7 +139,7 @@ impl Optimizer {
                 let (result_vec, _) = reg
                     .connect_node(
                         OptNode::new(
-                            Construct::new().with_inputs(vector_elements.len()),
+                            UniformConstruct::new().with_inputs(vector_elements.len()),
                             span.clone(),
                         ),
                         &vector_elements,
@@ -203,7 +201,7 @@ impl Optimizer {
                         let (row_vector, _) = reg
                             .connect_node(
                                 OptNode::new(
-                                    Construct::new().with_inputs(row_indices.len()),
+                                    UniformConstruct::new().with_inputs(row_indices.len()),
                                     span.clone(),
                                 ),
                                 &row_indices,
@@ -232,7 +230,7 @@ impl Optimizer {
                 let (result_vec, _) = reg
                     .connect_node(
                         OptNode::new(
-                            Construct::new().with_inputs(vector_elements.len()),
+                            UniformConstruct::new().with_inputs(vector_elements.len()),
                             span.clone(),
                         ),
                         &vector_elements,
@@ -298,7 +296,7 @@ impl Optimizer {
                         let (row_vector, _) = reg
                             .connect_node(
                                 OptNode::new(
-                                    Construct::new().with_inputs(row_indices.len()),
+                                    UniformConstruct::new().with_inputs(row_indices.len()),
                                     span.clone(),
                                 ),
                                 &row_indices,
@@ -338,7 +336,7 @@ impl Optimizer {
                     let (col_vec, _) = reg
                         .connect_node(
                             OptNode::new(
-                                Construct::new().with_inputs(result_column_elements.len()),
+                                UniformConstruct::new().with_inputs(result_column_elements.len()),
                                 span.clone(),
                             ),
                             &result_column_elements,
@@ -351,7 +349,7 @@ impl Optimizer {
                 let (result_vec, _) = reg
                     .connect_node(
                         OptNode::new(
-                            Construct::new().with_inputs(result_columns.len()),
+                            UniformConstruct::new().with_inputs(result_columns.len()),
                             span.clone(),
                         ),
                         &result_columns,

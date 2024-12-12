@@ -20,11 +20,11 @@ use crate::{
     alge::{
         arithmetic::{BinaryArith, UnaryArith},
         buildin::Buildin,
-        ConstantIndex, Construct,
     },
     autodiff::{AutoDiff, AutoDiffError},
     common::{DataType, Shape, Ty},
     imm::ImmScalar,
+    typelevel::{ConstantIndex, UniformConstruct},
     OptEdge, OptError, OptNode, Optimizer,
 };
 
@@ -68,7 +68,7 @@ impl Optimizer {
                     .graph
                     .on_region(&region, |g| {
                         let constr = g.insert_node(OptNode::new(
-                            Construct::new().with_inputs(width),
+                            UniformConstruct::new().with_inputs(width),
                             Span::empty(),
                         ));
 

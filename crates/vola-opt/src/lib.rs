@@ -46,6 +46,7 @@ pub mod config;
 mod graph;
 pub mod imm;
 mod passes;
+pub mod typelevel;
 mod util;
 
 //Re-Export all of these, since they basically form the basis of _everything_.

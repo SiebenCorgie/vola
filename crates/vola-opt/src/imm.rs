@@ -181,7 +181,7 @@ impl ImmMatrix {
     pub fn new(columns: SmallColl<SmallColl<f64>>) -> Self {
         //We are as wide as we have columns, and are as heigh has each column has elements.
         //see
-        // Construct::try_derive_type for more information
+        // UniformConstruct::try_derive_type for more information
         let width = columns.len();
         let height = columns[0].len();
 

@@ -62,15 +62,15 @@ pub struct Index {
 }
 
 #[derive(LangNode)]
-pub struct Construct {
+pub struct UniformConstruct {
     #[inputs]
     pub inputs: SmallColl<Inport>,
     #[output]
     pub output: Outport,
 }
 
-impl From<&vola_opt::alge::Construct> for Construct {
-    fn from(value: &vola_opt::alge::Construct) -> Self {
+impl From<&vola_opt::typelevel::UniformConstruct> for UniformConstruct {
+    fn from(value: &vola_opt::typelevel::UniformConstruct) -> Self {
         Self {
             inputs: smallvec![Inport::default(); value.inputs.len()],
             output: Outport::default(),

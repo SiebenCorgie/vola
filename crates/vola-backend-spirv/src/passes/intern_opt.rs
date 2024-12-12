@@ -23,9 +23,9 @@ use vola_opt::{
         matrix::{UnaryMatrix, UnaryMatrixOp},
         relational::{BinaryRel, BinaryRelOp},
         trigonometric::{Trig, TrigOp},
-        ConstantIndex, Construct,
     },
     imm::{ImmBool, ImmNat, ImmScalar},
+    typelevel::{ConstantIndex, UniformConstruct},
     OptEdge, OptNode, Optimizer,
 };
 
@@ -291,7 +291,7 @@ impl BackendOp {
             return Some(Self::from_const_index(facc));
         }
 
-        if let Some(lconst) = optnode.try_downcast_ref::<Construct>() {
+        if let Some(lconst) = optnode.try_downcast_ref::<UniformConstruct>() {
             return Some(Self::from_construct(lconst));
         }
 
@@ -395,7 +395,7 @@ impl BackendOp {
         Self::SpirvOp(SpvOp::Extract(smallvec![fac.access as u32]))
     }
 
-    fn from_construct(_lc: &Construct) -> Self {
-        Self::SpirvOp(SpvOp::Construct)
+    fn from_construct(_lc: &UniformConstruct) -> Self {
+        Self::SpirvOp(SpvOp::UniformConstruct)
     }
 }

@@ -25,8 +25,9 @@ use vola_ast::{
 use vola_common::{ariadne::Label, error::error_reporter, report};
 
 use crate::{
-    alge::{ConstantIndex, Construct, EvalNode},
+    alge::EvalNode,
     imm::{ImmNat, ImmScalar},
+    typelevel::{ConstantIndex, UniformConstruct},
     OptError, OptNode,
 };
 
@@ -220,7 +221,7 @@ impl Optimizer {
                     items.push(self.build_expr(itm, region, ctx)?);
                 }
 
-                let mut node = Construct::new();
+                let mut node = UniformConstruct::new();
                 node.inputs = smallvec![Input::default(); items.len()];
 
                 let opnode = self
@@ -374,7 +375,7 @@ impl Optimizer {
                     items.push(src_expr);
                 }
 
-                let mut node = Construct::new();
+                let mut node = UniformConstruct::new();
                 node.inputs = smallvec![Input::default(); items.len()];
 
                 let opnode = self

@@ -667,7 +667,7 @@ pub enum SpvOp {
     ///_some_ kind of constant extract. The exact instruction depends on _what_ is
     // being used, but we _know_ that the access indices are _constant_.
     Extract(SmallVec<[u32; 3]>),
-    Construct,
+    UniformConstruct,
 }
 
 impl SpvOp {
@@ -685,7 +685,7 @@ impl SpvOp {
             SpvOp::ConstantInt { resolution, bits } => format!("i{resolution}: {bits}"),
             SpvOp::ConstantBool(b) => format!("{b}"),
             SpvOp::Extract(ex) => format!("Extract: {:?}", ex),
-            SpvOp::Construct => "ConstantConstruct".to_owned(),
+            SpvOp::UniformConstruct => "UniformConstruct".to_owned(),
         }
     }
 
@@ -773,10 +773,10 @@ impl SpvOp {
                 log::warn!("Extract bound checking not yet implemented!");
                 Ok(())
             }
-            SpvOp::Construct => {
+            SpvOp::UniformConstruct => {
                 //TODO: implement
                 #[cfg(feature = "log")]
-                log::warn!("Construct checking not yet implemented!");
+                log::warn!("UniformConstruct checking not yet implemented!");
                 Ok(())
             }
         }
@@ -872,7 +872,7 @@ impl SpvOp {
                     operands,
                 )
             }
-            SpvOp::Construct => Instruction::new(
+            SpvOp::UniformConstruct => Instruction::new(
                 CoreOp::CompositeConstruct,
                 Some(result_type_id),
                 Some(result_id),

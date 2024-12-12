@@ -667,7 +667,7 @@ impl WasmLambdaBuilder {
 
                 self.store_values_to_port(output_ports[0], builder);
             }
-            WasmNode::Construct(_) => {
+            WasmNode::UniformConstruct(_) => {
                 //for construct we just load all inputs on the stack, and then
                 //store them.
                 for input in &input_src_ports {

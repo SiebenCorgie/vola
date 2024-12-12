@@ -24,10 +24,10 @@ use vola_opt::{
         matrix::UnaryMatrix,
         relational::BinaryRel,
         trigonometric::Trig,
-        ConstantIndex,
     },
     common::{DataType, Shape},
     imm::{ImmMatrix, ImmNat, ImmScalar, ImmVector},
+    typelevel::ConstantIndex,
     OptNode,
 };
 use walrus::{
@@ -37,7 +37,7 @@ use walrus::{
 
 use crate::{
     error::WasmError,
-    wasm::{self, Construct, Index, WasmBinaryOp, WasmRuntimeOp, WasmUnaryOp, WasmValue},
+    wasm::{self, Index, UniformConstruct, WasmBinaryOp, WasmRuntimeOp, WasmUnaryOp, WasmValue},
 };
 
 mod utils;
@@ -48,7 +48,7 @@ pub enum WasmNode {
     Runtime(WasmRuntimeOp),
     Value(WasmValue),
     Index(Index),
-    Construct(Construct),
+    UniformConstruct(UniformConstruct),
     Error {
         inputs: SmallColl<Input>,
         outputs: SmallColl<Output>,
@@ -94,8 +94,12 @@ impl WasmNode {
             }));
         }
 
-        if let Some(construct_node) = value.try_downcast_ref::<vola_opt::alge::Construct>() {
-            return Ok(WasmNode::Construct(wasm::Construct::from(construct_node)));
+        if let Some(construct_node) =
+            value.try_downcast_ref::<vola_opt::typelevel::UniformConstruct>()
+        {
+            return Ok(WasmNode::UniformConstruct(wasm::UniformConstruct::from(
+                construct_node,
+            )));
         }
 
         if let Some(binop) = value.try_downcast_ref::<BinaryArith>() {
@@ -201,7 +205,7 @@ impl LangNode for WasmNode {
             Self::Runtime(r) => r.inputs(),
             Self::Value(v) => v.inputs(),
             Self::Index(i) => i.inputs(),
-            Self::Construct(c) => c.inputs(),
+            Self::UniformConstruct(c) => c.inputs(),
             Self::Error { inputs, outputs: _ } => inputs,
         }
     }
@@ -213,7 +217,7 @@ impl LangNode for WasmNode {
             Self::Runtime(r) => r.inputs_mut(),
             Self::Value(v) => v.inputs_mut(),
             Self::Index(i) => i.inputs_mut(),
-            Self::Construct(c) => c.inputs_mut(),
+            Self::UniformConstruct(c) => c.inputs_mut(),
             Self::Error { inputs, outputs: _ } => inputs,
         }
     }
@@ -225,7 +229,7 @@ impl LangNode for WasmNode {
             Self::Runtime(r) => r.outputs(),
             Self::Value(v) => v.outputs(),
             Self::Index(i) => i.outputs(),
-            Self::Construct(c) => c.outputs(),
+            Self::UniformConstruct(c) => c.outputs(),
             Self::Error { inputs: _, outputs } => outputs,
         }
     }
@@ -237,7 +241,7 @@ impl LangNode for WasmNode {
             Self::Runtime(r) => r.outputs_mut(),
             Self::Value(v) => v.outputs_mut(),
             Self::Index(i) => i.outputs_mut(),
-            Self::Construct(c) => c.outputs_mut(),
+            Self::UniformConstruct(c) => c.outputs_mut(),
             Self::Error { inputs: _, outputs } => outputs,
         }
     }
@@ -251,7 +255,7 @@ impl View for WasmNode {
             Self::Runtime(r) => format!("{:?}", r.op),
             Self::Value(v) => format!("{:?}", v.op),
             Self::Index(i) => format!("Index<{}>", i.index),
-            Self::Construct(_) => format!("Construct"),
+            Self::UniformConstruct(_) => format!("UniformConstruct"),
             Self::Error { .. } => format!("Error"),
         }
     }
@@ -263,7 +267,7 @@ impl View for WasmNode {
             Self::Runtime(_r) => rvsdg_viewer::Color::from_rgba(230, 220, 255, 255),
             Self::Value(_r) => rvsdg_viewer::Color::from_rgba(150, 220, 150, 255),
             Self::Index(_r) => rvsdg_viewer::Color::from_rgba(150, 150, 150, 255),
-            Self::Construct(_r) => rvsdg_viewer::Color::from_rgba(150, 150, 150, 255),
+            Self::UniformConstruct(_r) => rvsdg_viewer::Color::from_rgba(150, 150, 150, 255),
             Self::Error { .. } => rvsdg_viewer::Color::from_rgba(255, 150, 100, 255),
         }
     }

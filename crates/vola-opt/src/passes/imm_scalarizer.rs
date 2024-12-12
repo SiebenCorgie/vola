@@ -7,15 +7,15 @@
  */
 
 //! Pass that destructs any immediate value that is not `ImmScalar` or `ImmNat`
-//! into a tree of just those two and `Construct` nodes.
+//! into a tree of just those two and `UniformConstruct` nodes.
 
 use rvsdg::{nodes::NodeType, region::RegionLocation, NodeRef, SmallColl};
 use vola_common::Span;
 
 use crate::{
-    alge::Construct,
     common::{DataType, Ty},
     imm::{ImmMatrix, ImmScalar, ImmVector},
+    typelevel::UniformConstruct,
     OptError, OptNode, Optimizer,
 };
 
@@ -122,7 +122,10 @@ impl Optimizer {
                 //now add the construct node and bail
                 let (node, connections) = reg
                     .connect_node(
-                        OptNode::new(Construct::new().with_inputs(input_count), Span::empty()),
+                        OptNode::new(
+                            UniformConstruct::new().with_inputs(input_count),
+                            Span::empty(),
+                        ),
                         &const_srcs,
                     )
                     .unwrap();
@@ -156,7 +159,10 @@ impl Optimizer {
             .graph
             .on_region(&region, |reg| {
                 reg.connect_node(
-                    OptNode::new(Construct::new().with_inputs(column_count), Span::empty()),
+                    OptNode::new(
+                        UniformConstruct::new().with_inputs(column_count),
+                        Span::empty(),
+                    ),
                     &vec_construct_srcs,
                 )
                 .expect("Failed to create mat-construct")
