@@ -16,7 +16,7 @@ use crate::{
         buildin::{Buildin, BuildinOp},
         ConstantIndex, Construct,
     },
-    common::Ty,
+    common::{DataType, Shape, Ty},
     OptError, OptNode, Optimizer,
 };
 
@@ -36,21 +36,48 @@ impl Optimizer {
         let right_type = self.get_or_derive_type(right_src);
 
         match (left_type.clone(), right_type.clone()) {
-            (Ty::Matrix { .. }, Ty::Vector { .. }) => {
+            (
+                Ty::Shaped {
+                    shape: Shape::Matrix { .. },
+                    ty: DataType::Real,
+                },
+                Ty::Shaped {
+                    shape: Shape::Vec { .. },
+                    ty: DataType::Real,
+                },
+            ) => {
                 //this is canonicalized into a unrolled multiplication
                 let _canon = self
                     .unroll_matrix_vector(region, node, left_type, right_type, left_src, right_src);
 
                 Ok(())
             }
-            (Ty::Vector { .. }, Ty::Matrix { .. }) => {
+            (
+                Ty::Shaped {
+                    shape: Shape::Vec { .. },
+                    ty: DataType::Real,
+                },
+                Ty::Shaped {
+                    shape: Shape::Matrix { .. },
+                    ty: DataType::Real,
+                },
+            ) => {
                 //this is canonicalized into a unrolled multiplication
                 let _canonicalized = self
                     .unroll_vector_matrix(region, node, left_type, right_type, left_src, right_src);
 
                 Ok(())
             }
-            (Ty::Matrix { .. }, Ty::Matrix { .. }) => {
+            (
+                Ty::Shaped {
+                    shape: Shape::Matrix { .. },
+                    ty: DataType::Real,
+                },
+                Ty::Shaped {
+                    shape: Shape::Matrix { .. },
+                    ty: DataType::Real,
+                },
+            ) => {
                 let _canonicalized = self
                     .unroll_matrix_matrix(region, node, left_type, right_type, left_src, right_src);
                 Ok(())

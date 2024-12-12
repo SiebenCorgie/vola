@@ -15,7 +15,7 @@ impl MyAdOp<sub> for Sdf(at){
     length([diff(sd, at.x); 3])
 }
 
-export fn mysdf(at: vec3, time: real) -> vec3{
+export fn mysdf(at: vec3, time: real) -> real{
     csg sphere = MyAdOp(){Sphere(time)};
     eval sphere.Sdf(at)
 }

@@ -41,7 +41,7 @@ pub mod common;
 mod csg;
 mod error;
 pub use error::OptError;
-//mod autodiff;
+mod autodiff;
 pub mod config;
 mod graph;
 pub mod imm;

@@ -7,6 +7,7 @@
  */
 use crate::{
     //autodiff::AutoDiffError,
+    autodiff::AutoDiffError,
     common::Ty,
 };
 use rvsdg::{
@@ -69,8 +70,8 @@ pub enum OptError {
     #[error("Failed to generate identitiy-implementation: {0}")]
     AIIFailed(String),
 
-    //#[error(transparent)]
-    //AutoDiffError(#[from] AutoDiffError),
+    #[error(transparent)]
+    AutoDiffError(#[from] AutoDiffError),
     #[error(transparent)]
     UnrollError(#[from] UnrollError),
 }

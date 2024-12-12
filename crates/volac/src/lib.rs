@@ -191,8 +191,7 @@ impl Pipeline {
         }
 
         //dispatch autodiff nodes
-        println!("reimplement autodiff");
-        //opt.dispatch_autodiff()?;
+        opt.dispatch_autodiff()?;
 
         //Call _before-finalize-hook_.
         self.backend.opt_pre_finalize(&mut opt)?;

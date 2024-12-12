@@ -8,7 +8,7 @@
 
 use crate::{
     autodiff::{activity::Activity, AdResponse, AutoDiffError},
-    common::Ty,
+    common::{DataType, Shape, Ty},
     imm::ImmScalar,
     Optimizer,
 };
@@ -81,9 +81,31 @@ impl Optimizer {
                 //
                 //For Matrix * vector we have a hand rolled derivative calculation, if only vector is active
                 match (left_type.clone(), right_type.clone()) {
-                    (Ty::Scalar, Ty::Scalar) => {}
-                    (Ty::Scalar, Ty::Vector { .. }) | (Ty::Vector { .. }, Ty::Scalar) => {}
-                    (Ty::Vector { width: w2 }, Ty::Vector { width: w1 }) => {
+                    (Ty::SCALAR_REAL, Ty::SCALAR_REAL) => {}
+                    (
+                        Ty::SCALAR_REAL,
+                        Ty::Shaped {
+                            shape: Shape::Vec { .. },
+                            ty: DataType::Real,
+                        },
+                    )
+                    | (
+                        Ty::Shaped {
+                            shape: Shape::Vec { .. },
+                            ty: DataType::Real,
+                        },
+                        Ty::SCALAR_REAL,
+                    ) => {}
+                    (
+                        Ty::Shaped {
+                            shape: Shape::Vec { width: w2 },
+                            ty: DataType::Real,
+                        },
+                        Ty::Shaped {
+                            shape: Shape::Vec { width: w1 },
+                            ty: DataType::Real,
+                        },
+                    ) => {
                         assert!(w2 == w1);
                     }
                     /*TODO: Implement a hand-rolled derivative based on activity analysis instead

@@ -21,7 +21,7 @@ use vola_common::Span;
 
 use crate::{
     alge::{ConstantIndex, Construct},
-    common::Ty,
+    common::{DataType, Shape, Ty},
     imm::{ImmScalar, ImmVector},
     OptError, OptNode, Optimizer,
 };
@@ -67,7 +67,7 @@ impl Activity {
             .expect("expected type information");
 
         match ty {
-            Ty::Scalar => {
+            Ty::SCALAR_REAL => {
                 assert!(wrt_to_scalar_chain.len() == 0);
                 opt.graph
                     .on_region(&region, |g| {
@@ -76,7 +76,10 @@ impl Activity {
                     })
                     .unwrap()
             }
-            Ty::Vector { width } => {
+            Ty::Shaped {
+                shape: Shape::Vec { width },
+                ty: DataType::Real,
+            } => {
                 assert!(
                     wrt_to_scalar_chain.len() == 1,
                     "expected 1 == {}",

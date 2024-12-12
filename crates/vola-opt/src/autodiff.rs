@@ -168,45 +168,24 @@ impl DialectNode for AutoDiff {
 
     fn try_derive_type(
         &self,
-        _typemap: &rvsdg::attrib::FlagStore<Ty>,
-        graph: &crate::OptGraph,
+        input_types: &[Ty],
         _concepts: &ahash::AHashMap<String, vola_ast::csg::CSGConcept>,
         _csg_defs: &ahash::AHashMap<String, vola_ast::csg::CsgDef>,
-    ) -> Result<Option<Ty>, OptError> {
+    ) -> Result<Ty, OptError> {
         //By definition we only allow expressions that
         //output scalars or vectors.
         //We also only allow _wrt_ args that are scalars or vectors.
         //
         //For those, the return type is _easy_, just the cross of its element products
 
-        let expr_type = if let Some(expr_edg) = self.inputs[0].edge {
-            if let Some(ty) = graph.edge(expr_edg).ty.get_type() {
-                ty.clone()
-            } else {
-                return Ok(None);
-            }
-        } else {
-            return Err(OptError::TypeDeriveError {
-                text: format!("diff() had no expression to differentiate"),
-            });
-        };
+        let expr_type = input_types[0].clone();
 
         //Make sure the expression has either scalar or vector type
         if !expr_type.is_scalar() && !expr_type.is_vector() {
             return Err(OptError::TypeDeriveError { text: format!("diff() can only be applied to expressions of type Scalar or Vector, expression had {}", expr_type) });
         }
 
-        let wrt_type = if let Some(wrt_edge) = self.inputs[1].edge {
-            if let Some(ty) = graph.edge(wrt_edge).ty.get_type() {
-                ty.clone()
-            } else {
-                return Ok(None);
-            }
-        } else {
-            return Err(OptError::TypeDeriveError {
-                text: format!("diff() wrt-argument was not set!"),
-            });
-        };
+        let wrt_type = input_types[1].clone();
 
         //Make sure the wrt has either scalar or vector type
         if !wrt_type.is_scalar() && !wrt_type.is_vector() {
@@ -224,7 +203,7 @@ impl DialectNode for AutoDiff {
         //      be a row-vector, but we don't have that concept, so we merge them just into _vector_.
 
         match (expr_type, wrt_type) {
-            (Ty::SCALAR_REAL, Ty::SCALAR_REAL) => Ok(Some(Ty::SCALAR_REAL)),
+            (Ty::SCALAR_REAL, Ty::SCALAR_REAL) => Ok(Ty::SCALAR_REAL),
             //diff(vec, real) or diff(real, vec).
             (
                 Ty::Shaped {
@@ -239,10 +218,10 @@ impl DialectNode for AutoDiff {
                     ty: DataType::Real,
                     shape: Shape::Vec { width },
                 },
-            ) => Ok(Some(Ty::Shaped {
+            ) => Ok(Ty::Shaped {
                 ty: DataType::Real,
                 shape: Shape::Vec { width },
-            })),
+            }),
             //diff(vec, vec)
             (
                 Ty::Shaped {
@@ -253,13 +232,13 @@ impl DialectNode for AutoDiff {
                     ty: DataType::Real,
                     shape: Shape::Vec { width: wrt_width },
                 },
-            ) => Ok(Some(Ty::Shaped {
+            ) => Ok(Ty::Shaped {
                 ty: DataType::Real,
                 shape: Shape::Matrix {
                     width: wrt_width,
                     height: expr_width,
                 },
-            })),
+            }),
             _ => panic!("invalid type state while resolving AutoDiff type"),
         }
     }
