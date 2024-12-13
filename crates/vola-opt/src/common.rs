@@ -211,7 +211,7 @@ impl Display for Ty {
                     }
                     write!(f, "{s}")?;
                 }
-                Ok(())
+                write!(f, ")")
             }
         }
     }

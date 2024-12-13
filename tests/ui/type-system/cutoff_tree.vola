@@ -1,5 +1,11 @@
-module std;
+//BEGIN-CONFIG
+//EXEC-FN:myField
+//EXEC-ARGS:0.0,0.0,4.0
+//EXEC-EPS:0.1
+//EXEC-RES:-0.7556544,0.0,0.0,1.0
+//END-CONFIG
 
+module std;
 
 impl Box for Color(at){
 	[0.0, 1.0, 0.0]
@@ -7,9 +13,8 @@ impl Box for Color(at){
 
 impl SmoothUnion<a, b> for Color(at){
 	let l = eval a.Color(at);
-	let r = eval b.Color(at);
-
-	mix(l, r, [0.5, 0.5, 0.5])
+    //just use the left color, so we can predict
+	l
 }
 
 
@@ -27,6 +32,7 @@ export fn myField(at: vec3) -> (real, vec3){
 	}{
 		Box([1.0, 1.0, 1.0])
 	};
-
+    //NOTE: the color is just the Translate's color, since this cuts
+    //      of the subtree (the sphere).
 	(eval t.SDF3D(at), eval t.Color(at))
 }

@@ -77,3 +77,20 @@ impl From<&vola_opt::typelevel::UniformConstruct> for UniformConstruct {
         }
     }
 }
+
+#[derive(LangNode)]
+pub struct NonUniformConstruct {
+    #[inputs]
+    pub inputs: SmallColl<Inport>,
+    #[output]
+    pub output: Outport,
+}
+
+impl From<&vola_opt::typelevel::NonUniformConstruct> for NonUniformConstruct {
+    fn from(value: &vola_opt::typelevel::NonUniformConstruct) -> Self {
+        Self {
+            inputs: smallvec![Inport::default(); value.inputs.len()],
+            output: Outport::default(),
+        }
+    }
+}

@@ -1,0 +1,14 @@
+//BEGIN-CONFIG
+//EXEC-FN:myField
+//EXEC-ARGS:0.0,0.0,4.0
+//EXEC-EPS:0.1
+//EXEC-RES:3.0,1.0,1.0,1.0
+//END-CONFIG
+
+module std;
+
+export fn myField(at: vec3) -> (real, vec3){
+	csg t = Sphere(1.0);
+
+	(eval t.SDF3D(at), eval t.Color(at))
+}

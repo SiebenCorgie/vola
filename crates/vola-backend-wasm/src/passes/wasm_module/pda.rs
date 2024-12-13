@@ -61,13 +61,14 @@ impl WasmLambdaBuilder {
                 None
             };
             //now emit a store for each local element of the
-            let per_element_offset = arg.ty.base_type_size();
-            for element_index in 0..arg.ty.element_count() {
+            let per_element_offsets = arg.ty.element_offsets();
+
+            for (element_index, offset) in per_element_offsets.into_iter().enumerate() {
                 //Emit a load for the local element, followed by a store to the correct
                 //to the correct offset of the `addr`
 
                 //NOTE: Since we are allocating _in order_ we can just use add
-                let localid = locals.add(arg.ty.unwarp_walrus_ty());
+                let localid = locals.add(arg.ty.unwarp_walrus_ty(element_index));
                 local_ids.push(localid);
                 //only store, if there is an actual address
                 if let Some(addr) = addr {
@@ -79,11 +80,11 @@ impl WasmLambdaBuilder {
                     builder.local_get(localid);
                     builder.store(
                         self.mem.memid,
-                        arg.ty.store_kind(),
+                        arg.ty.store_kind(element_index),
                         MemArg {
                             align: 0,
                             //calculate local offset for this address
-                            offset: (per_element_offset * element_index).try_into().unwrap(),
+                            offset,
                         },
                     );
                 }
@@ -132,6 +133,7 @@ impl WasmLambdaBuilder {
         &self,
         base_addr: i32,
         offset: u32,
+        element_index: usize,
         ty: &WasmTy,
         builder: &mut walrus::InstrSeqBuilder,
     ) {
@@ -140,7 +142,11 @@ impl WasmLambdaBuilder {
         builder.local_get(self.fn_local_stack_pointer);
         builder.binop(walrus::ir::BinaryOp::I32Add);
         //now load the element at index
-        builder.load(self.mem.memid, ty.load_kind(), MemArg { align: 0, offset });
+        builder.load(
+            self.mem.memid,
+            ty.load_kind(element_index),
+            MemArg { align: 0, offset },
+        );
     }
 
     ///Puts the elements of `port` on stack, regardless of its location
@@ -149,11 +155,9 @@ impl WasmLambdaBuilder {
         //so that all elements end up on the stack
         let memele = self.mem.get_port_element(port);
 
-        let pe_offset = memele.ty.base_type_size();
-        for ele_idx in 0..memele.ty.element_count() {
-            let offset = (pe_offset * ele_idx).try_into().unwrap();
-
-            self.load_addr_offset(memele.base_addr, offset, &memele.ty, builder);
+        let pe_offsets = memele.ty.element_offsets();
+        for (index, offset) in pe_offsets.into_iter().enumerate() {
+            self.load_addr_offset(memele.base_addr, offset, index, &memele.ty, builder);
         }
     }
 
@@ -186,7 +190,7 @@ impl WasmLambdaBuilder {
         // Also we do this on the informal stack, so we have to add that value as well.
 
         let memele = self.mem.get_port_element(port);
-        let pe_offset = memele.ty.base_type_size();
+        let pe_offsets = memele.ty.element_offsets();
 
         //push the addr value into the local element
         builder.const_(Value::I32(memele.base_addr));
@@ -195,15 +199,16 @@ impl WasmLambdaBuilder {
         let addr_id = self.mem.swap_i32[0];
         builder.local_set(addr_id);
 
-        //we always use the _second_ swap value
-        let payload_swap_id = match memele.ty.unwarp_walrus_ty() {
-            ValType::F32 => self.mem.swap_f32[1],
-            ValType::I32 => self.mem.swap_i32[1],
-            _ => panic!("{:?} cannot swap atm.", memele.ty),
-        };
-
         //NOTE: Store has to be in reverse...
-        for ele_idx in (0..memele.ty.element_count()).rev() {
+        for (element_index, offset) in pe_offsets.into_iter().enumerate().rev() {
+            //we always use the _second_ swap value. We test that for each element since for instance a tuple
+            //can have several _simple_ types.
+            let payload_swap_id = match memele.ty.unwarp_walrus_ty(element_index) {
+                ValType::F32 => self.mem.swap_f32[1],
+                ValType::I32 => self.mem.swap_i32[1],
+                _ => panic!("{:?} cannot swap atm.", memele.ty),
+            };
+
             //now set the top stack value into _another_ local
             //value, and pop both in reverse
             builder.local_set(payload_swap_id);
@@ -214,11 +219,8 @@ impl WasmLambdaBuilder {
             //now store the element at index
             builder.store(
                 self.mem.memid,
-                memele.ty.store_kind(),
-                MemArg {
-                    align: 0,
-                    offset: (pe_offset * ele_idx).try_into().unwrap(),
-                },
+                memele.ty.store_kind(element_index),
+                MemArg { align: 0, offset },
             );
         }
     }
@@ -662,12 +664,12 @@ impl WasmLambdaBuilder {
                 let input_ty = backend.outport_type(input_src_ports[0]).unwrap();
                 let addr = self.mem.get_port_element(input_src_ports[0]).base_addr;
                 for element_offset in input_ty.index_to_offset_elements(i.index) {
-                    self.load_addr_offset(addr, element_offset, &input_ty, builder);
+                    self.load_addr_offset(addr, element_offset, i.index, &input_ty, builder);
                 }
 
                 self.store_values_to_port(output_ports[0], builder);
             }
-            WasmNode::UniformConstruct(_) => {
+            WasmNode::UniformConstruct(_) | WasmNode::NonUniformConstruct(_) => {
                 //for construct we just load all inputs on the stack, and then
                 //store them.
                 for input in &input_src_ports {

@@ -34,7 +34,7 @@ impl Sphere for SDF3D(at){
 }
 
 impl Sphere for Color(at){
-	at
+	[1.0; 3]
 }
 
 impl Box for SDF3D(at){
