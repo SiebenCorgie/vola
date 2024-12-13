@@ -32,7 +32,7 @@ pub enum WasmError {
     UnsupportedNode(String),
     #[error("Encountered composite immediate value. Was \"ImmScalarize\" applied?")]
     UnexpectedComposite,
-    #[error("Unexpected type {0:?}")]
+    #[error("Unexpected type {0}")]
     UnexpectedType(Ty),
     #[error("Node {node} had unexpected signature:\nInput: {input:?}\noutput: {output:?}")]
     UnexpectedSignature {

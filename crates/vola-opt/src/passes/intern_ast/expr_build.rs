@@ -12,7 +12,10 @@ use rvsdg::{
     smallvec::SmallVec,
 };
 
-use crate::{csg::CsgOp, passes::intern_ast::block_build::VarDef, OptEdge, Optimizer};
+use crate::{
+    csg::CsgOp, passes::intern_ast::block_build::VarDef, typelevel::NonUniformConstruct, OptEdge,
+    Optimizer,
+};
 
 use super::block_build::BlockCtx;
 
@@ -22,7 +25,7 @@ use vola_ast::{
     common::Branch,
     csg::CsgTy,
 };
-use vola_common::{ariadne::Label, error::error_reporter, report};
+use vola_common::{ariadne::Label, error::error_reporter, report, Span};
 
 use crate::{
     alge::EvalNode,
@@ -255,7 +258,35 @@ impl Optimizer {
                 Ok(opnode)
             }
             ExprTy::Tuple(tuple_elements) => {
-                todo!("implement tuple")
+                let first_span = tuple_elements.first().map(|f| f.span.clone()).unwrap();
+                let last_span = tuple_elements.last().map(|f| f.span.clone()).unwrap();
+                let span = Span {
+                    file: first_span.file.clone(),
+                    from: first_span.from,
+                    to: last_span.to,
+                    byte_start: first_span.byte_start,
+                    byte_end: last_span.byte_end,
+                };
+                let mut args = SmallColl::default();
+                for arg in tuple_elements.into_iter() {
+                    args.push(self.build_expr(arg, region, ctx)?);
+                }
+
+                //For tuples we just emit a NonUniform constructor
+                let tuple_construct = self
+                    .graph
+                    .on_region(&region, |reg| {
+                        let (node, _edg) = reg
+                            .connect_node(
+                                OptNode::new(NonUniformConstruct::new(args.len()), span),
+                                &args,
+                            )
+                            .unwrap();
+                        node.output(0)
+                    })
+                    .unwrap();
+
+                Ok(tuple_construct)
             }
             ExprTy::ScopedCall(sc) => {
                 if let Some(operation) = self.csg_node_defs.get(&sc.call.ident.0) {

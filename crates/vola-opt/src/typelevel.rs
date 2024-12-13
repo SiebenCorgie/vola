@@ -251,6 +251,80 @@ impl DialectNode for UniformConstruct {
     }
 }
 
+///Creates a non-uniform aggregate from several input types. Contrary to [UniformConstruct] this won't produce a shaped
+/// type, but a Aggregate.
+#[derive(LangNode, Debug)]
+pub struct NonUniformConstruct {
+    #[inputs]
+    pub inputs: SmallColl<Input>,
+    #[output]
+    pub output: Output,
+}
+
+impl NonUniformConstruct {
+    pub fn new(argcount: usize) -> Self {
+        Self {
+            inputs: smallvec![Input::default(); argcount],
+            output: Output::default(),
+        }
+    }
+}
+
+implViewTyOp!(NonUniformConstruct, "NonUniformConstruct");
+impl DialectNode for NonUniformConstruct {
+    fn dialect(&self) -> &'static str {
+        "typelevel"
+    }
+
+    fn structural_copy(&self, span: Span) -> OptNode {
+        OptNode {
+            span,
+            node: Box::new(NonUniformConstruct {
+                inputs: smallvec![Input::default(); self.inputs.len()],
+                output: Output::default(),
+            }),
+        }
+    }
+    fn try_derive_type(
+        &self,
+        input_types: &[Ty],
+        _concepts: &AHashMap<String, CSGConcept>,
+        _csg_defs: &ahash::AHashMap<String, CsgDef>,
+    ) -> Result<Ty, OptError> {
+        //Tuple construct does not reall care _at-all_ what is _inside_.
+        //However, we make sure that no callables and voids are supplied, which we do
+        //not have the capabilities to use atm.
+
+        for (idx, t) in input_types.iter().enumerate() {
+            if t == &Ty::VOID || t == &Ty::Callable {
+                return Err(OptError::TypeDeriveError {
+                    text: format!(
+                        "Tuple constructor cannot take {t} as {}-th argument",
+                        idx + 1
+                    ),
+                });
+            }
+        }
+
+        let ty = Ty::Tuple(input_types.to_vec());
+        Ok(ty)
+    }
+    fn try_constant_fold(
+        &self,
+        #[allow(unused_variables)] src_nodes: &[Option<&rvsdg::nodes::Node<OptNode>>],
+    ) -> Option<OptNode> {
+        //Tuple constructors cannot meaningfully be folded.
+        None
+    }
+    fn is_operation_equal(&self, other: &OptNode) -> bool {
+        if other.try_downcast_ref::<Self>().is_some() {
+            true
+        } else {
+            false
+        }
+    }
+}
+
 ///Selects a subset of an _aggregated_ value. For instance an element of a matrix, a row in a matrix or a sub-matrix of an tensor.
 #[derive(LangNode, Debug)]
 pub struct ConstantIndex {
