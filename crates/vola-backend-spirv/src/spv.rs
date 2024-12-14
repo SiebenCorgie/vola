@@ -517,8 +517,10 @@ pub enum SpvType {
     Void,
     Undefined,
     State,
+    Callable,
     Arith(ArithTy),
     RuntimeArray(ArithTy),
+    Tuple(Vec<Self>),
     //TODO: This would be, where we add TypeImage, buffers etc.
 }
 
@@ -631,6 +633,13 @@ impl TryFrom<vola_opt::common::Ty> for SpvType {
                 shape: TyShape::Scalar,
                 resolution: 1,
             }),
+            vola_opt::common::Ty::Tuple(t) => {
+                //collect all subtypes
+                let subtypes: Result<Vec<_>, _> =
+                    t.into_iter().map(|t| Self::try_from(t)).collect();
+                Self::Tuple(subtypes?)
+            }
+            vola_opt::common::Ty::Callable => Self::Callable,
             any => return Err(BackendSpirvError::TypeConversionError(any)),
         };
 
@@ -645,6 +654,20 @@ impl Display for SpvType {
             SpvType::Undefined => write!(f, "Undefined"),
             SpvType::State => write!(f, "State"),
             SpvType::Arith(a) => write!(f, "{a}"),
+            SpvType::Tuple(t) => {
+                write!(f, "(")?;
+                let mut is_first = true;
+                for t in t.iter() {
+                    if !is_first {
+                        write!(f, ", ")?;
+                    } else {
+                        is_first = false
+                    }
+                    write!(f, "{t}")?;
+                }
+                write!(f, ")")
+            }
+            SpvType::Callable => write!(f, "Callable"),
             SpvType::RuntimeArray(a) => write!(f, "RA<{a}>"),
         }
     }
@@ -668,6 +691,7 @@ pub enum SpvOp {
     // being used, but we _know_ that the access indices are _constant_.
     Extract(SmallVec<[u32; 3]>),
     UniformConstruct,
+    NonUniformConstruct,
 }
 
 impl SpvOp {
@@ -686,6 +710,7 @@ impl SpvOp {
             SpvOp::ConstantBool(b) => format!("{b}"),
             SpvOp::Extract(ex) => format!("Extract: {:?}", ex),
             SpvOp::UniformConstruct => "UniformConstruct".to_owned(),
+            SpvOp::NonUniformConstruct => "NonUniformConstruct".to_owned(),
         }
     }
 
@@ -775,6 +800,11 @@ impl SpvOp {
             }
             SpvOp::UniformConstruct => {
                 //TODO: implement
+                #[cfg(feature = "log")]
+                log::warn!("UniformConstruct checking not yet implemented!");
+                Ok(())
+            }
+            SpvOp::NonUniformConstruct => {
                 #[cfg(feature = "log")]
                 log::warn!("UniformConstruct checking not yet implemented!");
                 Ok(())
@@ -872,7 +902,8 @@ impl SpvOp {
                     operands,
                 )
             }
-            SpvOp::UniformConstruct => Instruction::new(
+            //NOTE: In Spv this is the same
+            SpvOp::UniformConstruct | SpvOp::NonUniformConstruct => Instruction::new(
                 CoreOp::CompositeConstruct,
                 Some(result_type_id),
                 Some(result_id),

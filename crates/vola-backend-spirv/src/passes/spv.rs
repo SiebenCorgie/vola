@@ -216,7 +216,7 @@ impl SpirvBackend {
         let retty = match rettys.len() {
             0 => builder.type_void(),
             1 => register_or_get_type(builder, ctx, &rettys[0]),
-            _ => tupel_to_composite(builder, ctx, rettys),
+            x => return Err(BackendSpirvError::SPVError(format!("SPIR-V backend can only emit functions with a single function return type, got {x}"))),
         };
 
         //now collect the argument types and do the same
@@ -1224,6 +1224,7 @@ fn register_or_get_type(builder: &mut Builder, ctx: &mut EmitCtx, ty: &SpvType) 
         SpvType::Void => builder.type_void(),
         SpvType::Undefined => panic!("Cannot create undefined type!"),
         SpvType::State => panic!("Cannot create a type from State"),
+        SpvType::Callable => panic!("Cannot create callable type for SPIR-V"),
         SpvType::Arith(a) => {
             let basetype = match a.base {
                 ArithBaseTy::Integer { signed } => {
@@ -1247,6 +1248,14 @@ fn register_or_get_type(builder: &mut Builder, ctx: &mut EmitCtx, ty: &SpvType) 
                 }
             }
         }
+        SpvType::Tuple(t) => {
+            //in SPIR-V we register tuple basically as unnamed-field-structs
+            let subtypes = t
+                .iter()
+                .map(|t| register_or_get_type(builder, ctx, t))
+                .collect::<SmallColl<_>>();
+            builder.type_struct(subtypes)
+        }
         SpvType::RuntimeArray(ty) => {
             let arithty = register_or_get_type(builder, ctx, &SpvType::Arith(ty.clone()));
             builder.type_runtime_array_id(None, arithty)
@@ -1258,6 +1267,7 @@ fn register_or_get_type(builder: &mut Builder, ctx: &mut EmitCtx, ty: &SpvType) 
     tyword
 }
 
+/*
 ///Helper, that mapps a tupel of types to a composite in the same order.
 /// This is the way the rust-gpu codegen realises tupel, so we do it the same way.
 fn tupel_to_composite(builder: &mut Builder, ctx: &mut EmitCtx, tys: SmallColl<SpvType>) -> Word {
@@ -1268,3 +1278,4 @@ fn tupel_to_composite(builder: &mut Builder, ctx: &mut EmitCtx, tys: SmallColl<S
 
     builder.type_struct(local_mapped)
 }
+*/
