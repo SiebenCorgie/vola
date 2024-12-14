@@ -1,0 +1,21 @@
+//BEGIN-CONFIG
+//ERROR:CSG-Tree structure issue: Non-CSG value used in CSG tree!
+//END-CONFIG
+
+module std;
+
+export fn myfield(at: vec3) -> real{
+    csg c = if at.x > 0.0{
+        Sphere(1.0)
+    }else{
+        Box([1.0; 3])
+    };
+
+    csg t = Union(){
+        c
+    }{
+        Sphere(2.0)
+    };
+
+    eval t.SDF3D(at)
+}

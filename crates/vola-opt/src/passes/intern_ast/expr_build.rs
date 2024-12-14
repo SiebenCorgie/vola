@@ -531,6 +531,8 @@ impl Optimizer {
             }
         }
 
+        self.span_tags.set(gamma.into(), branch.span.clone());
+
         //successfully connected results, return the value_src port
         Ok(gamma.as_outport_location(OutputType::ExitVariableOutput(result_idx)))
     }

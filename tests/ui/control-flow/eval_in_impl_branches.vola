@@ -1,0 +1,30 @@
+//BEGIN-CONFIG
+//EXEC-FN:myfield
+//EXEC-ARGS:0.0,0.0,0.0
+//EXEC-EPS:0.01
+//EXEC-RES:1.0
+//END-CONFIG
+
+module std;
+
+operation MySwitch(alpha: real);
+
+impl MySwitch<a, b> for SDF3D(at){
+    if alpha >= 0.0{
+        eval a.SDF3D(at)
+    }else{
+        eval b.SDF3D(at)
+    }
+}
+
+export fn myfield(at: vec3) -> real{
+    csg t = MySwitch(at.x){
+        Translate([0.0, 2.0, 0.0]){
+            Box([1.0; 3])
+        }
+    }{
+        Sphere(1.0)
+    };
+
+    eval t.SDF3D(at)
+}

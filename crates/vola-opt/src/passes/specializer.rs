@@ -22,8 +22,6 @@ struct SpecCtx {
     tree_access_span: Span,
     host_region: RegionLocation,
     csg_tree: OutportLocation,
-    #[allow(dead_code)]
-    args: SmallColl<OutportLocation>,
     eval_node: NodeRef,
 }
 
@@ -199,6 +197,7 @@ impl Optimizer {
             .unwrap()
             .called_concept
             .clone();
+
         let csg_name = self
             .graph
             .node(spec_ctx.csg_tree.node)
@@ -312,24 +311,6 @@ impl Optimizer {
                 .expect("expected eval to be typed!");
             let call_src =
                 if self.graph.node(spec_ctx.eval_node).parent != Some(spec_ctx.host_region) {
-                    /*
-                    //if the eval is not in the host region, find the
-                    //CV-idx that imports the eval-src from the host-region, and rewire it to
-                    //the just created lmd decl.
-                    self.rewire_host(
-                        spec_ctx.host_region,
-                        spec_ctx.eval_node,
-                        OutportLocation {
-                            node: in_host_region_impl,
-                            output: OutputType::LambdaDeclaration,
-                        },
-                    );
-                    //now use the old src as src as well, since it shouldn't have changed
-
-                    self.graph
-                        .node(spec_ctx.eval_node)
-                        .input_src(&self.graph, 0)
-                        .unwrap()*/
                     self.import_context(
                         OutportLocation {
                             node: in_host_region_impl,
@@ -588,14 +569,40 @@ impl Optimizer {
             .unwrap_simple_ref()
             .span
             .clone();
-        let mut args = SmallColl::new();
+
         let csg_tree = if let Some(edg) = self.graph.node(eval).inputs()[0].edge {
             let edge = self.graph.edge(edg);
             match edge.ty.get_type() {
-                Some(&Ty::CSG) => self
-                    .graph
-                    .find_producer_out(edge.src().clone())
-                    .expect("Expected a producer for the eval's CSG-Tree"),
+                Some(&Ty::CSG) => {
+                    let prod = self
+                        .graph
+                        .find_producer_out(edge.src().clone())
+                        .expect("Expected a producer for the eval's CSG-Tree");
+
+                    if !self.is_node_type::<CsgOp>(prod.node) {
+                        let err =
+                            OptError::CsgStructureIssue(format!("Non-CSG value used in CSG tree!"));
+                        if let Some(span) = self.find_span(prod.node.into()) {
+                            report(
+                                error_reporter(err.clone(), src_span.clone())
+                                    .with_label(
+                                        Label::new(span).with_message("this should be a CSG value"),
+                                    )
+                                    .finish(),
+                            );
+                        } else {
+                            report(
+                                error_reporter(err.clone(), src_span.clone())
+                                    .with_label(
+                                        Label::new(tree_access_span).with_message("for this eval"),
+                                    )
+                                    .finish(),
+                            );
+                        }
+                        return Err(err);
+                    }
+                    prod
+                }
                 Some(other) => {
                     let err = OptError::Internal(format!(
                         "Eval wrongly typed first argument. Expected CSGTree, was {other:?}!"
@@ -626,60 +633,11 @@ impl Optimizer {
             );
             return Err(err);
         };
-
-        for inport in self.graph.node(eval).inputs().iter().skip(1) {
-            if let Some(edg) = inport.edge {
-                let edge = self.graph.edge(edg);
-                match edge.ty.get_type() {
-                    Some(&Ty::CSG) => {
-                        let err = OptError::Internal(
-                            "Eval wrongly typed argument. Expected anything but CSGTree!"
-                                .to_owned(),
-                        );
-                        report(
-                            error_reporter(err.clone(), src_span.clone())
-                                .with_label(Label::new(src_span.clone()).with_message("here"))
-                                .finish(),
-                        );
-                        return Err(err);
-                    }
-                    Some(_ty) => args.push(edge.src().clone()),
-                    None => {}
-                }
-            }
-        }
-
         Ok(SpecCtx {
             tree_access_span,
             host_region,
             csg_tree,
-            args,
             eval_node: eval,
         })
-    }
-    //NOTE: Maybe use that later again.
-    #[allow(dead_code)]
-    fn rewire_host(
-        &mut self,
-        host_region: RegionLocation,
-        eval_node: NodeRef,
-        lmd_def: OutportLocation,
-    ) {
-        let path = self.graph.trace_path(InportLocation {
-            node: eval_node,
-            input: InputType::Input(0),
-        });
-        assert!(self.graph.node(path.start.node).parent == Some(host_region));
-        //remove the first edge, which must be the one that goes from the CSG-node
-        //to the CV-Import that ends up at the `eval_node`.
-        let cv_port = self.graph.edge(path.edges[0]).dst().clone();
-        assert!(if let InputType::ContextVariableInput(_) = cv_port.input {
-            true
-        } else {
-            false
-        });
-
-        let removed_edge = self.graph.disconnect(path.edges[0]).unwrap();
-        self.graph.connect(lmd_def, cv_port, removed_edge).unwrap();
     }
 }

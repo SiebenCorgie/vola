@@ -35,6 +35,9 @@ pub enum OptError {
         errstring: String,
     },
 
+    #[error("CSG-Tree structure issue: {0}")]
+    CsgStructureIssue(String),
+
     #[error("Internal compiler error: {0}\nPlease file an issue!")]
     Internal(String),
 
