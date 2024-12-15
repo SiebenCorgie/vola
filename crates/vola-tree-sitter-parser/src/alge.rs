@@ -25,7 +25,6 @@ impl FromTreeSitter for Expr {
         Self: Sized,
     {
         ParserError::assert_node_kind(ctx, node, "expr")?;
-
         let child_node = node.child(0).unwrap();
         let expr_ty = match child_node.kind() {
             "unary_expr" => {
@@ -259,13 +258,27 @@ impl FromTreeSitter for Expr {
                 ParserError::consume_expected_node_string(ctx, dta, children.next(), "[")?;
                 let subexpr = Expr::parse(ctx, dta, &children.next().unwrap())?;
                 ParserError::consume_expected_node_string(ctx, dta, children.next(), ";")?;
-                let count = Digit::parse(ctx, dta, &children.next().unwrap())?;
+                let count = Literal::parse(ctx, dta, &children.next().unwrap())?;
+                let count = if let Literal::IntegerLiteral(i) = count {
+                    i
+                } else {
+                    let err =
+                        ParserError::Other(format!("Expected integer as second splat argument"));
+                    report(
+                        error_reporter(err.clone(), ctx.span(&child_node))
+                            .with_label(
+                                Label::new(ctx.span(&child_node)).with_message("for this splat"),
+                            )
+                            .finish(),
+                    );
+                    return Err(err);
+                };
                 ParserError::consume_expected_node_string(ctx, dta, children.next(), "]")?;
                 ParserError::assert_ast_level_empty(ctx, children.next())?;
 
                 ExprTy::SplatExpr {
                     expr: Box::new(subexpr),
-                    count: count.0,
+                    count,
                 }
             }
             _ => {

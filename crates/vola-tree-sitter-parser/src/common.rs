@@ -392,7 +392,7 @@ impl FromTreeSitter for Literal {
             _ => {
                 let err = ParserError::UnexpectedAstNode {
                     kind: node.kind().to_string(),
-                    expected: "integer_literal | float_literal".to_owned(),
+                    expected: "bool_literal | integer_literal | float_literal".to_owned(),
                 };
                 report(
                     error_reporter(err.clone(), ctx.span(node))

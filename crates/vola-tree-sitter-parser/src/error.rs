@@ -20,6 +20,8 @@ use crate::ParserCtx;
 pub enum ParserError {
     #[error("Unknown Error: {0}")]
     UnknownError(String),
+    #[error("{0}")]
+    Other(String),
     #[error("Could not run tree-sitter")]
     TreeSitterFailed,
     #[error("File Error occured: {0}")]
