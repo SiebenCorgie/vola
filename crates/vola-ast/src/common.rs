@@ -69,11 +69,13 @@ pub struct Digit(pub usize);
 pub enum Literal {
     IntegerLiteral(usize),
     FloatLiteral(f64),
+    BoolLiteral(bool),
 }
 
 impl Display for Literal {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Literal::BoolLiteral(b) => write!(f, "{b}"),
             Literal::FloatLiteral(fl) => write!(f, "{}f", fl),
             Literal::IntegerLiteral(i) => write!(f, "{}i", i),
         }

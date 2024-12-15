@@ -26,7 +26,7 @@ use vola_opt::{
         trigonometric::Trig,
     },
     common::{DataType, Shape},
-    imm::{ImmMatrix, ImmNat, ImmScalar, ImmVector},
+    imm::{ImmBool, ImmMatrix, ImmNat, ImmScalar, ImmVector},
     typelevel::ConstantIndex,
     OptNode,
 };
@@ -87,6 +87,10 @@ impl WasmNode {
             assert!(input_sig.len() == 0);
             assert!(output_sig.len() == 1);
             assert!(output_sig[0] == Some(vola_opt::common::Ty::SCALAR_REAL));
+            return Ok(WasmNode::from(imm));
+        }
+        if let Some(imm) = value.try_downcast_ref::<ImmBool>() {
+            assert!(output_sig[0] == Some(vola_opt::common::Ty::SCALAR_BOOL));
             return Ok(WasmNode::from(imm));
         }
 

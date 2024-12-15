@@ -14,7 +14,7 @@ use rvsdg::{
     smallvec::smallvec,
     SmallColl,
 };
-use vola_opt::imm::{ImmNat, ImmScalar};
+use vola_opt::imm::{ImmBool, ImmNat, ImmScalar};
 
 use crate::graph::WasmNode;
 
@@ -47,6 +47,16 @@ impl From<&ImmScalar> for WasmNode {
         WasmNode::Value(WasmValue {
             //NOTE the u64 should not have the highest bit set...
             op: walrus::ir::Value::F32(value.lit as f32),
+            output: Outport::default(),
+        })
+    }
+}
+
+impl From<&ImmBool> for WasmNode {
+    fn from(value: &ImmBool) -> Self {
+        WasmNode::Value(WasmValue {
+            //NOTE the u64 should not have the highest bit set...
+            op: walrus::ir::Value::I32(value.lit.into()),
             output: Outport::default(),
         })
     }

@@ -47,6 +47,9 @@ pub enum ParserError {
     #[error("Parsing float literal failed: {0}")]
     ParseIntLiteral(ParseIntError),
 
+    #[error("Parsing bool literal failed")]
+    ParseBoolFailed,
+
     #[error("Expected at least one access descriptor. For instance:\n my_field.SDF(p)\n")]
     NoAccessDecs,
 

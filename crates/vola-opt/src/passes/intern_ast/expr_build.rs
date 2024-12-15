@@ -13,8 +13,8 @@ use rvsdg::{
 };
 
 use crate::{
-    csg::CsgOp, passes::intern_ast::block_build::VarDef, typelevel::NonUniformConstruct, OptEdge,
-    Optimizer,
+    csg::CsgOp, imm::ImmBool, passes::intern_ast::block_build::VarDef,
+    typelevel::NonUniformConstruct, OptEdge, Optimizer,
 };
 
 use super::block_build::BlockCtx;
@@ -245,6 +245,9 @@ impl Optimizer {
                     }
                     vola_ast::common::Literal::FloatLiteral(f) => {
                         OptNode::new(ImmScalar::new(f), expr_span)
+                    }
+                    vola_ast::common::Literal::BoolLiteral(b) => {
+                        OptNode::new(ImmBool::new(b), expr_span)
                     }
                 };
 

@@ -367,17 +367,28 @@ impl FromTreeSitter for Literal {
                 ParserError::assert_node_no_error(ctx, node)?;
                 Ok(Literal::FloatLiteral(float))
             }
-            "integer_literal" => {
+            "int_literal" => {
                 //reuse the digit parser, but unwrap the value
                 let digit = Digit::parse(ctx, dta, &node.child(0).unwrap())?;
                 ParserError::assert_node_no_error(ctx, node)?;
                 Ok(Literal::IntegerLiteral(digit.0))
             }
-            "digit" => {
-                let digit = Digit::parse(ctx, dta, &node)?;
-                ParserError::assert_node_no_error(ctx, node)?;
-                Ok(Literal::IntegerLiteral(digit.0))
-            }
+            "bool_literal" => match node.child(0).unwrap().kind() {
+                "true" => Ok(Literal::BoolLiteral(true)),
+                "false" => Ok(Literal::BoolLiteral(false)),
+                _other => {
+                    let err = ParserError::ParseBoolFailed;
+                    report(
+                        error_reporter(err.clone(), ctx.span(node))
+                            .with_label(
+                                Label::new(ctx.span(node))
+                                    .with_message("should be \"true\" or \"false\""),
+                            )
+                            .finish(),
+                    );
+                    return Err(err);
+                }
+            },
             _ => {
                 let err = ParserError::UnexpectedAstNode {
                     kind: node.kind().to_string(),

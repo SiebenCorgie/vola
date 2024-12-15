@@ -109,7 +109,7 @@ impl FromTreeSitter for Expr {
                 ParserError::assert_node_no_error(ctx, node)?;
                 return Ok(inner);
             }
-            "digit" | "integer_literal" | "float_literal" => {
+            "bool_literal" | "int_literal" | "float_literal" => {
                 ExprTy::Literal(Literal::parse(ctx, dta, &child_node)?)
             }
             "field_access" => {
