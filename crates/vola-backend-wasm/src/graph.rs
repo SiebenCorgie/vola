@@ -327,9 +327,13 @@ impl TryFrom<vola_opt::common::Ty> for WasmTy {
                 walrus::ValType::F32,
             ),
             vola_opt::common::Ty::Tuple(t) => {
-                let subtypes: Result<Vec<Self>, _> =
-                    t.into_iter().map(|t| Self::try_from(t)).collect();
-                return Ok(Self::Tuple(subtypes?));
+                return Err(WasmError::Any(
+                    format!("Tuple are not supported in WASM (yet).").into(),
+                ));
+
+                //let subtypes: Result<Vec<Self>, _> =
+                //    t.into_iter().map(|t| Self::try_from(t)).collect();
+                //return Ok(Self::Tuple(subtypes?));
             }
             vola_opt::common::Ty::Callable => return Ok(WasmTy::Callabale),
             other => return Err(WasmError::UnexpectedType(other)),
@@ -497,7 +501,7 @@ impl WasmTy {
     pub fn element_count(&self) -> usize {
         match self {
             Self::Defined { shape, ty: _ } => shape.element_count(),
-            Self::Tuple(t) => t.len(),
+            Self::Tuple(t) => t.iter().fold(0, |a, t| a + t.element_count()),
             Self::Callabale => 0,
             Self::Undefined => 0,
         }
@@ -531,7 +535,10 @@ impl WasmTy {
                         break;
                     }
                 }
-                panic!("Could not find element {index} in tuple {:?}", self);
+                panic!(
+                    "Could not find element {index} in tuple {:?} (overall: {overall_count})",
+                    self
+                );
             }
             _ => panic!("cannot unwrap {:?} into WASM type", self),
         }
