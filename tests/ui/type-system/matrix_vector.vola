@@ -10,7 +10,7 @@ entity PassThrough();
 impl PassThrough for None(a){
     a
 }
-export myField(at: vec3){
+export fn myField(at: vec3) -> vec3{
 	let t = [
 		[1.0, 2.0, 0.0],
 		[0.0, 1.0, 8.0],

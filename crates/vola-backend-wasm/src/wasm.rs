@@ -14,7 +14,7 @@ use rvsdg::{
     smallvec::smallvec,
     SmallColl,
 };
-use vola_opt::imm::{ImmNat, ImmScalar};
+use vola_opt::imm::{ImmBool, ImmNat, ImmScalar};
 
 use crate::graph::WasmNode;
 
@@ -52,6 +52,16 @@ impl From<&ImmScalar> for WasmNode {
     }
 }
 
+impl From<&ImmBool> for WasmNode {
+    fn from(value: &ImmBool) -> Self {
+        WasmNode::Value(WasmValue {
+            //NOTE the u64 should not have the highest bit set...
+            op: walrus::ir::Value::I32(value.lit.into()),
+            output: Outport::default(),
+        })
+    }
+}
+
 #[derive(LangNode)]
 pub struct Index {
     #[input]
@@ -62,15 +72,32 @@ pub struct Index {
 }
 
 #[derive(LangNode)]
-pub struct Construct {
+pub struct UniformConstruct {
     #[inputs]
     pub inputs: SmallColl<Inport>,
     #[output]
     pub output: Outport,
 }
 
-impl From<&vola_opt::alge::Construct> for Construct {
-    fn from(value: &vola_opt::alge::Construct) -> Self {
+impl From<&vola_opt::typelevel::UniformConstruct> for UniformConstruct {
+    fn from(value: &vola_opt::typelevel::UniformConstruct) -> Self {
+        Self {
+            inputs: smallvec![Inport::default(); value.inputs.len()],
+            output: Outport::default(),
+        }
+    }
+}
+
+#[derive(LangNode)]
+pub struct NonUniformConstruct {
+    #[inputs]
+    pub inputs: SmallColl<Inport>,
+    #[output]
+    pub output: Outport,
+}
+
+impl From<&vola_opt::typelevel::NonUniformConstruct> for NonUniformConstruct {
+    fn from(value: &vola_opt::typelevel::NonUniformConstruct) -> Self {
         Self {
             inputs: smallvec![Inport::default(); value.inputs.len()],
             output: Outport::default(),

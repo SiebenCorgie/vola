@@ -13,10 +13,13 @@ use rvsdg::{
     rvsdg_derive_lang::LangNode,
     smallvec::smallvec,
 };
-use vola_opt::alge::{
-    arithmetic::{BinaryArith, BinaryArithOp},
-    logical::{BinaryBool, BinaryBoolOp},
-    relational::{BinaryRel, BinaryRelOp},
+use vola_opt::{
+    alge::{
+        arithmetic::{BinaryArith, BinaryArithOp},
+        logical::{BinaryBool, BinaryBoolOp},
+        relational::{BinaryRel, BinaryRelOp},
+    },
+    common::{DataType, Shape},
 };
 use walrus::ValType;
 
@@ -57,14 +60,20 @@ impl WasmNode {
 
         if value.op == BinaryArithOp::Mul && input_sig[0] != input_sig[1] {
             match input_sig {
-                [vola_opt::common::Ty::Vector { width: _ }, vola_opt::common::Ty::Scalar] => {
+                [vola_opt::common::Ty::Shaped {
+                    ty: DataType::Real,
+                    shape: Shape::Vec { width: _ },
+                }, vola_opt::common::Ty::SCALAR_REAL] => {
                     return Ok(WasmNode::Runtime(WasmRuntimeOp::new_with_signature(
                         2,
                         ExternOp::MulVec,
                     )))
                 }
                 //Simple Matrix scaling
-                [vola_opt::common::Ty::Matrix { width, height }, vola_opt::common::Ty::Scalar] => {
+                [vola_opt::common::Ty::Shaped {
+                    ty: DataType::Real,
+                    shape: Shape::Matrix { width, height },
+                }, vola_opt::common::Ty::SCALAR_REAL] => {
                     if width != height {
                         return Err(WasmError::UnsupportedNode(format!(
                             "Matrix-Scalar multiplication is only supported for square matrices: This one was Mat<{},{}>",
@@ -84,39 +93,81 @@ impl WasmNode {
                     )));
                 }
                 //Matrix-Vector multiplication. Note Both work, Mat_x_Vec and Vec_x_Mat
-                [vola_opt::common::Ty::Matrix {
-                    width: 2,
-                    height: 2,
-                }, vola_opt::common::Ty::Vector { width: 2 }]
-                | [vola_opt::common::Ty::Vector { width: 2 }, vola_opt::common::Ty::Matrix {
-                    width: 2,
-                    height: 2,
+                [vola_opt::common::Ty::Shaped {
+                    ty: DataType::Real,
+                    shape:
+                        Shape::Matrix {
+                            width: 2,
+                            height: 2,
+                        },
+                }, vola_opt::common::Ty::Shaped {
+                    ty: DataType::Real,
+                    shape: Shape::Vec { width: 2 },
+                }]
+                | [vola_opt::common::Ty::Shaped {
+                    ty: DataType::Real,
+                    shape: Shape::Vec { width: 2 },
+                }, vola_opt::common::Ty::Shaped {
+                    ty: DataType::Real,
+                    shape:
+                        Shape::Matrix {
+                            width: 2,
+                            height: 2,
+                        },
                 }] => {
                     return Ok(WasmNode::Runtime(WasmRuntimeOp::new_with_signature(
                         2,
                         ExternOp::MulMat,
                     )));
                 }
-                [vola_opt::common::Ty::Matrix {
-                    width: 3,
-                    height: 3,
-                }, vola_opt::common::Ty::Vector { width: 3 }]
-                | [vola_opt::common::Ty::Vector { width: 3 }, vola_opt::common::Ty::Matrix {
-                    width: 3,
-                    height: 3,
+                [vola_opt::common::Ty::Shaped {
+                    ty: DataType::Real,
+                    shape:
+                        Shape::Matrix {
+                            width: 3,
+                            height: 3,
+                        },
+                }, vola_opt::common::Ty::Shaped {
+                    ty: DataType::Real,
+                    shape: Shape::Vec { width: 3 },
+                }]
+                | [vola_opt::common::Ty::Shaped {
+                    ty: DataType::Real,
+                    shape: Shape::Vec { width: 3 },
+                }, vola_opt::common::Ty::Shaped {
+                    ty: DataType::Real,
+                    shape:
+                        Shape::Matrix {
+                            width: 3,
+                            height: 3,
+                        },
                 }] => {
                     return Ok(WasmNode::Runtime(WasmRuntimeOp::new_with_signature(
                         2,
                         ExternOp::MulMat,
                     )));
                 }
-                [vola_opt::common::Ty::Matrix {
-                    width: 4,
-                    height: 4,
-                }, vola_opt::common::Ty::Vector { width: 4 }]
-                | [vola_opt::common::Ty::Vector { width: 4 }, vola_opt::common::Ty::Matrix {
-                    width: 4,
-                    height: 4,
+                [vola_opt::common::Ty::Shaped {
+                    ty: DataType::Real,
+                    shape:
+                        Shape::Matrix {
+                            width: 4,
+                            height: 4,
+                        },
+                }, vola_opt::common::Ty::Shaped {
+                    ty: DataType::Real,
+                    shape: Shape::Vec { width: 4 },
+                }]
+                | [vola_opt::common::Ty::Shaped {
+                    ty: DataType::Real,
+                    shape: Shape::Vec { width: 4 },
+                }, vola_opt::common::Ty::Shaped {
+                    ty: DataType::Real,
+                    shape:
+                        Shape::Matrix {
+                            width: 4,
+                            height: 4,
+                        },
                 }] => {
                     return Ok(WasmNode::Runtime(WasmRuntimeOp::new_with_signature(
                         2,
@@ -264,7 +315,7 @@ impl WasmNode {
         //NOTE make sure both are of scalar or nat, otherwise
         //abort
         if !((input_sig[0].is_scalar() && input_sig[1].is_scalar())
-            || (input_sig[0].is_nat() && input_sig[1].is_nat()))
+            || (input_sig[0].is_integer() && input_sig[1].is_integer()))
         {
             return Err(WasmError::UnexpectedSignature {
                 node: format!("{:?}", value.op),
@@ -284,7 +335,7 @@ impl WasmNode {
         //now dispatch either to f32 rels, or i32 rels, depending on the type
         let node = match input_sig[0] {
             //NOTE: we have _natural_ numbers, so only signed integers
-            vola_opt::common::Ty::Nat => match value.op {
+            vola_opt::common::Ty::SCALAR_INT => match value.op {
                 BinaryRelOp::Eq => WasmNode::Binary(WasmBinaryOp::new(walrus::ir::BinaryOp::I32Eq)),
                 BinaryRelOp::Gt => {
                     WasmNode::Binary(WasmBinaryOp::new(walrus::ir::BinaryOp::I32GtU))
@@ -302,7 +353,7 @@ impl WasmNode {
                     WasmNode::Binary(WasmBinaryOp::new(walrus::ir::BinaryOp::I32Ne))
                 }
             },
-            vola_opt::common::Ty::Scalar => match value.op {
+            vola_opt::common::Ty::SCALAR_REAL => match value.op {
                 BinaryRelOp::Eq => WasmNode::Binary(WasmBinaryOp::new(walrus::ir::BinaryOp::F32Eq)),
                 BinaryRelOp::Gt => WasmNode::Binary(WasmBinaryOp::new(walrus::ir::BinaryOp::F32Gt)),
                 BinaryRelOp::Gte => {

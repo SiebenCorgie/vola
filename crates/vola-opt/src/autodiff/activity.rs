@@ -20,9 +20,9 @@ use rvsdg::{
 use vola_common::Span;
 
 use crate::{
-    alge::{ConstantIndex, Construct},
-    common::Ty,
+    common::{DataType, Shape, Ty},
     imm::{ImmScalar, ImmVector},
+    typelevel::{ConstantIndex, UniformConstruct},
     OptError, OptNode, Optimizer,
 };
 
@@ -67,7 +67,7 @@ impl Activity {
             .expect("expected type information");
 
         match ty {
-            Ty::Scalar => {
+            Ty::SCALAR_REAL => {
                 assert!(wrt_to_scalar_chain.len() == 0);
                 opt.graph
                     .on_region(&region, |g| {
@@ -76,7 +76,10 @@ impl Activity {
                     })
                     .unwrap()
             }
-            Ty::Vector { width } => {
+            Ty::Shaped {
+                shape: Shape::Vec { width },
+                ty: DataType::Real,
+            } => {
                 assert!(
                     wrt_to_scalar_chain.len() == 1,
                     "expected 1 == {}",
@@ -465,10 +468,10 @@ impl Optimizer {
                     consecutive_construct_chain.checked_sub(1).unwrap_or(0),
                 )
             } else {
-                if self.is_node_type::<Construct>(port.node) {
+                if self.is_node_type::<UniformConstruct>(port.node) {
                     //Find the n-last-index-element...
-                    //NOTE: lets say we have a chain `START->Construct[A]-Construct[B]-Index[C]-Index[D]`
-                    //      then CONSTRUCT[A] is indexed by Index[D], and Construct[B] is indexed by Index[C].
+                    //NOTE: lets say we have a chain `START->UniformConstruct[A]-UniformConstruct[B]-Index[C]-Index[D]`
+                    //      then CONSTRUCT[A] is indexed by Index[D], and UniformConstruct[B] is indexed by Index[C].
                     //      so we keep track of _how-far-back_ we'd need to go for our index
                     let last_index = self
                         .last_n_index_on_path(path, consecutive_construct_chain)
@@ -485,10 +488,10 @@ impl Optimizer {
         }
     }
 
-    //Unify the index path by merging all `Construct->Index[N]` chains.
-    //So `Construct->Index[N]->Construct->Index[M]->Index[I]` becomes `Index[I]`.
+    //Unify the index path by merging all `UniformConstruct->Index[N]` chains.
+    //So `UniformConstruct->Index[N]->UniformConstruct->Index[M]->Index[I]` becomes `Index[I]`.
     fn unify_index_path(&self, mut prime_path: SmallColl<OutportLocation>) -> SmallColl<usize> {
-        //NOTE use a restart loop that searches Construct-Index pairs from the front till it can't find any
+        //NOTE use a restart loop that searches UniformConstruct-Index pairs from the front till it can't find any
         'restart: loop {
             let mut construct_index = None;
             for i in 0..prime_path.len() {
@@ -503,7 +506,7 @@ impl Optimizer {
                     }
                 } else {
                     //Searching for a construct
-                    if self.is_node_type::<Construct>(prime_path[i].node) {
+                    if self.is_node_type::<UniformConstruct>(prime_path[i].node) {
                         construct_index = Some(i);
                     }
                 }
@@ -579,7 +582,7 @@ impl Optimizer {
                     return;
                 }
             } else {
-                if self.is_node_type::<Construct>(port.node) {
+                if self.is_node_type::<UniformConstruct>(port.node) {
                     let const_index = if let InputType::Input(n) = port.input {
                         n
                     } else {
@@ -693,7 +696,7 @@ impl Optimizer {
 
     fn is_value_producer(&self, node: NodeRef) -> bool {
         //FIXME: While currently correct, this is a _really_ bad way of finding that out :((
-        if self.is_node_type::<ConstantIndex>(node) || self.is_node_type::<Construct>(node) {
+        if self.is_node_type::<ConstantIndex>(node) || self.is_node_type::<UniformConstruct>(node) {
             false
         } else {
             true

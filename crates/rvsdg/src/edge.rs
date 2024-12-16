@@ -95,7 +95,7 @@ impl FromStr for InputType {
 
 impl InputType {
     ///If this is some kind of result, returns the region index.
-    /// This mostly will be 0, except for ExitVariableResult.
+    /// This mostly will be None or 0, except for ExitVariableResult.
     pub fn result_region_index(&self) -> Option<usize> {
         match self {
             Self::Result(_) | Self::RecursionVariableResult(_) | Self::ThetaPredicate => Some(0),
@@ -104,6 +104,22 @@ impl InputType {
                 exit_variable: _,
             } => Some(*branch),
             _ => None,
+        }
+    }
+
+    ///Changes the `region_index` of the input, if it has such a thing. Returns the old region index, or nothing, if nothing
+    /// was changed.
+    pub fn change_region_index(&mut self, new_region: usize) -> Option<usize> {
+        if let Self::ExitVariableResult {
+            branch,
+            exit_variable: _,
+        } = self
+        {
+            let old = *branch;
+            *branch = new_region;
+            Some(old)
+        } else {
+            None
         }
     }
 
@@ -275,6 +291,22 @@ impl OutputType {
                 entry_variable: _,
             } => Some(*branch),
             _ => None,
+        }
+    }
+
+    ///Changes the `region_index` of the input, if it has such a thing. Returns the old region index, or nothing, if nothing
+    /// was changed.
+    pub fn change_region_index(&mut self, new_region: usize) -> Option<usize> {
+        if let Self::EntryVariableArgument {
+            branch,
+            entry_variable: _,
+        } = self
+        {
+            let old = *branch;
+            *branch = new_region;
+            Some(old)
+        } else {
+            None
         }
     }
 

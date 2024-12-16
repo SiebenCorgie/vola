@@ -1,9 +1,9 @@
 module std;
 
 
-concept Sdf2d: vec2 -> s;
+concept Sdf2d: vec2 -> real;
 
-operation Extrude(h: s);
+operation Extrude(h: real);
 
 //Note not _correct_, but thats the part we wanna test.
 impl Extrude<sub> for SDF3D(at){
@@ -15,7 +15,7 @@ impl Box for Sdf2d(at){
 }
 
 
-export myField(at: vec3){
+export fn myField(at: vec3) -> real{
 	csg f = Union(){
 		Translate([0.0, 1.0, 0.0]){
 			Sphere(1.0)

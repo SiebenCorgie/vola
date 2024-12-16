@@ -5,7 +5,11 @@
  *
  * 2024 Tendsin Mende
  */
-use crate::{autodiff::AutoDiffError, common::Ty};
+use crate::{
+    //autodiff::AutoDiffError,
+    autodiff::AutoDiffError,
+    common::Ty,
+};
 use rvsdg::{
     err::GraphError,
     util::{dead_node_elimination::DneError, inline::InlineError, unroll::UnrollError},
@@ -30,6 +34,9 @@ pub enum OptError {
         opname: String,
         errstring: String,
     },
+
+    #[error("CSG-Tree structure issue: {0}")]
+    CsgStructureIssue(String),
 
     #[error("Internal compiler error: {0}\nPlease file an issue!")]
     Internal(String),
@@ -68,7 +75,6 @@ pub enum OptError {
 
     #[error(transparent)]
     AutoDiffError(#[from] AutoDiffError),
-
     #[error(transparent)]
     UnrollError(#[from] UnrollError),
 }

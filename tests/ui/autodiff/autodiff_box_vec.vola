@@ -8,7 +8,7 @@ impl MyAdOp<sub> for SDF3D(at){
     length(diff(sd, [at.x, at.y, at.z]))
 }
 
-export mysdf(at: vec3){
+export fn mysdf(at: vec3) -> real{
     csg sphere = MyAdOp(){Box([1.0; 3])};
     eval sphere.SDF3D(at)
 }

@@ -10,20 +10,19 @@
 
 use ahash::AHashMap;
 use rvsdg::{
-    attrib::FlagStore,
     region::{Input, Output},
     rvsdg_derive_lang::LangNode,
     smallvec::{smallvec, SmallVec},
     SmallColl,
 };
 use rvsdg_viewer::{Color, View};
-use vola_ast::csg::{CSGConcept, CSGNodeDef};
+use vola_ast::csg::{CSGConcept, CsgDef};
 use vola_common::Span;
 
 use crate::{
-    common::Ty,
+    common::{DataType, Shape, Ty},
     imm::{ImmScalar, ImmVector},
-    DialectNode, OptError, OptGraph, OptNode,
+    DialectNode, OptError, OptNode,
 };
 
 ///Buildin optimizer ops that are _not-standard_.
@@ -236,7 +235,7 @@ impl BuildinOp {
         }
     }
 
-    fn try_derive_type(&self, mut sig: SmallVec<[Ty; 2]>) -> Result<Option<Ty>, OptError> {
+    fn try_derive_type(&self, sig: &[Ty]) -> Result<Ty, OptError> {
         //NOTE: sig.len() is somewhat redundant, since the caller wouldn't try to derive if any input is
         // empty. However, its a good place to unify this check even if the type resolution changes at some point.
 
@@ -264,7 +263,7 @@ impl BuildinOp {
                 }
 
                 //Is okay, for these we return the _same_ type that we got
-                Ok(Some(sig.remove(0)))
+                Ok(sig[0].clone())
             }
             Self::Dot => {
                 if sig.len() != 2 {
@@ -288,7 +287,7 @@ impl BuildinOp {
                     });
                 }
 
-                Ok(Some(Ty::Scalar))
+                Ok(Ty::SCALAR_REAL)
             }
             Self::Cross => {
                 if sig.len() != 2 {
@@ -313,7 +312,7 @@ impl BuildinOp {
                 }
 
                 //Cross returns the same vector type as supplied
-                Ok(Some(sig[0].clone()))
+                Ok(sig[0].clone())
             }
             Self::Length => {
                 if sig.len() != 1 {
@@ -322,7 +321,10 @@ impl BuildinOp {
                     });
                 }
                 match &sig[0] {
-                    Ty::Vector { .. } => {}
+                    Ty::Shaped {
+                        ty: DataType::Real,
+                        shape: Shape::Vec { width: _ },
+                    } => {}
                     _ => {
                         return Err(OptError::Any {
                             text: format!(
@@ -334,7 +336,7 @@ impl BuildinOp {
                 }
 
                 //seems to be alright, return scalar
-                Ok(Some(Ty::Scalar))
+                Ok(Ty::SCALAR_REAL)
             }
 
             Self::SquareRoot => {
@@ -344,8 +346,11 @@ impl BuildinOp {
                     });
                 }
                 match &sig[0] {
-                    Ty::Scalar => Ok(Some(Ty::Scalar)),
-                    Ty::Vector { width } => Ok(Some(Ty::Vector { width: *width })),
+                    &Ty::SCALAR_REAL => Ok(Ty::SCALAR_REAL),
+                    Ty::Shaped {
+                        ty: DataType::Real,
+                        shape: Shape::Vec { width },
+                    } => Ok(Ty::vector_type(DataType::Real, *width)),
                     _ => {
                         return Err(OptError::Any {
                             text: format!(
@@ -363,8 +368,11 @@ impl BuildinOp {
                     });
                 }
                 match &sig[0] {
-                    Ty::Scalar => Ok(Some(Ty::Scalar)),
-                    Ty::Vector { width } => Ok(Some(Ty::Vector { width: *width })),
+                    &Ty::SCALAR_REAL => Ok(Ty::SCALAR_REAL),
+                    Ty::Shaped {
+                        ty: DataType::Real,
+                        shape: Shape::Vec { width },
+                    } => Ok(Ty::vector_type(DataType::Real, *width)),
                     _ => {
                         return Err(OptError::Any {
                             text: format!("Exp expects operands of type scalar, got {:?}", sig[0]),
@@ -395,7 +403,7 @@ impl BuildinOp {
                 }
 
                 //Cross returns the same vector type as supplied
-                Ok(Some(sig[0].clone()))
+                Ok(sig[0].clone())
             }
             Self::Mix | Self::Clamp => {
                 if sig.len() != 3 {
@@ -404,8 +412,12 @@ impl BuildinOp {
                     });
                 }
                 match (&sig[0], &sig[1], &sig[2]) {
-                    (Ty::Scalar, Ty::Scalar, Ty::Scalar) => {},
-                    (Ty::Vector{width: w0}, Ty::Vector{width: w1}, Ty::Vector{width: w2}) => {
+                    (&Ty::SCALAR_REAL, &Ty::SCALAR_REAL, &Ty::SCALAR_REAL) => {},
+                    (
+                        Ty::Shaped{ty: DataType::Real, shape: Shape::Vec{width: w0}},
+                        Ty::Shaped{ty: DataType::Real, shape: Shape::Vec{width: w1}},
+                        Ty::Shaped{ty: DataType::Real, shape: Shape::Vec{width: w2}}
+                    ) => {
                         if w0 != w1 || w0 != w2{
                             return Err(OptError::Any {
                                 text: format!("{:?} expects operands of type scalar or vector (of equal width), got {:?}", self, sig),
@@ -420,7 +432,7 @@ impl BuildinOp {
                 }
 
                 //seems to be alright, return scalar
-                Ok(Some(sig[0].clone()))
+                Ok(sig[0].clone())
             }
         }
     }
@@ -478,30 +490,14 @@ impl DialectNode for Buildin {
 
     fn try_derive_type(
         &self,
-        _typemap: &FlagStore<Ty>,
-        graph: &OptGraph,
+        input_types: &[Ty],
         _concepts: &AHashMap<String, CSGConcept>,
-        _csg_defs: &AHashMap<String, CSGNodeDef>,
-    ) -> Result<Option<Ty>, OptError> {
+        _csg_defs: &AHashMap<String, CsgDef>,
+    ) -> Result<Ty, OptError> {
         //For all WKOps we first collect all inputs, then let the op check itself.
         // For now we already bail if any type is unset, since we currently don't have any ops that
         // _don't_ care about any input.
-        let mut signature: SmallVec<[Ty; 2]> = SmallVec::new();
-        for (idx, inp) in self.inputs.iter().enumerate() {
-            if let Some(edg) = inp.edge {
-                //resolve if there is a type set
-                if let Some(t) = graph.edge(edg).ty.get_type() {
-                    signature.insert(idx, t.clone());
-                } else {
-                    return Ok(None);
-                }
-            } else {
-                //input not set atm. so return None as well
-                return Ok(None);
-            }
-        }
-
-        self.op.try_derive_type(signature)
+        self.op.try_derive_type(input_types)
     }
 
     fn is_operation_equal(&self, other: &OptNode) -> bool {

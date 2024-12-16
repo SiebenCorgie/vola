@@ -19,6 +19,7 @@ use rspirv::{
 };
 use rvsdg::smallvec::SmallVec;
 use spirv_grammar_rules::{GrammarRules, Rule};
+use vola_opt::common::{DataType, Shape};
 
 use crate::{passes::EmitCtx, BackendSpirvError};
 
@@ -516,8 +517,10 @@ pub enum SpvType {
     Void,
     Undefined,
     State,
+    Callable,
     Arith(ArithTy),
     RuntimeArray(ArithTy),
+    Tuple(Vec<Self>),
     //TODO: This would be, where we add TypeImage, buffers etc.
 }
 
@@ -581,26 +584,32 @@ impl TryFrom<vola_opt::common::Ty> for SpvType {
     fn try_from(value: vola_opt::common::Ty) -> Result<Self, Self::Error> {
         //FIXME: Currently those are all hard coded, since the optimizer currently does not track resolution.
         let res = match value {
-            vola_opt::common::Ty::Void => Self::Void,
-            vola_opt::common::Ty::Nat => Self::Arith(ArithTy {
+            vola_opt::common::Ty::VOID => Self::Void,
+            vola_opt::common::Ty::SCALAR_INT => Self::Arith(ArithTy {
                 base: ArithBaseTy::Integer { signed: false },
                 shape: TyShape::Scalar,
                 resolution: 32,
             }),
 
-            vola_opt::common::Ty::Scalar => Self::Arith(ArithTy {
+            vola_opt::common::Ty::SCALAR_REAL => Self::Arith(ArithTy {
                 base: ArithBaseTy::Float,
                 shape: TyShape::Scalar,
                 resolution: 32,
             }),
-            vola_opt::common::Ty::Vector { width } => Self::Arith(ArithTy {
+            vola_opt::common::Ty::Shaped {
+                ty: DataType::Real,
+                shape: Shape::Vec { width },
+            } => Self::Arith(ArithTy {
                 base: ArithBaseTy::Float,
                 shape: TyShape::Vector {
                     width: width as u32,
                 },
                 resolution: 32,
             }),
-            vola_opt::common::Ty::Matrix { width, height } => Self::Arith(ArithTy {
+            vola_opt::common::Ty::Shaped {
+                ty: DataType::Real,
+                shape: Shape::Matrix { width, height },
+            } => Self::Arith(ArithTy {
                 base: ArithBaseTy::Float,
                 shape: TyShape::Matrix {
                     width: width as u32,
@@ -609,18 +618,28 @@ impl TryFrom<vola_opt::common::Ty> for SpvType {
                 resolution: 32,
             }),
 
-            vola_opt::common::Ty::Tensor { dim } => Self::Arith(ArithTy {
+            vola_opt::common::Ty::Shaped {
+                ty: DataType::Real,
+                shape: Shape::Tensor { sizes },
+            } => Self::Arith(ArithTy {
                 base: ArithBaseTy::Float,
                 shape: TyShape::Tensor {
-                    dim: dim.into_iter().map(|d| d as u32).collect(),
+                    dim: sizes.into_iter().map(|d| d as u32).collect(),
                 },
                 resolution: 32,
             }),
-            vola_opt::common::Ty::Bool => Self::Arith(ArithTy {
+            vola_opt::common::Ty::SCALAR_BOOL => Self::Arith(ArithTy {
                 base: ArithBaseTy::Bool,
                 shape: TyShape::Scalar,
                 resolution: 1,
             }),
+            vola_opt::common::Ty::Tuple(t) => {
+                //collect all subtypes
+                let subtypes: Result<Vec<_>, _> =
+                    t.into_iter().map(|t| Self::try_from(t)).collect();
+                Self::Tuple(subtypes?)
+            }
+            vola_opt::common::Ty::Callable => Self::Callable,
             any => return Err(BackendSpirvError::TypeConversionError(any)),
         };
 
@@ -635,6 +654,20 @@ impl Display for SpvType {
             SpvType::Undefined => write!(f, "Undefined"),
             SpvType::State => write!(f, "State"),
             SpvType::Arith(a) => write!(f, "{a}"),
+            SpvType::Tuple(t) => {
+                write!(f, "(")?;
+                let mut is_first = true;
+                for t in t.iter() {
+                    if !is_first {
+                        write!(f, ", ")?;
+                    } else {
+                        is_first = false
+                    }
+                    write!(f, "{t}")?;
+                }
+                write!(f, ")")
+            }
+            SpvType::Callable => write!(f, "Callable"),
             SpvType::RuntimeArray(a) => write!(f, "RA<{a}>"),
         }
     }
@@ -657,7 +690,8 @@ pub enum SpvOp {
     ///_some_ kind of constant extract. The exact instruction depends on _what_ is
     // being used, but we _know_ that the access indices are _constant_.
     Extract(SmallVec<[u32; 3]>),
-    Construct,
+    UniformConstruct,
+    NonUniformConstruct,
 }
 
 impl SpvOp {
@@ -675,7 +709,8 @@ impl SpvOp {
             SpvOp::ConstantInt { resolution, bits } => format!("i{resolution}: {bits}"),
             SpvOp::ConstantBool(b) => format!("{b}"),
             SpvOp::Extract(ex) => format!("Extract: {:?}", ex),
-            SpvOp::Construct => "ConstantConstruct".to_owned(),
+            SpvOp::UniformConstruct => "UniformConstruct".to_owned(),
+            SpvOp::NonUniformConstruct => "NonUniformConstruct".to_owned(),
         }
     }
 
@@ -763,10 +798,15 @@ impl SpvOp {
                 log::warn!("Extract bound checking not yet implemented!");
                 Ok(())
             }
-            SpvOp::Construct => {
+            SpvOp::UniformConstruct => {
                 //TODO: implement
                 #[cfg(feature = "log")]
-                log::warn!("Construct checking not yet implemented!");
+                log::warn!("UniformConstruct checking not yet implemented!");
+                Ok(())
+            }
+            SpvOp::NonUniformConstruct => {
+                #[cfg(feature = "log")]
+                log::warn!("UniformConstruct checking not yet implemented!");
                 Ok(())
             }
         }
@@ -862,7 +902,8 @@ impl SpvOp {
                     operands,
                 )
             }
-            SpvOp::Construct => Instruction::new(
+            //NOTE: In Spv this is the same
+            SpvOp::UniformConstruct | SpvOp::NonUniformConstruct => Instruction::new(
                 CoreOp::CompositeConstruct,
                 Some(result_type_id),
                 Some(result_id),

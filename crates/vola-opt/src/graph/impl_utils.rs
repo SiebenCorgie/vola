@@ -6,27 +6,21 @@
  * 2024 Tendsin Mende
  */
 
-use ahash::AHashMap;
 use rvsdg::{
     edge::{InportLocation, InputType, LangEdge, OutportLocation, OutputType},
+    region::RegionLocation,
     util::unroll::UnrollError,
     NodeRef, SmallColl,
 };
-use vola_ast::{
-    common::Ident,
-    csg::{CSGNodeDef, CSGNodeTy},
-};
+use vola_ast::csg::{CsgDef, CsgTy};
 use vola_common::Span;
 
 use crate::{
-    alge::{
-        implblock::{ConceptImpl, ConceptImplKey},
-        EvalNode,
-    },
-    common::Ty,
-    imm::ImmNat,
-    OptEdge, OptError, OptNode, Optimizer,
+    alge::EvalNode, common::Ty, graph::auxiliary::Impl, imm::ImmNat, OptEdge, OptError, OptNode,
+    Optimizer,
 };
+
+use super::auxiliary::ImplKey;
 
 impl Optimizer {
     ///Builds a single-operand identity implementation for the given concept-operation compination.
@@ -35,18 +29,18 @@ impl Optimizer {
     /// operation definition.
     ///
     /// Fails if the operation definition is tagged `#[no_identity]`
-    pub fn implement_identity_for_concept(&mut self, key: ConceptImplKey) -> Result<(), OptError> {
+    pub fn implement_identity_for_concept(&mut self, key: ImplKey) -> Result<(), OptError> {
         if self.concept_impl.contains_key(&key) {
             return Err(OptError::AIIFailed(format!(
                 "There was already a implementation present for {}::{}",
-                key.concept_name, key.node_name,
+                key.concept, key.node,
             )));
         }
 
-        match self.csg_node_defs.get(&key.node_name) {
-            Some(CSGNodeDef {
+        match self.csg_node_defs.get(&key.node) {
+            Some(CsgDef {
                 span: _,
-                ty: CSGNodeTy::Entity,
+                ty: CsgTy::Entity,
                 name,
                 args: _,
             }) => {
@@ -55,26 +49,26 @@ impl Optimizer {
                     name.0
                 )))
             }
-            Some(CSGNodeDef {
+            Some(CsgDef {
                 span: _,
-                ty: CSGNodeTy::Operation,
+                ty: CsgTy::Operation,
                 name: _,
                 args: _,
             }) => {}
             None => {
                 return Err(OptError::AIIFailed(format!(
                     "Could not find operation definition named \"{}\", consider adding it first!",
-                    key.node_name
+                    key.node
                 )))
             }
         }
 
-        let concept_return_type = if let Some(concept) = self.concepts.get(&key.concept_name) {
+        let concept_return_type = if let Some(concept) = self.concepts.get(&key.concept) {
             concept.dst_ty.clone()
         } else {
             return Err(OptError::AIIFailed(format!(
                 "Concept \"{}\" doesn't exist",
-                key.concept_name
+                key.concept
             )));
         };
 
@@ -105,13 +99,14 @@ impl Optimizer {
                 output: OutputType::ContextVariableArgument(csg_operand),
             }
             .into(),
-            Ty::CSGTree,
+            Ty::CSG,
         );
 
+        let mut args = SmallColl::new();
         //Add the _unused_ csg-args
         //NOTE: Not really needed, but its the convention, and we don't know at this point if any
         //      pass depends on the convention.
-        for csg_aty in self.csg_node_defs.get(&key.node_name).unwrap().args.iter() {
+        for csg_aty in self.csg_node_defs.get(&key.node).unwrap().args.iter() {
             //add all the ports and type them
             let argidx = self
                 .graph
@@ -127,25 +122,26 @@ impl Optimizer {
                 .into(),
                 csg_aty.ty.clone().into(),
             );
+            args.push((csg_aty.ident.0.clone(), csg_aty.ty.clone().into()));
         }
 
-        //Add all the concepts args
+        //Add all the concept arg
         let mut eval_arg_ports = SmallColl::new();
-        for con_aty in self.concepts.get(&key.concept_name).unwrap().src_ty.iter() {
-            let argidx = self
-                .graph
-                .node_mut(lmd)
-                .node_type
-                .unwrap_lambda_mut()
-                .add_argument();
-            let port = OutportLocation {
-                node: lmd,
-                output: OutputType::Argument(argidx),
-            };
-            self.typemap
-                .set(port.clone().into(), con_aty.clone().into());
-            eval_arg_ports.push((port, con_aty.clone().into()));
-        }
+        let src_ty = self.concepts.get(&key.concept).unwrap().src_ty.clone();
+        args.push(("unnamed-concept-arg".to_owned(), src_ty.clone().into()));
+
+        let argidx = self
+            .graph
+            .node_mut(lmd)
+            .node_type
+            .unwrap_lambda_mut()
+            .add_argument();
+        let port = OutportLocation {
+            node: lmd,
+            output: OutputType::Argument(argidx),
+        };
+        self.typemap.set(port.clone().into(), src_ty.clone().into());
+        eval_arg_ports.push((port, src_ty.clone().into()));
 
         //add the result port
         let res = self
@@ -165,7 +161,7 @@ impl Optimizer {
         //add the eval node to the body, then connect all arguments
         self.graph.on_region(&lmd_region, |reg| {
             let eval_node = reg.insert_node(OptNode::new(
-                EvalNode::new(eval_arg_ports.len(), key.concept_name.clone()),
+                EvalNode::new(eval_arg_ports.len() + 1, key.concept.clone()),
                 Span::empty(),
             ));
             //connect subtree to first arg
@@ -180,7 +176,7 @@ impl Optimizer {
                         node: eval_node,
                         input: InputType::Input(0),
                     },
-                    OptEdge::value_edge().with_type(Ty::CSGTree),
+                    OptEdge::value_edge().with_type(Ty::CSG),
                 )
                 .unwrap();
             //connect the arg-edges and type them
@@ -210,7 +206,7 @@ impl Optimizer {
                         node: lmd,
                         input: InputType::Result(0),
                     },
-                    OptEdge::value_edge().with_type(concept_return_type.into()),
+                    OptEdge::value_edge().with_type(concept_return_type.clone().into()),
                 )
                 .unwrap();
         });
@@ -218,19 +214,20 @@ impl Optimizer {
         //last part is tagging it with a name and adding it to the collection of impl blocks
         self.names.set(
             lmd.into(),
-            format!("AII impl {} for {}", key.node_name, key.concept_name),
+            format!("AII impl {} for {}", key.node, key.concept),
         );
 
-        let mut operands = AHashMap::default();
-        operands.insert("unnamed".to_string(), 0);
+        let mut operands = SmallColl::default();
+        operands.push("unnamed".to_string());
 
-        let concept_impl = ConceptImpl {
-            span: Span::empty(),
-            concept: Ident(key.concept_name.clone()),
-            node_type: CSGNodeTy::Operation,
-            operands,
+        let concept_impl = Impl {
+            region_span: Span::empty(),
+            def_span: Span::empty(),
+            concept: key.concept.clone(),
+            subtrees: operands,
             lambda: lmd,
-            lambda_region: lmd_region,
+            args,
+            return_type: concept_return_type.into(),
         };
 
         let old = self.concept_impl.insert(key, concept_impl);
@@ -330,5 +327,25 @@ impl Optimizer {
         }
 
         candidate
+    }
+
+    ///Returns a list of all currently exported λ-bodies
+    pub(crate) fn exported_functions(&self) -> SmallColl<RegionLocation> {
+        let mut export_lambdas = SmallColl::default();
+        for result in self
+            .graph
+            .result_ports(self.graph.toplevel_region().node, 0)
+        {
+            if let Some(src) = self.graph.inport_src(result) {
+                if self.graph[src.node].node_type.is_lambda() {
+                    export_lambdas.push(RegionLocation {
+                        node: src.node,
+                        region_index: 0,
+                    });
+                }
+            }
+        }
+
+        export_lambdas
     }
 }

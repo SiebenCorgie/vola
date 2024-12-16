@@ -9,11 +9,93 @@
 use smallvec::SmallVec;
 use vola_ast::{
     alge::Expr,
-    common::{Block, Stmt},
+    common::{Block, Branch, Ident, Loop, Stmt},
 };
 use vola_common::{ariadne::Label, error::error_reporter, report};
 
-use crate::{error::ParserError, FromTreeSitter};
+use crate::{error::ParserError, FromTreeSitter, ParserCtx};
+
+impl FromTreeSitter for Loop {
+    fn parse(ctx: &mut ParserCtx, dta: &[u8], node: &tree_sitter::Node) -> Result<Self, ParserError>
+    where
+        Self: Sized,
+    {
+        ParserError::assert_node_kind(ctx, node, "theta_expr")?;
+        let mut walker = node.walk();
+        let mut children = node.children(&mut walker);
+        ParserError::consume_expected_node_string(ctx, dta, children.next(), "for")?;
+
+        let lv_identifier = Ident::parse(ctx, dta, &children.next().unwrap())?;
+        ParserError::consume_expected_node_string(ctx, dta, children.next(), "in")?;
+        let bound_lower = Expr::parse(ctx, dta, &children.next().unwrap())?;
+        ParserError::consume_expected_node_string(ctx, dta, children.next(), "..")?;
+        let bound_upper = Expr::parse(ctx, dta, &children.next().unwrap())?;
+        let body = Box::new(Block::parse(ctx, dta, &children.next().unwrap())?);
+
+        ParserError::assert_ast_level_empty(ctx, children.next())?;
+        ParserError::assert_node_no_error(ctx, node)?;
+        Ok(Loop {
+            span: ctx.span(node),
+            iteration_variable_ident: lv_identifier,
+            bound_lower,
+            bound_upper,
+            body,
+        })
+    }
+}
+
+impl FromTreeSitter for Branch {
+    fn parse(ctx: &mut ParserCtx, dta: &[u8], node: &tree_sitter::Node) -> Result<Self, ParserError>
+    where
+        Self: Sized,
+    {
+        ParserError::assert_node_kind(ctx, node, "gamma_expr")?;
+
+        let mut walker = node.walk();
+        let mut children = node.children(&mut walker);
+        //consume the first if, which must always be there. Then iterate over all
+        //_optional_ else_if branches, finally
+        // check if there is a unconditional within the loop, which always must be the last
+        //part.
+
+        let mut unconditional = None;
+
+        ParserError::consume_expected_node_string(ctx, dta, children.next(), "if")?;
+        let conditional = (
+            Expr::parse(ctx, dta, &children.next().unwrap())?,
+            Box::new(Block::parse(ctx, dta, &children.next().unwrap())?),
+        );
+
+        if let Some(next_node) = children.next() {
+            match next_node.kind() {
+                "else" => {
+                    unconditional =
+                        Some(Box::new(Block::parse(ctx, dta, &children.next().unwrap())?));
+                }
+                _ => {
+                    let err = ParserError::UnexpectedAstNode {
+                        kind: next_node.kind().to_string(),
+                        expected: "else, or nothing".to_owned(),
+                    };
+                    report(
+                        error_reporter(err.clone(), ctx.span(&next_node))
+                            .with_label(Label::new(ctx.span(&next_node)).with_message("here"))
+                            .finish(),
+                    );
+                    return Err(err);
+                }
+            }
+        }
+
+        ParserError::assert_ast_level_empty(ctx, children.next())?;
+        ParserError::assert_node_no_error(ctx, node)?;
+        Ok(Branch {
+            span: ctx.span(node),
+            conditional,
+            unconditional,
+        })
+    }
+}
 
 impl FromTreeSitter for Block {
     fn parse(

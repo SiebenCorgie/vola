@@ -17,23 +17,20 @@
 //! The pass itself just tries to find a fix-point style resolution, which basically comes down to calling try-derive on all _just changed nodes_ till
 //! either all are resolved, or nothing changes and we end in an _unresolved_ state.
 
-use ahash::{AHashMap, AHashSet};
 use rvsdg::{
     edge::{InportLocation, InputType, OutportLocation, OutputType},
     nodes::{ApplyNode, NodeType},
     region::RegionLocation,
-    smallvec::SmallVec,
+    smallvec::{smallvec, SmallVec},
     util::abstract_node_type::AbstractNodeType,
-    NodeRef,
+    NodeRef, SmallColl,
 };
-use rvsdg_viewer::View;
 use vola_common::{ariadne::Label, error::error_reporter, report, Span};
 
 use crate::{
-    alge::{algefn::AlgeFn, implblock::ConceptImpl},
-    common::Ty,
-    csg::{exportfn::ExportFn, fielddef::FieldDef},
+    common::{DataType, Shape, Ty},
     error::OptError,
+    graph::auxiliary::{Function, Impl},
     OptEdge, Optimizer, TypeState,
 };
 
@@ -45,23 +42,6 @@ use crate::{
 impl Optimizer {
     ///Runs the type resolution pass on all nodes.
     pub fn type_derive(&mut self) -> Result<(), OptError> {
-        //NOTE, we only need to run that on λ-Regions. There are 3 kinds for that
-        // 1. ImplBlocks
-        // 2. FieldDefs
-        // 3. ExportFns
-        //
-        // Each of those has slightly different requirements.
-        //
-        // - Impl block _just_ uses the standard λ-resolution algorithm
-        // - FieldDef: Uses the λ-resolution, then checks that the last result-connected node is a CSGTree node.
-        // - ExportFn: Uses the λ-resolution, makes sure that all result connected nodes are one of the algebraic types.
-        //
-        //
-        // Similar to the add_ast routine we _try_ all resolves, and collect errors before returning.
-
-        //NOTE: Implblocks never have context dependencies, so we can always resolve them immediately.
-        //      This also gives us a nice initial _resolved_set_
-
         #[cfg(feature = "log")]
         log::info!("type derive");
 
@@ -69,183 +49,52 @@ impl Optimizer {
             self.push_debug_state("pre type derive");
         }
 
-        let mut error_count = 0;
-        let mut resolve_set = AHashSet::new();
-        let implblocks = self
-            .concept_impl
-            .values()
-            .map(|v| (v.lambda_region, v.span.clone()))
-            .collect::<Vec<_>>();
-        for (implblock, span) in implblocks {
-            if let Err(_err) = self.derive_region(implblock, span.clone()) {
-                error_count += 1;
-            } else {
-                //Add to resolve set
-                let was_new = resolve_set.insert(implblock.node).clone();
-                assert!(was_new);
+        let mut errors = SmallColl::new();
+
+        //we first build the topological order of all nodes in Omega, then
+        //we enter eac
+        let toplevel = self.graph.toplevel_region();
+        let topoord = self.graph.topological_order_region(toplevel);
+
+        for node in topoord {
+            if let Err(e) = self.try_node_type_derive(node) {
+                errors.push(e)
             }
         }
 
         for implblock in self.concept_impl.values() {
-            self.verify_imblblock(implblock)?;
+            if let Err(e) = self.verify_imblblock(implblock) {
+                errors.push(e)
+            }
         }
 
-        //To guarantee that a region can resolve _context-dependent-nodes_ (mostly apply nodes atm),
-        //We build a _context_dependecy_map_ first. This will allow us to check all λ-Node context dependencies
-        //So we only try to resolve nodes where the context is already resolved.
+        for f in self.functions.values() {
+            if let Err(e) = self.verify_fn(f) {
+                errors.push(e)
+            }
+        }
 
-        let fregs = self
-            .field_def
-            .values()
-            .map(|fdef| (fdef.lambda_region.clone(), fdef.span.clone()))
-            //Append all alge_fn to the dependency resolution as well
-            .chain(
-                self.alge_fn
-                    .values()
-                    .map(|algefn| (algefn.lambda_region.clone(), algefn.span.clone())),
-            )
-            .collect::<Vec<_>>();
-
-        let exports = self
-            .export_fn
-            .values()
-            .map(|exp| (exp.lambda_region.clone(), exp.span.clone()))
-            .collect::<Vec<_>>();
-
-        let mut context_dependeny_map = AHashMap::default();
-        for def in fregs
-            .iter()
-            .map(|f| f.0.node)
-            .chain(exports.iter().map(|e| e.0.node))
+        if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("DUMP_POST_TYPE_DERIVE").is_ok()
         {
-            //For def, read out the context variables, and push all srcs
-            let mut i = 0;
-            let mut dependecy_set = AHashSet::default();
-            while let Some(cvin) = self
-                .graph
-                .node(def)
-                .node_type
-                .unwrap_lambda_ref()
-                .cv_input(i)
-            {
-                i += 1;
-                if let Some(connection) = cvin.edge {
-                    let src_node = self.graph.edge(connection).src().node;
-                    dependecy_set.insert(src_node);
-                }
-            }
-            if dependecy_set.len() > 0 {
-                context_dependeny_map.insert(def, dependecy_set);
-            }
-        }
-
-        //Now do the field defs by iterating work list till either nothing changes or empty.
-        //we always check if all dependencies are met
-        let mut worklist = fregs;
-        'fielddef_resolution: loop {
-            let mut changed_any = false;
-            let mut local_work_list = Vec::new();
-            std::mem::swap(&mut worklist, &mut local_work_list);
-            for (def, srcspan) in local_work_list {
-                //check if def's dependencies are met
-                let dependecies_met = {
-                    if let Some(dependecies) = context_dependeny_map.get(&def.node) {
-                        let mut is_met = true;
-                        for dep in dependecies {
-                            if !resolve_set.contains(dep) {
-                                is_met = false;
-                                break;
-                            }
-                        }
-                        is_met
-                    } else {
-                        //Has no dependencies, therefore we can always resolve
-                        true
-                    }
-                };
-
-                if dependecies_met {
-                    //Try to resolve, since all dependencies are met
-                    if let Err(_err) = self.derive_region(def, srcspan.clone()) {
-                        error_count += 1;
-                    } else {
-                        //successfully resolved, so add to resolve map
-                        changed_any = true;
-                        let is_newly_inserted = resolve_set.insert(def.node);
-                        assert!(
-                            is_newly_inserted,
-                            "the field-def {} shouldn't have been resolved yet...",
-                            def.node
-                        );
-                    }
-                } else {
-                    //dependencies not yet met, push back again
-                    worklist.push((def, srcspan));
-                }
-            }
-
-            if !changed_any && !worklist.is_empty() {
-                return Err(OptError::Any {
-                    text: format!("Could not type resolve all field definitions!"),
-                });
-            }
-
-            if worklist.is_empty() {
-                break 'fielddef_resolution;
-            }
-        }
-
-        for fdef in self.field_def.values() {
-            self.verify_field_def(fdef)?;
-        }
-
-        for algefn in self.alge_fn.values() {
-            self.verify_alge_fn(algefn)?;
-        }
-
-        #[cfg(feature = "log")]
-        log::info!("Finished deriving dependent nodes, moving to exports...");
-        //NOTE: Right now we don't use the dependency driven resolution we use for field defs,
-        //      cause by definition all dependencies must be resolved that could be imported.
-        //      However, since this is pre-alpha ware, we still check
-        for (exp, span) in exports {
-            if let Some(deps) = context_dependeny_map.get(&exp.node) {
-                for dep in deps {
-                    assert!(resolve_set.contains(dep));
-                }
-            }
-            if let Err(_err) = self.derive_region(exp, span) {
-                error_count += 1;
-            }
-        }
-        for exp in self.export_fn.values() {
-            self.verify_export_fn(exp)?;
-        }
-
-        if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("DUMP_TYPE_DERIVE").is_ok() {
             self.push_debug_state("post type derive");
         }
 
-        #[cfg(feature = "log")]
-        log::info!("Finished type derive");
-        if error_count > 0 {
-            Err(OptError::Any {
-                text: format!("Type derivation did not end successfully!"),
-            })
+        if errors.len() > 0 {
+            return Err(OptError::ErrorsOccurred(errors.len()));
         } else {
             Ok(())
         }
     }
 
     //Verifies that the implblock has the correct input and output signature set on all edges
-    fn verify_imblblock(&self, block: &ConceptImpl) -> Result<(), OptError> {
+    fn verify_imblblock(&self, block: &Impl) -> Result<(), OptError> {
         //NOTE: we currently only check that the return type matches, since the input types are
         // always pre-set by the impblock builder, based on the concept's deceleration. So there would be some
         // kind of type conflict within the region.
 
         let expected_result_type: Ty = self
             .concepts
-            .get(&block.concept.0)
+            .get(&block.concept)
             .unwrap()
             .dst_ty
             .clone()
@@ -256,7 +105,7 @@ impl Optimizer {
         let result_node_span = {
             if let Some(srcnode) = self
                 .graph
-                .region(&block.lambda_region)
+                .region(&block.region())
                 .unwrap()
                 .result_src(&self.graph, 0)
             {
@@ -271,16 +120,17 @@ impl Optimizer {
         };
 
         //check the output for the correctly typed edge
-        if let Some(result_edg) = self.graph.region(&block.lambda_region).unwrap().results[0].edge {
+        if let Some(result_edg) = self.graph.region(&block.region()).unwrap().results[0].edge {
             match self.graph.edge(result_edg).ty.get_type() {
                 None => {
                     let err = OptError::Any {
                         text: format!("impl-block's output was untyped"),
                     };
                     report(
-                        error_reporter(err.clone(), block.span.clone())
+                        error_reporter(err.clone(), block.def_span.clone())
                             .with_label(
-                                Label::new(block.span.clone()).with_message("in this region"),
+                                Label::new(block.region_span.clone())
+                                    .with_message("in this region"),
                             )
                             .finish(),
                     );
@@ -311,9 +161,9 @@ impl Optimizer {
                                 ),
                             };
                             report(
-                                error_reporter(err.clone(), block.span.clone())
+                                error_reporter(err.clone(), block.def_span.clone())
                                     .with_label(
-                                        Label::new(block.span.clone())
+                                        Label::new(block.region_span.clone())
                                             .with_message("In this region"),
                                     )
                                     .finish(),
@@ -330,122 +180,17 @@ impl Optimizer {
                 text: format!("ImplBlocks's output was not connected"),
             };
             report(
-                error_reporter(err.clone(), block.span.clone())
-                    .with_label(Label::new(block.span.clone()).with_message("In this region"))
+                error_reporter(err.clone(), block.def_span.clone())
+                    .with_label(
+                        Label::new(block.region_span.clone()).with_message("In this region"),
+                    )
                     .finish(),
             );
             Err(err)
         }
     }
 
-    fn verify_field_def(&self, fdef: &FieldDef) -> Result<(), OptError> {
-        //For the field def its pretty easy. We just have to check that it actually returns a CSGTree
-
-        if let Some(result_edge) = self.graph.region(&fdef.lambda_region).unwrap().results[0].edge {
-            if let Some(ty) = self.graph.edge(result_edge).ty.get_type() {
-                if ty != &Ty::CSGTree {
-                    let err = OptError::Any {
-                        text: format!(
-                            "field definition's output is expected to be a CSGTree, not {:?}",
-                            ty
-                        ),
-                    };
-                    report(
-                        error_reporter(err.clone(), fdef.span.clone())
-                            .with_label(
-                                Label::new(fdef.span.clone()).with_message("In this region"),
-                            )
-                            .finish(),
-                    );
-                    Err(err)
-                } else {
-                    Ok(())
-                }
-            } else {
-                let err = OptError::Any {
-                    text: format!("field definition's output was not typed"),
-                };
-                report(
-                    error_reporter(err.clone(), fdef.span.clone())
-                        .with_label(Label::new(fdef.span.clone()).with_message("In this region"))
-                        .finish(),
-                );
-                Err(err)
-            }
-        } else {
-            let err = OptError::Any {
-                text: format!("field definition's output was not connected"),
-            };
-            report(
-                error_reporter(err.clone(), fdef.span.clone())
-                    .with_label(Label::new(fdef.span.clone()).with_message("In this region"))
-                    .finish(),
-            );
-            Err(err)
-        }
-    }
-
-    fn verify_export_fn(&self, export: &ExportFn) -> Result<(), OptError> {
-        //In this case, for every output, make sure that the type is correct as well.
-        // NOTE that the expected result type is also derived from the accessed concept.
-        // So this makes mostly sure that we in fact derived the correct output type.
-        for (i, expected_ty) in export.output_signature.iter().enumerate() {
-            if let Some(result_edge) = self
-                .graph
-                .region(&export.lambda_region)
-                .unwrap()
-                .results
-                .get(i)
-                .map(|res| res.edge)
-                .flatten()
-            {
-                if let Some(ty) = self.graph.edge(result_edge).ty.get_type() {
-                    if ty != expected_ty {
-                        let err = OptError::Any {
-                            text: format!(
-                                "field definition's output {} is expected to be a {:?}, not {:?}",
-                                i, expected_ty, ty
-                            ),
-                        };
-                        report(
-                            error_reporter(err.clone(), export.span.clone())
-                                .with_label(
-                                    Label::new(export.span.clone()).with_message("In this region"),
-                                )
-                                .finish(),
-                        );
-                        return Err(err);
-                    }
-                } else {
-                    let err = OptError::Any {
-                        text: format!("field-export's output[{}] was not typed", i),
-                    };
-                    report(
-                        error_reporter(err.clone(), export.span.clone())
-                            .with_label(
-                                Label::new(export.span.clone()).with_message("In this region"),
-                            )
-                            .finish(),
-                    );
-                    return Err(err);
-                }
-            } else {
-                let err = OptError::Any {
-                    text: format!("field-export's output[{}] was not connected", i),
-                };
-                report(
-                    error_reporter(err.clone(), export.span.clone())
-                        .with_label(Label::new(export.span.clone()).with_message("In this region"))
-                        .finish(),
-                );
-                return Err(err);
-            }
-        }
-
-        Ok(())
-    }
-
-    fn verify_alge_fn(&self, algefn: &AlgeFn) -> Result<(), OptError> {
+    fn verify_fn(&self, algefn: &Function) -> Result<(), OptError> {
         //Make sure that the result-connected edge is of the right type,
         //and the argument-connected edges are correct as well
         for (argidx, (_name, argty)) in algefn.args.iter().enumerate() {
@@ -465,10 +210,10 @@ impl Optimizer {
                             text: format!("Argument {argidx} is of typ \"{argty:?}\", but was used as \"{ty:?}\". This is a compiler bug!"),
                         };
                         report(
-                            error_reporter(err.clone(), algefn.span.clone())
-                                .with_label(Label::new(algefn.span.clone()).with_message(&format!(
-                                    "user of argument {argidx} in this region"
-                                )))
+                            error_reporter(err.clone(), algefn.def_span.clone())
+                                .with_label(Label::new(algefn.region_span.clone()).with_message(
+                                    &format!("user of argument {argidx} in this region"),
+                                ))
                                 .finish(),
                         );
                         return Err(err);
@@ -478,9 +223,9 @@ impl Optimizer {
                         text: format!("Argument {argidx} is of type \"{argty:?}\", but connected edge was untyped. This is a compiler bug!"),
                     };
                     report(
-                        error_reporter(err.clone(), algefn.span.clone())
+                        error_reporter(err.clone(), algefn.def_span.clone())
                             .with_label(
-                                Label::new(algefn.span.clone()).with_message(&format!(
+                                Label::new(algefn.region_span.clone()).with_message(&format!(
                                     "user of argument {argidx} in this region"
                                 )),
                             )
@@ -502,31 +247,36 @@ impl Optimizer {
             .edge
         {
             if let Some(ty) = self.graph.edge(*edg).ty.get_type() {
-                if ty != &algefn.retty {
-                    let err = OptError::Any {
+                if ty != &algefn.return_type {
+                    let err = OptError::TypeDeriveError {
                         text: format!(
-                            "Result type was \"{ty:?}\", but expected {:?}!",
-                            algefn.retty
+                            "Result type was \"{ty}\", but expected {}!",
+                            algefn.return_type
                         ),
                     };
                     report(
-                        error_reporter(err.clone(), algefn.span.clone())
-                            .with_label(Label::new(algefn.span.clone()).with_message(&format!(
-                                "result producer in this region should be {:?}",
-                                algefn.retty
-                            )))
+                        error_reporter(err.clone(), algefn.def_span.clone())
+                            .with_label(Label::new(algefn.region_span.clone()).with_message(
+                                &format!(
+                                    "result producer in this region should be {}",
+                                    algefn.return_type
+                                ),
+                            ))
                             .finish(),
                     );
                     return Err(err);
                 }
             } else {
-                let err = OptError::Any {
-                    text: format!("Result is of type \"{:?}\", but connected edge was untyped. This is a compiler bug!", algefn.retty),
+                let err = OptError::TypeDeriveError {
+                    text: format!(
+                        "Result is of type \"{}\", but result was untyped. This is a compiler bug!",
+                        algefn.return_type
+                    ),
                 };
                 report(
-                    error_reporter(err.clone(), algefn.span.clone())
+                    error_reporter(err.clone(), algefn.def_span.clone())
                         .with_label(
-                            Label::new(algefn.span.clone())
+                            Label::new(algefn.region_span.clone())
                                 .with_message("result producer in this region"),
                         )
                         .finish(),
@@ -535,12 +285,12 @@ impl Optimizer {
             }
         } else {
             let err = OptError::Any {
-                text: format!("Result is of type \"{:?}\", but there was no return value set. This is a compiler bug!", algefn.retty),
+                text: format!("Result is of type \"{:?}\", but there was no return value set. This is a compiler bug!", algefn.return_type),
             };
             report(
-                error_reporter(err.clone(), algefn.span.clone())
+                error_reporter(err.clone(), algefn.def_span.clone())
                     .with_label(
-                        Label::new(algefn.span.clone())
+                        Label::new(algefn.region_span.clone())
                             .with_message("no result producer in this region"),
                     )
                     .finish(),
@@ -556,7 +306,7 @@ impl Optimizer {
         node: NodeRef,
         apply: &ApplyNode,
         region_src_span: &Span,
-    ) -> Result<Option<Ty>, OptError> {
+    ) -> Result<(Ty, OutportLocation), OptError> {
         #[cfg(feature = "log")]
         log::info!("Type derive Apply node");
 
@@ -630,7 +380,23 @@ impl Optimizer {
                                 ty
                             } else {
                                 //type of argument not yet derived
-                                return Ok(None);
+                                let err = OptError::TypeDeriveError {
+                                    text: format!("argument {i} of this call has no type"),
+                                };
+
+                                if let Some(span) = self.find_span(node.into()) {
+                                    report(
+                                        error_reporter(err.clone(), span.clone())
+                                            .with_label(
+                                                Label::new(span).with_message("for this call"),
+                                            )
+                                            .finish(),
+                                    );
+                                } else {
+                                    report(error_reporter(err.clone(), Span::empty()).finish());
+                                }
+
+                                return Err(err);
                             };
                             apply_sig.push(ty.clone());
                         } else {
@@ -674,7 +440,8 @@ impl Optimizer {
                     }
                 }
                 //If we finished till here, then its all-right
-                Ok(Some(result_type))
+
+                Ok((result_type, node.output(0)))
             } else {
                 let err = OptError::Any {
                     text: format!("apply node's call-edge hat no callable producer."),
@@ -701,7 +468,10 @@ impl Optimizer {
         }
     }
 
-    fn gamma_derive(&mut self, gamma: NodeRef) -> Result<(), OptError> {
+    fn gamma_derive(
+        &mut self,
+        gamma: NodeRef,
+    ) -> Result<SmallColl<(Ty, OutportLocation)>, OptError> {
         //Check that the condional port is a boolean, then
         //map all connected (and used) ports into both regions
         //
@@ -807,13 +577,15 @@ impl Optimizer {
 
         //finally, map all set outport out of the region, and error if either they are not of unified type,
         //or unset, but in use
+        let mut result_sig = SmallColl::default();
         for output in self.graph[gamma].outport_types() {
             let outport = gamma.as_outport_location(output);
             match output {
                 OutputType::ExitVariableOutput(idx) => {
                     if let Some(ty) = self.gamma_unified_type(gamma, idx) {
                         //set the output
-                        self.typemap.set(outport.into(), ty);
+                        self.typemap.set(outport.into(), ty.clone());
+                        result_sig.push((ty, outport));
                     } else {
                         //ignore for unused values
                         if self.graph[outport].edges.len() == 0 {
@@ -867,22 +639,31 @@ impl Optimizer {
                             .cloned()
                             .unwrap_or(Span::empty());
 
+                        let if_branch_ty = if_branch_ty.clone().unwrap_or(Ty::Shaped {
+                            ty: DataType::Void,
+                            shape: Shape::Scalar,
+                        });
+                        let else_branch_ty = else_branch_ty.clone().unwrap_or(Ty::Shaped {
+                            ty: DataType::Void,
+                            shape: Shape::Scalar,
+                        });
+
                         let err = OptError::Any {
                             text: format!(
-                                "Return type conflict. If branch returns {:?}, but else branch returns {:?}",
+                                "Return type conflict. If branch returns {}, but else branch returns {}",
                                 if_branch_ty, else_branch_ty
                             ),
                         };
                         report(
                             error_reporter(err.clone(), head_span)
                                 .with_label(
-                                    Label::new(if_branch_span.clone())
-                                        .with_message(format!("This returns {if_branch_ty:?}")),
+                                    Label::new(if_branch_span.clone()).with_message(format!(
+                                        "\"If\"-branch returns {if_branch_ty}"
+                                    )),
                                 )
-                                .with_label(
-                                    Label::new(else_branch_span.clone())
-                                        .with_message(format!("This returns {else_branch_ty:?}")),
-                                )
+                                .with_label(Label::new(else_branch_span.clone()).with_message(
+                                    format!("\"Else\"-branch returns {else_branch_ty}"),
+                                ))
                                 .finish(),
                         );
 
@@ -892,11 +673,14 @@ impl Optimizer {
                 _ => panic!("Malformed Gamma output: {output:?}"),
             }
         }
-        Ok(())
+        Ok(result_sig)
     }
 
     ///Does theta type derive, assuming that all used inputs are type set.
-    fn theta_type_derive(&mut self, theta: NodeRef) -> Result<(), OptError> {
+    fn theta_type_derive(
+        &mut self,
+        theta: NodeRef,
+    ) -> Result<SmallColl<(Ty, OutportLocation)>, OptError> {
         let theta_span = self.find_span(theta.into()).unwrap_or(Span::empty());
         //at the start, check input types.
         //we must be sure that the loop bounds (input 0 & 1) are natural numbers.
@@ -915,9 +699,13 @@ impl Optimizer {
                 //Check for natural
                 InputType::Input(0) | InputType::Input(1) => {
                     if let Some(ty) = self.find_type(&inportloc.into()) {
-                        if !ty.is_nat() {
+                        if !ty.is_integer() {
                             let err = OptError::TypeDeriveError {
-                                text: format!("Loop bound should be {}, was {}", Ty::Nat, ty),
+                                text: format!(
+                                    "Loop bound should be {}, was {}",
+                                    Ty::SCALAR_INT,
+                                    ty
+                                ),
                             };
                             report(
                                 error_reporter(err.clone(), arg_span.clone())
@@ -931,7 +719,10 @@ impl Optimizer {
                     } else {
                         //Did not find a type for the loop-bound, which is also undefined
                         let err = OptError::TypeDeriveError {
-                            text: format!("Loop bound should be {}, but had no type!", Ty::Nat),
+                            text: format!(
+                                "Loop bound should be {}, but had no type!",
+                                Ty::SCALAR_INT
+                            ),
                         };
                         report(
                             error_reporter(err.clone(), arg_span.clone())
@@ -989,7 +780,11 @@ impl Optimizer {
         {
             if !ty.is_bool() {
                 let err = OptError::TypeDeriveError {
-                    text: format!("Loop predicate should be {:?}, but is {:?}!", Ty::Bool, ty),
+                    text: format!(
+                        "Loop predicate should be {:?}, but is {:?}!",
+                        Ty::SCALAR_BOOL,
+                        ty
+                    ),
                 };
                 report(
                     error_reporter(err.clone(), theta_span.clone())
@@ -1000,7 +795,10 @@ impl Optimizer {
             }
         } else {
             let err = OptError::TypeDeriveError {
-                text: format!("Loop predicate should be {:?}, but had no type!", Ty::Bool,),
+                text: format!(
+                    "Loop predicate should be {:?}, but had no type!",
+                    Ty::SCALAR_BOOL,
+                ),
             };
             report(
                 error_reporter(err.clone(), theta_span.clone())
@@ -1010,7 +808,8 @@ impl Optimizer {
             return Err(err);
         }
 
-        //now map all results out of the theta
+        //now map all results out of the theta node and build the signature
+        let mut output_sig = SmallColl::default();
         for output in self.graph[theta].outport_types() {
             let result_port = theta.as_outport_location(output);
             let in_region_port = theta.as_inport_location(output.map_to_in_region(0).unwrap());
@@ -1034,6 +833,9 @@ impl Optimizer {
                     return Err(err);
                 }
             };
+
+            output_sig.push((result_ty.clone(), result_port));
+
             //result has a type. Find the equivalent argument port, and also make sure that they match.
             let argument_port = if let OutputType::Output(t) = output {
                 OutputType::Argument(t)
@@ -1051,7 +853,7 @@ impl Optimizer {
                     if ty != argty {
                         //type missmatch
                         let err = OptError::TypeDeriveError {
-                            text: format!("Loop-Variable[{argument_port:?}] type missmatch. Argument was {argty}, but Result was {ty}!"),
+                            text: format!("Loop-Variable type missmatch: Argument was imported as {argty}, but resulted in {ty}!"),
                         };
                         report(
                             error_reporter(err.clone(), theta_span.clone())
@@ -1069,62 +871,7 @@ impl Optimizer {
             self.typemap.set(result_port.into(), set_ty);
         }
 
-        Ok(())
-    }
-
-    pub fn try_node_type_derive(
-        &mut self,
-        node: NodeRef,
-    ) -> Result<(Option<Ty>, OutportLocation), OptError> {
-        //gather all inputs and let the node try to resolve itself
-        let payload = match &self.graph.node(node).node_type {
-            NodeType::Simple(s) => {
-                let ty = s.node.try_derive_type(
-                    &self.typemap,
-                    &self.graph,
-                    &self.concepts,
-                    &self.csg_node_defs,
-                );
-
-                (ty?, node.output(0))
-            }
-            NodeType::Apply(a) => {
-                let region_span = self
-                    .find_span(self.graph[node].parent.unwrap().into())
-                    .unwrap_or(Span::empty());
-                let ty = self.try_apply_derive(node, a, &region_span);
-                (ty?, node.output(0))
-            }
-            NodeType::Gamma(_g) => {
-                self.gamma_derive(node)?;
-                let output_port = self.value_producer_port(node).unwrap();
-                let ty = self.find_type(&output_port.into());
-                (ty, node.output(0))
-            }
-            //NOTE: by convention the θ-Node resolves to output 2
-            NodeType::Theta(_t) => {
-                self.theta_type_derive(node)?;
-                let output_port = self.value_producer_port(node).unwrap();
-                let ty = self.find_type(&output_port.into());
-                (ty, output_port)
-            }
-            NodeType::Lambda(_l) => {
-                self.derive_lambda(node)?;
-                //lambdas alwas return a single callable
-                (
-                    Some(Ty::Callable),
-                    node.as_outport_location(OutputType::LambdaDeclaration),
-                )
-            }
-            t => {
-                let err = OptError::Any {
-                    text: format!("Unexpected node type {t} in graph while doing type resolution."),
-                };
-                return Err(err);
-            }
-        };
-
-        Ok(payload)
+        Ok(output_sig)
     }
 
     fn derive_lambda(&mut self, lambda: NodeRef) -> Result<(), OptError> {
@@ -1210,6 +957,23 @@ impl Optimizer {
             }
         }
 
+        //declare all λ-decl edges as "callable"
+        self.typemap.set(
+            lambda
+                .as_outport_location(OutputType::LambdaDeclaration)
+                .into(),
+            Ty::Callable,
+        );
+
+        let consumers = self
+            .graph
+            .find_consumer_out(lambda.as_outport_location(OutputType::LambdaDeclaration));
+        for consumer in consumers {
+            let path = self.graph.trace_path(consumer);
+            let t = self.type_path(&path)?;
+            assert_eq!(t, Ty::Callable);
+        }
+
         //now do internal type derivative
         self.derive_region(
             RegionLocation {
@@ -1220,6 +984,77 @@ impl Optimizer {
         )?;
 
         Ok(())
+    }
+
+    pub fn try_node_type_derive(
+        &mut self,
+        node: NodeRef,
+    ) -> Result<SmallColl<(Ty, OutportLocation)>, OptError> {
+        //gather input types, those must be present, by definition
+        let mut input_config = SmallColl::default();
+        for input in self.graph.inports(node) {
+            let ty = if let Some(near_type) = self.find_type(&input.into()) {
+                near_type
+            } else {
+                //NOTE: there is this special case, if we _use_ a λ that was not yet type derived.
+                if self.graph.find_producer_inp(input).map(|port| port.output)
+                    == Some(OutputType::LambdaDeclaration)
+                {
+                    Ty::Callable
+                } else {
+                    let err = OptError::TypeDeriveError {
+                        text: format!(
+                        "Argument {} ({node:?}) is not connected, but also not type-set, which is an error",
+                        input.input
+                    ),
+                    };
+                    return Err(err);
+                }
+            };
+            input_config.push(ty);
+        }
+
+        //gather all inputs and let the node try to resolve itself
+        let payload: SmallColl<(Ty, OutportLocation)> = match &self.graph.node(node).node_type {
+            NodeType::Simple(s) => {
+                let ty =
+                    s.node
+                        .try_derive_type(&input_config, &self.concepts, &self.csg_node_defs)?;
+                smallvec![(ty, node.output(0))]
+            }
+            NodeType::Apply(a) => {
+                let region_span = self
+                    .find_span(self.graph[node].parent.unwrap().into())
+                    .unwrap_or(Span::empty());
+                let res = self.try_apply_derive(node, a, &region_span)?;
+                smallvec![res]
+            }
+            NodeType::Gamma(_g) => {
+                let result = self.gamma_derive(node)?;
+                result
+            }
+            //NOTE: by convention the θ-Node resolves to output 2
+            NodeType::Theta(_t) => {
+                let result = self.theta_type_derive(node)?;
+                result
+            }
+            NodeType::Lambda(_l) => {
+                self.derive_lambda(node)?;
+                //lambdas alwas return a single callable
+                smallvec![(
+                    Ty::Callable,
+                    node.as_outport_location(OutputType::LambdaDeclaration),
+                )]
+            }
+            t => {
+                let err = OptError::Any {
+                    text: format!("Unexpected node type {t} in graph while doing type resolution."),
+                };
+                return Err(err);
+            }
+        };
+
+        Ok(payload)
     }
 
     ///Derives the type for all live nodes in the region.
@@ -1269,54 +1104,66 @@ impl Optimizer {
         let topoord = self.graph.topological_order_region(reg);
 
         for node in topoord {
-            let (type_resolve_try, resolved_port) = match self.try_node_type_derive(node) {
-                Ok(t) => t,
+            let resolved_values = match self.try_node_type_derive(node) {
+                Ok(values) => values,
                 Err(e) => {
-                    let span = self.find_span(node.into()).unwrap_or(Span::empty());
-                    report(
-                        error_reporter(e.clone(), span.clone())
-                            .with_label(Label::new(span.clone()).with_message("on this operation"))
-                            .finish(),
-                    );
+                    if let Some(span) = self.find_span(node.into()) {
+                        report(
+                            error_reporter(e.clone(), span.clone())
+                                .with_label(
+                                    Label::new(span.clone()).with_message("on this operation"),
+                                )
+                                .finish(),
+                        )
+                    } else {
+                        report(error_reporter(e.clone(), Span::empty()).finish());
+                    }
                     //Immediately abort, since we have no way of finishing.
                     // TODO: We could also collect all error at this point...
                     return Err(e);
                 }
             };
 
-            match type_resolve_try {
-                Some(ty) => {
-                    //now assign that type to the nodes's output.
-                    self.typemap.set(resolved_port.into(), ty.clone());
-
-                    //And propagate to all edges
-                    for edg in self.graph[resolved_port].edges.clone().iter() {
-                        if let Err(e) = self.graph[*edg].ty.set_derived_state(ty.clone()) {
-                            if let Some(span) = self.find_span(resolved_port.node.into()) {
-                                report(
-                                    error_reporter(e.clone(), span.clone())
-                                        .with_label(
-                                            Label::new(span.clone()).with_message("On this node"),
-                                        )
-                                        .finish(),
-                                );
-                            } else {
-                                report(error_reporter(e.clone(), Span::empty()).finish());
-                            }
-
-                            return Err(e);
+            for (ty, port) in resolved_values {
+                //typset all edges and ports that are resolved
+                if let Some(old) = self.typemap.set(port.into(), ty.clone()) {
+                    if old != ty {
+                        let err = OptError::TypeDeriveError {
+                            text: format!(
+                                "Type collision, declared as {old:?}, but derived to {ty:?}"
+                            ),
+                        };
+                        if let Some(span) = self.find_span(port.node.into()) {
+                            report(
+                                error_reporter(err.clone(), span.clone())
+                                    .with_label(Label::new(span))
+                                    .with_message(format!("Sould be {old:?}"))
+                                    .finish(),
+                            );
+                        } else {
+                            report(error_reporter(err.clone(), Span::empty()).finish());
                         }
+
+                        return Err(err);
                     }
                 }
-                None => {
-                    //This was a soft error before, but now we assume that it is a hard erro
-                    return Err(OptError::TypeDeriveError {
-                        text: format!(
-                            "Could not derive type for node: {} ({})",
-                            self.graph[node].name(),
-                            node
-                        ),
-                    });
+                //And propagate to all edges
+                for edg in self.graph[port].edges.clone().iter() {
+                    if let Err(e) = self.graph[*edg].ty.set_derived_state(ty.clone()) {
+                        if let Some(span) = self.find_span(port.node.into()) {
+                            report(
+                                error_reporter(e.clone(), span.clone())
+                                    .with_label(
+                                        Label::new(span.clone()).with_message("On this node"),
+                                    )
+                                    .finish(),
+                            );
+                        } else {
+                            report(error_reporter(e.clone(), Span::empty()).finish());
+                        }
+
+                        return Err(e);
+                    }
                 }
             }
         }

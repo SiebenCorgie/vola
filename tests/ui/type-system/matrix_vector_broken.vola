@@ -1,10 +1,10 @@
 //BEGIN-CONFIG
-//ERROR:Type derivation did not end successfully!
+//ERROR:At least 2 errors occurred while running optimizer.
 //END-CONFIG
 
 module std;
 
-export myField(at: vec3){
+export fn myField(at: vec3) -> real{
 	let t = [
 		[1.0, 0.0, 0.0],
 		[0.0, 1.0, 0.0],

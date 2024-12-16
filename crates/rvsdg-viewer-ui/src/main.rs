@@ -103,7 +103,12 @@ impl Sandbox for Ui {
         //Our ui works by positioning
 
         let timeline_slider = slider(
-            0u8..=(self.viewer.states.len() - 1) as u8,
+            0u8..=(self
+                .viewer
+                .states
+                .len()
+                .checked_sub(1)
+                .expect("contained no viewer-state slice")) as u8,
             self.selected_state as u8,
             |changed| Message::TimelineSelect(changed as usize),
         );

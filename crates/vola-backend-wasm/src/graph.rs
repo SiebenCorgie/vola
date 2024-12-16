@@ -24,9 +24,10 @@ use vola_opt::{
         matrix::UnaryMatrix,
         relational::BinaryRel,
         trigonometric::Trig,
-        ConstantIndex,
     },
-    imm::{ImmMatrix, ImmNat, ImmScalar, ImmVector},
+    common::{DataType, Shape},
+    imm::{ImmBool, ImmMatrix, ImmNat, ImmScalar, ImmVector},
+    typelevel::ConstantIndex,
     OptNode,
 };
 use walrus::{
@@ -36,7 +37,10 @@ use walrus::{
 
 use crate::{
     error::WasmError,
-    wasm::{self, Construct, Index, WasmBinaryOp, WasmRuntimeOp, WasmUnaryOp, WasmValue},
+    wasm::{
+        self, Index, NonUniformConstruct, UniformConstruct, WasmBinaryOp, WasmRuntimeOp,
+        WasmUnaryOp, WasmValue,
+    },
 };
 
 mod utils;
@@ -47,7 +51,8 @@ pub enum WasmNode {
     Runtime(WasmRuntimeOp),
     Value(WasmValue),
     Index(Index),
-    Construct(Construct),
+    UniformConstruct(UniformConstruct),
+    NonUniformConstruct(NonUniformConstruct),
     Error {
         inputs: SmallColl<Input>,
         outputs: SmallColl<Output>,
@@ -75,13 +80,17 @@ impl WasmNode {
         if let Some(imm) = value.try_downcast_ref::<ImmNat>() {
             assert!(input_sig.len() == 0);
             assert!(output_sig.len() == 1);
-            assert!(output_sig[0] == Some(vola_opt::common::Ty::Nat));
+            assert!(output_sig[0] == Some(vola_opt::common::Ty::SCALAR_INT));
             return Ok(WasmNode::from(imm));
         }
         if let Some(imm) = value.try_downcast_ref::<ImmScalar>() {
             assert!(input_sig.len() == 0);
             assert!(output_sig.len() == 1);
-            assert!(output_sig[0] == Some(vola_opt::common::Ty::Scalar));
+            assert!(output_sig[0] == Some(vola_opt::common::Ty::SCALAR_REAL));
+            return Ok(WasmNode::from(imm));
+        }
+        if let Some(imm) = value.try_downcast_ref::<ImmBool>() {
+            assert!(output_sig[0] == Some(vola_opt::common::Ty::SCALAR_BOOL));
             return Ok(WasmNode::from(imm));
         }
 
@@ -93,8 +102,19 @@ impl WasmNode {
             }));
         }
 
-        if let Some(construct_node) = value.try_downcast_ref::<vola_opt::alge::Construct>() {
-            return Ok(WasmNode::Construct(wasm::Construct::from(construct_node)));
+        if let Some(construct_node) =
+            value.try_downcast_ref::<vola_opt::typelevel::UniformConstruct>()
+        {
+            return Ok(WasmNode::UniformConstruct(wasm::UniformConstruct::from(
+                construct_node,
+            )));
+        }
+        if let Some(construct_node) =
+            value.try_downcast_ref::<vola_opt::typelevel::NonUniformConstruct>()
+        {
+            return Ok(WasmNode::NonUniformConstruct(
+                wasm::NonUniformConstruct::from(construct_node),
+            ));
         }
 
         if let Some(binop) = value.try_downcast_ref::<BinaryArith>() {
@@ -166,11 +186,11 @@ impl WasmNode {
         if let Some(bi) = value.try_downcast_ref::<Buildin>() {
             let inputs = input_sig
                 .into_iter()
-                .map(|i| i.clone().unwrap_or(vola_opt::common::Ty::Void))
+                .map(|i| i.clone().unwrap_or(vola_opt::common::Ty::VOID))
                 .collect::<SmallColl<_>>();
             let outputs = output_sig
                 .into_iter()
-                .map(|o| o.clone().unwrap_or(vola_opt::common::Ty::Void))
+                .map(|o| o.clone().unwrap_or(vola_opt::common::Ty::VOID))
                 .collect::<SmallColl<_>>();
             return WasmNode::try_from_opt_buildin(bi, &inputs, &outputs);
         }
@@ -200,7 +220,8 @@ impl LangNode for WasmNode {
             Self::Runtime(r) => r.inputs(),
             Self::Value(v) => v.inputs(),
             Self::Index(i) => i.inputs(),
-            Self::Construct(c) => c.inputs(),
+            Self::UniformConstruct(c) => c.inputs(),
+            Self::NonUniformConstruct(c) => c.inputs(),
             Self::Error { inputs, outputs: _ } => inputs,
         }
     }
@@ -212,7 +233,8 @@ impl LangNode for WasmNode {
             Self::Runtime(r) => r.inputs_mut(),
             Self::Value(v) => v.inputs_mut(),
             Self::Index(i) => i.inputs_mut(),
-            Self::Construct(c) => c.inputs_mut(),
+            Self::UniformConstruct(c) => c.inputs_mut(),
+            Self::NonUniformConstruct(c) => c.inputs_mut(),
             Self::Error { inputs, outputs: _ } => inputs,
         }
     }
@@ -224,7 +246,8 @@ impl LangNode for WasmNode {
             Self::Runtime(r) => r.outputs(),
             Self::Value(v) => v.outputs(),
             Self::Index(i) => i.outputs(),
-            Self::Construct(c) => c.outputs(),
+            Self::UniformConstruct(c) => c.outputs(),
+            Self::NonUniformConstruct(c) => c.outputs(),
             Self::Error { inputs: _, outputs } => outputs,
         }
     }
@@ -236,7 +259,8 @@ impl LangNode for WasmNode {
             Self::Runtime(r) => r.outputs_mut(),
             Self::Value(v) => v.outputs_mut(),
             Self::Index(i) => i.outputs_mut(),
-            Self::Construct(c) => c.outputs_mut(),
+            Self::UniformConstruct(c) => c.outputs_mut(),
+            Self::NonUniformConstruct(c) => c.outputs_mut(),
             Self::Error { inputs: _, outputs } => outputs,
         }
     }
@@ -250,7 +274,8 @@ impl View for WasmNode {
             Self::Runtime(r) => format!("{:?}", r.op),
             Self::Value(v) => format!("{:?}", v.op),
             Self::Index(i) => format!("Index<{}>", i.index),
-            Self::Construct(_) => format!("Construct"),
+            Self::UniformConstruct(_) => format!("UniformConstruct"),
+            Self::NonUniformConstruct(_) => format!("NonUniformConstruct"),
             Self::Error { .. } => format!("Error"),
         }
     }
@@ -262,7 +287,8 @@ impl View for WasmNode {
             Self::Runtime(_r) => rvsdg_viewer::Color::from_rgba(230, 220, 255, 255),
             Self::Value(_r) => rvsdg_viewer::Color::from_rgba(150, 220, 150, 255),
             Self::Index(_r) => rvsdg_viewer::Color::from_rgba(150, 150, 150, 255),
-            Self::Construct(_r) => rvsdg_viewer::Color::from_rgba(150, 150, 150, 255),
+            Self::UniformConstruct(_r) => rvsdg_viewer::Color::from_rgba(150, 150, 150, 255),
+            Self::NonUniformConstruct(_r) => rvsdg_viewer::Color::from_rgba(150, 150, 150, 255),
             Self::Error { .. } => rvsdg_viewer::Color::from_rgba(255, 150, 100, 255),
         }
     }
@@ -271,6 +297,8 @@ impl View for WasmNode {
 #[derive(Debug, Clone, PartialEq)]
 pub enum WasmTy {
     Defined { shape: TyShape, ty: walrus::ValType },
+    Tuple(Vec<Self>),
+    Callabale,
     Undefined,
 }
 
@@ -278,21 +306,36 @@ impl TryFrom<vola_opt::common::Ty> for WasmTy {
     type Error = WasmError;
     fn try_from(value: vola_opt::common::Ty) -> Result<Self, Self::Error> {
         let (shape, ty) = match value {
-            vola_opt::common::Ty::Bool => (TyShape::Scalar, walrus::ValType::I32),
-            vola_opt::common::Ty::Nat => (TyShape::Scalar, walrus::ValType::I32),
-            vola_opt::common::Ty::Scalar => (TyShape::Scalar, walrus::ValType::F32),
-            vola_opt::common::Ty::Vector { width } => {
-                (TyShape::Vector { width }, walrus::ValType::F32)
-            }
-            vola_opt::common::Ty::Matrix { width, height } => {
-                (TyShape::Matrix { width, height }, walrus::ValType::F32)
-            }
-            vola_opt::common::Ty::Tensor { dim } => (
+            vola_opt::common::Ty::SCALAR_BOOL => (TyShape::Scalar, walrus::ValType::I32),
+            vola_opt::common::Ty::SCALAR_INT => (TyShape::Scalar, walrus::ValType::I32),
+            vola_opt::common::Ty::SCALAR_REAL => (TyShape::Scalar, walrus::ValType::F32),
+            vola_opt::common::Ty::Shaped {
+                ty: DataType::Real,
+                shape: Shape::Vec { width },
+            } => (TyShape::Vector { width }, walrus::ValType::F32),
+            vola_opt::common::Ty::Shaped {
+                ty: DataType::Real,
+                shape: Shape::Matrix { width, height },
+            } => (TyShape::Matrix { width, height }, walrus::ValType::F32),
+            vola_opt::common::Ty::Shaped {
+                ty: DataType::Real,
+                shape: Shape::Tensor { sizes },
+            } => (
                 TyShape::Tensor {
-                    dim: dim.into_iter().collect(),
+                    dim: sizes.into_iter().collect(),
                 },
                 walrus::ValType::F32,
             ),
+            vola_opt::common::Ty::Tuple(_t) => {
+                return Err(WasmError::Any(
+                    format!("Tuple are not supported in WASM (yet).").into(),
+                ));
+
+                //let subtypes: Result<Vec<Self>, _> =
+                //    t.into_iter().map(|t| Self::try_from(t)).collect();
+                //return Ok(Self::Tuple(subtypes?));
+            }
+            vola_opt::common::Ty::Callable => return Ok(WasmTy::Callabale),
             other => return Err(WasmError::UnexpectedType(other)),
         };
 
@@ -309,30 +352,66 @@ impl WasmTy {
     ///Doing the same for a mat3 returns three offsets for the
     ///4-th, 5-th & 6-th float, which is the second column of the vector
     pub fn index_to_offset_elements(&self, index: usize) -> SmallColl<u32> {
-        let per_element_offset = self.base_type_size();
         match self {
-            WasmTy::Defined { shape, .. } => match shape {
-                TyShape::Scalar => panic!("cannot index scalar"),
-                TyShape::Vector { width } => {
-                    assert!(*width > index, "Out of bound vector index");
-                    smallvec![(index * per_element_offset).try_into().unwrap()]
-                }
-                TyShape::Matrix { width, height } => {
-                    assert!(*width > index);
-                    //load all indices of the n-th column.
-                    //the base offset is index-times the element count of each
-                    //column times the element size
-                    let base_offset = per_element_offset * height * index;
-                    let mut indices = SmallColl::new();
-                    for idx in 0..*height {
-                        indices.push((base_offset + per_element_offset * idx).try_into().unwrap());
+            WasmTy::Defined { shape, .. } => {
+                let per_element_offset = self.base_type_size().unwrap();
+                match shape {
+                    TyShape::Scalar => panic!("cannot index scalar"),
+                    TyShape::Vector { width } => {
+                        assert!(*width > index, "Out of bound vector index");
+                        smallvec![(index * per_element_offset).try_into().unwrap()]
                     }
+                    TyShape::Matrix { width, height } => {
+                        assert!(*width > index);
+                        //load all indices of the n-th column.
+                        //the base offset is index-times the element count of each
+                        //column times the element size
+                        let base_offset = per_element_offset * height * index;
+                        let mut indices = SmallColl::new();
+                        for idx in 0..*height {
+                            indices
+                                .push((base_offset + per_element_offset * idx).try_into().unwrap());
+                        }
 
-                    indices
+                        indices
+                    }
+                    TyShape::Tensor { .. } => panic!("Tensor not yet supported"),
                 }
-                TyShape::Tensor { .. } => panic!("Tensor not yet supported"),
-            },
+            }
+            WasmTy::Tuple(ts) => ts[index].element_offsets(),
+            WasmTy::Callabale => SmallColl::new(),
             WasmTy::Undefined => SmallColl::new(),
+        }
+    }
+
+    ///Returns the offset for each _atomic_ element of this type
+    pub fn element_offsets(&self) -> SmallColl<u32> {
+        match self {
+            Self::Defined { shape, ty: _ } => {
+                let element_size = self.base_type_size().unwrap() as u32;
+                let mut offsets = SmallColl::default();
+                for c in 0..shape.element_count() {
+                    offsets.push(c as u32 * element_size);
+                }
+                offsets
+            }
+            Self::Tuple(t) => {
+                let mut local = 0u32;
+                let mut offsets = SmallColl::default();
+                for ele in t {
+                    let local_offset = local;
+                    let sub_elements = ele.element_offsets();
+                    for sub in sub_elements {
+                        //move the element according to `local`
+                        let element_offset = local_offset + sub;
+                        offsets.push(element_offset);
+                    }
+                    //now move the local pointer the size of ele
+                    local += ele.wasm_size() as u32;
+                }
+                offsets
+            }
+            Self::Callabale | Self::Undefined => SmallColl::new(),
         }
     }
 
@@ -360,8 +439,8 @@ impl WasmTy {
         }
     }
 
-    pub fn store_kind(&self) -> StoreKind {
-        match self.unwarp_walrus_ty() {
+    pub fn store_kind(&self, element_index: usize) -> StoreKind {
+        match self.unwarp_walrus_ty(element_index) {
             ValType::F32 => StoreKind::F32,
             ValType::I32 => StoreKind::I32 { atomic: false },
             ValType::F64 => StoreKind::F64,
@@ -372,8 +451,8 @@ impl WasmTy {
         }
     }
 
-    pub fn load_kind(&self) -> LoadKind {
-        match self.unwarp_walrus_ty() {
+    pub fn load_kind(&self, element_index: usize) -> LoadKind {
+        match self.unwarp_walrus_ty(element_index) {
             ValType::F32 => LoadKind::F32,
             ValType::I32 => LoadKind::I32 { atomic: false },
             ValType::F64 => LoadKind::F64,
@@ -384,14 +463,16 @@ impl WasmTy {
         }
     }
 
-    pub fn base_type_size(&self) -> usize {
+    pub fn base_type_size(&self) -> Option<usize> {
         match self {
             Self::Defined { shape: _, ty } => match ty {
-                ValType::F32 | ValType::I32 | ValType::Ref(_) => 4,
-                ValType::F64 | ValType::I64 => 8,
-                ValType::V128 => 16,
+                ValType::F32 | ValType::I32 | ValType::Ref(_) => Some(4),
+                ValType::F64 | ValType::I64 => Some(8),
+                ValType::V128 => Some(16),
             },
-            Self::Undefined => 0,
+            Self::Tuple(_t) => None,
+            Self::Callabale => None,
+            Self::Undefined => None,
         }
     }
 
@@ -399,10 +480,16 @@ impl WasmTy {
     pub fn wasm_size(&self) -> usize {
         match self {
             WasmTy::Defined { shape, ty: _ } => {
-                let base_type_size = self.base_type_size();
+                //NOTE: unwrap can't panic, cause basetype will always be defined
+                let base_type_size = self.base_type_size().unwrap();
                 let element_count = shape.element_count();
                 base_type_size * element_count
             }
+            WasmTy::Tuple(t) => {
+                let size = t.iter().fold(0, |last, t| last + t.wasm_size());
+                size
+            }
+            WasmTy::Callabale => 0,
             WasmTy::Undefined => 0,
         }
     }
@@ -414,21 +501,58 @@ impl WasmTy {
     pub fn element_count(&self) -> usize {
         match self {
             Self::Defined { shape, ty: _ } => shape.element_count(),
+            Self::Tuple(t) => t.iter().fold(0, |a, t| a + t.element_count()),
+            Self::Callabale => 0,
             Self::Undefined => 0,
         }
     }
 
-    pub fn unwarp_walrus_ty(&self) -> walrus::ValType {
-        if let Self::Defined { shape: _, ty } = self {
-            ty.clone()
-        } else {
-            panic!("Type was undefined!")
+    pub fn unwarp_walrus_ty(&self, index: usize) -> walrus::ValType {
+        match self {
+            Self::Defined { shape, ty } => {
+                assert!(shape.element_count() > index);
+                ty.clone()
+            }
+            Self::Tuple(t) => {
+                let overall_count = self.element_count();
+                let mut element_counter = 0;
+                let mut tuple_index = 0;
+                loop {
+                    let next_element_count = t[tuple_index].element_count();
+                    //println!("{:?} has {} elements", t[tuple_index], next_element_count);
+                    if (element_counter + next_element_count) > index {
+                        //must be in here, find local offset and unwrap the type
+                        let local_index = index - element_counter;
+                        //not try unwrap on that
+                        return t[tuple_index].unwarp_walrus_ty(local_index);
+                    } else {
+                        //go to next tuple element
+                        element_counter += next_element_count;
+                        tuple_index += 1;
+                    }
+
+                    if element_counter >= overall_count {
+                        break;
+                    }
+                }
+                panic!(
+                    "Could not find element {index} in tuple {:?} (overall: {overall_count})",
+                    self
+                );
+            }
+            _ => panic!("cannot unwrap {:?} into WASM type", self),
         }
     }
 
     pub fn append_elements_to_signature(&self, signature: &mut SmallColl<walrus::ValType>) {
         match self {
+            Self::Callabale => {}
             Self::Undefined => {}
+            Self::Tuple(t) => {
+                for st in t {
+                    st.append_elements_to_signature(signature);
+                }
+            }
             Self::Defined { shape, ty } => {
                 for _ in 0..shape.element_count() {
                     signature.push(ty.clone());
@@ -516,6 +640,8 @@ impl View for WasmEdge {
             Self::State => format!("State"),
             Self::Value(WasmTy::Defined { shape, ty }) => format!("{shape}<{ty:?}>"),
             Self::Value(WasmTy::Undefined) => format!("Undefined"),
+            Self::Value(WasmTy::Callabale) => format!("Callable"),
+            Self::Value(WasmTy::Tuple(t)) => format!("Tuple({t:?}"),
         }
     }
 

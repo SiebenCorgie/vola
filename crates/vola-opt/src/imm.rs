@@ -9,12 +9,13 @@
 //! The immediate value dialect. Takes care of representing typed constant values as well as constant-folding of those.
 
 use ahash::AHashMap;
-use rvsdg::{
-    attrib::FlagStore, region::Output, rvsdg_derive_lang::LangNode, smallvec::SmallVec, SmallColl,
-};
-use vola_ast::csg::{CSGConcept, CSGNodeDef};
+use rvsdg::{region::Output, rvsdg_derive_lang::LangNode, smallvec::SmallVec, SmallColl};
+use vola_ast::csg::{CSGConcept, CsgDef};
 
-use crate::{common::Ty, DialectNode, OptError, OptGraph, OptNode};
+use crate::{
+    common::{DataType, Shape, Ty},
+    DialectNode, OptError, OptNode,
+};
 use rvsdg_viewer::Color;
 
 //Macro that implements the "View" trait for the ImmDialect
@@ -78,13 +79,12 @@ impl DialectNode for ImmScalar {
 
     fn try_derive_type(
         &self,
-        _typemap: &FlagStore<Ty>,
-        _graph: &OptGraph,
+        _inputs: &[Ty],
         _concepts: &AHashMap<String, CSGConcept>,
-        _csg_defs: &AHashMap<String, CSGNodeDef>,
-    ) -> Result<Option<Ty>, OptError> {
+        _csg_defs: &ahash::AHashMap<String, CsgDef>,
+    ) -> Result<Ty, OptError> {
         //NOTE: all literals are translated to a _scalar_
-        Ok(Some(Ty::Scalar))
+        Ok(Ty::scalar_type(DataType::Real))
     }
 
     fn is_operation_equal(&self, other: &OptNode) -> bool {
@@ -133,15 +133,17 @@ impl DialectNode for ImmVector {
 
     fn try_derive_type(
         &self,
-        _typemap: &FlagStore<Ty>,
-        _graph: &OptGraph,
+        _inputs: &[Ty],
         _concepts: &AHashMap<String, CSGConcept>,
-        _csg_defs: &AHashMap<String, CSGNodeDef>,
-    ) -> Result<Option<Ty>, OptError> {
+        _csg_defs: &ahash::AHashMap<String, CsgDef>,
+    ) -> Result<Ty, OptError> {
         //NOTE: all literals are translated to a _scalar_
-        Ok(Some(Ty::Vector {
-            width: self.lit.len(),
-        }))
+        Ok(Ty::Shaped {
+            ty: DataType::Real,
+            shape: Shape::Vec {
+                width: self.lit.len(),
+            },
+        })
     }
 
     fn is_operation_equal(&self, other: &OptNode) -> bool {
@@ -179,7 +181,7 @@ impl ImmMatrix {
     pub fn new(columns: SmallColl<SmallColl<f64>>) -> Self {
         //We are as wide as we have columns, and are as heigh has each column has elements.
         //see
-        // Construct::try_derive_type for more information
+        // UniformConstruct::try_derive_type for more information
         let width = columns.len();
         let height = columns[0].len();
 
@@ -204,16 +206,18 @@ impl DialectNode for ImmMatrix {
 
     fn try_derive_type(
         &self,
-        _typemap: &FlagStore<Ty>,
-        _graph: &OptGraph,
+        _inputs: &[Ty],
         _concepts: &AHashMap<String, CSGConcept>,
-        _csg_defs: &AHashMap<String, CSGNodeDef>,
-    ) -> Result<Option<Ty>, OptError> {
+        _csg_defs: &ahash::AHashMap<String, CsgDef>,
+    ) -> Result<Ty, OptError> {
         //NOTE: all literals are translated to a _scalar_
-        Ok(Some(Ty::Matrix {
-            width: self.width,
-            height: self.height,
-        }))
+        Ok(Ty::Shaped {
+            ty: DataType::Real,
+            shape: Shape::Matrix {
+                width: self.width,
+                height: self.height,
+            },
+        })
     }
 
     fn is_operation_equal(&self, other: &OptNode) -> bool {
@@ -263,13 +267,12 @@ impl DialectNode for ImmNat {
 
     fn try_derive_type(
         &self,
-        _typemap: &FlagStore<Ty>,
-        _graph: &OptGraph,
+        _inputs: &[Ty],
         _concepts: &AHashMap<String, CSGConcept>,
-        _csg_defs: &AHashMap<String, CSGNodeDef>,
-    ) -> Result<Option<Ty>, OptError> {
+        _csg_defs: &ahash::AHashMap<String, CsgDef>,
+    ) -> Result<Ty, OptError> {
         //NOTE: all literals are translated to a _scalar_
-        Ok(Some(Ty::Nat))
+        Ok(Ty::scalar_type(DataType::Integer))
     }
 
     fn is_operation_equal(&self, other: &OptNode) -> bool {
@@ -317,13 +320,12 @@ impl DialectNode for ImmBool {
 
     fn try_derive_type(
         &self,
-        _typemap: &FlagStore<Ty>,
-        _graph: &OptGraph,
+        _inputs: &[Ty],
         _concepts: &AHashMap<String, CSGConcept>,
-        _csg_defs: &AHashMap<String, CSGNodeDef>,
-    ) -> Result<Option<Ty>, OptError> {
+        _csg_defs: &ahash::AHashMap<String, CsgDef>,
+    ) -> Result<Ty, OptError> {
         //NOTE: all literals are translated to a _scalar_
-        Ok(Some(Ty::Bool))
+        Ok(Ty::scalar_type(DataType::Bool))
     }
 
     fn is_operation_equal(&self, other: &OptNode) -> bool {

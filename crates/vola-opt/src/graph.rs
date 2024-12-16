@@ -23,17 +23,15 @@ use rvsdg::util::node_equality::NodeTypeEq;
 use rvsdg::util::Path;
 use rvsdg::NodeRef;
 use rvsdg::{
-    attrib::FlagStore, edge::LangEdge, nodes::LangNode, rvsdg_derive_lang::LangNode,
-    util::copy::StructuralClone,
+    edge::LangEdge, nodes::LangNode, rvsdg_derive_lang::LangNode, util::copy::StructuralClone,
 };
 
 use rvsdg_viewer::{Color, View};
-use vola_ast::csg::{CSGConcept, CSGNodeDef};
+use vola_ast::csg::{CSGConcept, CsgDef};
 use vola_common::Span;
 
-use crate::OptGraph;
-
 pub(crate) mod attribute_copy;
+pub(crate) mod auxiliary;
 pub(crate) mod convention;
 pub(crate) mod impl_utils;
 pub(crate) mod splat_ty;
@@ -45,15 +43,13 @@ pub trait DialectNode: LangNode + Any + View {
 
     ///When presented with the given type map and graph, lets the implementation choose a type, if possible.
     ///
-    /// Can return an error if an invalid configuration is detected. If the configuration is just incomplete, should return
-    /// Ok(None). In that case the type resolution will try again later.
+    /// Can return an error if an invalid configuration is detected. If the configuration is just incomplete.
     fn try_derive_type(
         &self,
-        _typemap: &FlagStore<Ty>,
-        _graph: &OptGraph,
+        _input_types: &[Ty],
         _concepts: &AHashMap<String, CSGConcept>,
-        _csg_defs: &AHashMap<String, CSGNodeDef>,
-    ) -> Result<Option<Ty>, OptError> {
+        _csg_defs: &ahash::AHashMap<String, CsgDef>,
+    ) -> Result<Ty, OptError> {
         Err(OptError::Any {
             text: format!("Type resolution not implemented for {}", self.name()),
         })

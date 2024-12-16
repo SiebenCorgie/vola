@@ -7,15 +7,15 @@
  */
 
 //! Pass that destructs any immediate value that is not `ImmScalar` or `ImmNat`
-//! into a tree of just those two and `Construct` nodes.
+//! into a tree of just those two and `UniformConstruct` nodes.
 
 use rvsdg::{nodes::NodeType, region::RegionLocation, NodeRef, SmallColl};
 use vola_common::Span;
 
 use crate::{
-    alge::Construct,
-    common::Ty,
+    common::{DataType, Ty},
     imm::{ImmMatrix, ImmScalar, ImmVector},
+    typelevel::UniformConstruct,
     OptError, OptNode, Optimizer,
 };
 
@@ -122,12 +122,18 @@ impl Optimizer {
                 //now add the construct node and bail
                 let (node, connections) = reg
                     .connect_node(
-                        OptNode::new(Construct::new().with_inputs(input_count), Span::empty()),
+                        OptNode::new(
+                            UniformConstruct::new().with_inputs(input_count),
+                            Span::empty(),
+                        ),
                         &const_srcs,
                     )
                     .unwrap();
                 for connection in connections {
-                    reg.ctx_mut().edge_mut(connection).ty.set_type(Ty::Scalar);
+                    reg.ctx_mut()
+                        .edge_mut(connection)
+                        .ty
+                        .set_type(Ty::SCALAR_REAL);
                 }
 
                 node
@@ -153,7 +159,10 @@ impl Optimizer {
             .graph
             .on_region(&region, |reg| {
                 reg.connect_node(
-                    OptNode::new(Construct::new().with_inputs(column_count), Span::empty()),
+                    OptNode::new(
+                        UniformConstruct::new().with_inputs(column_count),
+                        Span::empty(),
+                    ),
                     &vec_construct_srcs,
                 )
                 .expect("Failed to create mat-construct")
@@ -164,7 +173,7 @@ impl Optimizer {
             self.graph
                 .edge_mut(edge)
                 .ty
-                .set_type(Ty::Vector { width: vec_width })
+                .set_type(Ty::vector_type(DataType::Real, vec_width))
                 .unwrap();
         }
 

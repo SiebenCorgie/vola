@@ -11,6 +11,7 @@ use rvsdg::NodeRef;
 
 impl Optimizer {
     ///Copies all node (and port) attributes of _src_ to _dst_, if the same attribute location exists.
+    #[allow(dead_code)]
     pub(crate) fn copy_node_attributes(&mut self, src: NodeRef, dst: NodeRef) {
         for attrib in self.graph.iter_node_attribs(src.into()) {
             let dst_attrib = attrib.clone().change_node(dst);

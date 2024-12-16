@@ -19,9 +19,9 @@
 #![doc(html_logo_url = "https://gitlab.com/tendsinmende/vola/-/raw/main/resources/vola_icon.svg")]
 
 use ahash::AHashSet;
-use alge::{AlgeFunc, ImplBlock};
+use alge::Func;
 use common::CTArg;
-use csg::{CSGConcept, CSGNodeDef, ExportFn, FieldDef};
+use csg::{CSGConcept, CsgDef, ImplBlock};
 
 pub mod alge;
 pub mod common;
@@ -48,11 +48,9 @@ use vola_common::{ariadne::Label, error::error_reporter, report, FileString, Spa
 pub enum AstEntry {
     Comment(Span),
     Concept(CSGConcept),
-    CSGNodeDef(CSGNodeDef),
+    CsgDef(CsgDef),
     ImplBlock(ImplBlock),
-    FieldDefine(FieldDef),
-    ExportFn(ExportFn),
-    AlgeFunc(AlgeFunc),
+    Func(Func),
     Module(Module),
 }
 
@@ -60,7 +58,7 @@ impl AstEntry {
     ///Returns true for CSGNodeDef and Concept
     pub fn is_def_node(&self) -> bool {
         match self {
-            Self::Concept(_) | Self::CSGNodeDef(_) => true,
+            Self::Concept(_) | Self::CsgDef(_) => true,
             _ => false,
         }
     }
@@ -68,20 +66,6 @@ impl AstEntry {
     pub fn is_impl_block(&self) -> bool {
         match self {
             Self::ImplBlock(_) => true,
-            _ => false,
-        }
-    }
-
-    pub fn is_field_def(&self) -> bool {
-        match self {
-            Self::FieldDefine(_) => true,
-            _ => false,
-        }
-    }
-
-    pub fn is_exportfn(&self) -> bool {
-        match self {
-            Self::ExportFn(_) => true,
             _ => false,
         }
     }
@@ -94,9 +78,17 @@ impl AstEntry {
         }
     }
 
-    pub fn is_alge_fn(&self) -> bool {
-        if let Self::AlgeFunc(_) = self {
+    pub fn is_fn(&self) -> bool {
+        if let Self::Func(_) = self {
             true
+        } else {
+            false
+        }
+    }
+
+    pub fn is_export_fn(&self) -> bool {
+        if let Self::Func(f) = self {
+            f.is_export
         } else {
             false
         }

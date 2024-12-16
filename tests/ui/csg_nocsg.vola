@@ -1,0 +1,15 @@
+//BEGIN-CONFIG
+//ERROR:At least 1 errors occurred while running optimizer.
+//END-CONFIG
+
+module std;
+
+export fn test(a: real) -> real{
+    csg t = if a > 10.0{
+        Sphere(1.0)
+    }else{
+        1.0
+    };
+
+    eval a.SDF3D([a, 1.0, 1.0])
+}

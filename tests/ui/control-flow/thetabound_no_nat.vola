@@ -1,5 +1,5 @@
 //BEGIN-CONFIG
-//ERROR:Type derivation did not end successfully!
+//ERROR:At least 2 errors occurred while running optimizer.
 //END-CONFIG
 
 
@@ -11,15 +11,14 @@ operation SubTest();
 
 impl SubTest<a, b> for SDF3D(at){
     let myfloat = 2.0;
-    let a = for f=0.0 in 0..myfloat{
+    let f = 0.0;
+    for i in 0..myfloat{
         f = f + 1.0;
-    };
-
-    a
+    }
+    f
 }
 
-
-export test(at: vec3){
+export fn test(at: vec3) -> real{
 	csg t = SubTest(){
 		Sphere(1.0)
 	}{

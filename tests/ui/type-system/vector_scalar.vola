@@ -12,7 +12,7 @@ impl PassThrough for None(a){
 }
 
 
-export myField(at: vec3){
+export fn myField(at: vec3) -> vec3{
 	let a = at * 42.0;
 
 	csg r = PassThrough();

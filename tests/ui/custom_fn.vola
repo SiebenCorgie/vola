@@ -1,6 +1,6 @@
 module std;
 
-export myFn(at: vec3){
+export fn myFn(at: vec3) -> real{
 	let offsetx = noise(at.x);
 	let offsety = noise(at.y);
 
@@ -14,4 +14,3 @@ export myFn(at: vec3){
 
 	eval f.SDF3D(at)
 }
-

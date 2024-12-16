@@ -1,6 +1,6 @@
 
 
-fn myTestFunction(a: vec3, b: mat3x3) -> s{
+fn myTestFunction(a: vec3, b: mat3x3) -> real{
 	let t = b * a;
 	t.x
 }

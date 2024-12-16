@@ -29,9 +29,9 @@ use crate::{
         matrix::UnaryMatrix,
         relational::BinaryRel,
         trigonometric::{Trig, TrigOp},
-        ConstantIndex, Construct,
     },
     imm::ImmScalar,
+    typelevel::{ConstantIndex, UniformConstruct},
     OptNode, Optimizer,
 };
 
@@ -70,7 +70,7 @@ impl Optimizer {
             return self.build_diff_constant_index(region, node);
         }
 
-        if self.is_node_type::<Construct>(node) {
+        if self.is_node_type::<UniformConstruct>(node) {
             return self.build_diff_constant_construct(region, node);
         }
 
@@ -158,7 +158,7 @@ impl Optimizer {
             .graph
             .on_region(&region, |g| {
                 let index_diff = g.insert_node(OptNode::new(
-                    Construct::new().with_inputs(const_width),
+                    UniformConstruct::new().with_inputs(const_width),
                     span,
                 ));
 

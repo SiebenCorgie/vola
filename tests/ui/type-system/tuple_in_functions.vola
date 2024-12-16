@@ -1,0 +1,23 @@
+//BEGIN-CONFIG
+//EXEC-FN:test
+//EXEC-ARGS:3.0,0.0,1.0
+//EXEC-EPS:0.0
+//EXEC-RES:4.0
+//END-CONFIG
+
+
+concept TupleConcept: vec3 -> (vec3, real);
+entity TheEntity();
+impl TheEntity for TupleConcept(at){
+    (at, 1.0)
+}
+
+fn consume_and_stuff(got: (vec3, real)) -> real{
+    got.0.x + got.1
+}
+
+export fn test(at: vec3) -> real{
+    csg c = TheEntity();
+    let t = eval c.TupleConcept(at);
+    consume_and_stuff(t)
+}

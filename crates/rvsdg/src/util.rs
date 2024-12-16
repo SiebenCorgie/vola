@@ -393,7 +393,7 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
         }
     }
 
-    ///Tries to the closest lambda or phi node that _surounds_ `node`.
+    ///Tries to find the closest lambda or phi node that is _around_ `node`.
     pub fn find_parent_lambda_or_phi(&self, node: NodeRef) -> Option<NodeRef> {
         let mut parent = self.node(node).parent.clone();
 

@@ -7,12 +7,14 @@
  */
 
 //! Logical operations
+use ahash::AHashMap;
 use rvsdg::{
     nodes::NodeType,
     region::{Input, Output},
     rvsdg_derive_lang::LangNode,
 };
 use rvsdg_viewer::View;
+use vola_ast::csg::{CSGConcept, CsgDef};
 use vola_common::Span;
 
 use crate::{common::Ty, imm::ImmBool, DialectNode, OptError, OptNode};
@@ -58,24 +60,15 @@ impl DialectNode for UnaryBool {
     fn dialect(&self) -> &'static str {
         "alge"
     }
+
     fn try_derive_type(
         &self,
-        _typemap: &rvsdg::attrib::FlagStore<Ty>,
-        graph: &crate::OptGraph,
-        _concepts: &ahash::AHashMap<String, vola_ast::csg::CSGConcept>,
-        _csg_defs: &ahash::AHashMap<String, vola_ast::csg::CSGNodeDef>,
-    ) -> Result<Option<Ty>, OptError> {
-        let input_ty = if let Some(edg) = &self.inputs.edge {
-            //resolve if there is a type set
-            if let Some(t) = graph.edge(*edg).ty.get_type() {
-                t.clone()
-            } else {
-                return Ok(None);
-            }
-        } else {
-            //input not set atm. so return None as well
-            return Ok(None);
-        };
+        input_types: &[Ty],
+        _concepts: &AHashMap<String, CSGConcept>,
+        _csg_defs: &AHashMap<String, CsgDef>,
+    ) -> Result<Ty, OptError> {
+        assert_eq!(input_types.len(), 1);
+        let input_ty = input_types[0].clone();
 
         match &self.op {
             UnaryBoolOp::Not => {
@@ -88,7 +81,7 @@ impl DialectNode for UnaryBool {
                     });
                 }
                 //seem allright, for neg, we return the _same_ datatype as we get
-                Ok(Some(input_ty))
+                Ok(input_ty)
             }
         }
     }
@@ -180,33 +173,13 @@ impl DialectNode for BinaryBool {
     }
     fn try_derive_type(
         &self,
-        _typemap: &rvsdg::attrib::FlagStore<Ty>,
-        graph: &crate::OptGraph,
-        _concepts: &ahash::AHashMap<String, vola_ast::csg::CSGConcept>,
-        _csg_defs: &ahash::AHashMap<String, vola_ast::csg::CSGNodeDef>,
-    ) -> Result<Option<Ty>, OptError> {
-        let t0 = if let Some(edg) = &self.inputs[0].edge {
-            //resolve if there is a type set
-            if let Some(t) = graph.edge(*edg).ty.get_type() {
-                t.clone()
-            } else {
-                return Ok(None);
-            }
-        } else {
-            //input not set atm. so return None as well
-            return Ok(None);
-        };
-        let t1 = if let Some(edg) = &self.inputs[1].edge {
-            //resolve if there is a type set
-            if let Some(t) = graph.edge(*edg).ty.get_type() {
-                t.clone()
-            } else {
-                return Ok(None);
-            }
-        } else {
-            //input not set atm. so return None as well
-            return Ok(None);
-        };
+        input_types: &[Ty],
+        _concepts: &AHashMap<String, CSGConcept>,
+        _csg_defs: &AHashMap<String, CsgDef>,
+    ) -> Result<Ty, OptError> {
+        assert_eq!(input_types.len(), 2);
+        let t0 = input_types[0].clone();
+        let t1 = input_types[1].clone();
 
         //NOTE same test regardless if its & or |
         if t0 != t1 {
@@ -219,7 +192,7 @@ impl DialectNode for BinaryBool {
         }
 
         match t0{
-            Ty::Bool  =>  Ok(Some(Ty::Bool)),
+            Ty::SCALAR_BOOL  =>  Ok(Ty::SCALAR_BOOL),
             any => {
                 Err(OptError::Any { text: format!("Cannot use comperator {:?} on {}. Consider breaking it down into a single bool value", self.op, any) })
             }

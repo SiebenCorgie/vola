@@ -37,6 +37,35 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
             return true;
         }
 
+        //Remove loop-variable edges that only feed them self, but are not used _post-loop_ and are not used
+        //in the loop
+        if ty == AbstractNodeType::Theta {
+            let index = if let InputType::Input(i) = port.input {
+                i
+            } else {
+                panic!("Should be input!")
+            };
+            let in_use_in_theta = if let Some(in_theta) = port.input.map_to_in_region(0) {
+                let port = port.node.as_outport_location(in_theta);
+                let selfuse_port = port.node.as_inport_location(InputType::Result(index));
+                let mut non_self_use = false;
+                for user in self.outport_dsts(port) {
+                    if user != selfuse_port {
+                        non_self_use = true;
+                        break;
+                    }
+                }
+
+                non_self_use
+            } else {
+                panic!("Malformed theta node");
+            };
+            let result_in_use = self[port.node.output(index)].edges.len() > 0;
+            if !result_in_use && !in_use_in_theta {
+                return false;
+            }
+        }
+
         //otherwise, check the sub regions by trying  to map the port into the region, if any uses it, early return true,
         //else end with false
 

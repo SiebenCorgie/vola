@@ -10,8 +10,8 @@
 use std::fmt::Display;
 
 use crate::{
-    common::{Block, Call, GammaExpr, Ident, Literal, ThetaExpr, Ty, TypedIdent},
-    csg::{AccessDesc, ScopedCall},
+    common::{Block, Branch, Call, Ident, Literal, Ty, TypedIdent},
+    csg::ScopedCall,
 };
 use smallvec::SmallVec;
 use vola_common::Span;
@@ -90,11 +90,10 @@ impl Expr {
             ExprTy::FieldAccess { .. } => self.span.clone(),
             ExprTy::Ident(_i) => self.span.clone(),
             ExprTy::List(_) => self.span.clone(),
+            ExprTy::Tuple(_) => self.span.clone(),
             ExprTy::Literal(_) => self.span.clone(),
             ExprTy::ScopedCall(c) => c.head_span(),
-            ExprTy::ThetaExpr(t) => t.span.clone(),
-            ExprTy::GammaExpr(e) => e.span.clone(),
-            ExprTy::AccessExpr(e) => e.span.clone(),
+            ExprTy::BranchExpr(e) => e.span.clone(),
             ExprTy::SplatExpr { expr, count: _ } => expr.span.clone(),
         }
     }
@@ -152,10 +151,9 @@ pub enum ExprTy {
     Call(Box<Call>),
     ScopedCall(Box<ScopedCall>),
     List(Vec<Expr>),
+    Tuple(Vec<Expr>),
     Literal(Literal),
-    AccessExpr(AccessDesc),
-    GammaExpr(Box<GammaExpr>),
-    ThetaExpr(Box<ThetaExpr>),
+    BranchExpr(Box<Branch>),
     SplatExpr {
         expr: Box<Expr>,
         count: usize,
@@ -192,25 +190,23 @@ pub struct AssignStmt {
 
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Clone, Debug)]
-pub struct ImplBlock {
+pub struct Func {
     pub span: Span,
-    //What is being implemented
-    pub dst: Ident,
-    //On how many operands we implement
-    pub operands: SmallVec<[Ident; 2]>,
-    ///The concept on which we implement
-    pub concept: Ident,
-    ///(Re)naming of the concepts input argument.
-    pub concept_arg_naming: SmallVec<[Ident; 1]>,
-    pub block: Block,
-}
-
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-#[derive(Clone, Debug)]
-pub struct AlgeFunc {
-    pub span: Span,
+    pub is_export: bool,
     pub name: Ident,
     pub args: SmallVec<[TypedIdent; 3]>,
     pub return_type: Ty,
     pub block: Block,
+}
+
+impl Func {
+    pub fn head_span(&self) -> Span {
+        Span {
+            file: self.span.file.clone(),
+            from: self.span.from,
+            to: self.block.span.from,
+            byte_start: self.span.byte_start,
+            byte_end: self.block.span.byte_start,
+        }
+    }
 }

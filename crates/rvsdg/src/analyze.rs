@@ -24,7 +24,7 @@ use crate::{
     edge::{InportLocation, InputType, LangEdge, OutportLocation, OutputType},
     nodes::LangNode,
     region::RegionLocation,
-    util::Path,
+    util::{abstract_node_type::AbstractNodeType, Path},
     NodeRef, Rvsdg, SmallColl,
 };
 use ahash::{AHashMap, AHashSet};
@@ -114,6 +114,66 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> Iterator for ReachableWal
 }
 
 impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
+    ///Special version of [Self::find_producer_out], that does not treat loop and
+    ///exit variables as producers. Depending on what is analyzed, you might not want to
+    ///treat them as such. For instance if a gamma-node is producing values, and you want
+    ///to find both exit-variable-connected nodes, not just the exit-variable.
+    ///
+    ///In practice this will end at either arguments of λs, or simple nodes, or λ/ϕ declerations.
+    pub fn find_producer_simple(&self, output: OutportLocation) -> SmallColl<OutportLocation> {
+        //in practice this is just the find_producer_out call, but we do the bridgeing
+        //on EVOut and Out for Theta-Vars
+
+        let mut waiting = VecDeque::new();
+        if let Some(initial_prod) = self.find_producer_out(output) {
+            waiting.push_back(initial_prod);
+        }
+        //lets us break double-traversal
+        let mut seen = AHashSet::new();
+        let mut found = AHashSet::new();
+        while let Some(next) = waiting.pop_front() {
+            //check if this is one of the bridgeing producers
+            match (self[next.node].into_abstract(), next.output) {
+                (AbstractNodeType::Theta, OutputType::Argument(_)) => {
+                    //Theta-node's argument is bridged outside
+                    let outside = next
+                        .node
+                        .as_inport_location(next.output.map_out_of_region().unwrap());
+                    //get the producer of the output, if there is any
+                    if let Some(targ_prod) = self.find_producer_inp(outside) {
+                        if !seen.contains(&targ_prod) {
+                            waiting.push_back(targ_prod);
+                            seen.insert(next);
+                        }
+                    }
+                }
+                (AbstractNodeType::Gamma, OutputType::ExitVariableOutput(_)) => {
+                    //map gamma exit-vars into all sub regions, and continue
+                    for region_index in 0..self[next.node].regions().len() {
+                        let result_port = next.node.as_inport_location(
+                            next.output.map_to_in_region(region_index).unwrap(),
+                        );
+                        if let Some(prod) = self.find_producer_inp(result_port) {
+                            if !seen.contains(&prod) {
+                                waiting.push_back(prod);
+                                seen.insert(next);
+                            }
+                        }
+                    }
+                }
+                _ => {
+                    //All others are _just_ producers
+                    if !seen.contains(&next) {
+                        found.insert(next);
+                        seen.insert(next);
+                    }
+                }
+            }
+        }
+
+        found.into_iter().collect()
+    }
+
     ///Traverses context-variable boundaries of inter-procedural nodes as well as entry-variable boundaries
     /// of γ-Nodes and input/argument boundaries of theta-nodes, until it finds the producing port of `input`.
     ///
@@ -634,6 +694,27 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
         }
 
         dsts
+    }
+
+    ///Returns true if `node` is either the same as `parent` or if `node` is _withing_ a subregion of `node`.
+    pub fn is_in_parent(&self, mut node: NodeRef, parent: NodeRef) -> bool {
+        if node == parent {
+            return true;
+        }
+
+        //Walk "up" the region-hierachy, until we end at the omega node.
+        //if we don't cross `parent`, we are not _part_ of the parent
+        let toplevel_node = self.toplevel_region().node;
+        while node != toplevel_node {
+            let new_parent = self[node].parent.unwrap();
+            if new_parent.node == parent {
+                return true;
+            } else {
+                node = new_parent.node
+            }
+        }
+
+        false
     }
 }
 

@@ -6,7 +6,7 @@ license = "MPL-2.0"
 
 
 [features]
-default = ["spirv", "wasm", "native"]
+default = ["wasm", "spirv", "native"]
 dot = ["vola-ast/dot", "vola-common/dot"]
 native = ["vola-backend-wasm", "wasm", "wasmtime"]
 wasm = ["vola-backend-wasm"]

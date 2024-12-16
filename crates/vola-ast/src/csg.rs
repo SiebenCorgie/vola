@@ -9,7 +9,7 @@ use smallvec::SmallVec;
 use vola_common::Span;
 
 use crate::{
-    alge::{EvalExpr, Expr},
+    alge::Expr,
     common::{Block, Call, Ident, Ty, TypedIdent},
 };
 
@@ -41,39 +41,10 @@ pub struct CsgStmt {
     pub expr: Expr,
 }
 
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-#[derive(Clone, Debug)]
-pub struct FieldDef {
-    pub span: Span,
-    pub name: Ident,
-    pub args: SmallVec<[TypedIdent; 2]>,
-    pub block: Block,
-}
-
-///A export function, which defines a clear signature
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-#[derive(Clone, Debug)]
-pub struct ExportFn {
-    pub span: Span,
-    pub name: Ident,
-    pub args: SmallVec<[TypedIdent; 2]>,
-    pub block: Block,
-}
-
-///Last part of an export function. Describes how, and based on what parameters trees are evaluated.
-///
-/// Implicitly declares the return type of a [ExportFn].
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-#[derive(Clone, Debug)]
-pub struct AccessDesc {
-    pub span: Span,
-    pub evals: SmallVec<[EvalExpr; 3]>,
-}
-
 ///All types of nodes in a CSGTree
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum CSGNodeTy {
+pub enum CsgTy {
     Entity,
     Operation,
 }
@@ -81,9 +52,9 @@ pub enum CSGNodeTy {
 ///Either a entity or operation definition. Which means a definition of some kind of node in a CSGTree.
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Clone, Debug)]
-pub struct CSGNodeDef {
+pub struct CsgDef {
     pub span: Span,
-    pub ty: CSGNodeTy,
+    pub ty: CsgTy,
     pub name: Ident,
     pub args: SmallVec<[TypedIdent; 1]>,
 }
@@ -97,6 +68,34 @@ pub struct CSGNodeDef {
 pub struct CSGConcept {
     pub span: Span,
     pub name: Ident,
-    pub src_ty: SmallVec<[Ty; 1]>,
+    pub src_ty: Ty,
     pub dst_ty: Ty,
+}
+
+///Implementation of either a `Operation` or `Entity`
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[derive(Clone, Debug)]
+pub struct ImplBlock {
+    pub span: Span,
+    //What is being implemented
+    pub dst: Ident,
+    //On how many operands we implement
+    pub operands: SmallVec<[Ident; 2]>,
+    ///The concept on which we implement
+    pub concept: Ident,
+    ///(Re)naming of the concepts input argument.
+    pub concept_arg_name: Ident,
+    pub block: Block,
+}
+
+impl ImplBlock {
+    pub fn head_span(&self) -> Span {
+        Span {
+            file: self.span.file.clone(),
+            from: self.span.from,
+            to: self.block.span.from,
+            byte_start: self.span.byte_start,
+            byte_end: self.block.span.byte_start,
+        }
+    }
 }

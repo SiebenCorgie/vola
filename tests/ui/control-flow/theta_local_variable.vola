@@ -1,19 +1,21 @@
 module std;
 
-entity nSpheres(n: i);
+entity nSpheres(n: int);
 impl nSpheres for SDF3D(at){
-    let d = for d_off = [10000.0, 0.0] in 0..n{
-		let t = at.x - d_off.y + 1.0;
-		let d_off_x = min(d_off.x, length(at) - t);
-		d_off = [d_off_x, d_off.y - 1.0];
-    };
 
-    d.x
+    let offset = 0.0;
+    let sdf = 100000.0;
+
+    for idx in 0..n{
+		let local_at = at - [0.0, 0.0, offset];
+		sdf = min(sdf, length(local_at) - 1.0);
+    }
+
+    sdf
 }
 
 
-export myFn(at: vec3){
+export fn myFn(at: vec3) -> real{
 	csg t = nSpheres(3);
 	eval t.SDF3D(at)
 }
-

@@ -20,11 +20,11 @@ use crate::{
     alge::{
         arithmetic::{BinaryArith, UnaryArith},
         buildin::Buildin,
-        ConstantIndex, Construct,
     },
     autodiff::{AutoDiff, AutoDiffError},
-    common::Ty,
+    common::{DataType, Shape, Ty},
     imm::ImmScalar,
+    typelevel::{ConstantIndex, UniformConstruct},
     OptEdge, OptError, OptNode, Optimizer,
 };
 
@@ -59,13 +59,16 @@ impl Optimizer {
 
         match wrt_ty {
             //is already linear
-            Ty::Scalar => Ok(smallvec![entrypoint]),
-            Ty::Vector { width } => {
+            Ty::SCALAR_REAL => Ok(smallvec![entrypoint]),
+            Ty::Shaped {
+                shape: Shape::Vec { width },
+                ty: DataType::Real,
+            } => {
                 let autodiff_constructor = self
                     .graph
                     .on_region(&region, |g| {
                         let constr = g.insert_node(OptNode::new(
-                            Construct::new().with_inputs(width),
+                            UniformConstruct::new().with_inputs(width),
                             Span::empty(),
                         ));
 
@@ -117,9 +120,13 @@ impl Optimizer {
 
                 Ok(new_ad_entrypoints)
             }
-            Ty::Matrix {
-                width: _,
-                height: _,
+            Ty::Shaped {
+                shape:
+                    Shape::Matrix {
+                        width: _,
+                        height: _,
+                    },
+                ty: DataType::Real,
             } => {
                 todo!("Implement matrix-diff linearization!")
             }
@@ -227,17 +234,19 @@ impl Optimizer {
         //of nodes.
         //However, this'll fail, if the canonicalization adds _many_ nodes.
         //in that case we'll start a full pass.
-        match self.try_node_type_derive(node)? {
-            (Some(ty), outport) => {
-                self.typemap.set(outport.into(), ty.clone());
-                //push type on port into edges
-                for edg in self.graph[outport].edges.clone() {
-                    self.graph[edg].ty.set_type(ty.clone());
+        match self.try_node_type_derive(node) {
+            Ok(typed_ports) => {
+                for (ty, outport) in typed_ports {
+                    self.typemap.set(outport.into(), ty.clone());
+                    //push type on port into edges
+                    for edg in self.graph[outport].edges.clone() {
+                        self.graph[edg].ty.set_type(ty.clone());
+                    }
                 }
 
                 Ok(())
             }
-            (None, _) => {
+            Err(_e) => {
                 //Simple pass failed, therfore start the real-deal
 
                 let parent_region = self.graph[node].parent.unwrap();

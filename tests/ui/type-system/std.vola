@@ -1,7 +1,7 @@
-entity Sphere(radius: s);
+entity Sphere(radius: real);
 entity Box(extent: vec3);
-concept SDF3D: vec3 -> s;
-concept SDF2D: vec2 -> s;
+concept SDF3D: vec3 -> real;
+concept SDF2D: vec2 -> real;
 concept Color: vec3 -> vec3;
 
 ///Simple union operation
@@ -10,17 +10,17 @@ operation Union();
 #[define(no_identity)]
 operation Translate(trans: vec3);
 //SmoothUnion
-operation SmoothUnion(suradius: s);
+operation SmoothUnion(suradius: real);
 //Color overwrite operation
 operation ColorOw(owcol: vec3);
-operation Round(rad: s);
+operation Round(rad: real);
 
 
-fn rand(n: s) -> s{
+fn rand(n: real) -> real{
 	fract(sin(n) * 43758.5453123)
 }
 
-fn noise(p: s) -> s{
+fn noise(p: real) -> real{
 	let fl = floor(p);
 	let fc = fract(p);
 	mix(rand(fl), rand(fl + 1.0), fc)
@@ -34,7 +34,7 @@ impl Sphere for SDF3D(at){
 }
 
 impl Sphere for Color(at){
-	at
+	[1.0; 3]
 }
 
 impl Box for SDF3D(at){

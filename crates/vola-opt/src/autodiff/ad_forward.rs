@@ -288,7 +288,7 @@ impl Optimizer {
                     .node
                     .dialect()
                 {
-                    "alge" => self
+                    "typelevel" | "alge" => self
                         .fwd_handle_alge_node(region, node, ctx)
                         .map_err(|e| e.into()),
                     "autodiff" => {

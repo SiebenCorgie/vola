@@ -21,10 +21,10 @@ use crate::{
     alge::{
         arithmetic::{BinaryArith, BinaryArithOp, UnaryArith, UnaryArithOp},
         buildin::{Buildin, BuildinOp},
-        ConstantIndex,
     },
-    common::Ty,
+    common::{DataType, Shape, Ty},
     imm::ImmScalar,
+    typelevel::ConstantIndex,
     OptError, OptNode, Optimizer,
 };
 
@@ -146,7 +146,11 @@ impl Optimizer {
                                     panic!("Encountered untyped edge while canonicalizing");
                                 };
 
-                                if let Ty::Vector { width } = ty {
+                                if let Ty::Shaped {
+                                    shape: Shape::Vec { width },
+                                    ty: DataType::Real,
+                                } = ty
+                                {
                                     *width
                                 } else {
                                     panic!("Was no vector, was {ty}");

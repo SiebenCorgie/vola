@@ -172,8 +172,6 @@ impl Pipeline {
         if self.early_cnf {
             opt.full_graph_cnf()?;
         }
-        //do mandatory type derivation
-        opt.type_derive()?;
         opt.specialize_all_exports()?;
 
         //At this point any used nodes are hooked up. Therfore clean up
@@ -183,6 +181,8 @@ impl Pipeline {
         if self.late_cnf {
             opt.full_graph_cnf()?;
         }
+        //NOTE: Inliner can be buggy on undefined edges, clean those up.
+        opt.remove_unused_edges()?;
         opt.inline_field_exports()?;
 
         //do some _post_everyting_ cleanup

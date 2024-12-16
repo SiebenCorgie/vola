@@ -28,11 +28,11 @@ pub enum WasmError {
     InterningFailed,
     #[error(transparent)]
     GraphTransError(#[from] GraphTypeTransformerError),
-    #[error("Encountered unsupported optimizer node {0}")]
+    #[error("Encountered unsupported optimizer operation \"{0}\"")]
     UnsupportedNode(String),
     #[error("Encountered composite immediate value. Was \"ImmScalarize\" applied?")]
     UnexpectedComposite,
-    #[error("Unexpected type {0:?}")]
+    #[error("Unexpected type {0}")]
     UnexpectedType(Ty),
     #[error("Node {node} had unexpected signature:\nInput: {input:?}\noutput: {output:?}")]
     UnexpectedSignature {

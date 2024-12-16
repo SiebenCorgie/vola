@@ -1,5 +1,5 @@
 //BEGIN-CONFIG
-//ERROR:Type derivation did not end successfully!
+//ERROR:At least 2 errors occurred while running optimizer.
 //END-CONFIG
 
 module std;
@@ -14,7 +14,7 @@ impl SubTest<a, b> for SDF3D(at){
 }
 
 
-export test(at: vec3){
+export fn test(at: vec3) -> real{
 	csg t = SubTest(){
 		Sphere(1.0)
 	}{

@@ -9,25 +9,19 @@
 use rvsdg::{
     edge::{InportLocation, InputType, LangEdge, OutportLocation, OutputType},
     nodes::{NodeType, StructuralNode},
-    region::{Inport, Outport, RegionLocation},
-    smallvec::smallvec,
+    region::RegionLocation,
     NodeRef, SmallColl,
 };
 use vola_common::{ariadne::Label, error::error_reporter, report, Span};
 
 use crate::{
-    alge::{implblock::ConceptImplKey, EvalNode},
-    common::Ty,
-    csg::{CsgOp, TreeAccess},
-    OptEdge, OptError, OptNode, Optimizer,
+    alge::EvalNode, common::Ty, csg::CsgOp, graph::auxiliary::ImplKey, OptEdge, OptError, Optimizer,
 };
 
 struct SpecCtx {
     tree_access_span: Span,
     host_region: RegionLocation,
     csg_tree: OutportLocation,
-    #[allow(dead_code)]
-    args: SmallColl<OutportLocation>,
     eval_node: NodeRef,
 }
 
@@ -35,12 +29,30 @@ impl Optimizer {
     /// Shortcut to call [Self::specialize_export] for all exported λs
     pub fn specialize_all_exports(&mut self) -> Result<(), OptError> {
         let mut errors = SmallColl::new();
-        //NOTE: somehow the compiler doesn't get that cloned keys would be okay?
-        let keys = self.export_fn.keys().cloned().collect::<SmallColl<_>>();
-        for exp in keys {
+        //specialize all functions.
+        //NOTE: we don't specialize implementations, since those are
+        //      _pulled-in_ in this process, so whenever a impl-block with eval-nodes is
+        //      inlined, the "restart" step will discover that, and ... restart the process.
+        for (name, fnregion) in self
+            .functions
+            .values()
+            .map(|f| (f.name.clone(), f.region()))
+            .collect::<Vec<_>>()
+        {
+            if std::env::var("VOLA_DUMP_ALL").is_ok()
+                || std::env::var("DUMP_BEFORE_SPECIALIZE").is_ok()
+            {
+                self.push_debug_state(&format!("before specialize {name}"));
+            }
             //NOTE: defer breaking to _after_ all exports are specialized (or not^^).
-            if let Err(e) = self.specialize_export(&exp) {
+            if let Err(e) = self.specialize_region(fnregion) {
                 errors.push(e);
+            }
+
+            if std::env::var("VOLA_DUMP_ALL").is_ok()
+                || std::env::var("DUMP_POST_SPECIALIZE").is_ok()
+            {
+                self.push_debug_state(&format!("post specialize {name}"));
             }
         }
 
@@ -61,7 +73,7 @@ impl Optimizer {
     ///
     /// Instead a inliner _can_ be used if needed. It also doesn't import values via context variables, but
     /// uses _normal_ arguments to the specific λ-nodes / apply-nodes.
-    pub fn specialize_export(&mut self, key: &str) -> Result<(), OptError> {
+    pub fn specialize_region(&mut self, region: RegionLocation) -> Result<(), OptError> {
         //NOTE: The new specializer follows the learning of the first one
         //(see https://gitlab.com/tendsinmende/vola/-/blob/cc9624a2c159bac35cc818130f3041409b296419/crates/vola-opt/src/passes/field_dispatch.rs)
         //
@@ -115,118 +127,56 @@ impl Optimizer {
         // can be imported as a context variable. Same goes for any parameters from a used field-def. This
         // is, because we first inline all field-defs before specializing.
 
-        if !self.export_fn.contains_key(key) {
-            return Err(OptError::Any {
-                text: format!("Export key \"{key}\" does not exist!"),
-            });
-        }
-
         //NOTE inline takes care of bringing all CSG nodes into the same region
-        self.inline_all_region(self.export_fn.get(key).unwrap().lambda_region)?;
+        //TODO: Don't inline all, use heuristic instead.
+        self.inline_all_region(region)?;
 
-        if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("DUMP_BEFORE_SPECIALIZE").is_ok()
-        {
-            self.push_debug_state(&format!("before specialize {key}"));
-        }
-
-        // The first action is, to get the result producers. They _should_ all be TreeAccess with a CSG-Tree
-        // hooked up as the first argument and the eval-specific arg(s) following it
-        let export_lmd_region = self.export_fn.get(key).unwrap().lambda_region;
-        for res_idx in 0..self.graph.region(&export_lmd_region).unwrap().results.len() {
-            let res_src = self
-                .graph
-                .region(&export_lmd_region)
-                .unwrap()
-                .result_src(&self.graph, res_idx)
-                .unwrap();
-            //make sure this is actually an tree-access node, otherwise throw an error
-            match &self.graph.node(res_src.node).node_type {
-                NodeType::Simple(s) => {
-                    if !s.try_downcast_ref::<TreeAccess>().is_some() {
-                        let err = OptError::Any { text: format!("Expected \"TreeAccess\" at the end of the export function \"{key}\", got {}", s.node.name()) };
-                        let span = self
-                            .span_tags
-                            .get(&export_lmd_region.node.into())
-                            .cloned()
-                            .unwrap_or(Span::empty());
-                        report(
-                            error_reporter(err.clone(), span.clone())
-                                .with_label(Label::new(span).with_message("in this export"))
-                                .finish(),
-                        );
-                    }
+        //Try specializing reverse-topo-ord eval nodes, till we don't have any left
+        //TODO: handle sub-regions first? aka. control-flow csg nodes?
+        'restart: loop {
+            let topoord = self.graph.topological_order_region(region);
+            for node in topoord.into_iter().rev() {
+                for subreg in 0..self.graph[node].regions().len() {
+                    //if there are sub-regions to this node, try to specialize those first
+                    let region = RegionLocation {
+                        node,
+                        region_index: subreg,
+                    };
+                    self.specialize_region(region)?;
                 }
-                other => {
-                    let err = OptError::Any { text: format!("Expected \"TreeAccess\" at the end of the export function \"{key}\", got {other}") };
-                    let span = self
-                        .span_tags
-                        .get(&export_lmd_region.node.into())
-                        .cloned()
-                        .unwrap_or(Span::empty());
-                    report(
-                        error_reporter(err.clone(), span.clone())
-                            .with_label(Label::new(span).with_message("in this export"))
-                            .finish(),
-                    );
-                    return Err(err);
+                //if this is a eval node, specialize its value, then restart
+                if self.is_node_type::<EvalNode>(node) {
+                    //node seems good, start specializer
+                    self.specialize_eval_entry(region, node)?;
+                    continue 'restart;
                 }
             }
-            //node seems good, start specializer
-            self.specialize_tree_access(export_lmd_region, res_src.node)?;
-        }
 
-        if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("DUMP_AFTER_SPECIALIZE").is_ok()
-        {
-            self.push_debug_state(&format!("after specialize {key}"));
+            //if we came till here, there is no eval-node left in the graph, so we finished specializing
+            break;
         }
 
         Ok(())
     }
 
     ///Specializes the whole tree-access tree.
-    pub fn specialize_tree_access(
+    pub fn specialize_eval_entry(
         &mut self,
         host_region: RegionLocation,
-        tree_access: NodeRef,
+        eval: NodeRef,
     ) -> Result<(), OptError> {
         //build the frist eval_spec_ctx
         //for the first connected subtree, then substitude the tree-access node with a eval node
         let src_span = self
             .graph
-            .node(tree_access)
+            .node(eval)
             .node_type
             .unwrap_simple_ref()
             .span
             .clone();
-        let (called_concept, input_count) = {
-            let ic = self.graph.node(tree_access).inputs().len();
-            let called_concept = self
-                .graph
-                .node(tree_access)
-                .node_type
-                .unwrap_simple_ref()
-                .try_downcast_ref::<TreeAccess>()
-                .unwrap()
-                .called_concept
-                .clone();
-            (called_concept, ic)
-        };
-        let root_eval = self
-            .graph
-            .replace_node(
-                tree_access,
-                OptNode::new(
-                    EvalNode {
-                        called_concept,
-                        inputs: smallvec![Inport::default(); input_count],
-                        out: Outport::default(),
-                    },
-                    src_span.clone(),
-                ),
-            )
-            .unwrap();
-        let spec = self.eval_node_to_spec_ctx(src_span, host_region, root_eval)?;
-        //now start the actual replacment decent
+
+        let spec = self.eval_node_to_spec_ctx(src_span, host_region, eval)?;
+        //now start the actual replacement descent
         self.specialize_eval_node(spec)
     }
 
@@ -247,6 +197,7 @@ impl Optimizer {
             .unwrap()
             .called_concept
             .clone();
+
         let csg_name = self
             .graph
             .node(spec_ctx.csg_tree.node)
@@ -257,9 +208,9 @@ impl Optimizer {
             .op
             .clone();
 
-        let implkey = ConceptImplKey {
-            concept_name: concept_name.clone(),
-            node_name: csg_name.clone(),
+        let implkey = ImplKey {
+            concept: concept_name.clone(),
+            node: csg_name.clone(),
         };
 
         let subtree_count = self
@@ -325,7 +276,7 @@ impl Optimizer {
                     .clone();
                 let subtree_src = self.graph.edge(edg).src().clone();
                 let opt_edge = self.graph.edge(edg).ty.clone();
-                assert!(opt_edge.get_type() == Some(&Ty::CSGTree));
+                assert!(opt_edge.get_type() == Some(&Ty::CSG));
                 self.graph
                     .connect(
                         subtree_src,
@@ -360,24 +311,6 @@ impl Optimizer {
                 .expect("expected eval to be typed!");
             let call_src =
                 if self.graph.node(spec_ctx.eval_node).parent != Some(spec_ctx.host_region) {
-                    /*
-                    //if the eval is not in the host region, find the
-                    //CV-idx that imports the eval-src from the host-region, and rewire it to
-                    //the just created lmd decl.
-                    self.rewire_host(
-                        spec_ctx.host_region,
-                        spec_ctx.eval_node,
-                        OutportLocation {
-                            node: in_host_region_impl,
-                            output: OutputType::LambdaDeclaration,
-                        },
-                    );
-                    //now use the old src as src as well, since it shouldn't have changed
-
-                    self.graph
-                        .node(spec_ctx.eval_node)
-                        .input_src(&self.graph, 0)
-                        .unwrap()*/
                     self.import_context(
                         OutportLocation {
                             node: in_host_region_impl,
@@ -636,14 +569,40 @@ impl Optimizer {
             .unwrap_simple_ref()
             .span
             .clone();
-        let mut args = SmallColl::new();
+
         let csg_tree = if let Some(edg) = self.graph.node(eval).inputs()[0].edge {
             let edge = self.graph.edge(edg);
             match edge.ty.get_type() {
-                Some(Ty::CSGTree) => self
-                    .graph
-                    .find_producer_out(edge.src().clone())
-                    .expect("Expected a producer for the eval's CSG-Tree"),
+                Some(&Ty::CSG) => {
+                    let prod = self
+                        .graph
+                        .find_producer_out(edge.src().clone())
+                        .expect("Expected a producer for the eval's CSG-Tree");
+
+                    if !self.is_node_type::<CsgOp>(prod.node) {
+                        let err =
+                            OptError::CsgStructureIssue(format!("Non-CSG value used in CSG tree!"));
+                        if let Some(span) = self.find_span(prod.node.into()) {
+                            report(
+                                error_reporter(err.clone(), src_span.clone())
+                                    .with_label(
+                                        Label::new(span).with_message("this should be a CSG value"),
+                                    )
+                                    .finish(),
+                            );
+                        } else {
+                            report(
+                                error_reporter(err.clone(), src_span.clone())
+                                    .with_label(
+                                        Label::new(tree_access_span).with_message("for this eval"),
+                                    )
+                                    .finish(),
+                            );
+                        }
+                        return Err(err);
+                    }
+                    prod
+                }
                 Some(other) => {
                     let err = OptError::Internal(format!(
                         "Eval wrongly typed first argument. Expected CSGTree, was {other:?}!"
@@ -674,60 +633,11 @@ impl Optimizer {
             );
             return Err(err);
         };
-
-        for inport in self.graph.node(eval).inputs().iter().skip(1) {
-            if let Some(edg) = inport.edge {
-                let edge = self.graph.edge(edg);
-                match edge.ty.get_type() {
-                    Some(crate::common::Ty::CSGTree) => {
-                        let err = OptError::Internal(
-                            "Eval wrongly typed argument. Expected anything but CSGTree!"
-                                .to_owned(),
-                        );
-                        report(
-                            error_reporter(err.clone(), src_span.clone())
-                                .with_label(Label::new(src_span.clone()).with_message("here"))
-                                .finish(),
-                        );
-                        return Err(err);
-                    }
-                    Some(_ty) => args.push(edge.src().clone()),
-                    None => {}
-                }
-            }
-        }
-
         Ok(SpecCtx {
             tree_access_span,
             host_region,
             csg_tree,
-            args,
             eval_node: eval,
         })
-    }
-    //NOTE: Maybe use that later again.
-    #[allow(dead_code)]
-    fn rewire_host(
-        &mut self,
-        host_region: RegionLocation,
-        eval_node: NodeRef,
-        lmd_def: OutportLocation,
-    ) {
-        let path = self.graph.trace_path(InportLocation {
-            node: eval_node,
-            input: InputType::Input(0),
-        });
-        assert!(self.graph.node(path.start.node).parent == Some(host_region));
-        //remove the first edge, which must be the one that goes from the CSG-node
-        //to the CV-Import that ends up at the `eval_node`.
-        let cv_port = self.graph.edge(path.edges[0]).dst().clone();
-        assert!(if let InputType::ContextVariableInput(_) = cv_port.input {
-            true
-        } else {
-            false
-        });
-
-        let removed_edge = self.graph.disconnect(path.edges[0]).unwrap();
-        self.graph.connect(lmd_def, cv_port, removed_edge).unwrap();
     }
 }

@@ -11,7 +11,7 @@ impl PassThrough for None(a){
     a
 }
 
-export myField(at: vec3){
+export fn myField(at: vec3) -> vec3{
 	let t = [
 	   at,
 	   [3.0, 1.0, 0.0],

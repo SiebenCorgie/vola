@@ -8,13 +8,18 @@
 
 //! Matrix operations
 
+use ahash::AHashMap;
 use rvsdg::{
     region::{Input, Output},
     rvsdg_derive_lang::LangNode,
 };
 use rvsdg_viewer::View;
+use vola_ast::csg::{CSGConcept, CsgDef};
 
-use crate::{common::Ty, DialectNode, OptError, OptNode};
+use crate::{
+    common::{DataType, Shape, Ty},
+    DialectNode, OptError, OptNode,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UnaryMatrixOp {
@@ -57,29 +62,23 @@ impl DialectNode for UnaryMatrix {
     fn dialect(&self) -> &'static str {
         "alge"
     }
+
     fn try_derive_type(
         &self,
-        _typemap: &rvsdg::attrib::FlagStore<Ty>,
-        graph: &crate::OptGraph,
-        _concepts: &ahash::AHashMap<String, vola_ast::csg::CSGConcept>,
-        _csg_defs: &ahash::AHashMap<String, vola_ast::csg::CSGNodeDef>,
-    ) -> Result<Option<Ty>, OptError> {
-        let input_ty = if let Some(edg) = &self.inputs.edge {
-            //resolve if there is a type set
-            if let Some(t) = graph.edge(*edg).ty.get_type() {
-                t.clone()
-            } else {
-                return Ok(None);
-            }
-        } else {
-            //input not set atm. so return None as well
-            return Ok(None);
-        };
+        input_types: &[Ty],
+        _concepts: &AHashMap<String, CSGConcept>,
+        _csg_defs: &AHashMap<String, CsgDef>,
+    ) -> Result<Ty, OptError> {
+        assert_eq!(input_types.len(), 1);
+        let input_ty = input_types[0].clone();
 
         match &self.op {
             UnaryMatrixOp::Invert => {
                 match &input_ty {
-                    Ty::Matrix { width, height } => {
+                    Ty::Shaped {
+                        ty: DataType::Real,
+                        shape: Shape::Matrix { width, height },
+                    } => {
                         if width != height {
                             return Err(OptError::Any { text: format!("Inverse operation expects quadratic matrix, got one with width={width} & height={height}") });
                         }
@@ -95,7 +94,7 @@ impl DialectNode for UnaryMatrix {
                 }
 
                 //seems to be alright, return scalar
-                Ok(Some(input_ty))
+                Ok(input_ty)
             }
         }
     }

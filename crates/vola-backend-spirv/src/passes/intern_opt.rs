@@ -14,6 +14,7 @@ use rvsdg::{
     smallvec::smallvec,
     util::graph_type_transform::{GraphMapping, GraphTypeTransformer, GraphTypeTransformerError},
 };
+use vola_common::{error::error_reporter, report, Span};
 // use vola_common::{error::error_reporter, report, Span};
 use vola_opt::{
     alge::{
@@ -23,9 +24,9 @@ use vola_opt::{
         matrix::{UnaryMatrix, UnaryMatrixOp},
         relational::{BinaryRel, BinaryRelOp},
         trigonometric::{Trig, TrigOp},
-        ConstantIndex, Construct,
     },
     imm::{ImmBool, ImmNat, ImmScalar},
+    typelevel::{ConstantIndex, NonUniformConstruct, UniformConstruct},
     OptEdge, OptNode, Optimizer,
 };
 
@@ -33,7 +34,7 @@ use crate::{
     graph::{BackendEdge, BackendNode, BackendOp},
     hl::HlOp,
     spv::{CoreOp, GlOp, SpvOp, SpvType},
-    SpirvBackend,
+    BackendSpirvError, SpirvBackend,
 };
 
 pub struct InterningTransformer;
@@ -48,28 +49,31 @@ impl GraphTypeTransformer for InterningTransformer {
         //This basically just erases the type information atm.
         match src_edge {
             OptEdge::State => BackendEdge::State,
-            OptEdge::Value { ty } => BackendEdge::Value(
-                ty.get_type()
-                    .map(|t| {
-                        if let Ok(converted) = t.try_into() {
-                            converted
-                        } else {
-                            // report(
-                            //     error_reporter(
-                            //         BackendSpirvError::Any {
-                            //             text: format!(
-                            //             "could not convert edge to SpirvType, was of type {ty:?}"
-                            //         ),
-                            //         },
-                            //         Span::empty(),
-                            //     )
-                            //     .finish(),
-                            // );
-                            SpvType::Undefined
-                        }
-                    })
-                    .unwrap_or(SpvType::undefined()),
-            ),
+            OptEdge::Value { ty } => {
+                BackendEdge::Value(
+                    ty.get_type()
+                        .map(|t| {
+                            let tc = t.clone();
+                            if let Ok(converted) = t.try_into() {
+                                converted
+                            } else {
+                                report(
+                                    error_reporter(
+                                        BackendSpirvError::Any {
+                                            text: format!(
+                                                "could not convert type {tc} to SPIR-V Type",
+                                            ),
+                                        },
+                                        Span::empty(),
+                                    )
+                                    .finish(),
+                                );
+                                SpvType::Undefined
+                            }
+                        })
+                        .unwrap_or(SpvType::undefined()),
+                )
+            }
         }
     }
     fn transform_simple_node(&mut self, src_node: &Self::SrcNode) -> Self::DstNode {
@@ -291,8 +295,12 @@ impl BackendOp {
             return Some(Self::from_const_index(facc));
         }
 
-        if let Some(lconst) = optnode.try_downcast_ref::<Construct>() {
-            return Some(Self::from_construct(lconst));
+        if let Some(lconst) = optnode.try_downcast_ref::<UniformConstruct>() {
+            return Some(Self::from_uniform_construct(lconst));
+        }
+
+        if let Some(lconst) = optnode.try_downcast_ref::<NonUniformConstruct>() {
+            return Some(Self::from_non_uniform_construct(lconst));
         }
 
         if let Some(binray_rel) = optnode.try_downcast_ref::<BinaryRel>() {
@@ -395,7 +403,11 @@ impl BackendOp {
         Self::SpirvOp(SpvOp::Extract(smallvec![fac.access as u32]))
     }
 
-    fn from_construct(_lc: &Construct) -> Self {
-        Self::SpirvOp(SpvOp::Construct)
+    fn from_uniform_construct(_lc: &UniformConstruct) -> Self {
+        Self::SpirvOp(SpvOp::UniformConstruct)
+    }
+
+    fn from_non_uniform_construct(_lc: &NonUniformConstruct) -> Self {
+        Self::SpirvOp(SpvOp::NonUniformConstruct)
     }
 }

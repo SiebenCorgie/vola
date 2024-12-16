@@ -28,7 +28,10 @@ use rvsdg::{
 };
 use vola_common::thiserror::Error;
 
-use crate::{common::Ty, DialectNode, OptError, OptNode};
+use crate::{
+    common::{DataType, Shape, Ty},
+    DialectNode, OptError, OptNode,
+};
 
 ///Generic respons of a differentiation implementation of some node
 pub struct AdResponse {
@@ -165,45 +168,24 @@ impl DialectNode for AutoDiff {
 
     fn try_derive_type(
         &self,
-        _typemap: &rvsdg::attrib::FlagStore<Ty>,
-        graph: &crate::OptGraph,
+        input_types: &[Ty],
         _concepts: &ahash::AHashMap<String, vola_ast::csg::CSGConcept>,
-        _csg_defs: &ahash::AHashMap<String, vola_ast::csg::CSGNodeDef>,
-    ) -> Result<Option<Ty>, OptError> {
+        _csg_defs: &ahash::AHashMap<String, vola_ast::csg::CsgDef>,
+    ) -> Result<Ty, OptError> {
         //By definition we only allow expressions that
         //output scalars or vectors.
         //We also only allow _wrt_ args that are scalars or vectors.
         //
         //For those, the return type is _easy_, just the cross of its element products
 
-        let expr_type = if let Some(expr_edg) = self.inputs[0].edge {
-            if let Some(ty) = graph.edge(expr_edg).ty.get_type() {
-                ty.clone()
-            } else {
-                return Ok(None);
-            }
-        } else {
-            return Err(OptError::TypeDeriveError {
-                text: format!("diff() had no expression to differentiate"),
-            });
-        };
+        let expr_type = input_types[0].clone();
 
         //Make sure the expression has either scalar or vector type
         if !expr_type.is_scalar() && !expr_type.is_vector() {
             return Err(OptError::TypeDeriveError { text: format!("diff() can only be applied to expressions of type Scalar or Vector, expression had {}", expr_type) });
         }
 
-        let wrt_type = if let Some(wrt_edge) = self.inputs[1].edge {
-            if let Some(ty) = graph.edge(wrt_edge).ty.get_type() {
-                ty.clone()
-            } else {
-                return Ok(None);
-            }
-        } else {
-            return Err(OptError::TypeDeriveError {
-                text: format!("diff() wrt-argument was not set!"),
-            });
-        };
+        let wrt_type = input_types[1].clone();
 
         //Make sure the wrt has either scalar or vector type
         if !wrt_type.is_scalar() && !wrt_type.is_vector() {
@@ -219,17 +201,44 @@ impl DialectNode for AutoDiff {
         //NOTE: For (scalar, vector) or (vector, scalar) pairs, we just construct the vector of return values.
         //      Mathematicaly speaking, (scalar, vector) should be a column vector, and (vector, scalar) should
         //      be a row-vector, but we don't have that concept, so we merge them just into _vector_.
+
         match (expr_type, wrt_type) {
-            (Ty::Scalar, Ty::Scalar) => Ok(Some(Ty::Scalar)),
-            (Ty::Vector { width }, Ty::Scalar) | (Ty::Scalar, Ty::Vector { width }) => {
-                Ok(Some(Ty::Vector { width }))
-            }
-            (Ty::Vector { width: expr_width }, Ty::Vector { width: wrt_width }) => {
-                Ok(Some(Ty::Matrix {
+            (Ty::SCALAR_REAL, Ty::SCALAR_REAL) => Ok(Ty::SCALAR_REAL),
+            //diff(vec, real) or diff(real, vec).
+            (
+                Ty::Shaped {
+                    ty: DataType::Real,
+                    shape: Shape::Vec { width },
+                },
+                Ty::SCALAR_REAL,
+            )
+            | (
+                Ty::SCALAR_REAL,
+                Ty::Shaped {
+                    ty: DataType::Real,
+                    shape: Shape::Vec { width },
+                },
+            ) => Ok(Ty::Shaped {
+                ty: DataType::Real,
+                shape: Shape::Vec { width },
+            }),
+            //diff(vec, vec)
+            (
+                Ty::Shaped {
+                    ty: DataType::Real,
+                    shape: Shape::Vec { width: expr_width },
+                },
+                Ty::Shaped {
+                    ty: DataType::Real,
+                    shape: Shape::Vec { width: wrt_width },
+                },
+            ) => Ok(Ty::Shaped {
+                ty: DataType::Real,
+                shape: Shape::Matrix {
                     width: wrt_width,
                     height: expr_width,
-                }))
-            }
+                },
+            }),
             _ => panic!("invalid type state while resolving AutoDiff type"),
         }
     }

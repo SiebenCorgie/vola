@@ -20,6 +20,8 @@ use crate::ParserCtx;
 pub enum ParserError {
     #[error("Unknown Error: {0}")]
     UnknownError(String),
+    #[error("{0}")]
+    Other(String),
     #[error("Could not run tree-sitter")]
     TreeSitterFailed,
     #[error("File Error occured: {0}")]
@@ -46,6 +48,9 @@ pub enum ParserError {
     ParseFloatLiteral(ParseFloatError),
     #[error("Parsing float literal failed: {0}")]
     ParseIntLiteral(ParseIntError),
+
+    #[error("Parsing bool literal failed")]
+    ParseBoolFailed,
 
     #[error("Expected at least one access descriptor. For instance:\n my_field.SDF(p)\n")]
     NoAccessDecs,

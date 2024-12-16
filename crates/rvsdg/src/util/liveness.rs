@@ -98,9 +98,13 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
                 if let Some(edg) = src.edge {
                     self.edge(edg).src().clone()
                 } else {
+                    //mark as dead, since the port exists, but is unconnected
+                    flags.set(next_port.into(), false);
                     continue;
                 }
             } else {
+                //mark port as dead, since it is unconnected
+                flags.set(next_port.into(), false);
                 continue;
             };
 
@@ -203,9 +207,30 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
                             //Since Theta loops, a output might not be connected, but the
                             //result still be in use.
                             for lvidx in 0..t.loop_variable_count() {
+                                let lvport_result = InportLocation {
+                                    node: src_port.node,
+                                    input: InputType::Result(lvidx),
+                                };
+                                let lvport_output = src_port.node.output(lvidx);
+                                let lv_input = src_port.node.input(lvidx);
+                                let lv_argument = src_port
+                                    .node
+                                    .as_outport_location(OutputType::Argument(lvidx));
                                 let is_result_in_use = t
                                     .lv_result(lvidx)
-                                    .map(|port| port.edge.is_some())
+                                    .map(|port| {
+                                        if let Some(edg) = port.edge {
+                                            //the result is only marked _in-use_ if the src of that edge is not the Theta
+                                            //LV-Arg itself.
+                                            //Another LV is _okay_, which might signal a _shift_ pattern for loop-variables
+                                            self[edg].src()
+                                                != &src_port.node.as_outport_location(
+                                                    OutputType::Argument(lvidx),
+                                                )
+                                        } else {
+                                            false
+                                        }
+                                    })
                                     .unwrap_or(false);
                                 let is_output_in_use = t
                                     .lv_output(lvidx)
@@ -213,12 +238,14 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
                                     .unwrap_or(false);
                                 //if either is in use, mark output as live
                                 if is_result_in_use || is_output_in_use {
-                                    let lvport = InportLocation {
-                                        node: src_port.node,
-                                        input: InputType::Result(lvidx),
-                                    };
-                                    flags.set(lvport.into(), true);
-                                    waiting_ports.push_back(lvport);
+                                    flags.set(lvport_result.into(), true);
+                                    waiting_ports.push_back(lvport_result);
+                                } else {
+                                    //if both are not in use, mark both as dead
+                                    flags.set(lvport_result.into(), false);
+                                    flags.set(lv_argument.into(), false);
+                                    flags.set(lv_input.into(), false);
+                                    flags.set(lvport_output.into(), false);
                                 }
                             }
                         }

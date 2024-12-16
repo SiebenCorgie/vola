@@ -17,5 +17,7 @@ mod constant_folding;
 mod field_inliner;
 mod imm_scalarizer;
 mod inline_all;
+mod intern_ast;
+mod recursion_detection;
 mod specializer;
 mod type_derive;
