@@ -84,7 +84,7 @@ impl BinaryArith {
                 if sig[0] != sig[1] {
                     return Err(OptError::Any {
                         text: format!(
-                            "{:?} expects the two operands to be of the same type. but got {:?} & {:?}",
+                            "{:?} expects the two operands to be of the same type. but got {} & {}",
                             self.op, sig[0], sig[1]
                         ),
                     });
@@ -93,7 +93,7 @@ impl BinaryArith {
                 if !sig[0].is_algebraic() {
                     return Err(OptError::Any {
                         text: format!(
-                            "{:?} expects algebraic operands (scalar, vector, matrix, tensor) got {:?}",
+                            "{:?} expects algebraic operands (scalar, vector, matrix, tensor) got {}",
                             self.op, sig[0]
                         ),
                     });
@@ -114,14 +114,14 @@ impl BinaryArith {
                 //Still always two inputs one output
                 if sig.len() != 2 {
                     return Err(OptError::Any {
-                        text: format!("{:?} expects two operands, got {:?}", self.op, sig.len()),
+                        text: format!("{:?} expects two operands, got {}", self.op, sig.len()),
                     });
                 }
 
                 if !sig[0].is_algebraic() {
                     return Err(OptError::Any {
                         text: format!(
-                            "{:?} expects algebraic operands (scalar, vector, matrix, tensor) got {:?}",
+                            "{:?} expects algebraic operands (scalar, vector, matrix, tensor) got {}",
                             self.op, sig[0]
                         ),
                     });
@@ -130,7 +130,7 @@ impl BinaryArith {
                 if !sig[1].is_algebraic() {
                     return Err(OptError::Any {
                         text: format!(
-                            "{:?} expects algebraic operands (scalar, vector, matrix, tensor) got {:?}",
+                            "{:?} expects algebraic operands (scalar, vector, matrix, tensor) got {}",
                             self.op, sig[1]
                         ),
                     });

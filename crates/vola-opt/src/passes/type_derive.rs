@@ -1008,15 +1008,6 @@ impl Optimizer {
                         input.input
                     ),
                     };
-                    if let Some(span) = self.find_span(node.into()) {
-                        report(
-                            error_reporter(err.clone(), span.clone())
-                                .with_label(Label::new(span).with_message("here"))
-                                .finish(),
-                        );
-                    } else {
-                        report(error_reporter(err.clone(), Span::empty()).finish());
-                    }
                     return Err(err);
                 }
             };

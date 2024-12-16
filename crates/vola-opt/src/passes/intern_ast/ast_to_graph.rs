@@ -318,13 +318,19 @@ impl Optimizer {
         let mut args = SmallColl::new();
         //setup the lambda node accordingly, as well as the block context, then launch the block builder.
         let (lambda, result_port) = self.graph.on_omega_node(|omg| {
-            let (lmd, result_port) = omg.new_function(false, |lmd| {
+            let result = omg.new_function(false, |lmd| {
                 //setup all operands as CV-Vars, and the arg as ... arg
                 for operand in &implblock.operands {
                     let (outside, within) = lmd.add_context_variable();
-                    initial_context
-                        .define_var(operand.0.clone(), within)
-                        .unwrap();
+                    if let Err(e) = initial_context.define_var(operand.0.clone(), within) {
+                        let span = implblock.head_span();
+                        report(
+                            error_reporter(e.clone(), span.clone())
+                                .with_label(Label::new(span).with_message("here"))
+                                .finish(),
+                        );
+                        return Err(e);
+                    }
                     //Directly set to CSG type
                     self.typemap.set(within.into(), Ty::CSG);
                     self.typemap.set(outside.into(), Ty::CSG);
@@ -333,9 +339,15 @@ impl Optimizer {
                 //setup all implicit variables
                 for arg in &csgdef.args {
                     let port = lmd.add_argument();
-                    initial_context
-                        .define_var(arg.ident.0.clone(), port)
-                        .unwrap();
+                    if let Err(e) = initial_context.define_var(arg.ident.0.clone(), port) {
+                        let span = implblock.head_span();
+                        report(
+                            error_reporter(e.clone(), span.clone())
+                                .with_label(Label::new(span).with_message("here"))
+                                .finish(),
+                        );
+                        return Err(e);
+                    }
                     //setup type
                     self.typemap.set(port.into(), arg.ty.clone().into());
                     //and push into args collection
@@ -356,10 +368,12 @@ impl Optimizer {
                 let result_port = lmd.add_result();
                 self.typemap
                     .set(result_port.into(), return_ty.clone().into());
-                result_port
+                Ok(result_port)
             });
-            (lmd, result_port)
+            result
         });
+        //unwrap the result port... result. Since an error might happen while setting up the λ
+        let result_port = result_port?;
         //Correct the region-location as metioned above
         initial_context.active_scope.region = RegionLocation {
             node: lambda,
