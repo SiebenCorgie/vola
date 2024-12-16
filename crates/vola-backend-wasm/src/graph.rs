@@ -326,7 +326,7 @@ impl TryFrom<vola_opt::common::Ty> for WasmTy {
                 },
                 walrus::ValType::F32,
             ),
-            vola_opt::common::Ty::Tuple(t) => {
+            vola_opt::common::Ty::Tuple(_t) => {
                 return Err(WasmError::Any(
                     format!("Tuple are not supported in WASM (yet).").into(),
                 ));

@@ -256,9 +256,9 @@ impl FromTreeSitter for Ty {
 
         //Might have to unwrap the node, if its the _type_ kind.
         let root_node = if node.kind() == "type" {
-            &node.child(0).unwrap()
+            node.child(0).unwrap().clone()
         } else {
-            node
+            node.clone()
         };
         match root_node.kind() {
             "data_type" => Ok(Self::Simple(DataTy::parse(ctx, dta, &root_node)?)),
