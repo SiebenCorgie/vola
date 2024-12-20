@@ -20,6 +20,19 @@ members = [
 resolver = "2"
 
 [workspace.dependencies]
+#re-export all our own crates
+rvsdg = { path = "crates/rvsdg" }
+rvsdg-derive-lang = { path = "crates/rvsdg-derive-lang" }
+rvsdg-viewer = { path = "crates/rvsdg-viewer" }
+vola-ast = { path = "crates/vola-ast" }
+vola-backend-wasm = { path = "crates/vola-backend-wasm" }
+vola-backend-spirv = { path = "crates/vola-backend-spirv" }
+vola-cli = { path = "crates/vola-cli" }
+vola-common = { path = "crates/vola-common" }
+vola-opt = { path = "crates/vola-opt" }
+vola-tree-sitter-parser = { path = "crates/vola-tree-sitter-parser" }
+volac = { path = "crates/volac" }
+wasm-runtime = { path = "crates/wasm-runtime" }
 
 tree-sitter = "0.20.10"
 thiserror = "1.0.44"

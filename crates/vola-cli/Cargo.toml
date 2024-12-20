@@ -6,6 +6,6 @@ license = "MPL-2.0"
 
 [dependencies]
 clap = { workspace = true, features = ["derive"] }
-volac = { path = "../volac" }
-vola-common = { path = "../vola-common" }
+volac.workspace = true
+vola-common.workspace = true
 pretty_env_logger.workspace = true

@@ -11,7 +11,7 @@ viewer = ["smallvec", "bincode"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-rvsdg = { path = "../rvsdg" }
+rvsdg.workspace = true
 ahash = { workspace = true, features = ["serde"] }
 priority-queue = "2.0"
 log.workspace = true

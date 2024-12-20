@@ -14,10 +14,10 @@ profile = []
 log = ["dep:log"]
 
 [dependencies]
-rvsdg = { path = "../rvsdg" }
-rvsdg-viewer = { path = "../rvsdg-viewer", optional = true }
-vola-ast = { path = "../vola-ast" }
-vola-common = { path = "../vola-common" }
+rvsdg.workspace = true
+rvsdg-viewer = { workspace = true, optional = true }
+vola-ast.workspace = true
+vola-common.workspace = true
 ahash.workspace = true
 log = { workspace = true, optional = true }
 

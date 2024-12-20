@@ -25,7 +25,7 @@ ahash.workspace = true
 slotmap.workspace = true
 graphviz-rust = { workspace = true, optional = true }
 smallvec.workspace = true
-rvsdg-derive-lang = { path = "../rvsdg-derive-lang", optional = true }
+rvsdg-derive-lang = { workspace = true, optional = true }
 log = { workspace = true, optional = true }
 serde = { workspace = true, optional = true, features = ["derive"] }
 small-map = { workspace = true, features = ["hashes"] }
@@ -33,4 +33,4 @@ egg = { workspace = true, optional = true }
 chumsky = { workspace = true, optional = true }
 
 [dev-dependencies]
-rvsdg-viewer = { path = "../rvsdg-viewer" }
+rvsdg-viewer.workspace = true

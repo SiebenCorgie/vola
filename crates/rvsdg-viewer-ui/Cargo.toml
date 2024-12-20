@@ -4,6 +4,6 @@ version = "0.2.0"
 edition = "2021"
 
 [dependencies]
-rvsdg-viewer = { path = "../rvsdg-viewer", features = ["viewer"] }
-rvsdg = { path = "../rvsdg" }
+rvsdg-viewer = { workspace = true, features = ["viewer"] }
+rvsdg.workspace = true
 iced = { version = "0.12", features = ["canvas", "debug"] }

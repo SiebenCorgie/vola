@@ -13,13 +13,13 @@ wasm = ["vola-backend-wasm"]
 spirv = ["vola-backend-spirv"]
 
 [dependencies]
-vola-ast = { path = "../vola-ast" }
-vola-tree-sitter-parser = { path = "../vola-tree-sitter-parser" }
-vola-opt = { path = "../vola-opt" }
-vola-backend-spirv = { path = "../vola-backend-spirv", optional = true }
-vola-backend-wasm = { path = "../vola-backend-wasm", optional = true }
-vola-common = { path = "../vola-common" }
-rvsdg = { path = "../rvsdg" }
+vola-ast.workspace = true
+vola-tree-sitter-parser.workspace = true
+vola-opt.workspace = true
+vola-backend-spirv = { workspace = true, optional = true }
+vola-backend-wasm = { workspace = true, optional = true }
+vola-common.workspace = true
+rvsdg.workspace = true
 bytemuck.workspace = true
 log.workspace = true
 wasmtime = { workspace = true, optional = true }

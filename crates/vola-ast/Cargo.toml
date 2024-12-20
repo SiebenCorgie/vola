@@ -13,7 +13,7 @@ serde = ["dep:serde"]
 dot = ["vola-common/dot", "graphviz-rust"]
 
 [dependencies]
-vola-common = { path = "../vola-common" }
+vola-common.workspace = true
 thiserror.workspace = true
 ahash.workspace = true
 graphviz-rust = { workspace = true, optional = true }
@@ -24,7 +24,7 @@ serde = { workspace = true, optional = true }
 
 
 [dev-dependencies]
-vola-tree-sitter-parser = { path = "../vola-tree-sitter-parser" }
+vola-tree-sitter-parser.workspace = true
 
 
 [[example]]

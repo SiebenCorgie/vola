@@ -4,8 +4,8 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-volac = { path = "../../crates/volac" }
-vola-common = { path = "../../crates/vola-common" }
+volac.workspace = true
+vola-common.workspace = true
 yansi.workspace = true
 smallvec.workspace = true
 clap.workspace = true

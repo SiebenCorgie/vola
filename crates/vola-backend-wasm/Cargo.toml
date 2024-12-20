@@ -12,10 +12,10 @@ dot = ["graphviz-rust"]
 [dependencies]
 thiserror.workspace = true
 
-vola-opt = { path = "../vola-opt" }
-vola-common = { path = "../vola-common" }
-rvsdg = { path = "../rvsdg" }
-rvsdg-viewer = { path = "../rvsdg-viewer", optional = true }
+vola-opt.workspace = true
+vola-common.workspace = true
+rvsdg.workspace = true
+rvsdg-viewer = { workspace = true, optional = true }
 walrus.workspace = true
 ahash.workspace = true
 log = { workspace = true, optional = true }
