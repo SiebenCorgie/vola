@@ -142,24 +142,18 @@ impl VolaAst {
 
         Ok(root_ast)
     }
-    pub fn new_from_bytes(bytes: &[u8], parser: &dyn VolaParser) -> Result<Self, AstError> {
-        let root_ast = parser.parse_from_byte(None, &bytes)?;
+    pub fn new_from_bytes(
+        bytes: &[u8],
+        parser: &dyn VolaParser,
+        workspace: impl AsRef<Path>,
+    ) -> Result<Self, AstError> {
+        //build a pseudo file we use for error reporting
+        let mut pseudo_file = workspace.as_ref().to_path_buf();
+        pseudo_file.push("pseudo_source.vola");
+        let root_file: FileString = pseudo_file.as_path().to_str().unwrap().into();
 
-        //can't use the file system in this case
-        let contains_module = root_ast.entries.iter().find(|n| n.entry.is_module_import());
-        if let Some(module) = contains_module {
-            let err = AstError::NoRootFile;
-            report(
-                error_reporter(err.clone(), module.span.clone())
-                    .with_label(
-                        Label::new(module.span.clone())
-                            .with_message("consider removing this import"),
-                    )
-                    .finish(),
-            );
-            return Err(AstError::NoRootFile);
-        }
-
+        let mut root_ast = parser.parse_from_byte(Some(root_file), &bytes)?;
+        let _ = root_ast.resolve_modules(&pseudo_file, parser)?;
         Ok(root_ast)
     }
 

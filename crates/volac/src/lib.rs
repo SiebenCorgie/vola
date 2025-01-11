@@ -217,12 +217,17 @@ impl Pipeline {
         Ok(result)
     }
 
-    ///Tries to interpret `data` as a string in vola's language
-    pub fn execute_on_bytes(&mut self, data: &[u8]) -> Result<Target, PipelineError> {
+    ///Tries to interpret `data` as a string in vola's language.
+    ///Uses `workspace` to resolve any relative files.
+    pub fn execute_on_bytes(
+        &mut self,
+        data: &[u8],
+        workspace: impl AsRef<Path>,
+    ) -> Result<Target, PipelineError> {
         //NOTE: Always reset file cache, since the files we are reporting on might have changed.
         reset_file_cache();
         let mut parser = vola_tree_sitter_parser::VolaTreeSitterParser;
-        let ast = VolaAst::new_from_bytes(data, &mut parser)?;
+        let ast = VolaAst::new_from_bytes(data, &mut parser, workspace)?;
         #[cfg(feature = "dot")]
         if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("VOLA_DUMP_AST").is_ok() {
             vola_ast::dot::ast_to_svg(&ast, "ast.svg");
