@@ -15,6 +15,10 @@
 //!
 //!
 
+pub use vola_ast;
+pub use vola_opt;
+pub use vola_tree_sitter_parser;
+
 use backends::{BoxedBackend, StubBackend};
 use std::path::{Path, PathBuf};
 use vola_ast::VolaAst;
