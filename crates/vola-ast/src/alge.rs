@@ -26,6 +26,15 @@ pub enum UnaryOp {
     Neg,
 }
 
+impl Display for UnaryOp {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Neg => write!(f, "-"),
+            Self::Not => write!(f, "!"),
+        }
+    }
+}
+
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum BinaryOp {
@@ -44,6 +53,28 @@ pub enum BinaryOp {
 
     Or,
     And,
+}
+
+impl Display for BinaryOp {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Add => write!(f, "+"),
+            Self::Sub => write!(f, "-"),
+            Self::Mul => write!(f, "*"),
+            Self::Div => write!(f, "/"),
+            Self::Mod => write!(f, "%"),
+
+            Self::Lt => write!(f, "<"),
+            Self::Gt => write!(f, ">"),
+            Self::Lte => write!(f, "<="),
+            Self::Gte => write!(f, ">="),
+            Self::Eq => write!(f, "=="),
+            Self::NotEq => write!(f, "!="),
+
+            Self::Or => write!(f, "||"),
+            Self::And => write!(f, "&&"),
+        }
+    }
 }
 
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
