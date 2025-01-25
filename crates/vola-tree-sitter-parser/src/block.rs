@@ -9,7 +9,7 @@
 use smallvec::SmallVec;
 use vola_ast::{
     alge::Expr,
-    common::{Block, Branch, Ident, Loop, Stmt},
+    common::{Block, Branch, Comment, Ident, Loop, Stmt},
 };
 use vola_common::{ariadne::Label, error::error_reporter, report};
 
@@ -117,7 +117,7 @@ impl FromTreeSitter for Block {
         let mut retexpr = None;
         while let Some(next_node) = children.next() {
             match next_node.kind() {
-                "comment" => continue,
+                "comment" => stmts.push(Stmt::Comment(Comment::parse(ctx, dta, &next_node)?)),
                 "stmt" => stmts.push(Stmt::parse(ctx, dta, &next_node)?),
                 "expr" => {
                     //must be the last, and there fore return expression.

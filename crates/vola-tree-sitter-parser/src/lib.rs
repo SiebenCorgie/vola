@@ -11,7 +11,10 @@
 use error::ParserError;
 use std::path::Path;
 use tree_sitter::{Node, Parser};
-use vola_ast::{common::CTArg, AstEntry, TopLevelNode, VolaAst};
+use vola_ast::{
+    common::{CTArg, Comment},
+    AstEntry, TopLevelNode, VolaAst,
+};
 use vola_common::{error::error_reporter, report, FileString, Span};
 pub mod alge;
 pub mod block;
@@ -160,7 +163,19 @@ fn parse_data(
     let mut ct_args = Vec::with_capacity(0);
     for node in syn_tree.root_node().children(&mut cursor) {
         match node.kind() {
-            "comment" => continue,
+            "comment" => match Comment::parse(&mut ctx, data, &node) {
+                Ok(c) => {
+                    let astnode = AstEntry::Comment(c);
+                    let entry_node = TopLevelNode {
+                        span: ctx.span(&node),
+                        //NOTE: Comments can't be tagged with ct-args atm.
+                        ct_args: Vec::with_capacity(0),
+                        entry: astnode,
+                    };
+                    ast.entries.push(entry_node);
+                }
+                Err(e) => ctx.deep_errors.push(e),
+            },
             "ct_attrib" => {
                 if let Ok(ctattrib) = CTArg::parse(&mut ctx, data, &node) {
                     ct_args.push(ctattrib);

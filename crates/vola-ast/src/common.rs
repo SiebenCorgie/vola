@@ -19,6 +19,13 @@ use vola_common::Span;
 
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct Comment {
+    pub span: Span,
+    pub content: String,
+}
+
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Ident(pub String);
 
 ///All types that can be represented in the DSL.
@@ -124,6 +131,9 @@ pub enum Stmt {
     Csg(CsgStmt),
     Loop(Loop),
     Branch(Branch),
+    //NOTE: technically comments are not part of the semantics, however, we keep them here,
+    //      since we want to be able to reference/emit them.
+    Comment(Comment),
 }
 
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]

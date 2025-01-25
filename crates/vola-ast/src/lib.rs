@@ -20,8 +20,18 @@
 
 use ahash::AHashSet;
 use alge::Func;
-use common::CTArg;
+use common::{CTArg, Comment};
 use csg::{CSGConcept, CsgDef, ImplBlock};
+
+pub use error::AstError;
+use smallvec::smallvec;
+use std::path::Path;
+#[cfg(feature = "dot")]
+pub mod dot;
+pub use module::Module;
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
+use vola_common::{ariadne::Label, error::error_reporter, report, FileString, Span};
 
 pub mod alge;
 pub mod common;
@@ -30,23 +40,10 @@ mod error;
 pub mod module;
 mod passes;
 
-pub use error::AstError;
-use smallvec::smallvec;
-
-use std::path::Path;
-
-#[cfg(feature = "dot")]
-pub mod dot;
-
-pub use module::Module;
-#[cfg(feature = "serde")]
-use serde::{Deserialize, Serialize};
-use vola_common::{ariadne::Label, error::error_reporter, report, FileString, Span};
-
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Clone, Debug)]
 pub enum AstEntry {
-    Comment(Span),
+    Comment(Comment),
     Concept(CSGConcept),
     CsgDef(CsgDef),
     ImplBlock(ImplBlock),
@@ -103,6 +100,9 @@ pub struct TopLevelNode {
     pub entry: AstEntry,
 }
 
+///Collection of [TopLevelNode] nodes.
+///
+/// To turn a program back into a source-string, use [ToString]. This won't respect the `span` parts of the nodes however.
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Clone, Debug)]
 pub struct VolaAst {
@@ -142,6 +142,7 @@ impl VolaAst {
 
         Ok(root_ast)
     }
+
     pub fn new_from_bytes(
         bytes: &[u8],
         parser: &dyn VolaParser,
@@ -155,6 +156,37 @@ impl VolaAst {
         let mut root_ast = parser.parse_from_byte(Some(root_file), &bytes)?;
         let _ = root_ast.resolve_modules(&pseudo_file, parser)?;
         Ok(root_ast)
+    }
+
+    ///Parses `bytes` into [VolaAst], but does not resolve [AstEntry::Module]. Use either [VolaAst::new_from_bytes] to do that automatically, or [VolaAst::resolve_modules] to do that manually.
+    ///
+    /// On a side node, the file name "pseudo_source.vola" will be used, whenever a source file-name is needed.
+    pub fn new_from_bytes_no_import(
+        bytes: &[u8],
+        parser: &dyn VolaParser,
+    ) -> Result<Self, AstError> {
+        parser.parse_from_byte(None, &bytes)
+    }
+
+    ///Parses `file` into [VolaAst], but does not resolve [AstEntry::Module]. Use either [VolaAst::new_from_file] to do that automatically, or [VolaAst::resolve_modules] to do that manually.
+    pub fn new_from_file_no_import(
+        file: &dyn AsRef<Path>,
+        parser: &dyn VolaParser,
+    ) -> Result<Self, AstError> {
+        let root_file = file.as_ref().to_str().unwrap().into();
+        let bytes = std::fs::read(file.as_ref()).map_err(|e| {
+            report(
+                vola_common::ariadne::Report::build(
+                    vola_common::ariadne::ReportKind::Error,
+                    "File not found",
+                    0,
+                )
+                .with_message(format!("Could not find root file {:?}", file.as_ref()))
+                .finish(),
+            );
+            AstError::IoError(e.to_string())
+        })?;
+        parser.parse_from_byte(Some(root_file), &bytes)
     }
 
     pub fn empty() -> Self {

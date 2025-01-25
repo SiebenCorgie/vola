@@ -491,6 +491,8 @@ impl Optimizer {
             }
             Stmt::Branch(b) => self.build_branch_stmt(b, region, ctx),
             Stmt::Loop(loopstmt) => self.build_loop_stmt(loopstmt, region, ctx),
+            //Ignoring comments
+            Stmt::Comment(_) => Ok(()),
         }
     }
 

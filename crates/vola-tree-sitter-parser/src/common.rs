@@ -10,11 +10,30 @@ use vola_common::{ariadne::Label, error::error_reporter, report, Span};
 
 use vola_ast::{
     alge::Expr,
-    common::{Call, DataTy, Digit, Ident, Literal, Shape, Ty, TypedIdent},
+    common::{Call, Comment, DataTy, Digit, Ident, Literal, Shape, Ty, TypedIdent},
     Module,
 };
 
 use crate::{error::ParserError, FromTreeSitter, ParserCtx};
+
+impl FromTreeSitter for Comment {
+    fn parse(ctx: &mut ParserCtx, dta: &[u8], node: &tree_sitter::Node) -> Result<Self, ParserError>
+    where
+        Self: Sized,
+    {
+        ParserError::assert_node_kind(ctx, node, "comment")?;
+        let span = ctx.span(node);
+        let content = match node.utf8_text(dta) {
+            Ok(c) => c.to_string(),
+            Err(e) => {
+                let err = ParserError::Utf8ParseError(e);
+                report(error_reporter(err.clone(), Span::empty()).finish());
+                return Err(err);
+            }
+        };
+        Ok(Comment { span, content })
+    }
+}
 
 impl FromTreeSitter for Ident {
     fn parse(
