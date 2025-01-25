@@ -31,7 +31,7 @@ use rvsdg_viewer::ViewerState;
 use spv::SpvType;
 use vola_common::Span;
 use vola_opt::Optimizer;
-
+//re-export spirv-lib
 pub use rspirv;
 
 mod error;
@@ -41,6 +41,7 @@ mod passes;
 //Defines the SPIR-V dialect used in the backend's RVSDG.
 mod graph;
 pub(crate) mod hl;
+
 mod spv;
 
 pub type SpirvModule = rspirv::dr::Module;
@@ -49,14 +50,31 @@ pub type SpirvModule = rspirv::dr::Module;
 /// version, and expected extensions.
 #[derive(Clone, Debug)]
 pub struct SpirvConfig {
-    version_major: u8,
-    version_minor: u8,
+    pub version_major: u8,
+    pub version_minor: u8,
     ///Extensions that are required for this module. This might be patched
     /// by the backend with additional extensions.
     extensions: AHashSet<String>,
     ///Extended instruction sets that are required. This might be patched by the
     //backend with additional instruction-set extensions.
     ext_inst: AHashSet<String>,
+    ///By default this is the Vulkan memory model. If you are sure, what you are doing, however,
+    ///GLSL450 might be correct as well.
+    pub memory_model: rspirv::spirv::MemoryModel,
+    addressing_model: rspirv::spirv::AddressingModel,
+}
+
+impl SpirvConfig {
+    pub fn with_memory_model(mut self, memory_model: rspirv::spirv::MemoryModel) -> Self {
+        self.memory_model = memory_model;
+        self
+    }
+
+    pub fn with_spirv_version(mut self, major: u8, minor: u8) -> Self {
+        self.version_minor = minor;
+        self.version_major = major;
+        self
+    }
 }
 
 impl Default for SpirvConfig {
@@ -69,6 +87,8 @@ impl Default for SpirvConfig {
             version_minor: 5,
             extensions: AHashSet::default(),
             ext_inst,
+            memory_model: rspirv::spirv::MemoryModel::Vulkan,
+            addressing_model: rspirv::spirv::AddressingModel::Logical,
         }
     }
 }

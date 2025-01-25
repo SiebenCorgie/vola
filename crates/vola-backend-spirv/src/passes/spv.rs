@@ -53,14 +53,13 @@ impl SpirvBackend {
             node_mapping: AHashMap::default(),
         };
         b.set_version(self.config.version_major, self.config.version_minor);
-        b.memory_model(
-            rspirv::spirv::AddressingModel::Logical,
-            rspirv::spirv::MemoryModel::Vulkan,
-        );
+        b.memory_model(self.config.addressing_model, self.config.memory_model);
         //always emitting a linkable shader module
         b.capability(rspirv::spirv::Capability::Linkage);
         b.capability(rspirv::spirv::Capability::Shader);
-        b.capability(rspirv::spirv::Capability::VulkanMemoryModel);
+        if self.config.memory_model == rspirv::spirv::MemoryModel::Vulkan {
+            b.capability(rspirv::spirv::Capability::VulkanMemoryModel);
+        }
 
         for ext in &self.config.extensions {
             b.extension(ext.clone());
@@ -240,10 +239,11 @@ impl SpirvBackend {
                 fid,
                 rspirv::spirv::Decoration::LinkageAttributes,
                 [
-                    Operand::LiteralString(export_name),
+                    Operand::LiteralString(export_name.clone()),
                     Operand::LinkageType(rspirv::spirv::LinkageType::Export),
                 ],
             );
+            let _name_id = builder.name(fid, export_name.clone());
         }
 
         //add all the parameters

@@ -8,7 +8,8 @@
 
 use std::{io::Write, process::Stdio};
 
-use vola_backend_spirv::{rspirv::binary::Assemble, SpirvConfig};
+use vola_backend_spirv::rspirv::binary::Assemble;
+pub use vola_backend_spirv::SpirvConfig;
 
 use crate::{PipelineError, Target};
 

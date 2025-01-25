@@ -30,6 +30,12 @@ use vola_opt::Optimizer;
 
 pub mod backends;
 
+#[cfg(feature = "spirv")]
+pub use vola_backend_spirv;
+
+#[cfg(feature = "wasm")]
+pub use vola_backend_wasm;
+
 ///Target the output of the pipeline is compiled to.
 #[derive(Clone, Debug)]
 pub enum Target {
