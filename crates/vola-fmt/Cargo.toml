@@ -1,0 +1,11 @@
+[package]
+name = "vola-fmt"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+vola-ast.workspace = true
+
+
+[dev-dependencies]
+vola-tree-sitter-parser.workspace = true
