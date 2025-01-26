@@ -15,7 +15,9 @@
 //!
 //!
 
+pub use rvsdg;
 pub use vola_ast;
+pub use vola_common;
 pub use vola_opt;
 pub use vola_tree_sitter_parser;
 
