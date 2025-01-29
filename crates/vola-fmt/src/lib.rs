@@ -350,3 +350,16 @@ impl Display for Formater {
         self.tree.format(f, &state)
     }
 }
+
+///Shortcut to format _any_ part of an AST into a string.
+pub fn format_ast_element<'a, E>(element: &'a E) -> String
+where
+    FormatTree: From<&'a E>,
+{
+    let tree = FormatTree::from(element);
+    let formater = Formater {
+        tree,
+        config: FormatConfig::default(),
+    };
+    format!("{formater}")
+}
