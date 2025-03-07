@@ -103,8 +103,9 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> RegionBuilder<'a, N, E> {
         self.parent_ref
     }
 
-    ///Creates a new `node`, creates enough inputs to connect all `src` list entries to the node.
-    /// Returns the list of edges that where created. Use that to change the edge type, by default all edges are _value edges_.
+    ///Creates a new `node` in the region, and connects the `src` ports (sequentially) to the created node's inputs.
+    ///Might fail, if the created node has not enough inputs. Returns the list of edges that were created. Use that to change the edge type, by default all edges are _value edges_.
+    ///If that is not desired, consider using [Self::connect_node_with].
     pub fn connect_node(
         &mut self,
         node: N,
@@ -120,6 +121,29 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> RegionBuilder<'a, N, E> {
                     input: InputType::Input(dst_idx),
                 },
                 E::value_edge(),
+            )?);
+        }
+
+        Ok((created_node, edges))
+    }
+
+    ///Creates a new `node` in the region, and connects the `src` ports with the given edge-type (sequentially) to the created node's inputs.
+    ///Might fail, if the created node has not enough inputs. Returns the list of edges that were created.
+    pub fn connect_node_with(
+        &mut self,
+        node: N,
+        src: impl IntoIterator<Item = (OutportLocation, E)>,
+    ) -> Result<(NodeRef, SmallColl<EdgeRef>), GraphError> {
+        let created_node = self.insert_node(node);
+        let mut edges = SmallColl::default();
+        for (dst_idx, (src_port, edge_type)) in src.into_iter().enumerate() {
+            edges.push(self.ctx_mut().connect(
+                src_port.clone(),
+                InportLocation {
+                    node: created_node,
+                    input: InputType::Input(dst_idx),
+                },
+                edge_type,
             )?);
         }
 
@@ -174,7 +198,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> RegionBuilder<'a, N, E> {
         (created_node, res)
     }
 
-    ///Spawns a new decision-node/[γ-Node](crate::nodes::GammaNode) in this region. . Returns the reference under which the gamma-nodes is created, as well as any
+    ///Spawns a new decision-node/[γ-Node](crate::nodes::GammaNode) in this region. Returns the reference under which the gamma-nodes is created, as well as any
     /// result the `building` function produces.
     pub fn new_decission<R: 'static>(
         &mut self,
@@ -189,7 +213,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> RegionBuilder<'a, N, E> {
         (created, res)
     }
 
-    ///Allows you to spawn a new function-node/[λ-Node](crate::nodes::LambdaNode) in this region. . Returns the reference under which the function is created, as well as any
+    ///Allows you to spawn a new function-node/[λ-Node](crate::nodes::LambdaNode) in this region. Returns the reference under which the function is created, as well as any
     /// result the `building` function produces.
     pub fn new_function<R: 'static>(
         &mut self,
@@ -203,7 +227,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> RegionBuilder<'a, N, E> {
         (created, res)
     }
 
-    ///Allows you to spawn a new recursive-node/[ϕ-Node](crate::nodes::PhiNode) in this region. . Returns the reference under which the phi-node is created, as well as any
+    ///Allows you to spawn a new recursive-node/[ϕ-Node](crate::nodes::PhiNode) in this region. Returns the reference under which the phi-node is created, as well as any
     /// result the `building` function produces.
     pub fn new_recursive_region<R: 'static>(
         &mut self,
