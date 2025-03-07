@@ -37,7 +37,7 @@ fn simple_cne() {
                 let (add, _edges) = reg
                     .connect_node(
                         LNode::new().with_name("+").with_inputs(2).with_outputs(1),
-                        &[const0.output(0), const1.output(0)],
+                        [const0.output(0), const1.output(0)],
                     )
                     .unwrap();
 
@@ -82,7 +82,7 @@ fn medium_complex_cne() {
                 let gt = reg
                     .connect_node(
                         LNode::new().with_inputs(2).with_outputs(1).with_name(">"),
-                        &[const99.output(0), argx],
+                        [const99.output(0), argx],
                     )
                     .unwrap();
 
@@ -156,13 +156,13 @@ fn medium_complex_cne() {
                         let (xsquare1, _) = b
                             .connect_node(
                                 LNode::new().with_inputs(2).with_outputs(1).with_name("*"),
-                                &[xarg, xarg],
+                                [xarg, xarg],
                             )
                             .unwrap();
                         let (xsquare2, _) = b
                             .connect_node(
                                 LNode::new().with_inputs(2).with_outputs(1).with_name("*"),
-                                &[xarg, xarg],
+                                [xarg, xarg],
                             )
                             .unwrap();
                         let yarg = OutportLocation {
@@ -175,39 +175,39 @@ fn medium_complex_cne() {
                         let (ysquare1, _) = b
                             .connect_node(
                                 LNode::new().with_inputs(2).with_outputs(1).with_name("*"),
-                                &[yarg, yarg],
+                                [yarg, yarg],
                             )
                             .unwrap();
                         let (ysquare2, _) = b
                             .connect_node(
                                 LNode::new().with_inputs(2).with_outputs(1).with_name("*"),
-                                &[yarg, yarg],
+                                [yarg, yarg],
                             )
                             .unwrap();
                         let (xsq_min_ysq, _) = b
                             .connect_node(
                                 LNode::new().with_outputs(1).with_inputs(2).with_name("-"),
-                                &[xsquare1.output(0), ysquare1.output(0)],
+                                [xsquare1.output(0), ysquare1.output(0)],
                             )
                             .unwrap();
                         let (ysq_add_xsq, _) = b
                             .connect_node(
                                 LNode::new().with_inputs(2).with_outputs(1).with_name("+"),
-                                &[ysquare2.output(0), xsquare2.output(0)],
+                                [ysquare2.output(0), xsquare2.output(0)],
                             )
                             .unwrap();
 
                         let (div, _) = b
                             .connect_node(
                                 LNode::new().with_inputs(2).with_outputs(1).with_name("/"),
-                                &[xsq_min_ysq.output(0), ysq_add_xsq.output(0)],
+                                [xsq_min_ysq.output(0), ysq_add_xsq.output(0)],
                             )
                             .unwrap();
 
                         let (negdiv, _) = b
                             .connect_node(
                                 LNode::new().with_inputs(1).with_outputs(1).with_name("-"),
-                                &[div.output(0)],
+                                div.output(0),
                             )
                             .unwrap();
 

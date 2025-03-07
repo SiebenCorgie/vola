@@ -37,7 +37,7 @@ pub fn emit() -> Rvsdg<LNode, VSEdge> {
                     let (add_one, _) = lbuilder
                         .connect_node(
                             LNode::new(MyNodes::Add),
-                            &[
+                            [
                                 lv0_arg.clone(),
                                 litone.as_outport_location(OutputType::Output(0)),
                             ],
@@ -46,7 +46,7 @@ pub fn emit() -> Rvsdg<LNode, VSEdge> {
                     let (less_five, _) = lbuilder
                         .connect_node(
                             LNode::new(MyNodes::Lt),
-                            &[
+                            [
                                 add_one.as_outport_location(OutputType::Output(0)),
                                 litfive.as_outport_location(OutputType::Output(0)),
                             ],
@@ -71,7 +71,7 @@ pub fn emit() -> Rvsdg<LNode, VSEdge> {
 
                     //now build the multiplication and connect it to lv1
                     let (mul, _) = lbuilder
-                        .connect_node(LNode::new(MyNodes::Mul), &[lv0_arg, lv1_arg])
+                        .connect_node(LNode::new(MyNodes::Mul), [lv0_arg, lv1_arg])
                         .unwrap();
                     lbuilder
                         .ctx_mut()

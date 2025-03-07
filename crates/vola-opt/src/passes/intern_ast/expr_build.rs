@@ -53,7 +53,7 @@ impl Optimizer {
                     .graph
                     .on_region(&region, |regbuilder| {
                         let (opnode, _) = regbuilder
-                            .connect_node(OptNode::from(op).with_span(expr_span), &[sub_output])
+                            .connect_node(OptNode::from(op).with_span(expr_span), [sub_output])
                             .unwrap();
                         //NOTE we _know_ that the node has only one output
                         opnode.output(0)
@@ -74,7 +74,7 @@ impl Optimizer {
                         let (opnode, _) = regbuilder
                             .connect_node(
                                 OptNode::from(op).with_span(expr_span),
-                                &[left_out, right_out],
+                                [left_out, right_out],
                             )
                             .unwrap();
                         opnode.output(0)
@@ -117,7 +117,7 @@ impl Optimizer {
                     CallResult::Node(n) => self
                         .graph
                         .on_region(&region, |reg| {
-                            let (result, _) = reg.connect_node(n, &args).unwrap();
+                            let (result, _) = reg.connect_node(n, args).unwrap();
                             result.output(0)
                         })
                         .unwrap(),
@@ -159,7 +159,7 @@ impl Optimizer {
                                     EvalNode::new(args.len(), evalexpr.concept.0.clone()),
                                     expr_span,
                                 ),
-                                &args,
+                                args,
                             )
                             .unwrap();
                         opnode.output(0)
@@ -196,7 +196,7 @@ impl Optimizer {
                     let new_src = self
                         .graph
                         .on_region(&region, |reg| {
-                            let (opnode, _) = reg.connect_node(cinode, &[src.clone()]).unwrap();
+                            let (opnode, _) = reg.connect_node(cinode, [src.clone()]).unwrap();
                             opnode.output(0)
                         })
                         .unwrap();
@@ -231,7 +231,7 @@ impl Optimizer {
                     .graph
                     .on_region(&region, |regbuilder| {
                         let (opnode, _) = regbuilder
-                            .connect_node(OptNode::new(node, expr_span), &items)
+                            .connect_node(OptNode::new(node, expr_span), items)
                             .unwrap();
                         opnode.output(0)
                     })
@@ -282,7 +282,7 @@ impl Optimizer {
                         let (node, _edg) = reg
                             .connect_node(
                                 OptNode::new(NonUniformConstruct::new(args.len()), span),
-                                &args,
+                                args,
                             )
                             .unwrap();
                         node.output(0)
@@ -376,7 +376,7 @@ impl Optimizer {
                 let output = self
                     .graph
                     .on_region(&region, |reg| {
-                        let (usolev, _) = reg.connect_node(n, &csg_node_args).unwrap();
+                        let (usolev, _) = reg.connect_node(n, csg_node_args).unwrap();
                         usolev.output(0)
                     })
                     .unwrap();
@@ -416,7 +416,7 @@ impl Optimizer {
                     .graph
                     .on_region(&region, |regbuilder| {
                         let (opnode, _) = regbuilder
-                            .connect_node(OptNode::new(node, expr_span), &items)
+                            .connect_node(OptNode::new(node, expr_span), items)
                             .unwrap();
                         opnode.output(0)
                     })

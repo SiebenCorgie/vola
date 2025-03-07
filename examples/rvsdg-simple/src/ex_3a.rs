@@ -32,7 +32,7 @@ pub fn emit() -> Rvsdg<LNode, VSEdge> {
                 let (const_arr, edges) = reg
                     .connect_node(
                         LNode::new(MyNodes::AryConst(4)),
-                        &[
+                        [
                             const_m.as_outport_location(OutputType::Output(0)),
                             const_a.as_outport_location(OutputType::Output(0)),
                             const_x.as_outport_location(OutputType::Output(0)),
@@ -60,7 +60,7 @@ pub fn emit() -> Rvsdg<LNode, VSEdge> {
 
             func.on_region(|reg| {
                 let (gt_node, _edges) = reg
-                    .connect_node(LNode::new(MyNodes::Gt), &[arg_x.clone(), arg_y.clone()])
+                    .connect_node(LNode::new(MyNodes::Gt), [arg_x.clone(), arg_y.clone()])
                     .unwrap();
 
                 //setup the max_gamma branches and connect gt on them

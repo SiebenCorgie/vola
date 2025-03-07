@@ -35,7 +35,7 @@ fn main() {
                 let (add, _edges) = reg
                     .connect_node(
                         LNode::new().with_name("+").with_inputs(2).with_outputs(1),
-                        &[const0.output(0), const1.output(0)],
+                        [const0.output(0), const1.output(0)],
                     )
                     .unwrap();
 

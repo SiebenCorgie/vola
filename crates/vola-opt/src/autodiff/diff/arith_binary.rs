@@ -165,7 +165,7 @@ impl Optimizer {
                                             BinaryArith::new(BinaryArithOp::Mul),
                                             span.clone(),
                                         ),
-                                        &[left_src],
+                                        [left_src],
                                     )
                                     .unwrap();
                                 //defer connection of differentiated right_src
@@ -177,7 +177,7 @@ impl Optimizer {
                                 let (added, _) = g
                                     .connect_node(
                                         OptNode::new(BinaryArith::new(BinaryArithOp::Add), span),
-                                        &[mul_left.output(0), mul_right.output(0)],
+                                        [mul_left.output(0), mul_right.output(0)],
                                     )
                                     .unwrap();
 
@@ -223,7 +223,7 @@ impl Optimizer {
                                                     BinaryArith::new(BinaryArithOp::Mul),
                                                     span,
                                                 ),
-                                                &[constant_src],
+                                                [constant_src],
                                             )
                                             .unwrap();
 
@@ -253,7 +253,7 @@ impl Optimizer {
                         let (mul_left, _) = g
                             .connect_node(
                                 OptNode::new(BinaryArith::new(BinaryArithOp::Mul), span.clone()),
-                                &[v_src],
+                                [v_src],
                             )
                             .unwrap();
                         let pd_u = mul_left.input(1);
@@ -261,7 +261,7 @@ impl Optimizer {
                         let (mul_right, _) = g
                             .connect_node(
                                 OptNode::new(BinaryArith::new(BinaryArithOp::Mul), span.clone()),
-                                &[u_src],
+                                [u_src],
                             )
                             .unwrap();
                         let pd_v = mul_right.input(1);
@@ -270,21 +270,21 @@ impl Optimizer {
                         let (sub, _) = g
                             .connect_node(
                                 OptNode::new(BinaryArith::new(BinaryArithOp::Sub), span.clone()),
-                                &[mul_left.output(0), mul_right.output(0)],
+                                [mul_left.output(0), mul_right.output(0)],
                             )
                             .unwrap();
 
                         let (v_pow_two, _) = g
                             .connect_node(
                                 OptNode::new(BinaryArith::new(BinaryArithOp::Mul), span.clone()),
-                                &[v_src, v_src],
+                                [v_src, v_src],
                             )
                             .unwrap();
 
                         let (div, _) = g
                             .connect_node(
                                 OptNode::new(BinaryArith::new(BinaryArithOp::Div), span.clone()),
-                                &[sub.output(0), v_pow_two.output(0)],
+                                [sub.output(0), v_pow_two.output(0)],
                             )
                             .unwrap();
 
@@ -318,14 +318,14 @@ impl Optimizer {
                                         let (x_abs, _) = g
                                             .connect_node(
                                                 OptNode::new(UnaryArith::new(UnaryArithOp::Abs), span.clone()),
-                                                &[x_src],
+                                                [x_src]
                                             )
                                             .unwrap();
 
                                         let (div_out, _) = g
                                             .connect_node(
                                                 OptNode::new(BinaryArith::new(BinaryArithOp::Div), span),
-                                                &[x_abs.output(0), x_src],
+                                                [x_abs.output(0), x_src],
                                             )
                                             .unwrap();
 

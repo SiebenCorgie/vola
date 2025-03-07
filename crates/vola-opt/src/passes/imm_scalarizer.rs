@@ -126,7 +126,7 @@ impl Optimizer {
                             UniformConstruct::new().with_inputs(input_count),
                             Span::empty(),
                         ),
-                        &const_srcs,
+                        const_srcs,
                     )
                     .unwrap();
                 for connection in connections {
@@ -163,7 +163,7 @@ impl Optimizer {
                         UniformConstruct::new().with_inputs(column_count),
                         Span::empty(),
                     ),
-                    &vec_construct_srcs,
+                    vec_construct_srcs,
                 )
                 .expect("Failed to create mat-construct")
             })

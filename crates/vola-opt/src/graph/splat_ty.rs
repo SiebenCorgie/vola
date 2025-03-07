@@ -1,3 +1,10 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ *
+ * 2024 Tendsin Mende
+ */
 use rvsdg::{edge::OutportLocation, region::RegionLocation, smallvec::smallvec, SmallColl};
 use vola_common::Span;
 
@@ -9,14 +16,6 @@ use crate::{
 };
 
 use super::OptNode;
-
-/*
- * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at https://mozilla.org/MPL/2.0/.
- *
- * 2024 Tendsin Mende
- */
 
 impl Optimizer {
     ///Splats the value originating from `value` into the shape of `Ty`.
@@ -51,7 +50,7 @@ impl Optimizer {
                                     UniformConstruct::new().with_inputs(width),
                                     Span::empty(),
                                 ),
-                                &src_array,
+                                src_array,
                             )
                             .unwrap();
 
@@ -76,7 +75,7 @@ impl Optimizer {
                                     UniformConstruct::new().with_inputs(width),
                                     Span::empty(),
                                 ),
-                                &src_array,
+                                src_array,
                             )
                             .unwrap();
 
@@ -117,7 +116,7 @@ impl Optimizer {
                                         UniformConstruct::new().with_inputs(poped_dim),
                                         Span::empty(),
                                     ),
-                                    &src_array,
+                                    src_array,
                                 )
                                 .unwrap();
 

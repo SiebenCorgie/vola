@@ -109,7 +109,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> RegionBuilder<'a, N, E> {
     pub fn connect_node(
         &mut self,
         node: N,
-        src: &[OutportLocation],
+        src: impl IntoIterator<Item = OutportLocation>,
     ) -> Result<(NodeRef, SmallColl<EdgeRef>), GraphError> {
         let created_node = self.insert_node(node);
         let mut edges = SmallColl::default();

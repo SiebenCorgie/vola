@@ -73,7 +73,7 @@ impl Optimizer {
                         let (add, _) = g
                             .connect_node(
                                 OptNode::new(BinaryArith::new(BinaryArithOp::Add), span.clone()),
-                                &[udiff_op_v.output(0), u_op_diffv.output(0)],
+                                [udiff_op_v.output(0), u_op_diffv.output(0)],
                             )
                             .unwrap();
 
@@ -108,7 +108,7 @@ impl Optimizer {
                         let (mul_inner, _) = g
                             .connect_node(
                                 OptNode::new(BinaryArith::new(BinaryArithOp::Mul), span.clone()),
-                                &[imm_two, node.output(0)],
+                                [imm_two, node.output(0)],
                             )
                             .unwrap();
 
@@ -116,7 +116,7 @@ impl Optimizer {
                         let (div_one, _) = g
                             .connect_node(
                                 OptNode::new(BinaryArith::new(BinaryArithOp::Div), span.clone()),
-                                &[imm_one, mul_inner.output(0)],
+                                [imm_one, mul_inner.output(0)],
                             )
                             .unwrap();
 
@@ -249,7 +249,7 @@ impl Optimizer {
                         let (cmp, _) = g
                             .connect_node(
                                 OptNode::new(BinaryRel::new(relop), span),
-                                &[left_src, right_src],
+                                [left_src, right_src],
                             )
                             .unwrap();
                         //hookup the choosing criterium
@@ -313,14 +313,14 @@ impl Optimizer {
                                         BinaryArith::new(BinaryArithOp::Sub),
                                         span.clone(),
                                     ),
-                                    &[n_src, one],
+                                    [n_src, one],
                                 )
                                 .unwrap();
                             //into exponent
                             let (x_times, _) = g
                                 .connect_node(
                                     OptNode::new(Buildin::new(BuildinOp::Pow), span.clone()),
-                                    &[x_src, n_minus_one.output(0)],
+                                    [x_src, n_minus_one.output(0)],
                                 )
                                 .unwrap();
                             //mul n
@@ -330,7 +330,7 @@ impl Optimizer {
                                         BinaryArith::new(BinaryArithOp::Mul),
                                         span.clone(),
                                     ),
-                                    &[n_src, x_times.output(0)],
+                                    [n_src, x_times.output(0)],
                                 )
                                 .unwrap();
 

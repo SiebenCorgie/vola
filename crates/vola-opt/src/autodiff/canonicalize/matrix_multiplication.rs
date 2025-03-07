@@ -113,7 +113,7 @@ impl Optimizer {
                         let (column_src, _) = reg
                             .connect_node(
                                 OptNode::new(ConstantIndex::new(col_index), span.clone()),
-                                &[matrix_src],
+                                [matrix_src],
                             )
                             .unwrap();
                         column_src.output(0)
@@ -128,7 +128,7 @@ impl Optimizer {
                         let (dot_res, _) = reg
                             .connect_node(
                                 OptNode::new(Buildin::new(BuildinOp::Dot), span.clone()),
-                                &[vector_src, *column_src],
+                                [vector_src, *column_src],
                             )
                             .unwrap();
                         dot_res.output(0)
@@ -142,7 +142,7 @@ impl Optimizer {
                             UniformConstruct::new().with_inputs(vector_elements.len()),
                             span.clone(),
                         ),
-                        &vector_elements,
+                        vector_elements,
                     )
                     .unwrap();
 
@@ -176,7 +176,7 @@ impl Optimizer {
                         let (column_src, _) = reg
                             .connect_node(
                                 OptNode::new(ConstantIndex::new(col_index), span.clone()),
-                                &[left_src],
+                                [left_src],
                             )
                             .unwrap();
                         column_src.output(0)
@@ -191,7 +191,7 @@ impl Optimizer {
                                 let (element, _) = reg
                                     .connect_node(
                                         OptNode::new(ConstantIndex::new(row_idx), span.clone()),
-                                        &[column_sources[col_idx]],
+                                        [column_sources[col_idx]],
                                     )
                                     .unwrap();
                                 element.output(0)
@@ -204,7 +204,7 @@ impl Optimizer {
                                     UniformConstruct::new().with_inputs(row_indices.len()),
                                     span.clone(),
                                 ),
-                                &row_indices,
+                                row_indices,
                             )
                             .unwrap();
                         row_vector.output(0)
@@ -219,7 +219,7 @@ impl Optimizer {
                         let (dot_res, _) = reg
                             .connect_node(
                                 OptNode::new(Buildin::new(BuildinOp::Dot), span.clone()),
-                                &[row_src, right_src],
+                                [row_src, right_src],
                             )
                             .unwrap();
                         dot_res.output(0)
@@ -233,7 +233,7 @@ impl Optimizer {
                             UniformConstruct::new().with_inputs(vector_elements.len()),
                             span.clone(),
                         ),
-                        &vector_elements,
+                        vector_elements,
                     )
                     .unwrap();
 
@@ -271,7 +271,7 @@ impl Optimizer {
                         let (column_src, _) = reg
                             .connect_node(
                                 OptNode::new(ConstantIndex::new(col_index), span.clone()),
-                                &[left_src],
+                                [left_src],
                             )
                             .unwrap();
                         column_src.output(0)
@@ -286,7 +286,7 @@ impl Optimizer {
                                 let (element, _) = reg
                                     .connect_node(
                                         OptNode::new(ConstantIndex::new(row_idx), span.clone()),
-                                        &[column_sources[col_idx]],
+                                        [column_sources[col_idx]],
                                     )
                                     .unwrap();
                                 element.output(0)
@@ -299,7 +299,7 @@ impl Optimizer {
                                     UniformConstruct::new().with_inputs(row_indices.len()),
                                     span.clone(),
                                 ),
-                                &row_indices,
+                                row_indices,
                             )
                             .unwrap();
                         row_vector.output(0)
@@ -312,7 +312,7 @@ impl Optimizer {
                         let (element, _) = reg
                             .connect_node(
                                 OptNode::new(ConstantIndex::new(col_idx), span.clone()),
-                                &[right_src],
+                                [right_src],
                             )
                             .unwrap();
                         element.output(0)
@@ -327,7 +327,7 @@ impl Optimizer {
                         let (element, _) = reg
                             .connect_node(
                                 OptNode::new(Buildin::new(BuildinOp::Dot), span.clone()),
-                                &[row_vectors[row_idx], right_colmuns[column_idx]],
+                                [row_vectors[row_idx], right_colmuns[column_idx]],
                             )
                             .unwrap();
                         result_column_elements.push(element.output(0));
@@ -339,7 +339,7 @@ impl Optimizer {
                                 UniformConstruct::new().with_inputs(result_column_elements.len()),
                                 span.clone(),
                             ),
-                            &result_column_elements,
+                            result_column_elements,
                         )
                         .unwrap();
                     result_columns.push(col_vec.output(0));
@@ -352,7 +352,7 @@ impl Optimizer {
                             UniformConstruct::new().with_inputs(result_columns.len()),
                             span.clone(),
                         ),
-                        &result_columns,
+                        result_columns,
                     )
                     .unwrap();
 

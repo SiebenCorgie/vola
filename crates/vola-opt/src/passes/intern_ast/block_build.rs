@@ -708,7 +708,7 @@ impl Optimizer {
             .on_region(&region, |reg| {
                 let condition = OptNode::new(BinaryRel::new(BinaryRelOp::Lt), Span::empty());
                 let (node, _edgs) = reg
-                    .connect_node(condition, &[lower_bound, upper_bound])
+                    .connect_node(condition, [lower_bound, upper_bound])
                     .unwrap();
 
                 self.span_tags.set(node.into(), rangespan.clone());
@@ -769,14 +769,14 @@ impl Optimizer {
                                     BinaryArith::new(BinaryArithOp::Add),
                                     rangespan.clone(),
                                 ),
-                                &[lower_arg, one.output(0)],
+                                [lower_arg, one.output(0)],
                             )
                             .unwrap();
 
                         let (condition, _) = reg
                             .connect_node(
                                 OptNode::new(BinaryRel::new(BinaryRelOp::Lt), rangespan.clone()),
-                                &[added.output(0), upper_arg],
+                                [added.output(0), upper_arg],
                             )
                             .unwrap();
                         self.span_tags.set(condition.into(), rangespan.clone());

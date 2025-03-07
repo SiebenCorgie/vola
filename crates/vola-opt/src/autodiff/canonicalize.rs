@@ -75,7 +75,7 @@ impl Optimizer {
                                         BinaryArith::new(BinaryArithOp::Mul),
                                         span.clone(),
                                     ),
-                                    &[f_src, f_src],
+                                    [f_src, f_src],
                                 )
                                 .unwrap();
                             let (with_const, _) = g
@@ -84,13 +84,13 @@ impl Optimizer {
                                         BinaryArith::new(BinaryArithOp::Add),
                                         span.clone(),
                                     ),
-                                    &[fx_square.output(0), c_splat],
+                                    [fx_square.output(0), c_splat],
                                 )
                                 .unwrap();
                             let (sqrt, _) = g
                                 .connect_node(
                                     OptNode::new(Buildin::new(BuildinOp::SquareRoot), span.clone()),
-                                    &[with_const.output(0)],
+                                    [with_const.output(0)],
                                 )
                                 .unwrap();
 
@@ -163,7 +163,7 @@ impl Optimizer {
                                 let (new_node, _edges) = g
                                     .connect_node(
                                         OptNode::new(ConstantIndex::new(idx), span.clone()),
-                                        &[src_value],
+                                        [src_value],
                                     )
                                     .unwrap();
                                 indices.push(new_node.output(0));
@@ -179,7 +179,7 @@ impl Optimizer {
                                                 BinaryArith::new(BinaryArithOp::Mul),
                                                 span.clone(),
                                             ),
-                                            &[indexed, indexed],
+                                            [indexed, indexed],
                                         )
                                         .unwrap();
 
@@ -195,7 +195,7 @@ impl Optimizer {
                                         BinaryArith::new(BinaryArithOp::Add),
                                         span.clone(),
                                     ),
-                                    &[squared[0], squared[1]],
+                                    [squared[0], squared[1]],
                                 )
                                 .unwrap();
                             //now build the _staggered_ add chain.
@@ -206,7 +206,7 @@ impl Optimizer {
                                             BinaryArith::new(BinaryArithOp::Add),
                                             span.clone(),
                                         ),
-                                        &[last_add.output(0), squared[next_idx]],
+                                        [last_add.output(0), squared[next_idx]],
                                     )
                                     .unwrap();
 
@@ -216,7 +216,7 @@ impl Optimizer {
                             let (sqrt, _) = g
                                 .connect_node(
                                     OptNode::new(Buildin::new(BuildinOp::SquareRoot), span),
-                                    &[last_add.output(0)],
+                                    [last_add.output(0)],
                                 )
                                 .unwrap();
 
@@ -263,14 +263,14 @@ impl Optimizer {
                                         BinaryArith::new(BinaryArithOp::Sub),
                                         span.clone(),
                                     ),
-                                    &[x_src, y_src],
+                                    [x_src, y_src],
                                 )
                                 .unwrap();
 
                             let (abs, to_abs_edge) = g
                                 .connect_node(
                                     OptNode::new(UnaryArith::new(UnaryArithOp::Abs), span.clone()),
-                                    &[x_min_y.output(0)],
+                                    [x_min_y.output(0)],
                                 )
                                 .unwrap();
                             //pre_set the abs-type, otherwise the shortcut to canonicalize abs won't work later on.
@@ -281,7 +281,7 @@ impl Optimizer {
                             let (min_max_add_sub, _) = g
                                 .connect_node(
                                     OptNode::new(BinaryArith::new(inner_op), span.clone()),
-                                    &[y_src, abs.output(0)],
+                                    [y_src, abs.output(0)],
                                 )
                                 .unwrap();
 
@@ -292,7 +292,7 @@ impl Optimizer {
                                         BinaryArith::new(BinaryArithOp::Add),
                                         span.clone(),
                                     ),
-                                    &[x_src, min_max_add_sub.output(0)],
+                                    [x_src, min_max_add_sub.output(0)],
                                 )
                                 .unwrap();
                             //div with two
@@ -302,7 +302,7 @@ impl Optimizer {
                                         BinaryArith::new(BinaryArithOp::Div),
                                         span.clone(),
                                     ),
-                                    &[add.output(0), imm_two],
+                                    [add.output(0), imm_two],
                                 )
                                 .unwrap();
 
@@ -339,7 +339,7 @@ impl Optimizer {
                                         BinaryArith::new(BinaryArithOp::Sub),
                                         span.clone(),
                                     ),
-                                    &[one, a_src],
+                                    [one, a_src],
                                 )
                                 .unwrap();
 
@@ -349,7 +349,7 @@ impl Optimizer {
                                         BinaryArith::new(BinaryArithOp::Mul),
                                         span.clone(),
                                     ),
-                                    &[x_src, one_minus.output(0)],
+                                    [x_src, one_minus.output(0)],
                                 )
                                 .unwrap();
                             let (y_times, _) = g
@@ -358,7 +358,7 @@ impl Optimizer {
                                         BinaryArith::new(BinaryArithOp::Mul),
                                         span.clone(),
                                     ),
-                                    &[y_src, a_src],
+                                    [y_src, a_src],
                                 )
                                 .unwrap();
 
@@ -368,7 +368,7 @@ impl Optimizer {
                                         BinaryArith::new(BinaryArithOp::Add),
                                         span.clone(),
                                     ),
-                                    &[x_times.output(0), y_times.output(0)],
+                                    [x_times.output(0), y_times.output(0)],
                                 )
                                 .unwrap();
                             result
@@ -397,13 +397,13 @@ impl Optimizer {
                             let (inner_max, max_edg) = g
                                 .connect_node(
                                     OptNode::new(Buildin::new(BuildinOp::Max), span.clone()),
-                                    &[x_src, min_src],
+                                    [x_src, min_src],
                                 )
                                 .unwrap();
                             let (inner_min, min_edg) = g
                                 .connect_node(
                                     OptNode::new(Buildin::new(BuildinOp::Min), span.clone()),
-                                    &[inner_max.output(0), max_src],
+                                    [inner_max.output(0), max_src],
                                 )
                                 .unwrap();
 

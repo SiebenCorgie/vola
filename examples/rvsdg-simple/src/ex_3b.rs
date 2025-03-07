@@ -85,7 +85,7 @@ pub fn emit() -> Rvsdg<LNode, VSEdge> {
                                         let (decone, _args) = callbranch
                                             .connect_node(
                                                 LNode::new(MyNodes::Sub),
-                                                &[
+                                                [
                                                     parent.as_outport_location(
                                                         OutputType::EntryVariableArgument {
                                                             branch: bidx,
@@ -124,7 +124,7 @@ pub fn emit() -> Rvsdg<LNode, VSEdge> {
                                         let (mul, _args) = callbranch
                                             .connect_node(
                                                 LNode::new(MyNodes::Mul),
-                                                &[
+                                                [
                                                     parent.as_outport_location(
                                                         OutputType::EntryVariableArgument {
                                                             branch: bidx,

@@ -86,14 +86,14 @@ impl Optimizer {
                             let (wrt_index, _) = g
                                 .connect_node(
                                     OptNode::new(ConstantIndex::new(wrt_idx), span.clone()),
-                                    &[wrt_src],
+                                    [wrt_src],
                                 )
                                 .unwrap();
 
                             let (new_ad_node, _) = g
                                 .connect_node(
                                     OptNode::new(AutoDiff::default(), Span::empty()),
-                                    &[autodiff_src, wrt_index.output(0)],
+                                    [autodiff_src, wrt_index.output(0)],
                                 )
                                 .unwrap();
 

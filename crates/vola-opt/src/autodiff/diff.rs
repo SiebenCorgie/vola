@@ -208,21 +208,21 @@ impl Optimizer {
                         let (abs_f, _) = g
                             .connect_node(
                                 OptNode::new(UnaryArith::new(UnaryArithOp::Abs), span.clone()),
-                                &[src],
+                                [src],
                             )
                             .unwrap();
 
                         let (f_div_abs_div, _) = g
                             .connect_node(
                                 OptNode::new(BinaryArith::new(BinaryArithOp::Div), span.clone()),
-                                &[src, abs_f.output(0)],
+                                [src, abs_f.output(0)],
                             )
                             .unwrap();
 
                         let (mul, _) = g
                             .connect_node(
                                 OptNode::new(BinaryArith::new(BinaryArithOp::Mul), span.clone()),
-                                &[f_div_abs_div.output(0)],
+                                [f_div_abs_div.output(0)],
                             )
                             .unwrap();
 
@@ -247,7 +247,7 @@ impl Optimizer {
                         let (mul, _) = g
                             .connect_node(
                                 OptNode::new(BinaryArith::new(BinaryArithOp::Mul), span.clone()),
-                                &[negone],
+                                [negone],
                             )
                             .unwrap();
                         let diff_dst = mul.input(1);
@@ -342,7 +342,7 @@ impl Optimizer {
                     .graph
                     .on_region(&region, |g| {
                         let (f_diff, _) = g
-                            .connect_node(OptNode::new(Trig::new(TrigOp::Cos), span), &[src])
+                            .connect_node(OptNode::new(Trig::new(TrigOp::Cos), span), [src])
                             .unwrap();
                         f_diff.output(0)
                     })
@@ -356,15 +356,12 @@ impl Optimizer {
                     .graph
                     .on_region(&region, |g| {
                         let (sinout, _) = g
-                            .connect_node(
-                                OptNode::new(Trig::new(TrigOp::Sin), span.clone()),
-                                &[src],
-                            )
+                            .connect_node(OptNode::new(Trig::new(TrigOp::Sin), span.clone()), [src])
                             .unwrap();
                         let (negged, _) = g
                             .connect_node(
                                 OptNode::new(UnaryArith::new(UnaryArithOp::Neg), span),
-                                &[sinout.output(0)],
+                                [sinout.output(0)],
                             )
                             .unwrap();
                         negged.output(0)
@@ -399,7 +396,7 @@ impl Optimizer {
                 let (mul, _edg) = g
                     .connect_node(
                         OptNode::new(BinaryArith::new(BinaryArithOp::Mul), Span::empty()),
-                        &[diffed_output],
+                        [diffed_output],
                     )
                     .unwrap();
 

@@ -71,7 +71,7 @@ fn simple_cnf() {
                 let (add, _edges) = reg
                     .connect_node(
                         LNode::new().with_name("+").with_inputs(2).with_outputs(1),
-                        &[const0.output(0), const1.output(0)],
+                        [const0.output(0), const1.output(0)],
                     )
                     .unwrap();
 
@@ -109,14 +109,14 @@ fn single_cascade_cnf() {
                 let (add, _edges) = reg
                     .connect_node(
                         LNode::new().with_name("+").with_inputs(2).with_outputs(1),
-                        &[const0.output(0), const1.output(0)],
+                        [const0.output(0), const1.output(0)],
                     )
                     .unwrap();
 
                 let (mul, _edges) = reg
                     .connect_node(
                         LNode::new().with_name("*").with_inputs(2).with_outputs(1),
-                        &[add.output(0), const2.output(0)],
+                        [add.output(0), const2.output(0)],
                     )
                     .unwrap();
                 reg.connect_to_result(mul.output(0), InputType::Result(0))
