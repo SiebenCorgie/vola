@@ -682,7 +682,7 @@ impl Optimizer {
             }
         };
 
-        is_read_write(if_scope, name) && is_read_write(else_scope, name)
+        is_read_write(if_scope, name) || is_read_write(else_scope, name)
     }
 
     pub fn build_loop_stmt(
