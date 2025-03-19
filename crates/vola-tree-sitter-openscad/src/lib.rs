@@ -1,0 +1,172 @@
+//! TreeSitter based OpenScad->vola parser. Transforms the SCAD input into a Vola-Ast, if possible.
+
+mod error;
+use std::path::Path;
+
+use error::ParserError;
+use tree_sitter::{Node, Parser};
+use vola_ast::{AstEntry, VolaAst, common::Comment};
+use vola_common::{FileString, Span, ariadne::Label, error::error_reporter, report};
+
+///Context on the parser, like the current src file, and errors that occured, but are ignored.
+pub struct ParserCtx {
+    deep_errors: Vec<ParserError>,
+    src_file: FileString,
+}
+
+impl ParserCtx {
+    pub fn new(file: FileString) -> ParserCtx {
+        ParserCtx {
+            deep_errors: Vec::new(),
+            src_file: file,
+        }
+    }
+    pub fn new_fileless() -> ParserCtx {
+        ParserCtx {
+            deep_errors: Vec::new(),
+            src_file: FileString::default(),
+        }
+    }
+    ///Creates a new span for `node` on this context.
+    pub fn span(&self, node: &Node) -> Span {
+        Span::from(node).with_file(&self.src_file)
+    }
+
+    pub fn get_file(&self) -> Option<&str> {
+        if self.src_file.is_empty() {
+            None
+        } else {
+            Some(self.src_file.as_str())
+        }
+    }
+}
+
+///Parses `file`. Returns the [VolaAst] on success, or a partially parsed AST, and the reported errors, if any
+/// parsing errors happened.
+pub fn parse_file(file: impl AsRef<Path>) -> Result<VolaAst, (VolaAst, Vec<ParserError>)> {
+    let dta = match std::fs::read(file.as_ref()) {
+        Ok(dta) => dta,
+        Err(e) => {
+            let err = ParserError::FSError(e.to_string());
+            vola_common::report(error_reporter(err.clone(), Span::empty()).finish());
+
+            return Err((
+                VolaAst {
+                    entries: Vec::with_capacity(0),
+                },
+                vec![err],
+            ));
+        }
+    };
+    let file_src_str = file.as_ref().to_str().unwrap_or("NonUnicodeFilename");
+    parse_data(&dta, Some(file_src_str.into()))
+}
+
+///Parses `string`. Returns the [VolaAst] on success, or a partially parsed AST, and the reported errors, if any
+/// parsing errors happened.
+pub fn parse_string(string: String) -> Result<VolaAst, (VolaAst, Vec<ParserError>)> {
+    let as_bytes = string.as_bytes();
+    parse_data(as_bytes, None)
+}
+
+pub fn parse_from_bytes(bytes: &[u8]) -> Result<VolaAst, (VolaAst, Vec<ParserError>)> {
+    parse_data(bytes, None)
+}
+
+//load the vola-lang tree-sitter grammar / parser
+fn parser() -> Parser {
+    let mut parser = Parser::new();
+    parser
+        .set_language(tree_sitter_openscad::language())
+        .expect("Failed to load tree-sitter-openscad");
+    parser
+}
+
+pub struct OpenScadTreeSitterParser;
+
+impl vola_ast::VolaParser for OpenScadTreeSitterParser {
+    fn parse_from_byte(
+        &self,
+        src_file: Option<FileString>,
+        byte: &[u8],
+    ) -> Result<VolaAst, vola_ast::AstError> {
+        #[allow(unused_variables)]
+        parse_data(byte, src_file.clone()).map_err(|(partial_ast, e)| {
+            #[cfg(feature = "dot")]
+            if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("VOLA_DUMP_AST").is_ok() {
+                vola_ast::dot::ast_to_svg(&partial_ast, "partial_ast.svg");
+            }
+
+            vola_ast::AstError::ParsingError {
+                path: src_file
+                    .map(|f| f.to_string())
+                    .unwrap_or("NoFile".to_owned()),
+                err: format!("Parser had {} errors", e.len()),
+            }
+        })
+    }
+}
+
+///Internal parser implementation
+fn parse_data(
+    data: &[u8],
+    src_file: Option<FileString>,
+) -> Result<VolaAst, (VolaAst, Vec<ParserError>)> {
+    let mut ctx = if let Some(src) = src_file {
+        ParserCtx::new(src)
+    } else {
+        ParserCtx::new_fileless()
+    };
+
+    let mut ast = VolaAst {
+        entries: Vec::new(),
+    };
+
+    //recursively parse all nodes
+    let mut parser = parser();
+    let syn_tree = match parser.parse(&data, None) {
+        None => {
+            let err = ParserError::TreeSitterFailed;
+            report(error_reporter(err.clone(), Span::empty()).finish());
+            return Err((ast, vec![err]));
+        }
+        Some(syntree) => syntree,
+    };
+
+    let mut cursor = syn_tree.root_node().walk();
+    //Collects args until a non-comment, non-ct-arg node is returned. Attaches all preceeding ctargs
+    // to that toplevel node.
+    for node in syn_tree.root_node().children(&mut cursor) {
+        match node.kind() {
+            "comment" => ast.entries.push(vola_ast::TopLevelNode {
+                span: ctx.span(&node),
+                ct_args: Vec::with_capacity(0),
+                entry: AstEntry::Comment(match node.utf8_text(data) {
+                    Ok(t) => Comment {
+                        span: ctx.span(&node),
+                        content: t.trim_start_matches("//").to_owned(),
+                    },
+                    Err(e) => {
+                        ctx.deep_errors.push(e.into());
+                        report(
+                            error_reporter("Could not parse comment", ctx.span(&node))
+                                .with_label(Label::new(ctx.span(&node)).with_message("Here"))
+                                .finish(),
+                        );
+                        Comment {
+                            span: ctx.span(&node),
+                            content: "Could not parse comment".to_owned(),
+                        }
+                    }
+                }),
+            }),
+            other => println!("Seeing {other}"),
+        }
+    }
+
+    if ctx.deep_errors.len() > 0 {
+        Err((ast, ctx.deep_errors))
+    } else {
+        Ok(ast)
+    }
+}

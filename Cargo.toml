@@ -14,7 +14,7 @@ members = [
     "crates/vola-backend-spirv",
     "crates/vola-backend-wasm",
     "crates/wasm-runtime",
-    "tests/test-runner", "crates/vola-fmt",
+    "tests/test-runner", "crates/vola-fmt", "crates/vola-tree-sitter-openscad",
 ]
 
 resolver = "2"

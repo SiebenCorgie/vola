@@ -1,0 +1,12 @@
+[package]
+name = "vola-tree-sitter-openscad"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+tree-sitter-openscad = { git = "https://github.com/bollian/tree-sitter-openscad.git", rev = "bb1e12023e59489c0892af0c0c9a5b323af69df6" }
+vola-ast.workspace = true
+vola-common.workspace = true
+thiserror.workspace = true
+tree-sitter.workspace = true
+ahash.workspace = true
