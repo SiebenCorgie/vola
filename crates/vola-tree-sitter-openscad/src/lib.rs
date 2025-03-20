@@ -1,30 +1,61 @@
 //! TreeSitter based OpenScad->vola parser. Transforms the SCAD input into a Vola-Ast, if possible.
 
 mod error;
-use std::path::Path;
+use core::panic;
+use std::path::{Path, PathBuf};
 
 use error::ParserError;
+use smallvec::SmallVec;
+use statement::ScadStmt;
 use tree_sitter::{Node, Parser};
-use vola_ast::{AstEntry, VolaAst, common::Comment};
-use vola_common::{FileString, Span, ariadne::Label, error::error_reporter, report};
+use vola_ast::{
+    AstEntry, VolaAst,
+    alge::LetStmt,
+    common::{Block, Comment, Stmt},
+};
+use vola_common::{
+    FileString, Span,
+    ariadne::Label,
+    error::{error_reporter, warning_reporter},
+    report,
+};
+
+mod assignment;
+mod comment;
+mod expr;
+mod statement;
+mod util;
 
 ///Context on the parser, like the current src file, and errors that occured, but are ignored.
 pub struct ParserCtx {
     deep_errors: Vec<ParserError>,
+    pub deep_warnings: Vec<(Span, String)>,
     src_file: FileString,
+
+    ///See the SCAD documentation on both resolve behaviors: [here](https://en.wikibooks.org/wiki/OpenSCAD_User_Manual/Include_Statement)
+    ///Collects all `use` paths that where encountered.
+    resolve_uses: Vec<PathBuf>,
+    ///Collects all `include` paths that where encountered.
+    resolve_includes: Vec<PathBuf>,
 }
 
 impl ParserCtx {
     pub fn new(file: FileString) -> ParserCtx {
         ParserCtx {
             deep_errors: Vec::new(),
+            deep_warnings: Vec::new(),
             src_file: file,
+            resolve_uses: Vec::with_capacity(0),
+            resolve_includes: Vec::with_capacity(0),
         }
     }
     pub fn new_fileless() -> ParserCtx {
         ParserCtx {
             deep_errors: Vec::new(),
+            deep_warnings: Vec::new(),
             src_file: FileString::default(),
+            resolve_uses: Vec::with_capacity(0),
+            resolve_includes: Vec::with_capacity(0),
         }
     }
     ///Creates a new span for `node` on this context.
@@ -38,6 +69,46 @@ impl ParserCtx {
         } else {
             Some(self.src_file.as_str())
         }
+    }
+
+    pub fn try_resolve_local_path(&self, path: impl AsRef<Path>) -> Result<PathBuf, ParserError> {
+        let path = path.as_ref();
+        //first try local to _our_ path, then try to read the OPENSCADPATH EnvVar
+
+        //If the path is already absolute, just return it
+        if path.is_absolute() {
+            return Ok(path.to_owned());
+        }
+
+        if let Some(base_file) = self.get_file() {
+            let base_path = Path::new(base_file).to_path_buf();
+            let full_path = base_path.join(path);
+            if full_path.exists() {
+                return Ok(full_path);
+            }
+        }
+
+        //was not relative to the file we opened, try to read the env-var and build such a path
+        if let Ok(ev_path) = std::env::var("OPENSCADPATH") {
+            let evpath = PathBuf::from(ev_path);
+            if !evpath.exists() {
+                return Err(ParserError::FSError(format!(
+                    "OPENSCADPATH=\"{:?}\" does not exist",
+                    evpath
+                )));
+            }
+
+            let full_path = evpath.join(path);
+            if full_path.exists() {
+                return Ok(full_path);
+            }
+        }
+
+        Err(ParserError::FSError(format!(
+            "Could not find {:?}, neither relative to {:?} nor relative to $OPENSCADPATH",
+            path,
+            self.get_file().unwrap_or("NO-SOURCE-FILE-LOCATION")
+        )))
     }
 }
 
@@ -92,11 +163,6 @@ impl vola_ast::VolaParser for OpenScadTreeSitterParser {
     ) -> Result<VolaAst, vola_ast::AstError> {
         #[allow(unused_variables)]
         parse_data(byte, src_file.clone()).map_err(|(partial_ast, e)| {
-            #[cfg(feature = "dot")]
-            if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("VOLA_DUMP_AST").is_ok() {
-                vola_ast::dot::ast_to_svg(&partial_ast, "partial_ast.svg");
-            }
-
             vola_ast::AstError::ParsingError {
                 path: src_file
                     .map(|f| f.to_string())
@@ -133,35 +199,102 @@ fn parse_data(
         Some(syntree) => syntree,
     };
 
+    //NOTE: SCAD Has _out-of-module_ statements. This can be seen as something like a _main_
+    //      function that catches all statements that are not part of any module.
+    //
+    //      To make this work with vola we _just_ yeet any non-module statement into the _main-block_
+    //      once the module has finished parsing (and all sub-modules), we merge all _main-functions_, and
+    //      serialize it as the _main-λ-with-csg-return-arg_. That way the _user_ of the scad module can _use_
+    //      the generated CSG by _using_ the main function.
+    //
+    //      The behavior might change later on, since we could also directly build a export function that returns the SDF
+    //      value of the _main_ function.
+    let mut main_block = Vec::new();
+
     let mut cursor = syn_tree.root_node().walk();
     //Collects args until a non-comment, non-ct-arg node is returned. Attaches all preceeding ctargs
     // to that toplevel node.
     for node in syn_tree.root_node().children(&mut cursor) {
-        match node.kind() {
-            "comment" => ast.entries.push(vola_ast::TopLevelNode {
-                span: ctx.span(&node),
-                ct_args: Vec::with_capacity(0),
-                entry: AstEntry::Comment(match node.utf8_text(data) {
-                    Ok(t) => Comment {
-                        span: ctx.span(&node),
-                        content: t.trim_start_matches("//").to_owned(),
-                    },
+        let tl_node_result = match node.kind() {
+            "comment" => comment::comment(&mut ctx, data, &node)
+                .map(|entry| vola_ast::TopLevelNode {
+                    span: ctx.span(&node),
+                    ct_args: Vec::with_capacity(0),
+                    entry,
+                })
+                .map(|tl| Some(tl)),
+            "use_statement" => statement::use_stmt(&mut ctx, data, &node).map(|_| None),
+            "module_deceleration" => {
+                todo!()
+            }
+            "function_declecration" => {
+                todo!()
+            }
+            "assignment" => {
+                //since OpenScad makes no difference between assignment and decleration, we
+                //check, that the assignment was made _before_, and if not, move the assignement to a decleration.
+
+                match assignment::assignment(&mut ctx, data, &node) {
+                    Ok(assignment) => {
+                        //push into main, and return _None_
+                        main_block.push(ScadStmt::Assign(assignment));
+                        Ok(None)
+                    }
+                    Err(e) => Err(e),
+                }
+            }
+            //Happens on the top-level after working on a _to-be-added-to-main_ stmt.
+            ";" => Ok(None),
+            other => {
+                //if it is not your standard _include / use / module / function_, it is probably a _out-of-module_
+                //statement. Try to parse that. If that works, append it to the _main_ block. Otherwise
+                // emit an error
+                match statement::stmt(&mut ctx, &mut main_block, data, &node) {
+                    Ok(_) => Ok(None),
+                    //Was not a _valid_ statement, print the error, then also emit the _invalid_ error
                     Err(e) => {
-                        ctx.deep_errors.push(e.into());
                         report(
-                            error_reporter("Could not parse comment", ctx.span(&node))
-                                .with_label(Label::new(ctx.span(&node)).with_message("Here"))
+                            error_reporter(e.to_string(), ctx.span(&node))
+                                .with_label(Label::new(ctx.span(&node)).with_message("here"))
                                 .finish(),
                         );
-                        Comment {
-                            span: ctx.span(&node),
-                            content: "Could not parse comment".to_owned(),
-                        }
+
+                        Err(ParserError::Unexpected(other.to_owned()))
                     }
-                }),
-            }),
-            other => println!("Seeing {other}"),
+                }
+            }
+        };
+
+        match tl_node_result {
+            Ok(Some(tlnode)) => {
+                ast.entries.push(tlnode);
+            }
+            Ok(None) => {}
+            Err(e) => {
+                report(
+                    error_reporter(e.to_string(), ctx.span(&node))
+                        .with_label(Label::new(ctx.span(&node)).with_message("here"))
+                        .finish(),
+                );
+                ctx.deep_errors.push(e);
+            }
         }
+    }
+
+    if ctx.resolve_uses.len() > 0 || ctx.resolve_includes.len() > 0 {
+        panic!("Resolve of modules is not implemented (yet)");
+    }
+
+    if main_block.len() > 0 {
+        panic!("Building __main__ statements not yet supported :(");
+    }
+
+    for (span, warning) in ctx.deep_warnings {
+        report(
+            warning_reporter(warning, span.clone())
+                .with_label(Label::new(span).with_message("here"))
+                .finish(),
+        );
     }
 
     if ctx.deep_errors.len() > 0 {

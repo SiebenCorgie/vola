@@ -10,4 +10,16 @@ pub enum ParserError {
     FSError(String),
     #[error("UTF8 parser error: {0}")]
     Utf8ParseError(#[from] Utf8Error),
+    #[error("Malformed node: {0}")]
+    MalformedNode(String),
+    #[error("Unexpected AST element: {0}")]
+    Unexpected(String),
+    #[error("Use of unsupported OpenScad feature: {0}")]
+    UnsupportedScadFeature(String),
+    #[error(transparent)]
+    ParseIntError(#[from] std::num::ParseIntError),
+    #[error(transparent)]
+    ParseFloatError(#[from] std::num::ParseFloatError),
+    #[error("Is not an expression")]
+    NoExpr,
 }

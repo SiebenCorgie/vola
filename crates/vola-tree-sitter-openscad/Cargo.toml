@@ -10,3 +10,4 @@ vola-common.workspace = true
 thiserror.workspace = true
 tree-sitter.workspace = true
 ahash.workspace = true
+smallvec.workspace = true
