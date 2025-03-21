@@ -5,7 +5,7 @@ use core::panic;
 use std::path::{Path, PathBuf};
 
 use error::ParserError;
-use scad_ast::ScadStmt;
+use scad_ast::{ScadBlock, ScadStmt, ScadTopLevel};
 use smallvec::SmallVec;
 use tree_sitter::{Node, Parser};
 use vola_ast::{
@@ -183,19 +183,31 @@ impl vola_ast::VolaParser for OpenScadTreeSitterParser {
     }
 }
 
-///Internal parser implementation
 fn parse_data(
     data: &[u8],
     src_file: Option<FileString>,
 ) -> Result<VolaAst, (VolaAst, Vec<ParserError>)> {
+    let mut ast = VolaAst {
+        entries: Vec::new(),
+    };
+
+    //parse the ScadAst _fully_. This will also take care of recursively resolving any used modules
+    let scad_ast = parse_data_scad(data, src_file).map_err(|(_scad_ast, e)| (ast.clone(), e))?;
+
+    todo!("scad to vola");
+
+    Ok(ast)
+}
+
+///Internal parser implementation
+fn parse_data_scad(
+    data: &[u8],
+    src_file: Option<FileString>,
+) -> Result<ScadTopLevel, (ScadTopLevel, Vec<ParserError>)> {
     let mut ctx = if let Some(src) = src_file {
         ParserCtx::new(src)
     } else {
         ParserCtx::new_fileless()
-    };
-
-    let mut ast = VolaAst {
-        entries: Vec::new(),
     };
 
     //recursively parse all nodes
@@ -204,7 +216,16 @@ fn parse_data(
         None => {
             let err = ParserError::TreeSitterFailed;
             report(error_reporter(err.clone(), Span::empty()).finish());
-            return Err((ast, vec![err]));
+            return Err((
+                scad_ast::ScadTopLevel {
+                    main: ScadBlock {
+                        stmts: Vec::with_capacity(0),
+                        span: Span::empty(),
+                    },
+                    modules: Vec::with_capacity(0),
+                },
+                vec![err],
+            ));
         }
         Some(syntree) => syntree,
     };
@@ -271,12 +292,28 @@ fn parse_data(
         }
     }
 
-    if ctx.resolve_uses.len() > 0 || ctx.resolve_includes.len() > 0 {
-        panic!("Resolve of modules is not implemented (yet)");
-    }
+    //resolve uses by parsing AST recursively, but only copying over modules and functions
+    //resolve includes by parsing AST recursively and merging main function.
+    for (path, is_include) in ctx
+        .resolve_uses
+        .into_iter()
+        .map(|use_path| (use_path, false))
+        .chain(ctx.resolve_includes.into_iter().map(|incl| (incl, true)))
+    {
+        match std::fs::read(&path).map_err(|e| ParserError::FSError(e.to_string())) {
+            Err(e) => ctx.deep_errors.push(e),
+            Ok(content) => {
+                let mut sub_ast =
+                    parse_data_scad(&content, Some(FileString::from_str(path.to_str().unwrap())))?;
 
-    if tl.main.stmts.len() > 0 {
-        panic!("Building __main__ statements not yet supported :(");
+                if is_include {
+                    tl.main.stmts.append(&mut sub_ast.main.stmts);
+                }
+
+                tl.modules.append(&mut sub_ast.modules);
+                println!("Merge function!");
+            }
+        }
     }
 
     for (span, warning) in ctx.deep_warnings {
@@ -288,8 +325,8 @@ fn parse_data(
     }
 
     if ctx.deep_errors.len() > 0 {
-        Err((ast, ctx.deep_errors))
+        Err((tl, ctx.deep_errors))
     } else {
-        Ok(ast)
+        Ok(tl)
     }
 }
