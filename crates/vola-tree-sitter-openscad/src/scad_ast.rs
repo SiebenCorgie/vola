@@ -6,12 +6,13 @@ use std::path::PathBuf;
 
 use tree_sitter::Node;
 use vola_ast::{
+    VolaAst,
     alge::{BinaryOp, UnaryOp},
     common::{Comment, Ident},
 };
 use vola_common::Span;
 
-use crate::{ParserCtx, util::ScadLiteral};
+use crate::{ParserCtx, error::ParserError, util::ScadLiteral};
 
 #[derive(Debug)]
 pub struct ScadTopLevel {
@@ -30,6 +31,32 @@ impl ScadTopLevel {
             modules: Vec::new(),
         }
     }
+
+    pub fn normalize(&mut self) -> Result<(), Vec<ParserError>> {
+        let mut errors = Vec::with_capacity(0);
+        for module in &mut self.modules {
+            if let Err(e) = module.block.normalize() {
+                errors.push(e);
+            }
+        }
+        if let Err(e) = self.main.normalize() {
+            errors.push(e)
+        }
+
+        if errors.len() > 0 {
+            Err(errors)
+        } else {
+            Ok(())
+        }
+    }
+
+    pub fn unroll_csg(&mut self) -> Result<(), Vec<ParserError>> {
+        todo!()
+    }
+
+    pub fn into_vola_ast(mut self) -> Result<VolaAst, Vec<ParserError>> {
+        todo!()
+    }
 }
 
 #[derive(Debug)]
@@ -43,6 +70,7 @@ pub struct ScadModule {
     pub span: Span,
     pub name: Ident,
     pub args: Vec<ScadParameter>,
+    pub block: ScadBlock,
 }
 
 #[derive(Debug)]
@@ -91,6 +119,7 @@ pub enum ScadStmt {
     IncludeStmt(PathBuf),
     Comment(Comment),
     Assert,
+    None,
 }
 
 #[derive(Debug)]
