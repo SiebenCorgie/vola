@@ -4,8 +4,8 @@ use vola_common::{ariadne::Label, error::error_reporter, report};
 
 use crate::{ParserCtx, error::ParserError};
 
-pub fn comment(ctx: &mut ParserCtx, data: &[u8], node: &Node) -> Result<AstEntry, ParserError> {
-    let entry = AstEntry::Comment(match node.utf8_text(data) {
+pub fn comment(ctx: &mut ParserCtx, data: &[u8], node: &Node) -> Comment {
+    match node.utf8_text(data) {
         Ok(t) => Comment {
             span: ctx.span(&node),
             content: t.trim_start_matches("//").to_owned(),
@@ -22,7 +22,5 @@ pub fn comment(ctx: &mut ParserCtx, data: &[u8], node: &Node) -> Result<AstEntry
                 content: "Could not parse comment".to_owned(),
             }
         }
-    });
-
-    Ok(entry)
+    }
 }

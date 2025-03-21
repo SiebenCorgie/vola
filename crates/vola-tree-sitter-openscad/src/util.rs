@@ -7,7 +7,11 @@ use vola_ast::{
 };
 use vola_common::Span;
 
-use crate::{ParserCtx, error::ParserError, statement::ScadStmt};
+use crate::{
+    ParserCtx,
+    error::ParserError,
+    scad_ast::{ScadExpr, ScadStmt},
+};
 
 ///Parses the identifier into a simple string based ident
 pub fn identifier(ctx: &mut ParserCtx, data: &[u8], node: &Node) -> Result<Ident, ParserError> {
@@ -24,48 +28,79 @@ pub fn identifier(ctx: &mut ParserCtx, data: &[u8], node: &Node) -> Result<Ident
 
 ///So openScad _literal_ is a little strange, since function-values are treated as literals?
 ///Anyways, we just Declare that here, and let the _user_ handle the rest.
+#[derive(Debug)]
 pub enum ScadLiteral {
     Function(Func),
     Range {
-        start: Expr,
-        end: Expr,
-        increment: Option<Expr>,
+        start: Box<ScadExpr>,
+        end: Box<ScadExpr>,
+        increment: Option<Box<ScadExpr>>,
     },
     Undef,
-    List(Vec<Expr>),
+    List(Vec<ScadExpr>),
     Decimal(i32),
     Float(f64),
     Boolean(bool),
 }
 
 impl ScadLiteral {
-    pub fn into_expr_ty(self) -> Result<ExprTy, ParserError> {
-        match self {
-            Self::Function(f) => Err(ParserError::UnsupportedScadFeature(
-                "function-variable".to_owned(),
-            )),
-            Self::Undef => Err(ParserError::UnsupportedScadFeature(
-                "undefined-value".to_owned(),
-            )),
-            Self::Range { .. } => Err(ParserError::NoExpr),
-            Self::List(elements) => Ok(ExprTy::List(elements)),
-            Self::Decimal(d) => {
-                if d.is_negative() {
-                    Ok(ExprTy::Unary {
-                        op: vola_ast::alge::UnaryOp::Neg,
-                        operand: Box::new(Expr {
-                            span: Span::empty(),
-                            expr_ty: ExprTy::Literal(Literal::IntegerLiteral(d.abs() as usize)),
-                        }),
-                    })
-                } else {
-                    Ok(ExprTy::Literal(Literal::IntegerLiteral(d as usize)))
-                }
+    pub fn into_expr(self) -> ScadExpr {
+        ScadExpr::Literal(self)
+    }
+}
+
+pub fn list(ctx: &mut ParserCtx, data: &[u8], node: &Node) -> Result<Vec<ScadExpr>, ParserError> {
+    if node.kind() != "list" {
+        return Err(ParserError::MalformedNode(format!("expected list")));
+    }
+
+    let mut walker = node.walk();
+    let mut childern = node.children(&mut walker);
+    let mut elements = Vec::new();
+    let start_parent = childern.next().unwrap();
+    if start_parent.kind() != "[" {
+        return Err(ParserError::MalformedNode(format!(
+            "expected \"[\", got {}",
+            start_parent.kind()
+        )));
+    }
+
+    while let Some(next) = childern.next() {
+        match next.kind() {
+            "each" | "list_comprehension" => {
+                return Err(ParserError::UnsupportedScadFeature(next.kind().to_string()));
             }
-            Self::Float(f) => Ok(ExprTy::Literal(Literal::FloatLiteral(f))),
-            Self::Boolean(b) => Ok(ExprTy::Literal(Literal::BoolLiteral(b))),
+            other => {
+                let expr = crate::expr::expr(ctx, data, &next).map_err(|_e| {
+                    ParserError::MalformedNode(
+                        "Expected list element to be an expression".to_owned(),
+                    )
+                })?;
+                elements.push(expr);
+            }
+        }
+
+        let next = childern.next().unwrap();
+        //check if we must / should break
+        match next.kind() {
+            "," => {}
+            "]" => break,
+            other => {
+                return Err(ParserError::MalformedNode(format!(
+                    "expected ',' or ']', got {}",
+                    other
+                )));
+            }
         }
     }
+
+    if childern.next().is_some() {
+        return Err(ParserError::MalformedNode(
+            "There should be no further values".to_owned(),
+        ));
+    }
+
+    Ok(elements)
 }
 
 pub fn literal(ctx: &mut ParserCtx, data: &[u8], node: &Node) -> Result<ScadLiteral, ParserError> {
@@ -91,15 +126,20 @@ pub fn literal(ctx: &mut ParserCtx, data: &[u8], node: &Node) -> Result<ScadLite
                 None
             };
             Ok(ScadLiteral::Range {
-                start,
-                end,
-                increment,
+                start: Box::new(start),
+                end: Box::new(end),
+                increment: increment.map(|f| Box::new(f)),
             })
         }
-        "list" => {
-            println!("Impl List");
-            Ok(ScadLiteral::List(Vec::with_capacity(0)))
-        }
+        "list" => Ok(ScadLiteral::List(list(ctx, data, node)?)),
+        "boolean" => match node.utf8_text(data)? {
+            "true" => Ok(ScadLiteral::Boolean(true)),
+            "false" => Ok(ScadLiteral::Boolean(false)),
+            other => Err(ParserError::MalformedNode(format!(
+                "Unknown boolean literal: '{}'",
+                other
+            ))),
+        },
         other => Err(ParserError::Unexpected(format!(
             "Expected some kind of literal, got {}",
             other

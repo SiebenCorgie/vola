@@ -5,8 +5,8 @@ use core::panic;
 use std::path::{Path, PathBuf};
 
 use error::ParserError;
+use scad_ast::ScadStmt;
 use smallvec::SmallVec;
-use statement::ScadStmt;
 use tree_sitter::{Node, Parser};
 use vola_ast::{
     AstEntry, VolaAst,
@@ -23,8 +23,18 @@ use vola_common::{
 mod assignment;
 mod comment;
 mod expr;
-mod statement;
+mod stmt;
 mod util;
+
+mod scad_ast;
+
+pub fn report_here(error: impl ToString, span: Span) {
+    report(
+        error_reporter(error, span.clone())
+            .with_label(Label::new(span).with_message("here"))
+            .finish(),
+    );
+}
 
 ///Context on the parser, like the current src file, and errors that occured, but are ignored.
 pub struct ParserCtx {
@@ -209,21 +219,21 @@ fn parse_data(
     //
     //      The behavior might change later on, since we could also directly build a export function that returns the SDF
     //      value of the _main_ function.
-    let mut main_block = Vec::new();
+    let mut tl = scad_ast::ScadTopLevel::empty(&ctx, &syn_tree.root_node());
 
     let mut cursor = syn_tree.root_node().walk();
     //Collects args until a non-comment, non-ct-arg node is returned. Attaches all preceeding ctargs
     // to that toplevel node.
     for node in syn_tree.root_node().children(&mut cursor) {
-        let tl_node_result = match node.kind() {
-            "comment" => comment::comment(&mut ctx, data, &node)
-                .map(|entry| vola_ast::TopLevelNode {
-                    span: ctx.span(&node),
-                    ct_args: Vec::with_capacity(0),
-                    entry,
-                })
-                .map(|tl| Some(tl)),
-            "use_statement" => statement::use_stmt(&mut ctx, data, &node).map(|_| None),
+        match node.kind() {
+            "comment" => {
+                let stmt = ScadStmt::Comment(comment::comment(&mut ctx, data, &node));
+                tl.main.stmts.push(stmt);
+            }
+            "use_statement" => {
+                //statement::use_stmt(&mut ctx, data, &node);
+                todo!()
+            }
             "module_deceleration" => {
                 todo!()
             }
@@ -231,52 +241,32 @@ fn parse_data(
                 todo!()
             }
             "assignment" => {
-                //since OpenScad makes no difference between assignment and decleration, we
-                //check, that the assignment was made _before_, and if not, move the assignement to a decleration.
-
                 match assignment::assignment(&mut ctx, data, &node) {
                     Ok(assignment) => {
                         //push into main, and return _None_
-                        main_block.push(ScadStmt::Assign(assignment));
-                        Ok(None)
+                        tl.main.stmts.push(ScadStmt::Assign(assignment));
                     }
-                    Err(e) => Err(e),
+                    Err(e) => {
+                        report_here(e.clone(), ctx.span(&node));
+                        ctx.deep_errors.push(e);
+                    }
                 }
             }
             //Happens on the top-level after working on a _to-be-added-to-main_ stmt.
-            ";" => Ok(None),
+            ";" => {}
             other => {
                 //if it is not your standard _include / use / module / function_, it is probably a _out-of-module_
                 //statement. Try to parse that. If that works, append it to the _main_ block. Otherwise
                 // emit an error
-                match statement::stmt(&mut ctx, &mut main_block, data, &node) {
-                    Ok(_) => Ok(None),
+                match stmt::stmt(&mut ctx, &mut tl.main, data, &node) {
+                    Ok(stmt) => tl.main.stmts.push(stmt),
                     //Was not a _valid_ statement, print the error, then also emit the _invalid_ error
                     Err(e) => {
-                        report(
-                            error_reporter(e.to_string(), ctx.span(&node))
-                                .with_label(Label::new(ctx.span(&node)).with_message("here"))
-                                .finish(),
-                        );
-
-                        Err(ParserError::Unexpected(other.to_owned()))
+                        report_here(e.clone(), ctx.span(&node));
+                        ctx.deep_errors
+                            .push(ParserError::Unexpected(other.to_owned()))
                     }
                 }
-            }
-        };
-
-        match tl_node_result {
-            Ok(Some(tlnode)) => {
-                ast.entries.push(tlnode);
-            }
-            Ok(None) => {}
-            Err(e) => {
-                report(
-                    error_reporter(e.to_string(), ctx.span(&node))
-                        .with_label(Label::new(ctx.span(&node)).with_message("here"))
-                        .finish(),
-                );
-                ctx.deep_errors.push(e);
             }
         }
     }
@@ -285,7 +275,7 @@ fn parse_data(
         panic!("Resolve of modules is not implemented (yet)");
     }
 
-    if main_block.len() > 0 {
+    if tl.main.stmts.len() > 0 {
         panic!("Building __main__ statements not yet supported :(");
     }
 
