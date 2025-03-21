@@ -5,7 +5,8 @@ use tree_sitter::Node;
 use crate::{
     ParserCtx,
     error::ParserError,
-    scad_ast::{ScadArg, ScadBlock, ScadCall, ScadExpr, ScadStmt},
+    report_here,
+    scad_ast::{ChainElement, ScadArg, ScadBlock, ScadCall, ScadExpr, ScadStmt},
 };
 
 pub fn file_use_stmt(
@@ -70,6 +71,43 @@ pub fn file_use_stmt(
     Ok(())
 }
 
+pub fn block(ctx: &mut ParserCtx, data: &[u8], node: &Node) -> Result<ScadBlock, ParserError> {
+    let mut walker = node.walk();
+    let mut children = node.children(&mut walker);
+
+    let mut block = Vec::new();
+
+    let start = children.next().unwrap();
+    if start.kind() != "{" {
+        return Err(ParserError::MalformedNode("expected '{'".to_owned()));
+    }
+
+    while let Some(next) = children.next() {
+        match next.kind() {
+            "}" => break,
+            other => {
+                //we assume _some-kind_ of statement in the blocks
+                match stmt(ctx, data, &next) {
+                    Ok(stmt) => block.push(stmt),
+                    Err(e) => {
+                        //TODO: handle all the strange stuff
+                        report_here(
+                            format!("Expected some kind of statement, but was {}", node.kind()),
+                            ctx.span(node),
+                        );
+                        return Err(e);
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(ScadBlock {
+        span: ctx.span(node),
+        stmts: block,
+    })
+}
+
 pub fn argument_sequence(
     ctx: &mut ParserCtx,
     data: &[u8],
@@ -98,11 +136,14 @@ pub fn argument_sequence(
                 let assign = crate::assignment::assignment(ctx, data, &next)?;
                 args.push(ScadArg::Assign(assign));
             }
+            //NOTE: this can happen for empty arguments.
+            ")" => break,
             other => {
                 let expr = crate::expr::expr(ctx, data, &next).map_err(|_e| {
-                    ParserError::MalformedNode(
-                        "Argument was no assignment, but also no expression".to_owned(),
-                    )
+                    ParserError::MalformedNode(format!(
+                        "Argument was no assignment, but also no expression, was: '{}'",
+                        other
+                    ))
                 })?;
                 args.push(ScadArg::Expr(expr));
             }
@@ -152,7 +193,7 @@ pub fn module_call(ctx: &mut ParserCtx, data: &[u8], node: &Node) -> Result<Scad
 
 pub fn chain(
     ctx: &mut ParserCtx,
-    target_chain: &mut Vec<ScadCall>,
+    target_chain: &mut Vec<ChainElement>,
     data: &[u8],
     node: &Node,
 ) -> Result<(), ParserError> {
@@ -162,8 +203,14 @@ pub fn chain(
         "transform_chain" => {
             //parse the module call, then recurse
             let call = module_call(ctx, data, node.child(0).as_ref().unwrap())?;
-            target_chain.push(call);
+            target_chain.push(ChainElement::Call(call));
             chain(ctx, target_chain, data, node.child(1).as_ref().unwrap())
+        }
+        //A Union block can also terminate the chain
+        "union_block" => {
+            let block = block(ctx, data, node)?;
+            target_chain.push(ChainElement::Block(block));
+            Ok(())
         }
         //break recursion on ;
         ";" => return Ok(()),
@@ -175,20 +222,21 @@ pub fn chain(
 }
 
 ///Parses a (chain) of statements and appends them to _block_
-pub fn stmt(
-    ctx: &mut ParserCtx,
-    block: &mut ScadBlock,
-    data: &[u8],
-    node: &Node,
-) -> Result<ScadStmt, ParserError> {
+pub fn stmt(ctx: &mut ParserCtx, data: &[u8], node: &Node) -> Result<ScadStmt, ParserError> {
     match node.kind() {
-        "modifier_chain" | "transform_chain" => {
+        "modifier_chain" | "transform_chain" | "union_block" => {
             let mut target_chain = Vec::new();
             chain(ctx, &mut target_chain, data, node)?;
             Ok(ScadStmt::Chain {
                 chain: target_chain,
             })
         }
-        other => Err(ParserError::Unexpected(format!("{}", node.kind()))),
+        "include_statement" => todo!(),
+        "assign_block" | "let_block" => todo!(),
+        "if_block" => todo!(),
+        "intersection_for_block" | "for_block" => todo!(),
+        "assert_statement" => Ok(ScadStmt::Assert),
+
+        other => Err(ParserError::Unexpected(format!("Stmt: {}", node.kind()))),
     }
 }

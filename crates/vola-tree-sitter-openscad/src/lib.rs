@@ -285,7 +285,7 @@ fn parse_data_scad(
                 //if it is not your standard _include / use / module / function_, it is probably a _out-of-module_
                 //statement. Try to parse that. If that works, append it to the _main_ block. Otherwise
                 // emit an error
-                match stmt::stmt(&mut ctx, &mut tl.main, data, &node) {
+                match stmt::stmt(&mut ctx, data, &node) {
                     Ok(stmt) => tl.main.stmts.push(stmt),
                     //Was not a _valid_ statement, print the error, then also emit the _invalid_ error
                     Err(e) => {

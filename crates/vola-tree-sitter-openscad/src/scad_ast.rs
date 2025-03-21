@@ -59,6 +59,12 @@ pub struct ScadAssignment {
 }
 
 #[derive(Debug)]
+pub enum ChainElement {
+    Call(ScadCall),
+    Block(ScadBlock),
+}
+
+#[derive(Debug)]
 pub enum ScadStmt {
     ///Implicit union of ScadStmts based on a given range
     ForBlock {
@@ -69,7 +75,7 @@ pub enum ScadStmt {
         is_intersect: bool,
     },
     Chain {
-        chain: Vec<ScadCall>,
+        chain: Vec<ChainElement>,
     },
     Assign(ScadAssignment),
     IfBlock {
@@ -84,6 +90,7 @@ pub enum ScadStmt {
     },
     IncludeStmt(PathBuf),
     Comment(Comment),
+    Assert,
 }
 
 #[derive(Debug)]
