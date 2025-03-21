@@ -252,8 +252,14 @@ fn parse_data_scad(
                 tl.main.stmts.push(stmt);
             }
             "use_statement" => {
-                //statement::use_stmt(&mut ctx, data, &node);
-                todo!()
+                if let Err(e) = stmt::file_use_stmt(&mut ctx, true, data, &node) {
+                    report_here(e, ctx.span(&node));
+                }
+            }
+            "include_statement" => {
+                if let Err(e) = stmt::file_use_stmt(&mut ctx, false, data, &node) {
+                    report_here(e, ctx.span(&node));
+                }
             }
             "module_deceleration" => {
                 todo!()

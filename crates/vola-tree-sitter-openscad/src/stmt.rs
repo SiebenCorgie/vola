@@ -1,3 +1,5 @@
+use std::path::{Path, PathBuf};
+
 use tree_sitter::Node;
 
 use crate::{
@@ -5,6 +7,68 @@ use crate::{
     error::ParserError,
     scad_ast::{ScadArg, ScadBlock, ScadCall, ScadExpr, ScadStmt},
 };
+
+pub fn file_use_stmt(
+    ctx: &mut ParserCtx,
+    is_use: bool,
+    data: &[u8],
+    node: &Node,
+) -> Result<(), ParserError> {
+    if is_use {
+        if node.kind() != "use_statement" || node.child(0).as_ref().unwrap().kind() != "use" {
+            return Err(ParserError::Unexpected("expected use statement".to_owned()));
+        }
+    } else {
+        if node.kind() != "include_statement" || node.child(0).as_ref().unwrap().kind() != "include"
+        {
+            return Err(ParserError::Unexpected(
+                "expected include statement".to_owned(),
+            ));
+        }
+    }
+
+    let path_string = node
+        .child(1)
+        .as_ref()
+        .unwrap()
+        .utf8_text(data)
+        .map_err(|e| ParserError::from(e))?;
+    let path = PathBuf::from(path_string);
+    //try to build the _actual_ path.
+    //if its absolute, that already done, otherwise try to resolve locally to the context,
+    //or locally to the SCAD var
+    let path = if path.is_absolute() {
+        path
+    } else {
+        let ctx_local = Path::new(ctx.src_file.as_str()).join(path.clone());
+        if ctx_local.exists() {
+            ctx_local
+        } else {
+            if let Ok(var) = std::env::var("OPENSCADPATH") {
+                let var_local = Path::new(&var).join(path.clone());
+                if var_local.exists() {
+                    var_local
+                } else {
+                    return Err(ParserError::FSError(format!(
+                        "Could not find file {path:?}, not relative to the source file ({}) nor relative to 'OPENSCADPATH'",
+                        ctx.src_file
+                    )));
+                }
+            } else {
+                return Err(ParserError::FSError(format!(
+                    "Could not find file {path:?}, not relative to the source file ({}) nor relative to 'OPENSCADPATH'",
+                    ctx.src_file
+                )));
+            }
+        }
+    };
+    if is_use {
+        ctx.resolve_uses.push(path);
+    } else {
+        ctx.resolve_includes.push(path);
+    }
+    Ok(())
+}
 
 pub fn argument_sequence(
     ctx: &mut ParserCtx,
