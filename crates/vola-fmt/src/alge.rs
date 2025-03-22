@@ -18,7 +18,7 @@ impl From<&Expr> for FormatTree {
                 op: format!("{}", op),
                 right: Box::new(FormatTree::from(right.as_ref())),
             },
-            ExprTy::EvalExpr(eval) => FormatTree::from(eval),
+            ExprTy::Eval(eval) => FormatTree::from(eval),
             ExprTy::Ident(i) => FormatTree::from(i),
             ExprTy::FieldAccess { src, accessors } => {
                 let mut seq = vec![FormatTree::from(src)];
@@ -42,8 +42,8 @@ impl From<&Expr> for FormatTree {
                 sub: Box::new(FormatTree::seperated_list(",", l.iter())),
             },
             ExprTy::Literal(l) => FormatTree::from(l),
-            ExprTy::BranchExpr(b) => FormatTree::from(b.as_ref()),
-            ExprTy::SplatExpr { expr, count } => FormatTree::Wrapped {
+            ExprTy::Branch(b) => FormatTree::from(b.as_ref()),
+            ExprTy::Splat { expr, count } => FormatTree::Wrapped {
                 left: '[',
                 right: ']',
                 sub: Box::new(FormatTree::Seq(vec![

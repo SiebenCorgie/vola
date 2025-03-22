@@ -117,15 +117,15 @@ impl Expr {
                     c.span.clone()
                 }
             }
-            ExprTy::EvalExpr(eexpr) => eexpr.span.clone(),
+            ExprTy::Eval(eexpr) => eexpr.span.clone(),
             ExprTy::FieldAccess { .. } => self.span.clone(),
             ExprTy::Ident(_i) => self.span.clone(),
             ExprTy::List(_) => self.span.clone(),
             ExprTy::Tuple(_) => self.span.clone(),
             ExprTy::Literal(_) => self.span.clone(),
             ExprTy::ScopedCall(c) => c.head_span(),
-            ExprTy::BranchExpr(e) => e.span.clone(),
-            ExprTy::SplatExpr { expr, count: _ } => expr.span.clone(),
+            ExprTy::Branch(e) => e.span.clone(),
+            ExprTy::Splat { expr, count: _ } => expr.span.clone(),
         }
     }
 }
@@ -173,7 +173,7 @@ pub enum ExprTy {
         right: Box<Expr>,
         op: BinaryOp,
     },
-    EvalExpr(EvalExpr),
+    Eval(EvalExpr),
     Ident(Ident),
     FieldAccess {
         src: Ident,
@@ -184,8 +184,8 @@ pub enum ExprTy {
     List(Vec<Expr>),
     Tuple(Vec<Expr>),
     Literal(Literal),
-    BranchExpr(Box<Branch>),
-    SplatExpr {
+    Branch(Box<Branch>),
+    Splat {
         expr: Box<Expr>,
         count: usize,
     },

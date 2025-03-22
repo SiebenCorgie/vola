@@ -207,7 +207,7 @@ fn medium_complex_cne() {
                         let (negdiv, _) = b
                             .connect_node(
                                 LNode::new().with_inputs(1).with_outputs(1).with_name("-"),
-                                div.output(0),
+                                [div.output(0)],
                             )
                             .unwrap();
 

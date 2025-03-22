@@ -345,7 +345,7 @@ impl Optimizer {
                 //move the branch to the block's result, instead
                 block.retexpr = Some(Expr {
                     span: b.span.clone(),
-                    expr_ty: vola_ast::alge::ExprTy::BranchExpr(Box::new(b)),
+                    expr_ty: vola_ast::alge::ExprTy::Branch(Box::new(b)),
                 });
                 //and remove the branch
                 block.stmts.remove(block.stmts.len() - 1);
