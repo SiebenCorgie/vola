@@ -1,0 +1,30 @@
+//This is the vola implementation of OpenScad's standard feature-set.
+//
+//This is also the basis to which the _normalize_pass_ will reslove assignment variables.
+// For instance if open_scad declares `cube(1, center=true)` this will be normalized to Cub([1, 1, 1], true)
+
+
+entity OSCircle(radius: real);
+entity OSSquare(ext: vec2, center: bool);
+
+
+entity OSSphere(radius: real);
+//standard cube, but the user can set, if the cube extends
+// from the bottom corner, or center.
+entity OSCube(ext: vec3, center: bool);
+//The Open-Scad cylinder can also be a cone
+entity OSCylinder(height: real, rad_lower: real, rad_upper: real);
+
+
+operation OSUnion();
+operation OSIntersection();
+operation OSDifference();
+operation OSLinearExtrude(height: real, center: bool, twist: real);
+operation OSRotateExtrude(angle: real);
+operation OSTranslate(trans: vec3)
+operation OSRotate(axis: vec3, angle: real);
+operation OSScale(scale: vec3);
+operation OSMirror(normal: vec3);
+operation OSMulMatrix(mat: mat4x4);
+operation OSColor(color: vec3);
+operation OSOffset(delta: real, chamfer: bool);

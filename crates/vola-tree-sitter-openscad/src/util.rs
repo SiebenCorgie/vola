@@ -1,17 +1,8 @@
-use std::env::consts::OS;
-
 use tree_sitter::Node;
-use vola_ast::{
-    alge::{Expr, ExprTy, Func},
-    common::{Block, Ident, Literal, Stmt},
-};
+use vola_ast::{alge::Func, common::Ident};
 use vola_common::Span;
 
-use crate::{
-    ParserCtx,
-    error::ParserError,
-    scad_ast::{ScadExpr, ScadStmt},
-};
+use crate::{ParserCtx, error::ParserError, scad_ast::ScadExpr};
 
 ///Parses the identifier into a simple string based ident
 pub fn identifier(ctx: &mut ParserCtx, data: &[u8], node: &Node) -> Result<Ident, ParserError> {
@@ -45,7 +36,10 @@ pub enum ScadLiteral {
 
 impl ScadLiteral {
     pub fn into_expr(self) -> ScadExpr {
-        ScadExpr::Literal(self)
+        ScadExpr::Literal {
+            lit: self,
+            span: Span::empty(),
+        }
     }
 }
 

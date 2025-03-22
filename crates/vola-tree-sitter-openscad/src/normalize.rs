@@ -70,6 +70,7 @@ impl ScadStmt {
                 block,
             } => block.normalize(),
             Self::IfBlock {
+                head_span: _,
                 condition: _,
                 consequence,
                 alternative,
@@ -81,7 +82,7 @@ impl ScadStmt {
                 Ok(())
             }
             Self::ForBlock { block, .. } => block.normalize(),
-            Self::Chain { chain } => {
+            Self::Chain { chain, span: _ } => {
                 for element in chain {
                     match element {
                         crate::scad_ast::ChainElement::Block(b) => b.normalize()?,

@@ -186,7 +186,11 @@ pub fn module_call(ctx: &mut ParserCtx, data: &[u8], node: &Node) -> Result<Scad
     )?;
 
     Ok(ScadCall {
-        function: Box::new(ScadExpr::Var(function_ident)),
+        span: ctx.span(node),
+        function: Box::new(ScadExpr::Var {
+            var: function_ident,
+            span: ctx.span(node),
+        }),
         args,
     })
 }
@@ -228,6 +232,7 @@ pub fn stmt(ctx: &mut ParserCtx, data: &[u8], node: &Node) -> Result<ScadStmt, P
             let mut target_chain = Vec::new();
             chain(ctx, &mut target_chain, data, node)?;
             Ok(ScadStmt::Chain {
+                span: ctx.span(node),
                 chain: target_chain,
             })
         }

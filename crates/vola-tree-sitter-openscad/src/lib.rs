@@ -1,18 +1,12 @@
 //! TreeSitter based OpenScad->vola parser. Transforms the SCAD input into a Vola-Ast, if possible.
 
 mod error;
-use core::panic;
 use std::path::{Path, PathBuf};
 
 use error::ParserError;
 use scad_ast::{ScadBlock, ScadStmt, ScadTopLevel};
-use smallvec::SmallVec;
 use tree_sitter::{Node, Parser};
-use vola_ast::{
-    AstEntry, VolaAst,
-    alge::LetStmt,
-    common::{Block, Comment, Stmt},
-};
+use vola_ast::VolaAst;
 use vola_common::{
     FileString, Span,
     ariadne::Label,
@@ -22,6 +16,7 @@ use vola_common::{
 
 mod assignment;
 mod comment;
+mod convert;
 mod expr;
 mod normalize;
 mod scad_ast;
@@ -201,18 +196,12 @@ fn parse_data(
     //The main pain-point is [scope-of-variables](https://en.wikibooks.org/wiki/OpenSCAD_User_Manual/General#Scope_of_variables)
     //namely that they seem to be _set-on-last-write-in-block_
     //
-    //Once we've done that, we unroll all loops while working on the loop expressions.
-    //A _nice_ thing about OpenScad is, that the programms are fully specified at compile-time. This allows us to just
-    //interprete all variables at compile-time, and insert the respective _correct_ number at any actual _use_ point.
-    //TODO: Once we support CSG mutation in ControlFlow (in Vola) we can actually remove that step, and just keep the CF.
-    //
     //Finally we transform the _normalized_ ScadAst into the Vola Ast. This is also where we sort out any undefined function calls.
     //There are two options for each:
     // 1. Its calling something unsupported like `dxf_dim(file="..", ..)`, in that case we bail,
     // 2. Its calling some kind of supported domain specific _thing_, i.e. `color(some_vec_3)`. Is that case we insert the appropriate
     //    CSGOperation. We maintain a Scad compatible standard library, that (tries to) mirrors oScad's functionality like union, intersect, color, translate etc.
     scad_ast.normalize().map_err(|e| (empty_ast.clone(), e))?;
-    scad_ast.unroll_csg().map_err(|e| (empty_ast.clone(), e))?;
     scad_ast.into_vola_ast().map_err(|e| (empty_ast, e))
 }
 

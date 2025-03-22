@@ -50,12 +50,42 @@ impl ScadTopLevel {
         }
     }
 
-    pub fn unroll_csg(&mut self) -> Result<(), Vec<ParserError>> {
-        todo!()
-    }
-
     pub fn into_vola_ast(mut self) -> Result<VolaAst, Vec<ParserError>> {
-        todo!()
+        //convert all _modules_ into functions with csg-return argument.
+        //
+        //convert the main function into that _as well :D, but infer the
+        //body as a function with no arguments, and only the csg return expression.
+
+        let mut errors = Vec::new();
+        let mut ast = VolaAst::empty();
+
+        for module in self.modules {
+            let span = module.span.clone();
+            match crate::convert::emit_module_as_function(module) {
+                Err(e) => errors.push(e),
+                Ok(f) => ast.entries.push(vola_ast::TopLevelNode {
+                    span,
+                    ct_args: Vec::with_capacity(0),
+                    entry: vola_ast::AstEntry::Func(f),
+                }),
+            }
+        }
+
+        match crate::convert::emit_block_as_main_function(self.main) {
+            Err(e) => errors.push(e),
+            Ok(f) => ast.entries.push(vola_ast::TopLevelNode {
+                //NOTE: we cant't build a span for main, because main is made up from anything that we discovered _along-the-way_
+                span: Span::empty(),
+                ct_args: Vec::with_capacity(0),
+                entry: vola_ast::AstEntry::Func(f),
+            }),
+        }
+
+        if errors.len() > 0 {
+            Err(errors)
+        } else {
+            Ok(ast)
+        }
     }
 }
 
@@ -103,10 +133,12 @@ pub enum ScadStmt {
         is_intersect: bool,
     },
     Chain {
+        span: Span,
         chain: Vec<ChainElement>,
     },
     Assign(ScadAssignment),
     IfBlock {
+        head_span: Span,
         condition: ScadExpr,
         consequence: ScadBlock,
         alternative: Option<ScadBlock>,
@@ -130,6 +162,7 @@ pub enum ScadArg {
 
 #[derive(Debug)]
 pub struct ScadCall {
+    pub span: Span,
     pub function: Box<ScadExpr>,
     pub args: Vec<ScadArg>,
 }
@@ -137,31 +170,42 @@ pub struct ScadCall {
 #[derive(Debug)]
 pub enum ScadExpr {
     Binary {
+        span: Span,
         op: BinaryOp,
         left: Box<Self>,
         right: Box<Self>,
     },
     Unary {
+        span: Span,
         op: UnaryOp,
         expr: Box<Self>,
     },
     Ternary {
+        span: Span,
         condition: Box<Self>,
         consequence: Box<Self>,
         alternative: Box<Self>,
     },
     //Let or assign expression
     Overwrite {
+        span: Span,
         overwrites: Vec<ScadAssignment>,
         block: ScadBlock,
     },
     Call(ScadCall),
     //Contains _normal_ index, and dotIndex expression
     Index {
+        span: Span,
         value: Box<Self>,
         index: Box<Self>,
     },
     Assert,
-    Literal(ScadLiteral),
-    Var(Ident),
+    Literal {
+        span: Span,
+        lit: ScadLiteral,
+    },
+    Var {
+        span: Span,
+        var: Ident,
+    },
 }
