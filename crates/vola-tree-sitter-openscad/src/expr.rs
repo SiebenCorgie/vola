@@ -8,6 +8,7 @@ use crate::{
     report_here,
     scad_ast::{ScadAssignment, ScadExpr},
     stmt::{argument_sequence, block},
+    warn_here,
 };
 
 pub fn variable_name(ctx: &mut ParserCtx, data: &[u8], node: &Node) -> Result<Ident, ParserError> {
@@ -206,11 +207,35 @@ pub fn expr(ctx: &mut ParserCtx, data: &[u8], node: &Node) -> Result<ScadExpr, P
             })
         }
         "function_call" => {
-            let function = Box::new(expr(
+            let function = match expr(
                 ctx,
                 data,
                 node.child_by_field_name("function").as_ref().unwrap(),
-            )?);
+            )? {
+                ScadExpr::Var { span: _, var } => var,
+                _other => {
+                    report_here(
+                        "function call's name should be a identifier",
+                        ctx.span(node),
+                    );
+                    return Err(ParserError::MalformedNode(
+                        "function call's name should be identifier".to_owned(),
+                    ));
+                }
+            };
+
+            match function.0.as_ref() {
+                "echo" | "render" | "children" | "assert" | "is_undef" | "is_bool" | "is_num"
+                | "is_string" | "is_list" | "is_function" => {
+                    warn_here(
+                        format!("function '{}' not supported. Ignoring", function.0),
+                        ctx.span(node),
+                    );
+                    return Err(ParserError::Ignored);
+                }
+                _ => {}
+            }
+
             let args = argument_sequence(
                 ctx,
                 data,

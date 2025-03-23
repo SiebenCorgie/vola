@@ -19,7 +19,7 @@ pub fn identifier(ctx: &mut ParserCtx, data: &[u8], node: &Node) -> Result<Ident
 
 ///So openScad _literal_ is a little strange, since function-values are treated as literals?
 ///Anyways, we just Declare that here, and let the _user_ handle the rest.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum ScadLiteral {
     Function(Func),
     Range {
@@ -40,6 +40,16 @@ impl ScadLiteral {
             lit: self,
             span: Span::empty(),
         }
+    }
+
+    pub fn vec_n(value: f64, count: usize) -> Self {
+        ScadLiteral::List(vec![
+            ScadExpr::Literal {
+                span: Span::empty(),
+                lit: ScadLiteral::Float(value)
+            };
+            count
+        ])
     }
 }
 

@@ -14,7 +14,10 @@ members = [
     "crates/vola-backend-spirv",
     "crates/vola-backend-wasm",
     "crates/wasm-runtime",
-    "tests/test-runner", "crates/vola-fmt", "crates/vola-tree-sitter-openscad",
+    "tests/test-runner",
+    "crates/vola-fmt",
+    "crates/vola-tree-sitter-openscad",
+    "crates/vola-convert",
 ]
 
 resolver = "2"
@@ -31,7 +34,9 @@ vola-cli = { path = "crates/vola-cli" }
 vola-common = { path = "crates/vola-common" }
 vola-opt = { path = "crates/vola-opt" }
 vola-tree-sitter-parser = { path = "crates/vola-tree-sitter-parser" }
+vola-tree-sitter-openscad = { path = "crates/vola-tree-sitter-openscad" }
 volac = { path = "crates/volac" }
+vola-fmt = { path = "crates/vola-fmt" }
 wasm-runtime = { path = "crates/wasm-runtime" }
 
 tree-sitter = "0.20.10"

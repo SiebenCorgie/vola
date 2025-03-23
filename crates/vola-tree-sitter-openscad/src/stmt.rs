@@ -7,6 +7,7 @@ use crate::{
     error::ParserError,
     report_here,
     scad_ast::{ChainElement, ScadArg, ScadBlock, ScadCall, ScadExpr, ScadStmt},
+    warn_here,
 };
 
 pub fn file_use_stmt(
@@ -187,10 +188,7 @@ pub fn module_call(ctx: &mut ParserCtx, data: &[u8], node: &Node) -> Result<Scad
 
     Ok(ScadCall {
         span: ctx.span(node),
-        function: Box::new(ScadExpr::Var {
-            var: function_ident,
-            span: ctx.span(node),
-        }),
+        function: function_ident,
         args,
     })
 }
@@ -207,6 +205,19 @@ pub fn chain(
         "transform_chain" => {
             //parse the module call, then recurse
             let call = module_call(ctx, data, node.child(0).as_ref().unwrap())?;
+
+            match call.function.0.as_ref() {
+                "echo" | "render" | "children" | "assert" | "is_undef" | "is_bool" | "is_num"
+                | "is_string" | "is_list" | "is_function" => {
+                    warn_here(
+                        format!("function '{}' not supported. Ignoring", call.function.0),
+                        ctx.span(node),
+                    );
+                    return Err(ParserError::Ignored);
+                }
+                _ => {}
+            }
+
             target_chain.push(ChainElement::Call(call));
             chain(ctx, target_chain, data, node.child(1).as_ref().unwrap())
         }
@@ -219,8 +230,7 @@ pub fn chain(
         //break recursion on ;
         ";" => return Ok(()),
         other => Err(ParserError::Unexpected(format!(
-            "Expected modifier or transform, got {}",
-            node.kind()
+            "Expected modifier or transform, got {other}",
         ))),
     }
 }

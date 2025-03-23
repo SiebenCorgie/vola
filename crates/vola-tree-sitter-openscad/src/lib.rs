@@ -31,6 +31,14 @@ pub fn report_here(error: impl ToString, span: Span) {
     );
 }
 
+pub fn warn_here(warn: impl ToString, span: Span) {
+    report(
+        warning_reporter(warn, span.clone())
+            .with_label(Label::new(span).with_message("here"))
+            .finish(),
+    );
+}
+
 ///Context on the parser, like the current src file, and errors that occured, but are ignored.
 pub struct ParserCtx {
     deep_errors: Vec<ParserError>,
@@ -295,9 +303,11 @@ fn parse_data_scad(
                     Ok(stmt) => tl.main.stmts.push(stmt),
                     //Was not a _valid_ statement, print the error, then also emit the _invalid_ error
                     Err(e) => {
-                        report_here(e.clone(), ctx.span(&node));
-                        ctx.deep_errors
-                            .push(ParserError::Unexpected(other.to_owned()))
+                        if e != ParserError::Ignored {
+                            report_here(e.clone(), ctx.span(&node));
+                            ctx.deep_errors
+                                .push(ParserError::Unexpected(other.to_owned()))
+                        }
                     }
                 }
             }

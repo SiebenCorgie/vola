@@ -89,13 +89,13 @@ impl ScadTopLevel {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ScadBlock {
     pub span: Span,
     pub stmts: Vec<ScadStmt>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ScadModule {
     pub span: Span,
     pub name: Ident,
@@ -103,26 +103,26 @@ pub struct ScadModule {
     pub block: ScadBlock,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum ScadParameter {
     ByIdent { span: Span, ident: Ident },
     ByAssignment(ScadAssignment),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ScadAssignment {
     pub span: Span,
     pub var: Ident,
     pub expr: Box<ScadExpr>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum ChainElement {
     Call(ScadCall),
     Block(ScadBlock),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum ScadStmt {
     ///Implicit union of ScadStmts based on a given range
     ForBlock {
@@ -154,20 +154,20 @@ pub enum ScadStmt {
     None,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum ScadArg {
     Expr(ScadExpr),
     Assign(ScadAssignment),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ScadCall {
     pub span: Span,
-    pub function: Box<ScadExpr>,
+    pub function: Ident,
     pub args: Vec<ScadArg>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum ScadExpr {
     Binary {
         span: Span,

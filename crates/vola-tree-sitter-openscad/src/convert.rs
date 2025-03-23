@@ -247,22 +247,16 @@ fn convert_expr(expr: ScadExpr) -> Result<vola_ast::alge::Expr, ParserError> {
 }
 
 fn convert_call(call: ScadCall) -> Result<vola_ast::common::Call, ParserError> {
-    let call_ident = if let ScadExpr::Var { span, var } = *call.function {
-        var
-    } else {
-        report_here("call must be a function call", call.span);
-        return Err(ParserError::Unexpected(
-            "call was not a function-name".to_owned(),
-        ));
-    };
-
     let args = call
         .args
         .into_iter()
         .map(|arg| match arg {
             crate::scad_ast::ScadArg::Expr(expr) => convert_expr(expr),
             crate::scad_ast::ScadArg::Assign(assign) => {
-                report_here("assignment argument not (yet) supported", assign.span);
+                report_here(
+                    "assignment argument should have been normalized before!",
+                    assign.span,
+                );
                 return Err(ParserError::Unexpected("assignment argument".to_owned()));
             }
         })
@@ -270,12 +264,12 @@ fn convert_call(call: ScadCall) -> Result<vola_ast::common::Call, ParserError> {
 
     Ok(vola_ast::common::Call {
         span: call.span.clone(),
-        ident: call_ident,
+        ident: call.function,
         args,
     })
 }
 
-fn convert_chain(elements: Vec<ChainElement>) -> Result<vola_ast::alge::Expr, ParserError> {
+fn convert_chain(elements: Vec<ChainElement>) -> Result<ScopedCall, ParserError> {
     //basically reverse through the chain, and assemble the _sub-tree_ with the previouse op.
     //
     //_the-thing_ is, that you can't build actual trees in scad, only chains, so thats quiete easy
@@ -329,7 +323,27 @@ fn convert_chain(elements: Vec<ChainElement>) -> Result<vola_ast::alge::Expr, Pa
                     return Err(ParserError::Unexpected("no previous call".to_owned()));
                 };
 
-                //build the sub-block then wrap the
+                //pull out the first (csg)statment of the sub-block, if this is a boolean operation.
+                //because for instance OpenScad's
+                //`
+                // difference(){
+                //    x
+                //    y
+                //    z
+                // };
+                //`
+                //means
+                //`
+                //Subtract(){
+                //  x
+                //}{
+                // Union(){y}{z}
+                //}
+                //`
+                //In vola-terms.
+
+                compile_error!("continue");
+
                 let sub_block = convert_block(b)?;
                 //build the call, based on the scad-defined sub-block (this-time)
 
@@ -364,7 +378,7 @@ fn convert_chain(elements: Vec<ChainElement>) -> Result<vola_ast::alge::Expr, Pa
 ///A converted Scad statement might actually be a statement, or
 ///a CSG-Chain, which is a Expr in vola
 enum ConvertedStatement {
-    CsgChain(Expr),
+    CsgChain(ScopedCall),
     Stmt(vola_ast::common::Stmt),
 }
 fn convert_stmt(stmt: ScadStmt) -> Result<ConvertedStatement, ParserError> {
@@ -427,7 +441,7 @@ fn convert_block(block: ScadBlock) -> Result<Block, ParserError> {
         retexpr: None,
     };
 
-    //Now thats where the _interisting_ stuff happens.
+    //Now thats where the _interesting_ stuff happens.
     //
     //We treat each csg-statment (chains, union-blocks, transforms etc.) as a _union_ with all previouse
     //statements (saved in `build_union_tree`).
@@ -437,7 +451,7 @@ fn convert_block(block: ScadBlock) -> Result<Block, ParserError> {
     for stmt in block.stmts {
         match convert_stmt(stmt)? {
             ConvertedStatement::Stmt(stmt) => vblock.stmts.push(stmt),
-            ConvertedStatement::CsgChain(expr) => {
+            ConvertedStatement::CsgChain(scope_call) => {
                 let unioned_expr = if let Some(resting_expr) = vblock.retexpr.take() {
                     let union = Expr {
                         span: Span::empty(),
@@ -445,16 +459,27 @@ fn convert_block(block: ScadBlock) -> Result<Block, ParserError> {
                             span: Span::empty(),
                             call: vola_ast::common::Call {
                                 span: Span::empty(),
-                                ident: vola_ast::common::Ident("union".to_string()),
+                                ident: vola_ast::common::Ident("OSUnion".to_string()),
                                 args: SmallVec::new(),
                             },
-                            blocks: vec![expr_to_block(resting_expr), expr_to_block(expr)],
+                            blocks: vec![
+                                expr_to_block(resting_expr),
+                                expr_to_block(Expr {
+                                    span: scope_call.span.clone(),
+                                    expr_ty: vola_ast::alge::ExprTy::ScopedCall(Box::new(
+                                        scope_call,
+                                    )),
+                                }),
+                            ],
                         })),
                     };
 
                     union
                 } else {
-                    expr
+                    Expr {
+                        span: scope_call.span.clone(),
+                        expr_ty: vola_ast::alge::ExprTy::ScopedCall(Box::new(scope_call)),
+                    }
                 };
 
                 vblock.retexpr = Some(unioned_expr);

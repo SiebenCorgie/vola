@@ -1,6 +1,6 @@
 use std::str::Utf8Error;
 
-#[derive(Debug, thiserror::Error, Clone)]
+#[derive(Debug, thiserror::Error, Clone, PartialEq, Eq)]
 pub enum ParserError {
     #[error("Unknown Error: {0}")]
     UnknownError(String),
@@ -22,4 +22,6 @@ pub enum ParserError {
     ParseFloatError(#[from] std::num::ParseFloatError),
     #[error("Is not an expression")]
     NoExpr,
+    #[error("Expression will be ignored")]
+    Ignored,
 }

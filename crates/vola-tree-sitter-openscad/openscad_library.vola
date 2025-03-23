@@ -13,7 +13,7 @@ entity OSSphere(radius: real);
 // from the bottom corner, or center.
 entity OSCube(ext: vec3, center: bool);
 //The Open-Scad cylinder can also be a cone
-entity OSCylinder(height: real, rad_lower: real, rad_upper: real);
+entity OSCylinder(height: real, rad_lower: real, rad_upper: real, center: bool);
 
 
 operation OSUnion();
