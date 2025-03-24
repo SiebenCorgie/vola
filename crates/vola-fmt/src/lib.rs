@@ -250,7 +250,7 @@ impl FormatTree {
                 for item in lines {
                     write!(f, "\n")?;
                     new_state.ident_on(f)?;
-                    item.format(f, state)?
+                    item.format(f, &new_state)?
                 }
 
                 if *braced {

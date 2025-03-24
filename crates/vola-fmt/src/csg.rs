@@ -21,7 +21,7 @@ impl From<&ScopedCall> for FormatTree {
         let mut seq = vec![FormatTree::from(&value.call)];
 
         for block in &value.blocks {
-            seq.push(FormatTree::Indent(Box::new(FormatTree::from(block))));
+            seq.push(FormatTree::from(block));
         }
 
         FormatTree::Seq(seq)
