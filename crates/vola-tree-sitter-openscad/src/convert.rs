@@ -301,7 +301,7 @@ fn convert_chain(elements: Vec<ChainElement>) -> Result<ScopedCall, ParserError>
                     expr_ty: vola_ast::alge::ExprTy::ScopedCall(Box::new(scoped_csg_call)),
                 });
             }
-            ChainElement::Block(b) => {
+            ChainElement::Block(mut b) => {
                 let call = if let Some(next) = elements.next() {
                     match next {
                         ChainElement::Block(b) => {
@@ -322,6 +322,8 @@ fn convert_chain(elements: Vec<ChainElement>) -> Result<ScopedCall, ParserError>
                     );
                     return Err(ParserError::Unexpected("no previous call".to_owned()));
                 };
+                let call = convert_call(call)?;
+                let span = call.span.clone();
 
                 //pull out the first (csg)statment of the sub-block, if this is a boolean operation.
                 //because for instance OpenScad's
@@ -342,37 +344,129 @@ fn convert_chain(elements: Vec<ChainElement>) -> Result<ScopedCall, ParserError>
                 //`
                 //In vola-terms.
 
-                compile_error!("continue");
-
-                let sub_block = convert_block(b)?;
-                //build the call, based on the scad-defined sub-block (this-time)
-
-                let call = convert_call(call)?;
-                let span = call.span.clone();
-                let scoped_csg_call = ScopedCall {
-                    span: span.clone(),
-                    call,
-                    //push down the sub-tree into the block, if there is any
-                    blocks: vec![sub_block],
+                let is_binary_csg = match call.ident.0.as_str() {
+                    "OSUnion" | "OSDifference" | "OSIntersection" => true,
+                    _ => false,
                 };
 
-                if sub_tree.is_some() {
-                    report_here(
-                        "Cannot use a scope'd in a chain, only as the last element of a chain!"
-                            .to_owned(),
-                        span,
-                    );
-                } else {
-                    sub_tree = Some(Expr {
-                        span,
-                        expr_ty: vola_ast::alge::ExprTy::ScopedCall(Box::new(scoped_csg_call)),
+                if is_binary_csg {
+                    //We have to handle two edge cases:
+                    // 1. There is only one CSG-Stmt in the block => just return that statment in a union,
+                    // 2. There is no CSG-Stmt in the block => do not change sub-tree at all
+                    let mut first_csg_stmt = None;
+                    b.stmts.retain(|item| {
+                        if first_csg_stmt.is_none() {
+                            if let ScadStmt::Chain { span, chain } = item {
+                                first_csg_stmt = Some(ScadStmt::Chain {
+                                    span: span.clone(),
+                                    chain: chain.clone(),
+                                });
+                                false
+                            } else {
+                                true
+                            }
+                        } else {
+                            true
+                        }
                     });
+
+                    let has_more_csg_stmts = b.stmts.iter().fold(false, |had_one, item| {
+                        if let ScadStmt::Chain { .. } = item {
+                            true
+                        } else {
+                            had_one
+                        }
+                    });
+
+                    if let Some(first) = first_csg_stmt {
+                        if has_more_csg_stmts {
+                            //put the first stmt in the _left_ part, and the rest in the second part.
+                            let left = ScadBlock {
+                                span: Span::empty(),
+                                stmts: vec![first],
+                            };
+                            let right = ScadBlock {
+                                span: Span::empty(),
+                                stmts: b.stmts,
+                            };
+                            let leftblock = convert_block(left)?;
+                            let rightblock = convert_block(right)?;
+                            let scoped_csg_call = ScopedCall {
+                                span: span.clone(),
+                                call,
+                                //push down the sub-tree into the block, if there is any
+                                blocks: vec![leftblock, rightblock],
+                            };
+                            sub_tree = Some(Expr {
+                                span,
+                                expr_ty: vola_ast::alge::ExprTy::ScopedCall(Box::new(
+                                    scoped_csg_call,
+                                )),
+                            });
+                        } else {
+                            //no further stmts, therfore just union with the current tree
+                            let sub_block = convert_block(ScadBlock {
+                                span: Span::empty(),
+                                stmts: vec![first],
+                            })?;
+                            let scoped_csg_call = ScopedCall {
+                                span: span.clone(),
+                                call: vola_ast::common::Call {
+                                    span: call.span,
+                                    ident: vola_ast::common::Ident("OSUnion".to_owned()),
+                                    args: SmallVec::new(),
+                                },
+                                //push down the sub-tree into the block, if there is any
+                                blocks: vec![sub_block],
+                            };
+                            sub_tree = Some(Expr {
+                                span,
+                                expr_ty: vola_ast::alge::ExprTy::ScopedCall(Box::new(
+                                    scoped_csg_call,
+                                )),
+                            });
+                        }
+                    } else {
+                        //do nothing, cause there are no csg stmts
+                        assert!(!has_more_csg_stmts);
+                    }
+                } else {
+                    let sub_block = convert_block(b)?;
+                    //build the call, based on the scad-defined sub-block (this-time)
+
+                    let scoped_csg_call = ScopedCall {
+                        span: span.clone(),
+                        call,
+                        //push down the sub-tree into the block, if there is any
+                        blocks: vec![sub_block],
+                    };
+
+                    if sub_tree.is_some() {
+                        report_here(
+                            "Cannot use a scope'd in a chain, only as the last element of a chain!"
+                                .to_owned(),
+                            span,
+                        );
+                    } else {
+                        sub_tree = Some(Expr {
+                            span,
+                            expr_ty: vola_ast::alge::ExprTy::ScopedCall(Box::new(scoped_csg_call)),
+                        });
+                    }
                 }
             }
         }
     }
 
-    sub_tree.ok_or(ParserError::Unexpected("Chain was empty".to_owned()))
+    match sub_tree {
+        Some(Expr {
+            span: _,
+            expr_ty: vola_ast::alge::ExprTy::ScopedCall(sc),
+        }) => Ok(*sc),
+        _other => Err(ParserError::MalformedNode(
+            "CSG chain did not resolve to csg-object".to_owned(),
+        )),
+    }
 }
 
 ///A converted Scad statement might actually be a statement, or

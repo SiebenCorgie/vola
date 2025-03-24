@@ -15,8 +15,17 @@ pub fn variable_name(ctx: &mut ParserCtx, data: &[u8], node: &Node) -> Result<Id
     match node.kind() {
         "identifier" => crate::util::identifier(ctx, data, node),
         "special_variable" => {
-            let ident = crate::util::identifier(ctx, data, node.child(1).as_ref().unwrap())?;
-            Ok(Ident(format!("${}", ident.0)))
+            warn_here(
+                format!(
+                    "special variable '{}' not supported in Vola, ignoring...",
+                    node.utf8_text(data).unwrap()
+                ),
+                ctx.span(node),
+            );
+
+            //let ident = crate::util::identifier(ctx, data, node.child(1).as_ref().unwrap())?;
+            //Ok(Ident(format!("${}", ident.0)))
+            Err(ParserError::Ignored)
         }
         other => Err(ParserError::MalformedNode(other.to_owned())),
     }
@@ -81,17 +90,10 @@ pub fn expr(ctx: &mut ParserCtx, data: &[u8], node: &Node) -> Result<ScadExpr, P
             let lit = crate::util::literal(ctx, data, node)?;
             Ok(lit.into_expr())
         }
-        "identifier" => {
-            let ident = crate::util::identifier(ctx, data, node)?;
+        "identifier" | "special_variable" => {
+            let var = variable_name(ctx, data, node)?;
             Ok(ScadExpr::Var {
-                var: ident,
-                span: ctx.span(node),
-            })
-        }
-        "special_variable" => {
-            let ident = crate::util::identifier(ctx, data, node.child(1).as_ref().unwrap())?;
-            Ok(ScadExpr::Var {
-                var: Ident(format!("${}", ident.0)),
+                var,
                 span: ctx.span(node),
             })
         }

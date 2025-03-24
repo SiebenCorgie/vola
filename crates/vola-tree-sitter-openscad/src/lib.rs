@@ -287,6 +287,7 @@ fn parse_data_scad(
                         //push into main, and return _None_
                         tl.main.stmts.push(ScadStmt::Assign(assignment));
                     }
+                    Err(ParserError::Ignored) => {}
                     Err(e) => {
                         report_here(e.clone(), ctx.span(&node));
                         ctx.deep_errors.push(e);
