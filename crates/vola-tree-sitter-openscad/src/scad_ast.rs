@@ -50,7 +50,7 @@ impl ScadTopLevel {
         }
     }
 
-    pub fn into_vola_ast(mut self) -> Result<VolaAst, Vec<ParserError>> {
+    pub fn into_vola_ast(self) -> Result<VolaAst, Vec<ParserError>> {
         //convert all _modules_ into functions with csg-return argument.
         //
         //convert the main function into that _as well :D, but infer the
@@ -58,6 +58,25 @@ impl ScadTopLevel {
 
         let mut errors = Vec::new();
         let mut ast = VolaAst::empty();
+
+        //Pre_insert the _openscad_library_ we _assume_ exists.
+        ast.entries.push(vola_ast::TopLevelNode {
+            span: Span::empty(),
+            ct_args: Vec::with_capacity(0),
+            entry: vola_ast::AstEntry::Comment(vola_ast::common::Comment {
+                span: Span::empty(),
+                content: "//Vola implementation of OpenScad CSG operations and primitives"
+                    .to_owned(),
+            }),
+        });
+        ast.entries.push(vola_ast::TopLevelNode {
+            span: Span::empty(),
+            ct_args: Vec::with_capacity(0),
+            entry: vola_ast::AstEntry::Module(vola_ast::Module {
+                span: Span::empty(),
+                path: smallvec::smallvec![Ident("openscad_library".to_owned())],
+            }),
+        });
 
         for module in self.modules {
             let span = module.span.clone();
