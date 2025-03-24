@@ -25,6 +25,7 @@ use crate::{
 };
 
 enum ConvertedLiteral {
+    #[allow(unused)]
     Range {
         start: Box<Expr>,
         end: Box<Expr>,
@@ -100,7 +101,7 @@ fn convert_literal(lit: ScadLiteral, span: Span) -> Result<ConvertedLiteral, Par
                 span,
             })
         }
-        crate::util::ScadLiteral::Function(f) => todo!(),
+        crate::util::ScadLiteral::Function(_f) => todo!(),
         ScadLiteral::String(s) => {
             warn_here(
                 "converting string to color, that might be lossy",
@@ -184,7 +185,7 @@ fn convert_expr(expr: ScadExpr) -> Result<vola_ast::alge::Expr, ParserError> {
             };
 
             let src = if let Expr {
-                span,
+                span: _,
                 expr_ty: vola_ast::alge::ExprTy::Ident(i),
             } = src
             {
@@ -283,7 +284,7 @@ fn convert_expr(expr: ScadExpr) -> Result<vola_ast::alge::Expr, ParserError> {
                 "overwrite-expr".to_owned(),
             ))
         }
-        ScadExpr::Call(c) => {
+        ScadExpr::Call(_c) => {
             todo!()
         }
     }
@@ -585,6 +586,7 @@ fn convert_stmt(stmt: ScadStmt) -> Result<ConvertedStatement, ParserError> {
                 },
             )))
         }
+        #[allow(unused)]
         ScadStmt::ForBlock {
             range_start,
             range_end,
@@ -592,7 +594,7 @@ fn convert_stmt(stmt: ScadStmt) -> Result<ConvertedStatement, ParserError> {
             block,
             is_intersect,
         } => todo!(),
-        ScadStmt::Chain { span, chain } => {
+        ScadStmt::Chain { span: _, chain } => {
             //This is the case, where we emit a chain of Elements as a CSG expression.
             Ok(ConvertedStatement::CsgChain(convert_chain(chain)?))
         }

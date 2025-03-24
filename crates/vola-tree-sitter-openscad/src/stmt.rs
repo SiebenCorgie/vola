@@ -7,9 +7,9 @@ use crate::{
     ParserCtx,
     comment::comment,
     error::ParserError,
-    expr::{expr, parenthesized_assignements, parenthesized_expression},
+    expr::{parenthesized_assignements, parenthesized_expression},
     report_here,
-    scad_ast::{ChainElement, ScadArg, ScadBlock, ScadCall, ScadExpr, ScadStmt},
+    scad_ast::{ChainElement, ScadArg, ScadBlock, ScadCall, ScadStmt},
     warn_here,
 };
 
@@ -267,7 +267,10 @@ pub fn overwrite_block(
         "let" => false,
         "assign" => true,
         other => {
-            report_here("Expected 'let' or 'assign'".to_owned(), ctx.span(node));
+            report_here(
+                format!("Expected 'let' or 'assign', got {other}"),
+                ctx.span(node),
+            );
             return Err(ParserError::MalformedNode(
                 "expected 'let' or 'assign'".to_owned(),
             ));
@@ -339,6 +342,7 @@ pub fn ifblock(ctx: &mut ParserCtx, data: &[u8], node: &Node) -> Result<ScadStmt
     })
 }
 
+#[allow(unused)]
 pub fn forblock(ctx: &mut ParserCtx, data: &[u8], node: &Node) -> Result<ScadStmt, ParserError> {
     report_here("for-blocks not (yet) supported!", ctx.span(node));
     Err(ParserError::UnsupportedScadFeature("For blocks".to_owned()))

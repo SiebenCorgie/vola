@@ -5,6 +5,7 @@ use vola_common::Span;
 use crate::{ParserCtx, error::ParserError, scad_ast::ScadExpr};
 
 ///Parses the identifier into a simple string based ident
+#[allow(unused)]
 pub fn identifier(ctx: &mut ParserCtx, data: &[u8], node: &Node) -> Result<Ident, ParserError> {
     if node.kind() != "identifier" {
         return Err(ParserError::MalformedNode(format!(
@@ -20,6 +21,7 @@ pub fn identifier(ctx: &mut ParserCtx, data: &[u8], node: &Node) -> Result<Ident
 ///So openScad _literal_ is a little strange, since function-values are treated as literals?
 ///Anyways, we just Declare that here, and let the _user_ handle the rest.
 #[derive(Debug, Clone)]
+#[allow(unused)]
 pub enum ScadLiteral {
     Function(Func),
     Range {
@@ -72,7 +74,7 @@ pub fn list(ctx: &mut ParserCtx, data: &[u8], node: &Node) -> Result<Vec<ScadExp
             "each" | "list_comprehension" => {
                 return Err(ParserError::UnsupportedScadFeature(next.kind().to_string()));
             }
-            other => {
+            _other => {
                 let expr = crate::expr::expr(ctx, data, &next).map_err(|_e| {
                     ParserError::MalformedNode(
                         "Expected list element to be an expression".to_owned(),
@@ -153,6 +155,7 @@ pub fn literal(ctx: &mut ParserCtx, data: &[u8], node: &Node) -> Result<ScadLite
     }
 }
 
+#[allow(unused)]
 pub fn number(ctx: &mut ParserCtx, data: &[u8], node: &Node) -> Result<ScadLiteral, ParserError> {
     match node.kind() {
         "decimal" => {

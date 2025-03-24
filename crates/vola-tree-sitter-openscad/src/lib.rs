@@ -191,7 +191,7 @@ fn parse_data(
     data: &[u8],
     src_file: Option<FileString>,
 ) -> Result<VolaAst, (VolaAst, Vec<ParserError>)> {
-    let mut empty_ast = VolaAst {
+    let empty_ast = VolaAst {
         entries: Vec::with_capacity(0),
     };
 
@@ -283,9 +283,15 @@ fn parse_data_scad(
                     ctx.deep_errors.push(e);
                 }
             },
-            "function_declecration" => {
-                todo!()
-            }
+            "function_declecration" => match entry_decl::function_decl(&mut ctx, data, &node) {
+                Ok(_f) => {
+                    panic!("function-decl not yet supported")
+                }
+                Err(e) => {
+                    report_here(e.clone(), ctx.span(&node));
+                    ctx.deep_errors.push(e);
+                }
+            },
             "assignment" => {
                 match assignment::assignment(&mut ctx, data, &node) {
                     Ok(assignment) => {

@@ -39,10 +39,14 @@ impl ScadExpr {
                         }
                     }
                     ScadLiteral::Decimal(d) => *lit = ScadLiteral::Float(*d as f64),
-                    other => {}
+                    _other => {}
                 };
             }
-            Self::Index { span, value, index } => value.normalize_as_arg(),
+            Self::Index {
+                span: _,
+                value,
+                index: _,
+            } => value.normalize_as_arg(),
         }
     }
 }

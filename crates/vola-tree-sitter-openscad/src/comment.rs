@@ -1,8 +1,8 @@
 use tree_sitter::Node;
-use vola_ast::{AstEntry, common::Comment};
+use vola_ast::common::Comment;
 use vola_common::{ariadne::Label, error::error_reporter, report};
 
-use crate::{ParserCtx, error::ParserError};
+use crate::ParserCtx;
 
 pub fn comment(ctx: &mut ParserCtx, data: &[u8], node: &Node) -> Comment {
     match node.utf8_text(data) {

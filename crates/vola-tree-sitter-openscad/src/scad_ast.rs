@@ -142,6 +142,7 @@ pub enum ChainElement {
 }
 
 #[derive(Debug, Clone)]
+#[allow(unused)]
 pub enum ScadStmt {
     ///Implicit union of ScadStmts based on a given range
     ForBlock {
@@ -187,6 +188,7 @@ pub struct ScadCall {
 }
 
 #[derive(Debug, Clone)]
+#[allow(unused)]
 pub enum ScadExpr {
     Binary {
         span: Span,

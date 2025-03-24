@@ -1,7 +1,6 @@
 use tree_sitter::Node;
-use vola_ast::alge::AssignStmt;
 
-use crate::{ParserCtx, error::ParserError, scad_ast::ScadAssignment, util};
+use crate::{ParserCtx, error::ParserError, scad_ast::ScadAssignment};
 
 pub fn assignment(
     ctx: &mut ParserCtx,

@@ -2,9 +2,8 @@ use tree_sitter::Node;
 
 use crate::{
     ParserCtx,
-    assignment::{self, assignment},
+    assignment::assignment,
     error::ParserError,
-    expr::expr,
     report_here,
     scad_ast::{ScadBlock, ScadExpr, ScadModule, ScadParameter},
     stmt::{block, stmt},
@@ -126,6 +125,7 @@ pub fn module_decl(
     })
 }
 
+#[allow(unused)]
 pub fn function_decl(
     ctx: &mut ParserCtx,
     data: &[u8],
