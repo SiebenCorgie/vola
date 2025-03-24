@@ -475,6 +475,15 @@ enum ConvertedStatement {
     CsgChain(ScopedCall),
     Stmt(vola_ast::common::Stmt),
 }
+impl ConvertedStatement {
+    pub fn unwrap_stmt(self) -> vola_ast::common::Stmt {
+        if let Self::Stmt(s) = self {
+            s
+        } else {
+            panic!("Was not a statement!")
+        }
+    }
+}
 fn convert_stmt(stmt: ScadStmt) -> Result<ConvertedStatement, ParserError> {
     match stmt {
         ScadStmt::None | ScadStmt::Assert => Err(ParserError::Unexpected(
@@ -497,7 +506,21 @@ fn convert_stmt(stmt: ScadStmt) -> Result<ConvertedStatement, ParserError> {
                 letstmt,
             )))
         }
-        ScadStmt::Overwrite { overwrites, block } => todo!(),
+        ScadStmt::Overwrite { overwrites, block } => {
+            //overwrites work by creating an inline-block, and moving the assignments into that block
+            let mut inline_block = convert_block(block)?;
+            let overwrites = overwrites
+                .into_iter()
+                .map(|ov| convert_stmt(ScadStmt::Assign(ov)))
+                .collect::<Result<Vec<_>, ParserError>>()?;
+            //push the assignments to the front
+            inline_block
+                .stmts
+                .insert_many(0, overwrites.into_iter().map(|ov| ov.unwrap_stmt()));
+            Ok(ConvertedStatement::Stmt(vola_ast::common::Stmt::Block(
+                Box::new(inline_block),
+            )))
+        }
         ScadStmt::IfBlock {
             condition,
             consequence,

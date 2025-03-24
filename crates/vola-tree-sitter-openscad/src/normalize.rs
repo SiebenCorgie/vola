@@ -303,7 +303,7 @@ impl ScadCall {
                 self.function.0 = "OSDifference".to_owned();
             }
             "intersection" => {
-                self.function.0 = "OSIntersectio".to_owned();
+                self.function.0 = "OSIntersection".to_owned();
                 for arg in &mut self.args {
                     arg.normalize_as_arg();
                 }

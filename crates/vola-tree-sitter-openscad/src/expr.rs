@@ -77,6 +77,51 @@ pub fn parenthesized_assignements(
     Ok(assignments)
 }
 
+pub fn parenthesized_expression(
+    ctx: &mut ParserCtx,
+    data: &[u8],
+    node: &Node,
+) -> Result<Vec<ScadExpr>, ParserError> {
+    let mut walker = node.walk();
+    let mut children = node.children(&mut walker);
+
+    let first = children.next().unwrap();
+    if first.kind() != "(" {
+        return Err(ParserError::MalformedNode(format!(
+            "Expected '(', got {}",
+            first.kind()
+        )));
+    }
+
+    let mut expressions = Vec::new();
+    while let Some(next) = children.next() {
+        match next.kind() {
+            //empty list
+            ")" => break,
+            _other => match expr(ctx, data, &next) {
+                Ok(expr) => expressions.push(expr),
+                Err(e) => {
+                    report_here(format!("expected ')' or expression"), ctx.span(&next));
+                    return Err(e);
+                }
+            },
+        }
+
+        match children.next().unwrap().kind() {
+            ")" => break,
+            "," => {}
+            other => {
+                report_here(
+                    format!("expected ')' or ',', got {}", other),
+                    ctx.span(&next),
+                );
+                return Err(ParserError::MalformedNode("expected ')' or ','".to_owned()));
+            }
+        }
+    }
+
+    Ok(expressions)
+}
 //parses the full scad expr.
 pub fn expr(ctx: &mut ParserCtx, data: &[u8], node: &Node) -> Result<ScadExpr, ParserError> {
     //NOTE: the syn-tree is _sometimes_ strange, so we have all kinds of escape hatches :/
@@ -230,7 +275,7 @@ pub fn expr(ctx: &mut ParserCtx, data: &[u8], node: &Node) -> Result<ScadExpr, P
                 "echo" | "render" | "children" | "assert" | "is_undef" | "is_bool" | "is_num"
                 | "is_string" | "is_list" | "is_function" => {
                     warn_here(
-                        format!("function '{}' not supported. Ignoring", function.0),
+                        format!("function '{}' not supported. Ignoring...", function.0),
                         ctx.span(node),
                     );
                     return Err(ParserError::Ignored);

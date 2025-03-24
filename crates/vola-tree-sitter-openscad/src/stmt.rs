@@ -1,10 +1,12 @@
 use std::path::{Path, PathBuf};
 
 use tree_sitter::Node;
+use vola_common::Span;
 
 use crate::{
     ParserCtx,
     error::ParserError,
+    expr::{expr, parenthesized_assignements, parenthesized_expression},
     report_here,
     scad_ast::{ChainElement, ScadArg, ScadBlock, ScadCall, ScadExpr, ScadStmt},
     warn_here,
@@ -86,7 +88,7 @@ pub fn block(ctx: &mut ParserCtx, data: &[u8], node: &Node) -> Result<ScadBlock,
     while let Some(next) = children.next() {
         match next.kind() {
             "}" => break,
-            other => {
+            _other => {
                 //we assume _some-kind_ of statement in the blocks
                 match stmt(ctx, data, &next) {
                     Ok(stmt) => block.push(stmt),
@@ -210,7 +212,7 @@ pub fn chain(
                 "echo" | "render" | "children" | "assert" | "is_undef" | "is_bool" | "is_num"
                 | "is_string" | "is_list" | "is_function" => {
                     warn_here(
-                        format!("function '{}' not supported. Ignoring", call.function.0),
+                        format!("function '{}' not supported. Ignoring...", call.function.0),
                         ctx.span(node),
                     );
                     return Err(ParserError::Ignored);
@@ -235,6 +237,87 @@ pub fn chain(
     }
 }
 
+pub fn overwrite_block(
+    ctx: &mut ParserCtx,
+    data: &[u8],
+    node: &Node,
+) -> Result<ScadStmt, ParserError> {
+    //Is there a semantic difference?
+    let _is_assign = match node.child(0).as_ref().unwrap().kind() {
+        "let" => false,
+        "assign" => true,
+        other => {
+            report_here("Expected 'let' or 'assign'".to_owned(), ctx.span(node));
+            return Err(ParserError::MalformedNode(
+                "expected 'let' or 'assign'".to_owned(),
+            ));
+        }
+    };
+
+    let overwrites = parenthesized_assignements(ctx, data, node.child(1).as_ref().unwrap())?;
+    let block = block(ctx, data, node.child(2).as_ref().unwrap())?;
+
+    Ok(ScadStmt::Overwrite { overwrites, block })
+}
+
+pub fn ifblock(ctx: &mut ParserCtx, data: &[u8], node: &Node) -> Result<ScadStmt, ParserError> {
+    let mut conditions = parenthesized_expression(
+        ctx,
+        data,
+        node.child_by_field_name("condition").as_ref().unwrap(),
+    )?;
+
+    let head_span = ctx.span(node.child_by_field_name("condition").as_ref().unwrap());
+    if conditions.is_empty() {
+        report_here("'If' should have a condition", head_span);
+        return Err(ParserError::MalformedNode("no condition".to_owned()));
+    }
+    if conditions.len() > 1 {
+        report_here(
+            "'If' should only have one condition. Consider using boolean operands like '&&' or '||' to build one expression",
+            head_span,
+        );
+        return Err(ParserError::MalformedNode("multiple conditions".to_owned()));
+    }
+    let condition = conditions.remove(0);
+
+    let mut block_or_exprblock = |node: &Node| match block(ctx, data, node) {
+        Ok(block) => Ok(block),
+        Err(_) => match stmt(ctx, data, node) {
+            Ok(stmt) => Ok(ScadBlock {
+                span: Span::empty(),
+                stmts: vec![stmt],
+            }),
+            Err(e) => {
+                report_here("Body should be statement or block", head_span.clone());
+                Err(ParserError::MalformedNode(
+                    "not block or statment".to_owned(),
+                ))
+            }
+        },
+    };
+
+    let consequence =
+        block_or_exprblock(node.child_by_field_name("consequence").as_ref().unwrap())?;
+    let alternative = if let Some(alternative) = node.child_by_field_name("alternative").as_ref() {
+        Some(block_or_exprblock(alternative)?)
+    } else {
+        None
+    };
+
+    Ok(ScadStmt::IfBlock {
+        head_span,
+        condition,
+        consequence,
+        alternative,
+    })
+}
+
+pub fn forblock(ctx: &mut ParserCtx, data: &[u8], node: &Node) -> Result<ScadStmt, ParserError> {
+    report_here("for-blocks not (yet) supported!", ctx.span(node));
+    Err(ParserError::UnsupportedScadFeature("For blocks".to_owned()))
+}
+
 ///Parses a (chain) of statements and appends them to _block_
 pub fn stmt(ctx: &mut ParserCtx, data: &[u8], node: &Node) -> Result<ScadStmt, ParserError> {
     match node.kind() {
@@ -246,12 +329,15 @@ pub fn stmt(ctx: &mut ParserCtx, data: &[u8], node: &Node) -> Result<ScadStmt, P
                 chain: target_chain,
             })
         }
-        "include_statement" => todo!(),
-        "assign_block" | "let_block" => todo!(),
-        "if_block" => todo!(),
-        "intersection_for_block" | "for_block" => todo!(),
+        "include_statement" => {
+            file_use_stmt(ctx, false, data, node)?;
+            Ok(ScadStmt::None)
+        }
+        "assign_block" | "let_block" => overwrite_block(ctx, data, node),
+        "if_block" => ifblock(ctx, data, node),
+        "intersection_for_block" | "for_block" => forblock(ctx, data, node),
         "assert_statement" => Ok(ScadStmt::Assert),
 
-        other => Err(ParserError::Unexpected(format!("Stmt: {}", node.kind()))),
+        other => Err(ParserError::Unexpected(format!("Stmt: {other}"))),
     }
 }
