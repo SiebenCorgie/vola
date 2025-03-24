@@ -5,6 +5,7 @@ use vola_common::Span;
 
 use crate::{
     ParserCtx,
+    comment::comment,
     error::ParserError,
     expr::{expr, parenthesized_assignements, parenthesized_expression},
     report_here,
@@ -80,7 +81,13 @@ pub fn block(ctx: &mut ParserCtx, data: &[u8], node: &Node) -> Result<ScadBlock,
 
     let mut block = Vec::new();
 
-    let start = children.next().unwrap();
+    let start = if let Some(child) = children.next() {
+        child
+    } else {
+        return Err(ParserError::MalformedNode(
+            "no start '{' on block".to_owned(),
+        ));
+    };
     if start.kind() != "{" {
         return Err(ParserError::MalformedNode("expected '{'".to_owned()));
     }
@@ -88,15 +95,27 @@ pub fn block(ctx: &mut ParserCtx, data: &[u8], node: &Node) -> Result<ScadBlock,
     while let Some(next) = children.next() {
         match next.kind() {
             "}" => break,
-            _other => {
+            "module_declaration" => {
+                report_here(
+                    "inline module decleration not (yet) supported. Consider moving that outside the parent module",
+                    ctx.span(&next),
+                );
+                return Err(ParserError::UnsupportedScadFeature(
+                    "inline module deceleration".to_owned(),
+                ));
+            }
+            other => {
                 //we assume _some-kind_ of statement in the blocks
                 match stmt(ctx, data, &next) {
                     Ok(stmt) => block.push(stmt),
                     Err(e) => {
                         //TODO: handle all the strange stuff
                         report_here(
-                            format!("Expected some kind of statement, but was {}", node.kind()),
-                            ctx.span(node),
+                            format!(
+                                "Expected some kind of statement, but was {other}: {}",
+                                next.utf8_text(data).unwrap()
+                            ),
+                            ctx.span(&next),
                         );
                         return Err(e);
                     }
@@ -142,7 +161,8 @@ pub fn argument_sequence(
             //NOTE: this can happen for empty arguments.
             ")" => break,
             other => {
-                let expr = crate::expr::expr(ctx, data, &next).map_err(|_e| {
+                let expr = crate::expr::expr(ctx, data, &next).map_err(|e| {
+                    report_here(format!("Could not build argument: {e}"), ctx.span(&next));
                     ParserError::MalformedNode(format!(
                         "Argument was no assignment, but also no expression, was: '{}'",
                         other
@@ -289,7 +309,10 @@ pub fn ifblock(ctx: &mut ParserCtx, data: &[u8], node: &Node) -> Result<ScadStmt
                 stmts: vec![stmt],
             }),
             Err(e) => {
-                report_here("Body should be statement or block", head_span.clone());
+                report_here(
+                    format!("Body should be statement or block: {e}"),
+                    ctx.span(node),
+                );
                 Err(ParserError::MalformedNode(
                     "not block or statment".to_owned(),
                 ))
@@ -299,8 +322,11 @@ pub fn ifblock(ctx: &mut ParserCtx, data: &[u8], node: &Node) -> Result<ScadStmt
 
     let consequence =
         block_or_exprblock(node.child_by_field_name("consequence").as_ref().unwrap())?;
-    let alternative = if let Some(alternative) = node.child_by_field_name("alternative").as_ref() {
-        Some(block_or_exprblock(alternative)?)
+    let alternative = if let Some(_alternative) = node.child_by_field_name("alternative").as_ref() {
+        //Dafuq?
+        //println!("Alternative: {}", alternative.utf8_text(data).unwrap());
+        //assert!(alternative.child(0).as_ref().unwrap().kind() == "else");
+        Some(block_or_exprblock(node.child(4).as_ref().unwrap())?)
     } else {
         None
     };
@@ -323,7 +349,19 @@ pub fn stmt(ctx: &mut ParserCtx, data: &[u8], node: &Node) -> Result<ScadStmt, P
     match node.kind() {
         "modifier_chain" | "transform_chain" | "union_block" => {
             let mut target_chain = Vec::new();
-            chain(ctx, &mut target_chain, data, node)?;
+            match chain(ctx, &mut target_chain, data, node) {
+                Ok(_) => {}
+                Err(e) => {
+                    if e == ParserError::Ignored {
+                        return Err(e);
+                    }
+                    report_here(
+                        format!("could not build this {}: {e}", node.kind()),
+                        ctx.span(node),
+                    );
+                    return Err(e);
+                }
+            }
             Ok(ScadStmt::Chain {
                 span: ctx.span(node),
                 chain: target_chain,
@@ -337,6 +375,7 @@ pub fn stmt(ctx: &mut ParserCtx, data: &[u8], node: &Node) -> Result<ScadStmt, P
         "if_block" => ifblock(ctx, data, node),
         "intersection_for_block" | "for_block" => forblock(ctx, data, node),
         "assert_statement" => Ok(ScadStmt::Assert),
+        "comment" => Ok(ScadStmt::Comment(comment(ctx, data, node))),
 
         other => Err(ParserError::Unexpected(format!("Stmt: {other}"))),
     }

@@ -6,6 +6,8 @@
 //! 1. If a Scad _CSG-Statement_ (ScadStmt::Chain) is converted, the result will always be _union-ed_ with
 //!    an assumed csg-variable `union_tree`.
 
+use std::str::FromStr;
+
 use smallvec::{SmallVec, smallvec};
 use vola_ast::{
     alge::{Expr, Func},
@@ -19,6 +21,7 @@ use crate::{
     report_here,
     scad_ast::{ChainElement, ScadBlock, ScadCall, ScadExpr, ScadModule, ScadParameter, ScadStmt},
     util::ScadLiteral,
+    warn_here,
 };
 
 enum ConvertedLiteral {
@@ -98,6 +101,46 @@ fn convert_literal(lit: ScadLiteral, span: Span) -> Result<ConvertedLiteral, Par
             })
         }
         crate::util::ScadLiteral::Function(f) => todo!(),
+        ScadLiteral::String(s) => {
+            warn_here(
+                "converting string to color, that might be lossy",
+                span.clone(),
+            );
+            match color_art::Color::from_str(&s) {
+                Ok(c) => {
+                    let [r, g, b] = [c.red(), c.green(), c.blue()];
+                    Ok(ConvertedLiteral::Expr(Expr {
+                        span: span.clone(),
+                        expr_ty: vola_ast::alge::ExprTy::List(vec![
+                            Expr {
+                                span: span.clone(),
+                                expr_ty: vola_ast::alge::ExprTy::Literal(
+                                    vola_ast::common::Literal::FloatLiteral(r as f64 / 255.0),
+                                ),
+                            },
+                            Expr {
+                                span: span.clone(),
+                                expr_ty: vola_ast::alge::ExprTy::Literal(
+                                    vola_ast::common::Literal::FloatLiteral(g as f64 / 255.0),
+                                ),
+                            },
+                            Expr {
+                                span: span.clone(),
+                                expr_ty: vola_ast::alge::ExprTy::Literal(
+                                    vola_ast::common::Literal::FloatLiteral(b as f64 / 255.0),
+                                ),
+                            },
+                        ]),
+                    }))
+                }
+                Err(_e) => {
+                    report_here(format!("Could not convert '{s}' to color"), span);
+                    Err(ParserError::MalformedNode(
+                        "could not convert string to color".to_owned(),
+                    ))
+                }
+            }
+        }
     }
 }
 
@@ -526,7 +569,22 @@ fn convert_stmt(stmt: ScadStmt) -> Result<ConvertedStatement, ParserError> {
             consequence,
             alternative,
             head_span,
-        } => todo!(),
+        } => {
+            let condition = convert_expr(condition)?;
+            let consequence = convert_block(consequence)?;
+            let alternative = if let Some(alt) = alternative {
+                Some(Box::new(convert_block(alt)?))
+            } else {
+                None
+            };
+            Ok(ConvertedStatement::Stmt(vola_ast::common::Stmt::Branch(
+                vola_ast::common::Branch {
+                    span: head_span,
+                    conditional: (condition, Box::new(consequence)),
+                    unconditional: alternative,
+                },
+            )))
+        }
         ScadStmt::ForBlock {
             range_start,
             range_end,

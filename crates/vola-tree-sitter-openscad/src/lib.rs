@@ -1,5 +1,5 @@
 //! TreeSitter based OpenScad->vola parser. Transforms the SCAD input into a Vola-Ast, if possible.
-
+#![feature(string_remove_matches)]
 mod error;
 use std::path::{Path, PathBuf};
 
@@ -17,6 +17,7 @@ use vola_common::{
 mod assignment;
 mod comment;
 mod convert;
+mod entry_decl;
 mod expr;
 mod normalize;
 mod scad_ast;
@@ -275,9 +276,13 @@ fn parse_data_scad(
                     report_here(e, ctx.span(&node));
                 }
             }
-            "module_deceleration" => {
-                todo!()
-            }
+            "module_declaration" => match entry_decl::module_decl(&mut ctx, data, &node) {
+                Ok(module) => tl.modules.push(module),
+                Err(e) => {
+                    report_here(e.clone(), ctx.span(&node));
+                    ctx.deep_errors.push(e);
+                }
+            },
             "function_declecration" => {
                 todo!()
             }

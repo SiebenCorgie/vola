@@ -129,11 +129,11 @@ pub fn expr(ctx: &mut ParserCtx, data: &[u8], node: &Node) -> Result<ScadExpr, P
         "decimal" | "float" => {
             let num = crate::util::number(ctx, data, node)?;
             //found some kind of literal, unwrap it into an expression for vola, and return that
-            Ok(num.into_expr())
+            Ok(num.into_expr(ctx.span(node)))
         }
         "literal" => {
             let lit = crate::util::literal(ctx, data, node)?;
-            Ok(lit.into_expr())
+            Ok(lit.into_expr(ctx.span(node)))
         }
         "identifier" | "special_variable" => {
             let var = variable_name(ctx, data, node)?;
@@ -302,7 +302,7 @@ pub fn expr(ctx: &mut ParserCtx, data: &[u8], node: &Node) -> Result<ScadExpr, P
             ))
         }
         "list" | "range" | "undef" | "number" | "string" | "boolean" => {
-            Ok(crate::util::literal(ctx, data, node)?.into_expr())
+            Ok(crate::util::literal(ctx, data, node)?.into_expr(ctx.span(node)))
         }
         other => {
             report_here(format!("unexpected '{other}'"), ctx.span(node));

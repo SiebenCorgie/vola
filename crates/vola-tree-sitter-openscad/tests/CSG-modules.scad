@@ -55,10 +55,9 @@ module holes() {
     }
 }
 
-module helpers() {
-    // Inner module since it's only needed inside helpers
-    module line() color("Black") cylinder(r=1, h=10, center=true);
 
+module line() color("Black") cylinder(r=1, h=10, center=true);
+module helpers() {
     scale(0.5) {
         translate([-30,0,-40]) {
             intersected();

@@ -11,3 +11,4 @@ thiserror.workspace = true
 tree-sitter.workspace = true
 ahash.workspace = true
 smallvec.workspace = true
+color-art = "0.3"

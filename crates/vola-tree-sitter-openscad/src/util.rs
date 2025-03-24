@@ -32,14 +32,12 @@ pub enum ScadLiteral {
     Decimal(i32),
     Float(f64),
     Boolean(bool),
+    String(String),
 }
 
 impl ScadLiteral {
-    pub fn into_expr(self) -> ScadExpr {
-        ScadExpr::Literal {
-            lit: self,
-            span: Span::empty(),
-        }
+    pub fn into_expr(self, span: Span) -> ScadExpr {
+        ScadExpr::Literal { lit: self, span }
     }
 
     pub fn vec_n(value: f64, count: usize) -> Self {
@@ -109,7 +107,11 @@ pub fn list(ctx: &mut ParserCtx, data: &[u8], node: &Node) -> Result<Vec<ScadExp
 
 pub fn literal(ctx: &mut ParserCtx, data: &[u8], node: &Node) -> Result<ScadLiteral, ParserError> {
     match node.kind() {
-        "string" => Err(ParserError::UnsupportedScadFeature("string".to_owned())),
+        "string" => {
+            let mut string = node.utf8_text(data).unwrap().to_string();
+            string.remove_matches("\"");
+            Ok(ScadLiteral::String(string))
+        }
         "number" => number(ctx, data, node),
         "undef" => Ok(ScadLiteral::Undef),
         "range" => {
