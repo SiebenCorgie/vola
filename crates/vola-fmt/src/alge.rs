@@ -147,6 +147,7 @@ impl From<&Stmt> for FormatTree {
             Stmt::Loop(l) => FormatTree::from(l),
             Stmt::Branch(b) => FormatTree::from(b),
             Stmt::Comment(c) => FormatTree::from(c),
+            Stmt::Block(b) => FormatTree::from(b.as_ref()),
         }
     }
 }

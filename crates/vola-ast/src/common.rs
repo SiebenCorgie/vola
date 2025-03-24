@@ -134,6 +134,8 @@ pub enum Stmt {
     //NOTE: technically comments are not part of the semantics, however, we keep them here,
     //      since we want to be able to reference/emit them.
     Comment(Comment),
+    //Anonym _inline_ block. Allows the user to shadow variables.
+    Block(Box<Block>),
 }
 
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]

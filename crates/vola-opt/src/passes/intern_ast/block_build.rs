@@ -491,6 +491,23 @@ impl Optimizer {
             }
             Stmt::Branch(b) => self.build_branch_stmt(b, region, ctx),
             Stmt::Loop(loopstmt) => self.build_loop_stmt(loopstmt, region, ctx),
+            Stmt::Block(b) => {
+                let current_region = region;
+                ctx.open_new_scope(current_region, false);
+                self.build_block(region, *b, ctx)?;
+                let closed = ctx.close_scope();
+                if let Some(return_value) = closed.result {
+                    report(
+                        error_reporter(
+                            "Block statement should not have a return value.",
+                            self.find_span(return_value.into()).unwrap_or(Span::empty()),
+                        )
+                        .finish(),
+                    );
+                    return Err(OptError::Any { text: format!("Statement block can not return value. Consider binding the value to a variable, or not returning at all") });
+                }
+                Ok(())
+            }
             //Ignoring comments
             Stmt::Comment(_) => Ok(()),
         }
