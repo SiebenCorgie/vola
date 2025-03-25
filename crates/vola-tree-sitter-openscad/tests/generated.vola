@@ -1,0 +1,199 @@
+
+//Vola implementation of OpenScad CSG operations and primitives
+module openscad_library;
+fn body() -> csg{
+    OSColor([0.0, 0.0, 1.0]){
+        OSSphere(10.0)
+    }
+}
+
+fn intersector() -> csg{
+    OSColor([1.0, 0.0, 0.0]){
+        OSCube([15.0, 15.0, 15.0], true)
+    }
+}
+
+fn holeObject() -> csg{
+    OSColor([0.0, 1.0, 0.0]){
+        OSCylinder(20.0, 5.0, 5.0, true)
+    }
+}
+
+fn intersected() -> csg{
+    OSIntersection(){
+        body()
+    }{
+        intersector()
+    }
+}
+
+fn holeA() -> csg{
+    OSRotateEuler([0.0, 90.0, 0.0]){
+        holeObject()
+    }
+}
+
+fn holeB() -> csg{
+    OSRotateEuler([90.0, 0.0, 0.0]){
+        holeObject()
+    }
+}
+
+fn holeC() -> csg{
+    holeObject()
+}
+
+fn holes() -> csg{
+    OSUnion(){
+        holeA()
+    }{
+        OSUnion(){
+            holeB()
+        }{
+            holeC()
+        }
+    }
+}
+
+fn line() -> csg{
+    OSColor([0.0, 0.0, 0.0]){
+        OSCylinder(10.0, 1.0, 1.0, true)
+    }
+}
+
+fn helpers() -> csg{
+    OSScale([0.5, 0.5, 0.5]){
+        OSUnion(){
+            OSUnion(){
+                OSUnion(){
+                    OSTranslate([-30.0, 0.0, -40.0]){
+                        OSUnion(){
+                            OSUnion(){
+                                OSUnion(){
+                                    OSUnion(){
+                                        intersected()
+                                    }{
+                                        OSTranslate([-15.0, 0.0, -35.0]){
+                                            body()
+                                        }
+                                    }
+                                }{
+                                    OSTranslate([15.0, 0.0, -35.0]){
+                                        intersector()
+                                    }
+                                }
+                            }{
+                                OSTranslate([-7.5, 0.0, -17.5]){
+                                    OSRotateEuler([0.0, 30.0, 0.0]){
+                                        line()
+                                    }
+                                }
+                            }
+                        }{
+                            OSTranslate([7.5, 0.0, -17.5]){
+                                OSRotateEuler([0.0, -30.0, 0.0]){
+                                    line()
+                                }
+                            }
+                        }
+                    }
+                }{
+                    OSTranslate([30.0, 0.0, -40.0]){
+                        OSUnion(){
+                            OSUnion(){
+                                OSUnion(){
+                                    OSUnion(){
+                                        OSUnion(){
+                                            OSUnion(){
+                                                holes()
+                                            }{
+                                                OSTranslate([-10.0, 0.0, -35.0]){
+                                                    holeA()
+                                                }
+                                            }
+                                        }{
+                                            OSTranslate([10.0, 0.0, -35.0]){
+                                                holeB()
+                                            }
+                                        }
+                                    }{
+                                        OSTranslate([30.0, 0.0, -35.0]){
+                                            holeC()
+                                        }
+                                    }
+                                }{
+                                    OSTranslate([5.0, 0.0, -17.5]){
+                                        OSRotateEuler([0.0, -20.0, 0.0]){
+                                            line()
+                                        }
+                                    }
+                                }
+                            }{
+                                OSTranslate([-5.0, 0.0, -17.5]){
+                                    OSRotateEuler([0.0, 30.0, 0.0]){
+                                        line()
+                                    }
+                                }
+                            }
+                        }{
+                            OSTranslate([15.0, 0.0, -17.5]){
+                                OSRotateEuler([0.0, -45.0, 0.0]){
+                                    line()
+                                }
+                            }
+                        }
+                    }
+                }
+            }{
+                OSTranslate([-20.0, 0.0, -22.5]){
+                    OSRotateEuler([0.0, 45.0, 0.0]){
+                        line()
+                    }
+                }
+            }
+        }{
+            OSTranslate([20.0, 0.0, -22.5]){
+                OSRotateEuler([0.0, -45.0, 0.0]){
+                    line()
+                }
+            }
+        }
+    }
+}
+
+fn __scad_main__() -> csg{
+    let debug = true;
+    // CSG-modules.scad - Basic usage of modules, if, color, $fs/$fa
+    // Change this to false to remove the helper geometry
+    // Global resolution
+    // Don't generate smaller facets than 0.1 mm
+    // Don't generate larger angles than 5 degrees
+    // Main geometry
+    // Helpers
+    
+    if debug{
+        helpers()
+    }
+    // Core geometric primitives.
+    // These can be modified to create variations of the final object
+    // Various modules for visualizing intermediate components
+    // Written by Marius Kintel <marius@kintel.net>
+    //
+    // To the extent possible under law, the author(s) have dedicated all
+    // copyright and related and neighboring rights to this software to the
+    // public domain worldwide. This software is distributed without any
+    // warranty.
+    //
+    // You should have received a copy of the CC0 Public Domain
+    // Dedication along with this software.
+    // If not, see <http://creativecommons.org/publicdomain/zero/1.0/>.
+    OSDifference(){
+        OSIntersection(){
+            body()
+        }{
+            intersector()
+        }
+    }{
+        holes()
+    }
+}

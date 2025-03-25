@@ -19,3 +19,9 @@ fn cad_modules() {
     let ast = parse_file("tests/CSG-modules.scad").expect("Expected no errors!");
     assert_eq!(ast.entries.len(), 13);
 }
+
+#[test]
+fn extrude() {
+    let ast = parse_file("tests/extrudes.scad").expect("Expected no errors!");
+    assert_eq!(ast.entries.len(), 3);
+}

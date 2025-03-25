@@ -6,6 +6,7 @@ use crate::{
     report_here,
     scad_ast::{ScadArg, ScadBlock, ScadCall, ScadExpr, ScadStmt},
     util::ScadLiteral,
+    warn_here,
 };
 
 impl ScadExpr {
@@ -72,8 +73,12 @@ impl ScadCall {
         //We do that by pre-defining all arguments by their _default_ value, and then overwrite either by indexed
         //(in case of a simple expression), or by-name, in case of an assignment.
         match self.function.0.as_str() {
-            "sphere" => {
-                self.function.0 = "OSSphere".to_owned();
+            "sphere" | "circle" => {
+                self.function.0 = if self.function.0 == "sphere" {
+                    "OSSphere".to_owned()
+                } else {
+                    "OSCircle".to_owned()
+                };
                 let args_iter = std::mem::take(&mut self.args);
                 //predefine args with default values, in this case [1.0]
                 self.args.push(ScadArg::Expr(ScadExpr::Literal {
@@ -106,7 +111,67 @@ impl ScadCall {
                                 }
                                 other => {
                                     report_here(
-                                        format!("unknown named argument '{other}' for cube!"),
+                                        format!("unknown named argument '{other}' for sphere!"),
+                                        assign.span,
+                                    );
+                                    return Err(ParserError::MalformedNode(
+                                        "Unknown named argument".to_owned(),
+                                    ));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            "square" => {
+                self.function.0 = "OSSquare".to_owned();
+                let args_iter = std::mem::take(&mut self.args);
+                //predefine args with default values, in this case [[1; 3], false]
+                self.args.push(ScadArg::Expr(ScadExpr::Literal {
+                    span: Span::empty(),
+                    lit: ScadLiteral::vec_n(1.0, 2),
+                }));
+                self.args.push(ScadArg::Expr(ScadExpr::Literal {
+                    span: Span::empty(),
+                    lit: ScadLiteral::Boolean(false),
+                }));
+
+                let mut expr_index = 0;
+                for arg in args_iter {
+                    match arg {
+                        ScadArg::Expr(mut expr) => {
+                            //normalize before using
+                            expr.normalize_as_arg();
+                            //note, if this is the first arg, and its a single number, splice to a vec
+                            let expr = if expr_index == 0 {
+                                if let ScadExpr::Literal {
+                                    span,
+                                    lit: ScadLiteral::Float(f),
+                                } = expr
+                                {
+                                    ScadExpr::Literal {
+                                        span,
+                                        lit: ScadLiteral::vec_n(f, 2),
+                                    }
+                                } else {
+                                    expr
+                                }
+                            } else {
+                                expr
+                            };
+
+                            self.args[expr_index] = ScadArg::Expr(expr);
+                            expr_index += 1;
+                        }
+                        ScadArg::Assign(assign) => {
+                            match assign.var.0.as_str() {
+                                "center" => {
+                                    //overwrite second
+                                    self.args[1] = ScadArg::Expr(*assign.expr);
+                                }
+                                other => {
+                                    report_here(
+                                        format!("unknown named argument '{other}' for square!"),
                                         assign.span,
                                     );
                                     return Err(ParserError::MalformedNode(
@@ -290,15 +355,86 @@ impl ScadCall {
             }
             "translate" => {
                 self.function.0 = "OSTranslate".to_owned();
-                for arg in &mut self.args {
-                    arg.normalize_as_arg();
-                }
             }
             "rotate" => {
-                self.function.0 = "OSRotate".to_owned();
-                for arg in &mut self.args {
-                    arg.normalize_as_arg();
+                //normalize to either axis-rotation or euler rotation
+                if self.args.len() == 1 {
+                    self.function.0 = "OSRotateEuler".to_owned();
+                } else {
+                    self.function.0 = "OSRotateAxis".to_owned();
                 }
+            }
+            "linear_extrude" => {
+                self.function.0 = "OSLinearExtrude".to_owned();
+                let args_iter = std::mem::take(&mut self.args);
+                //predefine args with default values, in this case [h=1.0, center=false, scale=1.0 twist=0.0]
+                self.args.push(ScadArg::Expr(ScadExpr::Literal {
+                    span: Span::empty(),
+                    lit: ScadLiteral::Float(1.0),
+                }));
+                self.args.push(ScadArg::Expr(ScadExpr::Literal {
+                    span: Span::empty(),
+                    lit: ScadLiteral::Boolean(false),
+                }));
+                self.args.push(ScadArg::Expr(ScadExpr::Literal {
+                    span: Span::empty(),
+                    lit: ScadLiteral::Float(1.0),
+                }));
+                self.args.push(ScadArg::Expr(ScadExpr::Literal {
+                    span: Span::empty(),
+                    lit: ScadLiteral::Float(0.0),
+                }));
+
+                let mut expr_index = 0;
+                //NOTE: we ignore "slices" and "convexity"
+                for arg in args_iter {
+                    match arg {
+                        ScadArg::Expr(mut expr) => {
+                            //normalize before using
+                            expr.normalize_as_arg();
+                            self.args[expr_index] = ScadArg::Expr(expr);
+                            expr_index += 1;
+                        }
+                        ScadArg::Assign(assign) => match assign.var.0.as_str() {
+                            "height" => {
+                                let mut rexpr = *assign.expr;
+                                rexpr.normalize_as_arg();
+                                self.args[0] = ScadArg::Expr(rexpr);
+                            }
+                            "center" => {
+                                let mut r_expr = *assign.expr.clone();
+                                r_expr.normalize_as_arg();
+                                self.args[1] = ScadArg::Expr(r_expr.clone());
+                            }
+                            "scale" => {
+                                let mut r_expr = *assign.expr.clone();
+                                r_expr.normalize_as_arg();
+                                self.args[2] = ScadArg::Expr(r_expr);
+                            }
+                            "twist" => {
+                                let mut r_expr = *assign.expr.clone();
+                                r_expr.normalize_as_arg();
+                                self.args[3] = ScadArg::Expr(r_expr);
+                            }
+                            "slices" | "convexity" => {
+                                warn_here("ignoring this argument", assign.span);
+                            }
+
+                            other => {
+                                report_here(
+                                    format!("unknown named argument '{other}' for linear_extrude!"),
+                                    assign.span,
+                                );
+                                return Err(ParserError::MalformedNode(
+                                    "Unknown named argument".to_owned(),
+                                ));
+                            }
+                        },
+                    }
+                }
+            }
+            "rotate_extrude" => {
+                self.function.0 = "OSRotateExtrude".to_owned();
             }
             "union" => {
                 self.function.0 = "OSUnion".to_owned();
@@ -308,11 +444,59 @@ impl ScadCall {
             }
             "intersection" => {
                 self.function.0 = "OSIntersection".to_owned();
-                for arg in &mut self.args {
-                    arg.normalize_as_arg();
+            }
+            "color" => {
+                self.function.0 = "OSColor".to_owned();
+            }
+            "mirror" => {
+                self.function.0 = "OSMirror".to_owned();
+            }
+            "scale" => {
+                self.function.0 = "OSScale".to_owned();
+                let args_iter = std::mem::take(&mut self.args);
+                //predefine args with default values, in this case [1.0]
+                self.args.push(ScadArg::Expr(ScadExpr::Literal {
+                    span: Span::empty(),
+                    lit: ScadLiteral::vec_n(1.0, 3),
+                }));
+                let mut expr_index = 0;
+                for arg in args_iter {
+                    match arg {
+                        ScadArg::Expr(mut expr) => {
+                            //normalize before using
+                            expr.normalize_as_arg();
+                            let expr = if let ScadExpr::Literal {
+                                span,
+                                lit: ScadLiteral::Float(f),
+                            } = expr
+                            {
+                                ScadExpr::Literal {
+                                    span,
+                                    lit: ScadLiteral::vec_n(f, 3),
+                                }
+                            } else {
+                                expr
+                            };
+                            self.args[expr_index] = ScadArg::Expr(expr);
+                            expr_index += 1;
+                        }
+                        ScadArg::Assign(assign) => {
+                            report_here(
+                                "scale does not support assignment argument".to_owned(),
+                                assign.span,
+                            );
+                            return Err(ParserError::MalformedNode(
+                                "scale assignment argument".to_owned(),
+                            ));
+                        }
+                    }
                 }
             }
             _ => {}
+        }
+
+        for arg in &mut self.args {
+            arg.normalize_as_arg();
         }
 
         Ok(())
