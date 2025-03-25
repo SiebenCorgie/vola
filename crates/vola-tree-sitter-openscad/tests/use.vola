@@ -1,0 +1,9 @@
+
+
+module generated;
+module openscad_library;
+
+export fn use() -> real{
+    csg used = __scad_main__();
+    eval used.OSSdf([1.0; 3])
+}

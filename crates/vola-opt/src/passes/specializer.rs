@@ -243,7 +243,7 @@ impl Optimizer {
         let created_spec_node = if let Some(concept_impl) = self.concept_impl.get(&implkey) {
             //If we found a concept impl for that tree, import it into the _host_region_
             // and hook it up to the eval node's first input.
-
+            let impl_span = concept_impl.def_span.clone();
             let in_host_region_impl =
                 self.deep_copy_lmd_into_region(concept_impl.lambda, spec_ctx.host_region)?;
 
@@ -262,6 +262,27 @@ impl Optimizer {
             //of the just specialized/imported impl block.
             //then do the same with the
             // arguments.
+            let cv_count = self.graph[in_host_region_impl]
+                .node_type
+                .unwrap_lambda_ref()
+                .context_variable_count();
+
+            if cv_count != subtree_count {
+                let errspan = self
+                    .graph
+                    .node(spec_ctx.eval_node)
+                    .node_type
+                    .unwrap_simple_ref()
+                    .span
+                    .clone();
+                report(error_reporter(format!("Trying to use the implementation of {csg_name} for {concept_name}: Implementation is for {cv_count} sub-trees, but using it for {subtree_count} sub-trees"), errspan.clone()).with_label(Label::new(errspan).with_message(format!("this should have {cv_count} sub-trees"))).with_label(Label::new(impl_span).with_message("Trying to use this implementation")).with_label(Label::new(spec_ctx.tree_access_span).with_color(vola_common::ariadne::Color::Green).with_message("Specialization for this eval.")).finish());
+                return Err(OptError::DispatchAnyError {
+                    concept: concept_name,
+                    opname: csg_name,
+                    errstring: "Concept implementation CSG-Operand-count does not match usage"
+                        .to_owned(),
+                });
+            }
 
             let arg_count = self.graph.node(spec_ctx.csg_tree.node).inputs().len() - subtree_count;
             for subtree_idx in 0..subtree_count {

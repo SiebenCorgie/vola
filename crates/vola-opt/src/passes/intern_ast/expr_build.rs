@@ -137,7 +137,7 @@ impl Optimizer {
 
                 Ok(call_result)
             }
-            ExprTy::EvalExpr(evalexpr) => {
+            ExprTy::Eval(evalexpr) => {
                 //for eval, hookup the operand, then all arguments, to a unresolved eval node
 
                 let mut args = SmallColl::new();
@@ -382,7 +382,7 @@ impl Optimizer {
                     .unwrap();
                 Ok(output)
             }
-            ExprTy::SplatExpr { expr, count } => {
+            ExprTy::Splat { expr, count } => {
                 //The splat expression is a shortcut for
                 //building vectors / matrixes etc from elements.
                 //So thats exactly what we are emitting as well.
@@ -423,7 +423,7 @@ impl Optimizer {
                     .unwrap();
                 Ok(opnode)
             }
-            ExprTy::BranchExpr(e) => self.build_branch_expr(*e, region, ctx),
+            ExprTy::Branch(e) => self.build_branch_expr(*e, region, ctx),
         }
     }
 

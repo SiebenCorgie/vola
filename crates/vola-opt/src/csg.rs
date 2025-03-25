@@ -133,11 +133,13 @@ impl DialectNode for CsgOp {
             .collect::<SmallVec<[Ty; 3]>>();
 
         if inputs.len() != expected_signature.len() + self.subtree_count {
-            panic!(
-                "Unexpected argcount: {} != {}",
-                expected_signature.len() + self.subtree_count,
-                inputs.len()
-            );
+            return Err(OptError::TypeDeriveError {
+                text: format!(
+                    "Argument count missmatch: \nexpected:    {}\ncalled with: {}",
+                    expected_signature.len() + self.subtree_count,
+                    inputs.len()
+                ),
+            });
         }
 
         //we always output a _CSGTree_ component.

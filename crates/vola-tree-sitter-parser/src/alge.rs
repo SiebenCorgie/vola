@@ -99,7 +99,7 @@ impl FromTreeSitter for Expr {
                     op: binop,
                 }
             }
-            "eval_expr" => ExprTy::EvalExpr(EvalExpr::parse(ctx, dta, &child_node)?),
+            "eval_expr" => ExprTy::Eval(EvalExpr::parse(ctx, dta, &child_node)?),
             "(" => {
                 //parse inner and return
                 let inner = Expr::parse(ctx, dta, &node.child(1).unwrap())?;
@@ -250,7 +250,7 @@ impl FromTreeSitter for Expr {
                     ExprTy::List(list)
                 }
             }
-            "gamma_expr" => ExprTy::BranchExpr(Box::new(Branch::parse(ctx, dta, &child_node)?)),
+            "gamma_expr" => ExprTy::Branch(Box::new(Branch::parse(ctx, dta, &child_node)?)),
             "splat_expr" => {
                 let mut walker = child_node.walk();
                 let mut children = child_node.children(&mut walker);
@@ -276,7 +276,7 @@ impl FromTreeSitter for Expr {
                 ParserError::consume_expected_node_string(ctx, dta, children.next(), "]")?;
                 ParserError::assert_ast_level_empty(ctx, children.next())?;
 
-                ExprTy::SplatExpr {
+                ExprTy::Splat {
                     expr: Box::new(subexpr),
                     count,
                 }

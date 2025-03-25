@@ -78,11 +78,14 @@ impl From<&Ty> for FormatTree {
                 if ty == &DataTy::Real {
                     FormatTree::from(shape)
                 } else {
-                    FormatTree::Seq(vec![FormatTree::from(shape), FormatTree::Wrapped {
-                        left: '<',
-                        right: '>',
-                        sub: Box::new(FormatTree::from(ty)),
-                    }])
+                    FormatTree::Seq(vec![
+                        FormatTree::from(shape),
+                        FormatTree::Wrapped {
+                            left: '<',
+                            right: '>',
+                            sub: Box::new(FormatTree::from(ty)),
+                        },
+                    ])
                 }
             }
             Ty::Simple(simple) => FormatTree::from(simple),
@@ -131,7 +134,7 @@ impl From<&Call> for FormatTree {
 impl From<&Module> for FormatTree {
     fn from(value: &Module) -> Self {
         FormatTree::Seq(vec![
-            FormatTree::Token("module".to_owned()),
+            FormatTree::Token("module ".to_owned()),
             FormatTree::seperated_list("::", value.path.iter()),
             FormatTree::StmtEnd,
         ])
@@ -146,10 +149,13 @@ impl From<&CTArg> for FormatTree {
             ident: value.ident.clone(),
             args: value.args.clone(),
         };
-        FormatTree::Seq(vec![Self::Token("#".to_owned()), Self::Wrapped {
-            left: '[',
-            right: ']',
-            sub: Box::new(FormatTree::from(&as_call)),
-        }])
+        FormatTree::Seq(vec![
+            Self::Token("#".to_owned()),
+            Self::Wrapped {
+                left: '[',
+                right: ']',
+                sub: Box::new(FormatTree::from(&as_call)),
+            },
+        ])
     }
 }

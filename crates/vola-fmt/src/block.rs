@@ -14,27 +14,27 @@ impl From<&Loop> for FormatTree {
         ]);
         FormatTree::Block {
             lines: vec![header, FormatTree::from(value.body.as_ref())],
-            braced: true,
+            braced: false,
         }
     }
 }
 
 impl From<&Branch> for FormatTree {
     fn from(value: &Branch) -> Self {
-        let header = FormatTree::Seq(vec![
+        let mut seq = vec![
             FormatTree::Keyword(Keyword::IfBranch),
             FormatTree::from(&value.conditional.0),
-        ]);
-        let mut blk = vec![header, FormatTree::from(value.conditional.1.as_ref())];
+            FormatTree::from(value.conditional.1.as_ref()),
+        ];
 
         if let Some(uncond) = &value.unconditional {
-            blk.push(FormatTree::Keyword(Keyword::ElseBranch));
-            blk.push(FormatTree::from(uncond.as_ref()));
+            seq.push(FormatTree::Keyword(Keyword::ElseBranch));
+            seq.push(FormatTree::from(uncond.as_ref()));
         }
 
         FormatTree::Block {
-            lines: blk,
-            braced: true,
+            lines: vec![FormatTree::Seq(seq)],
+            braced: false,
         }
     }
 }

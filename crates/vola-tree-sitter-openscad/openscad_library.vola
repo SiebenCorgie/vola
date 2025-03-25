@@ -1,0 +1,226 @@
+//This is the vola implementation of OpenScad's standard feature-set.
+//
+//This is also the basis to which the _normalize_pass_ will reslove assignment variables.
+// For instance if open_scad declares `cube(1, center=true)` this will be normalized to Cube([1, 1, 1], true)
+
+concept OSSdf: vec3 -> real;
+concept OSColor: vec3 -> vec3;
+
+entity OSCircle(radius: real);
+impl OSCircle for OSSdf(at){
+    length(at) - radius
+}
+entity OSSquare(ext: vec2, center: bool);
+impl OSSquare for OSSdf(at){
+    let d = abs([at.x, at.y])- (ext / [2.0; 2]);
+    length(max(d, [0.0; 2])) + min(max(d.x, d.y), 0.0)
+}
+entity OSSphere(radius: real);
+impl OSSphere for OSSdf(at){
+    length(at) - radius
+}
+impl OSSphere for OSColor(at){
+    [1.0, 1.0, 0.0]
+}
+//standard cube, but the user can set, if the cube extends
+// from the bottom corner, or center.
+entity OSCube(ext: vec3, center: bool);
+
+impl OSCube for OSSdf(at){
+	let q = abs(at) - (ext / [2.0; 3]);
+	length(max(q, [0.0, 0.0, 0.0])) + min(max(q.x, max(q.y, q.z)), 0.0)
+}
+impl OSCube for OSColor(at){
+	[1.0, 1.0, 1.0]
+}
+
+//The Open-Scad cylinder can also be a cone
+entity OSCylinder(height: real, r1: real, r2: real, center: bool);
+impl OSCylinder for OSSdf(at){
+//    let h = height / 2.0;
+//    let q = [length([at.x, at.z]), at.y];
+//    let k1 = [r2, h];
+//    let k2 = [r2 - r1, 2.0 * h];
+
+
+//    let qs = if q.y < 0.0{
+//        r1
+//    }else{
+//        r2
+//    };
+//    let ca = [q.x - min(q.x, qs), abs(q.y) - h];
+
+//    let cb = q - k1 + k2*clamp( dot(k1-q,k2) / dot(k2, k2), 0.0, 1.0 );
+//    let s = if cb.x < 0.0 && ca.y < 0.0{
+//        -1.0
+//    }else{
+//        1.0
+//    };
+//    s * sqrt(min(dot(ca, ca), dot(cb, cb)) )
+
+    let d = length([at.x, at.z]) - r1;
+    max(d, abs(at.y) - (height / 2.0))
+
+}
+
+
+
+operation OSUnion();
+impl OSUnion<l, r> for OSSdf(at) {
+    let left = eval l.OSSdf(at);
+    let right = eval r.OSSdf(at);
+    let new_result = min(left, right);
+    new_result
+}
+
+impl OSUnion<l, r> for OSColor(at) {
+    let left = eval l.OSSdf(at);
+    let right = eval r.OSSdf(at);
+    let lcol = eval l.OSColor(at);
+    let rcol = eval r.OSColor(at);
+
+	if left < right{
+		lcol
+	}else{
+		rcol
+	}
+}
+operation OSIntersection();
+impl OSIntersection<left, right> for OSSdf(at){
+    let a = eval left.OSSdf(at);
+    let b = eval right.OSSdf(at);
+    max(a,b)
+}
+impl OSIntersection<left, right> for OSColor(at){
+    let a = eval left.OSSdf(at);
+    let b = eval right.OSSdf(at);
+    let ac = eval left.OSColor(at);
+    let bc = eval right.OSColor(at);
+
+	if a > b{
+		ac
+	}else{
+		bc
+	}
+}
+operation OSDifference();
+impl OSDifference<left, right> for OSSdf(at){
+    let a = eval left.OSSdf(at);
+    let b = eval right.OSSdf(at);
+    max(-b, a)
+}
+impl OSDifference<left, right> for OSColor(at){
+    let a = eval left.OSSdf(at);
+    let b = eval right.OSSdf(at);
+	let ac = eval left.OSColor(at);
+	let bc = eval right.OSColor(at);
+
+	if (-b) > a{
+		bc
+	}else{
+		ac
+	}
+}
+
+operation OSLinearExtrude(height: real, center: bool, scale: real, twist: real);
+impl OSLinearExtrude<sub> for OSSdf(at){
+    //Linear extrude in OpenScad is actually a mix of
+    // "Twist", "Extrude" and "Linear-Scale?"
+
+    //Twist space parameter
+    let t = twist;
+    let c = cos(degree_to_radiant(t * (at.y / height) - twist / 2.0));
+    let s = sin(degree_to_radiant(t * (at.y / height) - twist / 2.0));
+    let m = [[c, -s], [s, c]];
+    let tw = m * [at.x, at.z];
+    let q = [tw.x, tw.y, at.y];
+
+    let relative_scaling = mix(1.0, scale, q.z / -height);
+    //depending on the _height_, scale the 2d location
+    let q2d = [q.x, q.y] / [relative_scaling; 2];
+
+
+    //NOTE: we have no notion of Sdf2D, so just clamping to 2D.
+    //Extrude based on twisted space
+    let d = eval sub.OSSdf([q2d.x, q2d.y, 0.0]) * relative_scaling;
+    let bound = abs(q.z) - (height / 2.0);
+	min(max(d, bound), 0.0) + length(max([d, bound], [0.0, 0.0]))
+}
+
+impl OSLinearExtrude<sub> for OSColor(at){
+    //Linear extrude in OpenScad is actually a mix of
+    // "Twist", "Extrude" and "Linear-Scale?"
+
+    //Twist space parameter
+    let t = twist / (360.0 * (2.0 * 3.141));
+    let c = cos(t * at.y);
+    let s = sin(t * at.y);
+    let m = [[c, -s], [s, c]];
+    let tw = m * [at.x, at.z];
+    let q = [tw.x, tw.y, at.y];
+
+    //NOTE: we have no notion of Sdf2D, so just clamping to 2D.
+    //Extrude based on twisted space
+    eval sub.OSColor([q.x, q.y, 0.0])
+}
+
+operation OSRotateExtrude(angle: real);
+operation OSTranslate(trans: vec3);
+impl OSTranslate<sub> for OSSdf(at){
+//NOTE: Scad is (-Z)-up, vola is, (usually), Y-Up
+    eval sub.OSSdf(at - [trans.x, -trans.z, trans.y])
+}
+impl OSTranslate<sub> for OSColor(at){
+    //NOTE: Scad is (-Z)-up, vola is, (usually), Y-Up
+    eval sub.OSColor(at - [trans.x, -trans.z, trans.y])
+}
+operation OSRotateAxis(axis: vec3, angle: real);
+operation OSRotateEuler(euler_angle: vec3);
+
+fn degree_to_radiant(deg: real) -> real{
+    deg * (3.141 / 180.0)
+}
+
+impl OSRotateEuler<sub> for OSSdf(at){
+    //z_axis (forward)
+    let roll = degree_to_radiant(euler_angle.x);
+    //x-axis (right)
+    let pitch = degree_to_radiant(euler_angle.z);
+    //y-axis (up)
+    let yaw = degree_to_radiant(-euler_angle.y);
+
+    let rotmat_roll = [
+		[1.0, 0.0,       0.0       ],
+		[0.0, cos(roll), -sin(roll)],
+		[0.0, sin(roll), cos(roll) ]
+	];
+	let rotmat_pitch = [
+	    [cos(pitch),  0.0, sin(pitch)],
+		[0.0,         1.0, 0.0       ],
+		[-sin(pitch), 0.0, cos(pitch)]
+	];
+
+	let rotmat_yaw = [
+	    [cos(yaw), -sin(yaw), 0.0],
+	    [sin(yaw), cos(yaw),  0.0],
+		[0.0,      0.0,       1.0]
+	];
+
+	let rotmat =  rotmat_roll * rotmat_pitch * rotmat_yaw;
+
+	eval sub.OSSdf(invert(rotmat) * at)
+}
+operation OSScale(scale: vec3);
+impl OSScale<sub> for OSSdf(at){
+    eval sub.OSSdf(at / [scale.x; 3]) * scale.x
+}
+impl OSScale<sub> for OSColor(at){
+    eval sub.OSColor(at / scale)
+}
+operation OSMirror(normal: vec3);
+operation OSMulMatrix(mat: mat4x4);
+operation OSColor(color: vec3);
+impl OSColor<sub> for OSColor(at){
+    color
+}
+operation OSOffset(delta: real, chamfer: bool);

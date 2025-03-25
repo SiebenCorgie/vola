@@ -1,0 +1,11 @@
+[package]
+name = "vola-convert"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+vola-fmt.workspace = true
+vola-tree-sitter-openscad.workspace = true
+clap = { workspace = true, features = ["derive"] }
+pretty_env_logger.workspace = true
+log.workspace = true
