@@ -162,7 +162,7 @@ pub fn parse_from_bytes(bytes: &[u8]) -> Result<VolaAst, (VolaAst, Vec<ParserErr
 fn parser() -> Parser {
     let mut parser = Parser::new();
     parser
-        .set_language(tree_sitter_openscad::language())
+        .set_language(&tree_sitter_openscad::language())
         .expect("Failed to load tree-sitter-openscad");
     parser
 }

@@ -102,7 +102,7 @@ pub fn parse_from_bytes(bytes: &[u8]) -> Result<VolaAst, (VolaAst, Vec<ParserErr
 fn parser() -> Parser {
     let mut parser = Parser::new();
     parser
-        .set_language(tree_sitter_vola::language())
+        .set_language(&tree_sitter_vola::language())
         .expect("Failed to load tree-sitter-vola");
     parser
 }

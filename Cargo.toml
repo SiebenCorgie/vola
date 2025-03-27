@@ -39,7 +39,7 @@ volac = { path = "crates/volac" }
 vola-fmt = { path = "crates/vola-fmt" }
 wasm-runtime = { path = "crates/wasm-runtime" }
 
-tree-sitter = "0.20.10"
+tree-sitter = "0.25.3"
 thiserror = "1.0.44"
 ahash = "0.8.7"
 slotmap = "1.0"
