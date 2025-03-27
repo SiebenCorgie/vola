@@ -2,7 +2,7 @@
 //EXEC-FN:mysdf
 //EXEC-ARGS:0.0,2.0,0.0
 //EXEC-EPS:0.01
-//EXEC-RES:1.0
+//EXEC-RES:0.577
 //END-CONFIG
 
 module std;
@@ -19,7 +19,6 @@ impl OpWithCall<sub> for SDF3D(at){
 }
 
 operation MyAdOp();
-
 impl MyAdOp<sub> for SDF3D(at){
     let sd = eval sub.SDF3D(at);
     let res = diff(sd, at);

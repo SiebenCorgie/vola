@@ -29,30 +29,50 @@ impl Optimizer {
     /// Shortcut to call [Self::specialize_export] for all exported λs
     pub fn specialize_all_exports(&mut self) -> Result<(), OptError> {
         let mut errors = SmallColl::new();
-        //specialize all functions.
+
+        //specialize all functions:
+        //Iterate over all functions in the TopLevel region, topological.
+        //IFF they exist in the _functions_ map, call the specializer
+
+        let life_toplevel_nodes = self
+            .graph
+            .live_nodes_in_region(self.graph.toplevel_region());
+        let topord_functions =
+            self.graph
+                .topological_order_nodes(self.functions.values().filter_map(|f| {
+                    if life_toplevel_nodes.contains(&f.lambda) {
+                        Some(f.lambda)
+                    } else {
+                        None
+                    }
+                }));
+
         //NOTE: we don't specialize implementations, since those are
         //      _pulled-in_ in this process, so whenever a impl-block with eval-nodes is
         //      inlined, the "restart" step will discover that, and ... restart the process.
-        for (name, fnregion) in self
-            .functions
-            .values()
-            .map(|f| (f.name.clone(), f.region()))
-            .collect::<Vec<_>>()
-        {
+        for function in topord_functions {
+            let (function_region, function_name) = if let Some(function) =
+                self.functions.values().find(|v| v.lambda == function)
+            {
+                (function.region(), function.name.clone())
+            } else {
+                errors.push(OptError::Any{text: format!("function node {function:?} was discovered, but not present in function map. This is a bug!")});
+                continue;
+            };
             if std::env::var("VOLA_DUMP_ALL").is_ok()
                 || std::env::var("DUMP_BEFORE_SPECIALIZE").is_ok()
             {
-                self.push_debug_state(&format!("before specialize {name}"));
+                self.push_debug_state(&format!("before specialize {}", function_name));
             }
             //NOTE: defer breaking to _after_ all exports are specialized (or not^^).
-            if let Err(e) = self.specialize_region(fnregion) {
+            if let Err(e) = self.specialize_region(function_region) {
                 errors.push(e);
             }
 
             if std::env::var("VOLA_DUMP_ALL").is_ok()
                 || std::env::var("DUMP_POST_SPECIALIZE").is_ok()
             {
-                self.push_debug_state(&format!("post specialize {name}"));
+                self.push_debug_state(&format!("post specialize {}", function_name));
             }
         }
 
@@ -243,6 +263,7 @@ impl Optimizer {
         let created_spec_node = if let Some(concept_impl) = self.concept_impl.get(&implkey) {
             //If we found a concept impl for that tree, import it into the _host_region_
             // and hook it up to the eval node's first input.
+            let impl_subtree_conut = concept_impl.subtrees.len();
             let impl_span = concept_impl.def_span.clone();
             let in_host_region_impl =
                 self.deep_copy_lmd_into_region(concept_impl.lambda, spec_ctx.host_region)?;
@@ -258,16 +279,8 @@ impl Optimizer {
                 ),
             );
 
-            //now hook up the subtree(s) of the eval-connected csg node to the CVs
-            //of the just specialized/imported impl block.
-            //then do the same with the
-            // arguments.
-            let cv_count = self.graph[in_host_region_impl]
-                .node_type
-                .unwrap_lambda_ref()
-                .context_variable_count();
-
-            if cv_count != subtree_count {
+            //Make sure that the actual subtree-count matches the sub-tree-count of the implementation.
+            if impl_subtree_conut != subtree_count {
                 let errspan = self
                     .graph
                     .node(spec_ctx.eval_node)
@@ -275,7 +288,7 @@ impl Optimizer {
                     .unwrap_simple_ref()
                     .span
                     .clone();
-                report(error_reporter(format!("Trying to use the implementation of {csg_name} for {concept_name}: Implementation is for {cv_count} sub-trees, but using it for {subtree_count} sub-trees"), errspan.clone()).with_label(Label::new(errspan).with_message(format!("this should have {cv_count} sub-trees"))).with_label(Label::new(impl_span).with_message("Trying to use this implementation")).with_label(Label::new(spec_ctx.tree_access_span).with_color(vola_common::ariadne::Color::Green).with_message("Specialization for this eval.")).finish());
+                report(error_reporter(format!("Trying to use the implementation of {csg_name} for {concept_name}: Implementation is for {impl_subtree_conut} sub-trees, but using it for {subtree_count} sub-trees"), errspan.clone()).with_label(Label::new(errspan).with_message(format!("this should have {impl_subtree_conut} sub-trees"))).with_label(Label::new(impl_span).with_message("Trying to use this implementation")).with_label(Label::new(spec_ctx.tree_access_span).with_color(vola_common::ariadne::Color::Green).with_message("Specialization for this eval.")).finish());
                 return Err(OptError::DispatchAnyError {
                     concept: concept_name,
                     opname: csg_name,
@@ -284,6 +297,10 @@ impl Optimizer {
                 });
             }
 
+            //now hook up the subtree(s) of the eval-connected csg node to the CVs
+            //of the just specialized/imported impl block.
+            //then do the same with the
+            // arguments.
             let arg_count = self.graph.node(spec_ctx.csg_tree.node).inputs().len() - subtree_count;
             for subtree_idx in 0..subtree_count {
                 //disconnect from csg-node and connect to the just created λ

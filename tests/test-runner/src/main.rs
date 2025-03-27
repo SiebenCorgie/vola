@@ -25,6 +25,9 @@ struct Args {
     ///If not used, all files are tested.
     #[arg(long, short = 'f')]
     files: Option<Vec<PathBuf>>,
+
+    #[arg(long)]
+    no_timeout: bool,
 }
 
 const TIMEOUT: Duration = Duration::from_secs(5);
@@ -105,7 +108,6 @@ fn main() -> Result<(), Box<dyn Error>> {
         })?;
 
     //Now poll all handles until either the time out was reached, or the result is send back
-
     'wait: loop {
         let mut contained_running = false;
 
@@ -124,7 +126,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                         }
                     } else {
                         //check if we exceed the timeout, in that case kill the thread and end
-                        if start.elapsed() > TIMEOUT {
+                        if !args.no_timeout && start.elapsed() > TIMEOUT {
                             *state = LaunchState::TimedOut(path.clone());
                         } else {
                             //Not in timeout, and not ended, keep running
