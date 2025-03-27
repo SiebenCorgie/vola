@@ -11,6 +11,7 @@
 use error::ParserError;
 use std::path::Path;
 use tree_sitter::{Node, Parser};
+pub use tree_sitter_vola;
 use vola_ast::{
     common::{CTArg, Comment},
     AstEntry, TopLevelNode, VolaAst,
