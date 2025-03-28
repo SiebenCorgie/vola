@@ -10,7 +10,7 @@ readme = "crates/vola-ast/README.md"
 [features]
 default = ["serde"]
 serde = ["dep:serde"]
-dot = ["vola-common/dot", "graphviz-rust"]
+dot = ["vola-common/dot", "dep:graphviz-rust"]
 
 [dependencies]
 vola-common.workspace = true
@@ -29,4 +29,3 @@ vola-tree-sitter-parser.workspace = true
 
 [[example]]
 name = "simple_csg"
-required-features = ["serde", "dot"]

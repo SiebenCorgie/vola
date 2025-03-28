@@ -2,11 +2,11 @@
 
 
 #[derive(LocalLipshitz)]
-entity Sphere(radius: s);
+entity Sphere(radius: real);
 entity Box(extent: vec3);
 
-concept SDF2D: vec2 -> s;
-concept SDF3D: vec3 -> s;
+concept SDF2D: vec2 -> real;
+concept SDF3D: vec3 -> real;
 concept Color: vec3 -> vec3;
 concept MultiConcept: (vec3, s, vec3) -> vec3;
 
@@ -19,10 +19,10 @@ operation Union();
 #[define(no_identity)]
 operation Translate(trans: vec3);
 //SmoothUnion
-operation SmoothUnion(suradius: s);
+operation SmoothUnion(suradius: real);
 //Color overwrite operation
 operation ColorOw(owcol: vec3);
-operation Round(rad: s);
+operation Round(rad: real);
 
 //Declares that we need the parameter `@` to define SDF3D of Sphere
 impl Sphere for SDF3D(at){
@@ -81,7 +81,7 @@ impl ColorOw<sub> for Color(at){
 }
 
 
-define some_cube(){
+fn some_cube() -> csg{
     let some_mat = [
         [1.0, 1.0, 1.0],
         [2.0, 2.0, 2.0],
@@ -91,7 +91,7 @@ define some_cube(){
 }
 
 //Some reusable field definition
-define subfield(trans: vec3){
+fn subfield(trans: vec3) -> csg{
     csg sphere = Sphere(42.0);
     let somethin = 1.0;
     Union(){
@@ -105,12 +105,12 @@ define subfield(trans: vec3){
 
 
 //Export interface of the SDF
-export myField(p: vec3, translation: vec3, some_lerp: s){
+export fn myField(p: vec3, translation: vec3, some_lerp: real) -> (real, vec3){
     csg all_field = Union(){
         subfield(translation)
     }{
-        Sphere(1.0)  
+        Sphere(1.0)
     };
-    
+
     (eval all_field.SDF3D(p), eval all_field.Color(p))
 }
