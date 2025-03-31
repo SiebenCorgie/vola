@@ -6,7 +6,7 @@
  * 2024 Tendsin Mende
  */
 use smallvec::SmallVec;
-use vola_common::{ariadne::Label, error::error_reporter, report, Span};
+use vola_common::{Span, VolaError};
 
 use vola_ast::{
     alge::Expr,
@@ -17,7 +17,11 @@ use vola_ast::{
 use crate::{error::ParserError, FromTreeSitter, ParserCtx};
 
 impl FromTreeSitter for Comment {
-    fn parse(ctx: &mut ParserCtx, dta: &[u8], node: &tree_sitter::Node) -> Result<Self, ParserError>
+    fn parse(
+        ctx: &mut ParserCtx,
+        dta: &[u8],
+        node: &tree_sitter::Node,
+    ) -> Result<Self, VolaError<ParserError>>
     where
         Self: Sized,
     {
@@ -27,8 +31,11 @@ impl FromTreeSitter for Comment {
             Ok(c) => c.to_string(),
             Err(e) => {
                 let err = ParserError::Utf8ParseError(e);
-                report(error_reporter(err.clone(), Span::empty()).finish());
-                return Err(err);
+                return Err(VolaError::error_here(
+                    err,
+                    ctx.span(node),
+                    "could not get content for this",
+                ));
             }
         };
         Ok(Comment { span, content })
@@ -40,7 +47,7 @@ impl FromTreeSitter for Ident {
         ctx: &mut ParserCtx,
         dta: &[u8],
         node: &tree_sitter::Node,
-    ) -> Result<Self, crate::error::ParserError>
+    ) -> Result<Self, VolaError<ParserError>>
     where
         Self: Sized,
     {
@@ -51,15 +58,13 @@ impl FromTreeSitter for Ident {
                     let err = ParserError::EmptyParse {
                         kind: "identifier".to_owned(),
                     };
-                    report(error_reporter(err.clone(), ctx.span(node)).finish());
-                    return Err(err);
+                    return Err(VolaError::error_here(err, ctx.span(node), "here"));
                 }
                 parsed
             }
             Err(e) => {
                 let err = ParserError::Utf8ParseError(e);
-                report(error_reporter(err.clone(), Span::empty()).finish());
-                return Err(err);
+                return Err(VolaError::error_here(err, ctx.span(node), "here"));
             }
         };
 
@@ -68,7 +73,11 @@ impl FromTreeSitter for Ident {
 }
 
 impl FromTreeSitter for Digit {
-    fn parse(ctx: &mut ParserCtx, dta: &[u8], node: &tree_sitter::Node) -> Result<Self, ParserError>
+    fn parse(
+        ctx: &mut ParserCtx,
+        dta: &[u8],
+        node: &tree_sitter::Node,
+    ) -> Result<Self, VolaError<ParserError>>
     where
         Self: Sized,
     {
@@ -76,14 +85,7 @@ impl FromTreeSitter for Digit {
         let node_text = match node.utf8_text(dta) {
             Err(e) => {
                 let err = ParserError::Utf8ParseError(e);
-                report(
-                    error_reporter(err.clone(), Span::empty())
-                        .with_label(
-                            Label::new(ctx.span(node)).with_message("UTF-8 Parser error here"),
-                        )
-                        .finish(),
-                );
-                return Err(err);
+                return Err(VolaError::error_here(err, ctx.span(node), "here"));
             }
             Ok(s) => s.to_owned(),
         };
@@ -92,20 +94,14 @@ impl FromTreeSitter for Digit {
             let err = ParserError::EmptyParse {
                 kind: "digit".to_owned(),
             };
-            report(
-                error_reporter(err.clone(), ctx.span(node))
-                    .with_label(Label::new(ctx.span(node)).with_message("here"))
-                    .finish(),
-            );
-            return Err(err);
+            return Err(VolaError::error_here(err, ctx.span(node), "here"));
         }
 
         let int: usize = match node_text.parse() {
             Ok(f) => f,
             Err(e) => {
                 let err = ParserError::ParseIntLiteral(e);
-                report(error_reporter(err.clone(), Span::empty()).finish());
-                return Err(err);
+                return Err(VolaError::error_here(err, ctx.span(node), "here"));
             }
         };
 
@@ -114,7 +110,11 @@ impl FromTreeSitter for Digit {
 }
 
 impl FromTreeSitter for DataTy {
-    fn parse(ctx: &mut ParserCtx, dta: &[u8], node: &tree_sitter::Node) -> Result<Self, ParserError>
+    fn parse(
+        ctx: &mut ParserCtx,
+        dta: &[u8],
+        node: &tree_sitter::Node,
+    ) -> Result<Self, VolaError<ParserError>>
     where
         Self: Sized,
     {
@@ -123,8 +123,7 @@ impl FromTreeSitter for DataTy {
         let node_text = match node.utf8_text(dta) {
             Err(e) => {
                 let err = ParserError::Utf8ParseError(e);
-                report(error_reporter(err.clone(), Span::empty()).finish());
-                return Err(err);
+                return Err(VolaError::error_here(err, ctx.span(node), "here"));
             }
             Ok(s) => s.to_owned(),
         };
@@ -133,8 +132,7 @@ impl FromTreeSitter for DataTy {
             let err = ParserError::EmptyParse {
                 kind: "type".to_owned(),
             };
-            report(error_reporter(err.clone(), ctx.span(node)).finish());
-            return Err(err);
+            return Err(VolaError::error_here(err, ctx.span(node), "here"));
         }
 
         //match the text
@@ -150,15 +148,18 @@ impl FromTreeSitter for DataTy {
                     kind: other.to_owned(),
                     expected: "data type".to_owned(),
                 };
-                report(error_reporter(err.clone(), ctx.span(node)).finish());
-                return Err(err);
+                return Err(VolaError::error_here(err, ctx.span(node), "here"));
             }
         }
     }
 }
 
 impl FromTreeSitter for Shape {
-    fn parse(ctx: &mut ParserCtx, dta: &[u8], node: &tree_sitter::Node) -> Result<Self, ParserError>
+    fn parse(
+        ctx: &mut ParserCtx,
+        dta: &[u8],
+        node: &tree_sitter::Node,
+    ) -> Result<Self, VolaError<ParserError>>
     where
         Self: Sized,
     {
@@ -179,8 +180,7 @@ impl FromTreeSitter for Shape {
                             kind: succ.kind().to_owned(),
                             expected: "x".to_owned(),
                         };
-                        report(error_reporter(err.clone(), ctx.span(succ)).finish());
-                        return Err(err);
+                        return Err(VolaError::error_here(err, ctx.span(succ), "here"));
                     }
 
                     //has successor, read the digit
@@ -219,8 +219,7 @@ impl FromTreeSitter for Shape {
                                 kind: x.to_owned(),
                                 expected: "digit or \">\"".to_owned(),
                             };
-                            report(error_reporter(err.clone(), Span::empty()).finish());
-                            return Err(err);
+                            return Err(VolaError::error_here(err, ctx.span(&next_node), "here"));
                         }
                     };
 
@@ -235,8 +234,7 @@ impl FromTreeSitter for Shape {
                                     kind: x.to_owned(),
                                     expected: ", or \">\"".to_owned(),
                                 };
-                                report(error_reporter(err.clone(), ctx.span(node)).finish());
-                                return Err(err);
+                                return Err(VolaError::error_here(err, ctx.span(&next), "here"));
                             }
                         }
                     }
@@ -251,15 +249,18 @@ impl FromTreeSitter for Shape {
                     kind: node.kind().to_string(),
                     expected: "shape description".to_owned(),
                 };
-                report(error_reporter(err.clone(), ctx.span(node)).finish());
-                Err(err)
+                Err(VolaError::error_here(err, ctx.span(node), "here"))
             }
         }
     }
 }
 
 impl FromTreeSitter for Ty {
-    fn parse(ctx: &mut ParserCtx, dta: &[u8], node: &tree_sitter::Node) -> Result<Self, ParserError>
+    fn parse(
+        ctx: &mut ParserCtx,
+        dta: &[u8],
+        node: &tree_sitter::Node,
+    ) -> Result<Self, VolaError<ParserError>>
     where
         Self: Sized,
     {
@@ -335,19 +336,18 @@ impl FromTreeSitter for Ty {
                     kind: root_node.kind().to_string(),
                     expected: "data_type | shape | csg | (".to_owned(),
                 };
-                report(
-                    error_reporter(err.clone(), ctx.span(&root_node))
-                        .with_label(Label::new(ctx.span(&root_node)).with_message("here"))
-                        .finish(),
-                );
-                Err(err)
+                return Err(VolaError::error_here(err, ctx.span(&root_node), "here"));
             }
         }
     }
 }
 
 impl FromTreeSitter for Literal {
-    fn parse(ctx: &mut ParserCtx, dta: &[u8], node: &tree_sitter::Node) -> Result<Self, ParserError>
+    fn parse(
+        ctx: &mut ParserCtx,
+        dta: &[u8],
+        node: &tree_sitter::Node,
+    ) -> Result<Self, VolaError<ParserError>>
     where
         Self: Sized,
     {
@@ -360,8 +360,7 @@ impl FromTreeSitter for Literal {
                 let node_text = match node.utf8_text(dta) {
                     Err(e) => {
                         let err = ParserError::Utf8ParseError(e);
-                        report(error_reporter(err.clone(), Span::empty()).finish());
-                        return Err(err);
+                        return Err(VolaError::error_here(err, ctx.span(&node), "here"));
                     }
                     Ok(s) => s.to_owned(),
                 };
@@ -370,16 +369,14 @@ impl FromTreeSitter for Literal {
                     let err = ParserError::EmptyParse {
                         kind: "float".to_owned(),
                     };
-                    report(error_reporter(err.clone(), ctx.span(node)).finish());
-                    return Err(err);
+                    return Err(VolaError::error_here(err, ctx.span(node), "here"));
                 }
 
                 let float: f64 = match node_text.parse() {
                     Ok(f) => f,
                     Err(e) => {
                         let err = ParserError::ParseFloatLiteral(e);
-                        report(error_reporter(err.clone(), Span::empty()).finish());
-                        return Err(err);
+                        return Err(VolaError::error_here(err, ctx.span(node), "here"));
                     }
                 };
 
@@ -397,15 +394,11 @@ impl FromTreeSitter for Literal {
                 "false" => Ok(Literal::BoolLiteral(false)),
                 _other => {
                     let err = ParserError::ParseBoolFailed;
-                    report(
-                        error_reporter(err.clone(), ctx.span(node))
-                            .with_label(
-                                Label::new(ctx.span(node))
-                                    .with_message("should be \"true\" or \"false\""),
-                            )
-                            .finish(),
-                    );
-                    return Err(err);
+                    return Err(VolaError::error_here(
+                        err,
+                        ctx.span(node),
+                        "should be 'true' or 'false'",
+                    ));
                 }
             },
             _ => {
@@ -413,18 +406,17 @@ impl FromTreeSitter for Literal {
                     kind: node.kind().to_string(),
                     expected: "bool_literal | integer_literal | float_literal".to_owned(),
                 };
-                report(
-                    error_reporter(err.clone(), ctx.span(node))
-                        .with_label(Label::new(ctx.span(node)).with_message("here"))
-                        .finish(),
-                );
-                Err(err)
+                Err(VolaError::error_here(err, ctx.span(node), "here"))
             }
         }
     }
 }
 impl FromTreeSitter for TypedIdent {
-    fn parse(ctx: &mut ParserCtx, dta: &[u8], node: &tree_sitter::Node) -> Result<Self, ParserError>
+    fn parse(
+        ctx: &mut ParserCtx,
+        dta: &[u8],
+        node: &tree_sitter::Node,
+    ) -> Result<Self, VolaError<ParserError>>
     where
         Self: Sized,
     {
@@ -443,7 +435,11 @@ impl FromTreeSitter for TypedIdent {
 }
 
 impl FromTreeSitter for Call {
-    fn parse(ctx: &mut ParserCtx, dta: &[u8], node: &tree_sitter::Node) -> Result<Self, ParserError>
+    fn parse(
+        ctx: &mut ParserCtx,
+        dta: &[u8],
+        node: &tree_sitter::Node,
+    ) -> Result<Self, VolaError<ParserError>>
     where
         Self: Sized,
     {
@@ -471,8 +467,7 @@ impl FromTreeSitter for Call {
                         kind: next_node.kind().to_string(),
                         expected: "expr".to_owned(),
                     };
-                    report(error_reporter(err.clone(), ctx.span(&next_node)).finish());
-                    return Err(err);
+                    return Err(VolaError::error_here(err, ctx.span(&next_node), "here"));
                 }
             }
         }
@@ -488,7 +483,11 @@ impl FromTreeSitter for Call {
 }
 
 impl FromTreeSitter for Module {
-    fn parse(ctx: &mut ParserCtx, dta: &[u8], node: &tree_sitter::Node) -> Result<Self, ParserError>
+    fn parse(
+        ctx: &mut ParserCtx,
+        dta: &[u8],
+        node: &tree_sitter::Node,
+    ) -> Result<Self, VolaError<ParserError>>
     where
         Self: Sized,
     {
@@ -507,8 +506,7 @@ impl FromTreeSitter for Module {
                         kind: next_node.kind().to_string(),
                         expected: "identifier".to_owned(),
                     };
-                    report(error_reporter(err.clone(), ctx.span(&next_node)).finish());
-                    return Err(err);
+                    return Err(VolaError::error_here(err, ctx.span(&next_node), "here"));
                 }
             }
 
@@ -516,8 +514,7 @@ impl FromTreeSitter for Module {
                 n
             } else {
                 let err = ParserError::NoChildAvailable;
-                report(error_reporter(err.clone(), Span::empty()).finish());
-                return Err(err);
+                return Err(VolaError::error_here(err, ctx.span(&node), "here"));
             };
             match next_node.kind() {
                 //can end
@@ -529,8 +526,7 @@ impl FromTreeSitter for Module {
                         kind: next_node.kind().to_string(),
                         expected: "\"::\" or \";\"".to_owned(),
                     };
-                    report(error_reporter(err.clone(), ctx.span(&next_node)).finish());
-                    return Err(err);
+                    return Err(VolaError::error_here(err, ctx.span(&next_node), "here"));
                 }
             }
         }

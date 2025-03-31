@@ -8,7 +8,7 @@
 //! Algebra related parser portion.
 
 use smallvec::SmallVec;
-use vola_common::{ariadne::Label, error::error_reporter, report, Span};
+use vola_common::{Span, VolaError};
 
 use vola_ast::{
     alge::{AssignStmt, BinaryOp, EvalExpr, Expr, ExprTy, FieldAccessor, LetStmt, UnaryOp},
@@ -20,7 +20,11 @@ use super::{FromTreeSitter, ParserCtx};
 use crate::error::ParserError;
 
 impl FromTreeSitter for Expr {
-    fn parse(ctx: &mut ParserCtx, dta: &[u8], node: &tree_sitter::Node) -> Result<Self, ParserError>
+    fn parse(
+        ctx: &mut ParserCtx,
+        dta: &[u8],
+        node: &tree_sitter::Node,
+    ) -> Result<Self, VolaError<ParserError>>
     where
         Self: Sized,
     {
@@ -40,8 +44,7 @@ impl FromTreeSitter for Expr {
                             "Unknown Unary operation {}",
                             operator_node.kind()
                         ));
-                        report(error_reporter(err.clone(), ctx.span(&operator_node)).finish());
-                        return Err(err);
+                        return Err(VolaError::error_here(err, ctx.span(&operator_node), "here"));
                     }
                 };
 
@@ -80,14 +83,7 @@ impl FromTreeSitter for Expr {
                             "Unknown Binary operation {}",
                             operator_node.kind()
                         ));
-                        report(
-                            error_reporter(err.clone(), ctx.span(&operator_node))
-                                .with_label(
-                                    Label::new(ctx.span(&operator_node)).with_message("here"),
-                                )
-                                .finish(),
-                        );
-                        return Err(err);
+                        return Err(VolaError::error_here(err, ctx.span(&operator_node), "here"));
                     }
                 };
 
@@ -129,15 +125,11 @@ impl FromTreeSitter for Expr {
                                 expected: "\".\"".to_owned(),
                             };
 
-                            report(
-                                error_reporter(err.clone(), ctx.span(&next_node))
-                                    .with_label(
-                                        Label::new(ctx.span(&next_node))
-                                            .with_message("Expected this to be a \".\""),
-                                    )
-                                    .finish(),
-                            );
-                            return Err(err);
+                            return Err(VolaError::error_here(
+                                err,
+                                ctx.span(&next_node),
+                                "Expected this to be a \".\"",
+                            ));
                         }
                     }
                     //if there was a dot, a digit or identfier has to follow.
@@ -152,23 +144,21 @@ impl FromTreeSitter for Expr {
                                 kind: next_node.kind().to_owned(),
                                 expected: "digit | identifier | .".to_owned(),
                             };
-
-                            report(
-                                error_reporter(err.clone(), ctx.span(&next_node))
-                                    .with_label(Label::new(ctx.span(&next_node)).with_message(
-                                        "Expected this to be either a digit, or an identifier",
-                                    ))
-                                    .finish(),
-                            );
-                            return Err(err);
+                            return Err(VolaError::error_here(
+                                err,
+                                ctx.span(&next_node),
+                                "Expected this to be either a digit, or an identifier",
+                            ));
                         }
                     }
                 }
 
                 if accessors.len() == 0 {
-                    let err = ParserError::NoAccessedField;
-                    report(error_reporter(err.clone(), Span::empty()).finish());
-                    return Err(err);
+                    return Err(VolaError::error_here(
+                        ParserError::NoAccessedField,
+                        ctx.span(&child_node),
+                        "should access at least one field!",
+                    ));
                 }
 
                 ParserError::assert_ast_level_empty(ctx, children.next())?;
@@ -203,15 +193,11 @@ impl FromTreeSitter for Expr {
                                 kind: next_node.kind().to_owned(),
                                 expected: "expr ".to_owned(),
                             };
-                            report(
-                                error_reporter(err.clone(), ctx.span(&next_node))
-                                    .with_label(
-                                        Label::new(ctx.span(&next_node))
-                                            .with_message("Should be an algebraic expression"),
-                                    )
-                                    .finish(),
-                            );
-                            return Err(err);
+                            return Err(VolaError::error_here(
+                                err,
+                                ctx.span(&next_node),
+                                "Should be an algebraic expression",
+                            ));
                         }
                     }
 
@@ -229,16 +215,11 @@ impl FromTreeSitter for Expr {
                                     .to_owned(),
                                 exp: format!(", or {close} "),
                             };
-                            report(
-                                error_reporter(err.clone(), ctx.span(&next_node))
-                                    .with_label(
-                                        Label::new(ctx.span(&next_node)).with_message(&format!(
-                                            "Should be \",\" or \"{close}\""
-                                        )),
-                                    )
-                                    .finish(),
-                            );
-                            return Err(err);
+                            return Err(VolaError::error_here(
+                                err,
+                                ctx.span(&next_node),
+                                format!("Should be \",\" or \"{close}\""),
+                            ));
                         }
                     }
                 }
@@ -264,14 +245,11 @@ impl FromTreeSitter for Expr {
                 } else {
                     let err =
                         ParserError::Other(format!("Expected integer as second splat argument"));
-                    report(
-                        error_reporter(err.clone(), ctx.span(&child_node))
-                            .with_label(
-                                Label::new(ctx.span(&child_node)).with_message("for this splat"),
-                            )
-                            .finish(),
-                    );
-                    return Err(err);
+                    return Err(VolaError::error_here(
+                        err,
+                        ctx.span(&child_node),
+                        "for this splat",
+                    ));
                 };
                 ParserError::consume_expected_node_string(ctx, dta, children.next(), "]")?;
                 ParserError::assert_ast_level_empty(ctx, children.next())?;
@@ -286,12 +264,7 @@ impl FromTreeSitter for Expr {
                     kind: child_node.kind().to_owned(),
                     expected: "unary expression| binary expression | eval expression | (alge expression) | literal | field access | identifier | call | list | gamma_expr | theta_expr | splat_expr ".to_owned(),
                 };
-                report(
-                    error_reporter(err.clone(), ctx.span(&child_node))
-                        .with_label(Label::new(ctx.span(&child_node)).with_message("here"))
-                        .finish(),
-                );
-                return Err(err);
+                return Err(VolaError::error_here(err, ctx.span(&child_node), "here"));
             }
         };
 
@@ -304,7 +277,11 @@ impl FromTreeSitter for Expr {
 }
 
 impl FromTreeSitter for FieldAccessor {
-    fn parse(ctx: &mut ParserCtx, dta: &[u8], node: &tree_sitter::Node) -> Result<Self, ParserError>
+    fn parse(
+        ctx: &mut ParserCtx,
+        dta: &[u8],
+        node: &tree_sitter::Node,
+    ) -> Result<Self, VolaError<ParserError>>
     where
         Self: Sized,
     {
@@ -322,15 +299,18 @@ impl FromTreeSitter for FieldAccessor {
                     kind: node.kind().to_owned(),
                     expected: "digit | identifier".to_owned(),
                 };
-                report(error_reporter(err.clone(), ctx.span(&node)).finish());
-                Err(err)
+                Err(VolaError::error_here(err, ctx.span(&node), "here"))
             }
         }
     }
 }
 
 impl FromTreeSitter for LetStmt {
-    fn parse(ctx: &mut ParserCtx, dta: &[u8], node: &tree_sitter::Node) -> Result<Self, ParserError>
+    fn parse(
+        ctx: &mut ParserCtx,
+        dta: &[u8],
+        node: &tree_sitter::Node,
+    ) -> Result<Self, VolaError<ParserError>>
     where
         Self: Sized,
     {
@@ -354,7 +334,11 @@ impl FromTreeSitter for LetStmt {
 }
 
 impl FromTreeSitter for AssignStmt {
-    fn parse(ctx: &mut ParserCtx, dta: &[u8], node: &tree_sitter::Node) -> Result<Self, ParserError>
+    fn parse(
+        ctx: &mut ParserCtx,
+        dta: &[u8],
+        node: &tree_sitter::Node,
+    ) -> Result<Self, VolaError<ParserError>>
     where
         Self: Sized,
     {
@@ -378,7 +362,11 @@ impl FromTreeSitter for AssignStmt {
 }
 
 impl FromTreeSitter for EvalExpr {
-    fn parse(ctx: &mut ParserCtx, dta: &[u8], node: &tree_sitter::Node) -> Result<Self, ParserError>
+    fn parse(
+        ctx: &mut ParserCtx,
+        dta: &[u8],
+        node: &tree_sitter::Node,
+    ) -> Result<Self, VolaError<ParserError>>
     where
         Self: Sized,
     {
@@ -405,8 +393,7 @@ impl FromTreeSitter for EvalExpr {
                         kind: next_node.kind().to_owned(),
                         expected: ") | expr  ".to_owned(),
                     };
-                    report(error_reporter(err.clone(), ctx.span(&next_node)).finish());
-                    return Err(err);
+                    return Err(VolaError::error_here(err, ctx.span(&next_node), "here"));
                 }
             }
 
@@ -424,8 +411,7 @@ impl FromTreeSitter for EvalExpr {
                         kind: next_node.kind().to_owned(),
                         expected: ") | , ".to_owned(),
                     };
-                    report(error_reporter(err.clone(), ctx.span(&next_node)).finish());
-                    return Err(err);
+                    return Err(VolaError::error_here(err, ctx.span(&next_node), "here"));
                 }
             }
         }
@@ -442,7 +428,11 @@ impl FromTreeSitter for EvalExpr {
 }
 
 impl FromTreeSitter for ImplBlock {
-    fn parse(ctx: &mut ParserCtx, dta: &[u8], node: &tree_sitter::Node) -> Result<Self, ParserError>
+    fn parse(
+        ctx: &mut ParserCtx,
+        dta: &[u8],
+        node: &tree_sitter::Node,
+    ) -> Result<Self, VolaError<ParserError>>
     where
         Self: Sized,
     {
@@ -468,8 +458,7 @@ impl FromTreeSitter for ImplBlock {
                                 kind: next_node.kind().to_owned(),
                                 expected: "identifier".to_owned(),
                             };
-                            report(error_reporter(err.clone(), ctx.span(&next_node)).finish());
-                            return Err(err);
+                            return Err(VolaError::error_here(err, ctx.span(&next_node), "here"));
                         }
                     }
 
@@ -497,8 +486,7 @@ impl FromTreeSitter for ImplBlock {
                                 kind: next_node.kind().to_owned(),
                                 expected: " , or >".to_owned(),
                             };
-                            report(error_reporter(err.clone(), ctx.span(&next_node)).finish());
-                            return Err(err);
+                            return Err(VolaError::error_here(err, ctx.span(&next_node), "here"));
                         }
                     }
                 }
@@ -512,12 +500,7 @@ impl FromTreeSitter for ImplBlock {
                     kind: next_node.kind().to_owned(),
                     expected: "for | < ".to_owned(),
                 };
-                report(
-                    error_reporter(err.clone(), ctx.span(&next_node))
-                        .with_label(Label::new(ctx.span(&next_node)).with_message("here"))
-                        .finish(),
-                );
-                return Err(err);
+                return Err(VolaError::error_here(err, ctx.span(&next_node), "here"));
             }
         };
 
@@ -546,7 +529,11 @@ impl FromTreeSitter for ImplBlock {
 }
 
 impl FromTreeSitter for Stmt {
-    fn parse(ctx: &mut ParserCtx, dta: &[u8], node: &tree_sitter::Node) -> Result<Self, ParserError>
+    fn parse(
+        ctx: &mut ParserCtx,
+        dta: &[u8],
+        node: &tree_sitter::Node,
+    ) -> Result<Self, VolaError<ParserError>>
     where
         Self: Sized,
     {
@@ -577,8 +564,7 @@ impl FromTreeSitter for Stmt {
                     expected: "let_stmt | assign_stmt | csg_stmt | gamma_expr | theta_expr"
                         .to_owned(),
                 };
-                report(error_reporter(err.clone(), ctx.span(&stmtnode)).finish());
-                return Err(err);
+                return Err(VolaError::error_here(err, ctx.span(&stmtnode), "here"));
             }
         };
 

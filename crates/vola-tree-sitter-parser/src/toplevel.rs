@@ -6,7 +6,7 @@
  * 2024 Tendsin Mende
  */
 use smallvec::SmallVec;
-use vola_common::{ariadne::Label, error::error_reporter, report, Span};
+use vola_common::{Span, VolaError};
 
 use vola_ast::{
     alge::Func,
@@ -19,7 +19,11 @@ use crate::error::ParserError;
 use crate::{FromTreeSitter, ParserCtx};
 
 impl FromTreeSitter for AstEntry {
-    fn parse(ctx: &mut ParserCtx, dta: &[u8], node: &tree_sitter::Node) -> Result<Self, ParserError>
+    fn parse(
+        ctx: &mut ParserCtx,
+        dta: &[u8],
+        node: &tree_sitter::Node,
+    ) -> Result<Self, VolaError<ParserError>>
     where
         Self: Sized,
     {
@@ -48,19 +52,18 @@ impl FromTreeSitter for AstEntry {
                 let err = ParserError::UnknownAstNode {
                     kind: node.kind().to_owned(),
                 };
-                report(
-                    error_reporter(err.clone(), ctx.span(node))
-                        .with_label(Label::new(ctx.span(node)).with_message("here"))
-                        .finish(),
-                );
-                Err(err)
+                return Err(VolaError::error_here(err, ctx.span(node), "here"));
             }
         }
     }
 }
 
 impl FromTreeSitter for Func {
-    fn parse(ctx: &mut ParserCtx, dta: &[u8], node: &tree_sitter::Node) -> Result<Self, ParserError>
+    fn parse(
+        ctx: &mut ParserCtx,
+        dta: &[u8],
+        node: &tree_sitter::Node,
+    ) -> Result<Self, VolaError<ParserError>>
     where
         Self: Sized,
     {
@@ -99,8 +102,7 @@ impl FromTreeSitter for Func {
                         kind: next_node.kind().to_owned(),
                         expected: "typed_arg".to_owned(),
                     };
-                    report(error_reporter(err.clone(), ctx.span(node)).finish());
-                    return Err(err);
+                    return Err(VolaError::error_here(err, ctx.span(&next_node), "here"));
                 }
             }
         }
@@ -122,7 +124,11 @@ impl FromTreeSitter for Func {
 }
 
 impl FromTreeSitter for CTArg {
-    fn parse(ctx: &mut ParserCtx, dta: &[u8], node: &tree_sitter::Node) -> Result<Self, ParserError>
+    fn parse(
+        ctx: &mut ParserCtx,
+        dta: &[u8],
+        node: &tree_sitter::Node,
+    ) -> Result<Self, VolaError<ParserError>>
     where
         Self: Sized,
     {

@@ -6,7 +6,7 @@
  * 2024 Tendsin Mende
  */
 use smallvec::SmallVec;
-use vola_common::{ariadne::Label, error::error_reporter, report, Span};
+use vola_common::{Span, VolaError};
 
 use vola_ast::{
     alge::Expr,
@@ -18,7 +18,11 @@ use super::{FromTreeSitter, ParserCtx};
 use crate::error::ParserError;
 
 impl FromTreeSitter for CsgStmt {
-    fn parse(ctx: &mut ParserCtx, dta: &[u8], node: &tree_sitter::Node) -> Result<Self, ParserError>
+    fn parse(
+        ctx: &mut ParserCtx,
+        dta: &[u8],
+        node: &tree_sitter::Node,
+    ) -> Result<Self, VolaError<ParserError>>
     where
         Self: Sized,
     {
@@ -44,7 +48,11 @@ impl FromTreeSitter for CsgStmt {
 }
 
 impl FromTreeSitter for ScopedCall {
-    fn parse(ctx: &mut ParserCtx, dta: &[u8], node: &tree_sitter::Node) -> Result<Self, ParserError>
+    fn parse(
+        ctx: &mut ParserCtx,
+        dta: &[u8],
+        node: &tree_sitter::Node,
+    ) -> Result<Self, VolaError<ParserError>>
     where
         Self: Sized,
     {
@@ -62,15 +70,11 @@ impl FromTreeSitter for ScopedCall {
 
         if blocks.len() == 0 {
             let err = ParserError::NoChildAvailable;
-            report(
-                error_reporter(err.clone(), ctx.span(&node))
-                    .with_label(
-                        Label::new(ctx.span(&node))
-                            .with_message("expected at least one block after this scoped call"),
-                    )
-                    .finish(),
-            );
-            return Err(err);
+            return Err(VolaError::error_here(
+                err,
+                ctx.span(node),
+                "expected at least one block after this scoped call",
+            ));
         }
 
         ParserError::assert_ast_level_empty(ctx, children.next())?;
@@ -84,7 +88,11 @@ impl FromTreeSitter for ScopedCall {
 }
 
 impl FromTreeSitter for CsgDef {
-    fn parse(ctx: &mut ParserCtx, dta: &[u8], node: &tree_sitter::Node) -> Result<Self, ParserError>
+    fn parse(
+        ctx: &mut ParserCtx,
+        dta: &[u8],
+        node: &tree_sitter::Node,
+    ) -> Result<Self, VolaError<ParserError>>
     where
         Self: Sized,
     {
@@ -93,13 +101,7 @@ impl FromTreeSitter for CsgDef {
                 kind: node.kind().to_owned(),
                 expected: "def_entity | def_operation".to_owned(),
             };
-
-            report(
-                error_reporter(err.clone(), ctx.span(&node))
-                    .with_label(Label::new(ctx.span(&node)).with_message("in this region"))
-                    .finish(),
-            );
-            return Err(err);
+            return Err(VolaError::error_here(err, ctx.span(node), "in this region"));
         }
 
         let mut walker = node.walk();
@@ -119,12 +121,11 @@ impl FromTreeSitter for CsgDef {
                     kind: ty_node.kind().to_owned(),
                     expected: "entity | operation".to_owned(),
                 };
-                report(
-                    error_reporter(err.clone(), ctx.span(&ty_node))
-                        .with_label(Label::new(ctx.span(&ty_node)).with_message("in this region"))
-                        .finish(),
-                );
-                return Err(err);
+                return Err(VolaError::error_here(
+                    err,
+                    ctx.span(&ty_node),
+                    "in this region",
+                ));
             }
         };
 
@@ -146,15 +147,11 @@ impl FromTreeSitter for CsgDef {
                         kind: next_node.kind().to_owned(),
                         expected: "typed_arg | )".to_owned(),
                     };
-
-                    report(
-                        error_reporter(err.clone(), ctx.span(&next_node))
-                            .with_label(
-                                Label::new(ctx.span(&next_node)).with_message("in this region"),
-                            )
-                            .finish(),
-                    );
-                    return Err(err);
+                    return Err(VolaError::error_here(
+                        err,
+                        ctx.span(&next_node),
+                        "in this region",
+                    ));
                 }
             }
 
@@ -172,14 +169,11 @@ impl FromTreeSitter for CsgDef {
                         kind: next_node.kind().to_owned(),
                         expected: "\",\" or )".to_owned(),
                     };
-                    report(
-                        error_reporter(err.clone(), ctx.span(&next_node))
-                            .with_label(
-                                Label::new(ctx.span(&next_node)).with_message("in this region"),
-                            )
-                            .finish(),
-                    );
-                    return Err(err);
+                    return Err(VolaError::error_here(
+                        err,
+                        ctx.span(&next_node),
+                        "in this region",
+                    ));
                 }
             }
         }
@@ -198,7 +192,11 @@ impl FromTreeSitter for CsgDef {
 }
 
 impl FromTreeSitter for CSGConcept {
-    fn parse(ctx: &mut ParserCtx, dta: &[u8], node: &tree_sitter::Node) -> Result<Self, ParserError>
+    fn parse(
+        ctx: &mut ParserCtx,
+        dta: &[u8],
+        node: &tree_sitter::Node,
+    ) -> Result<Self, VolaError<ParserError>>
     where
         Self: Sized,
     {

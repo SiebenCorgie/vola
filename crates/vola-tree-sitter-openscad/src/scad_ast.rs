@@ -10,7 +10,7 @@ use vola_ast::{
     alge::{BinaryOp, UnaryOp},
     common::{Comment, Ident},
 };
-use vola_common::Span;
+use vola_common::{Span, VolaError};
 
 use crate::{ParserCtx, error::ParserError, util::ScadLiteral};
 
@@ -32,7 +32,7 @@ impl ScadTopLevel {
         }
     }
 
-    pub fn normalize(&mut self) -> Result<(), Vec<ParserError>> {
+    pub fn normalize(&mut self) -> Result<(), Vec<VolaError<ParserError>>> {
         let mut errors = Vec::with_capacity(0);
         for module in &mut self.modules {
             if let Err(e) = module.block.normalize() {
@@ -50,7 +50,7 @@ impl ScadTopLevel {
         }
     }
 
-    pub fn into_vola_ast(self) -> Result<VolaAst, Vec<ParserError>> {
+    pub fn into_vola_ast(self) -> Result<VolaAst, Vec<VolaError<ParserError>>> {
         //convert all _modules_ into functions with csg-return argument.
         //
         //convert the main function into that _as well :D, but infer the
@@ -81,7 +81,7 @@ impl ScadTopLevel {
         for module in self.modules {
             let span = module.span.clone();
             match crate::convert::emit_module_as_function(module) {
-                Err(e) => errors.push(e),
+                Err(e) => errors.push(VolaError::error_here(e, span, "could not translate this")),
                 Ok(f) => ast.entries.push(vola_ast::TopLevelNode {
                     span,
                     ct_args: Vec::with_capacity(0),
@@ -91,7 +91,7 @@ impl ScadTopLevel {
         }
 
         match crate::convert::emit_block_as_main_function(self.main) {
-            Err(e) => errors.push(e),
+            Err(e) => errors.push(VolaError::new(e)),
             Ok(f) => ast.entries.push(vola_ast::TopLevelNode {
                 //NOTE: we cant't build a span for main, because main is made up from anything that we discovered _along-the-way_
                 span: Span::empty(),
@@ -172,6 +172,33 @@ pub enum ScadStmt {
     Comment(Comment),
     Assert,
     None,
+}
+
+impl ScadStmt {
+    pub fn span(&self) -> Option<Span> {
+        match self {
+            Self::ForBlock { block, .. } => Some(block.span.clone()),
+            Self::Chain { span, .. } => Some(span.clone()),
+            Self::Assign(a) => Some(a.span.clone()),
+            Self::IfBlock { head_span, .. } => Some(head_span.clone()),
+            Self::Overwrite { overwrites, block } => Some(Span {
+                file: block.span.file.clone(),
+                byte_start: overwrites
+                    .first()
+                    .map(|f| f.span.byte_start)
+                    .unwrap_or(block.span.byte_start),
+                from: overwrites
+                    .first()
+                    .map(|f| f.span.from)
+                    .unwrap_or(block.span.from),
+
+                byte_end: block.span.byte_end.clone(),
+                to: block.span.to.clone(),
+            }),
+            Self::Comment(c) => Some(c.span.clone()),
+            Self::IncludeStmt(_) | Self::Assert | Self::None => None,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]

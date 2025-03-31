@@ -1,5 +1,5 @@
 use ahash::AHashMap;
-use vola_common::Span;
+use vola_common::{Span, VolaError};
 
 use crate::{
     error::ParserError,
@@ -506,7 +506,7 @@ impl ScadCall {
 impl ScadBlock {
     ///Recursively normalizes this, and all sub-blocks by moving all _last_ variables assignments
     ///to the top of the block.
-    pub fn normalize(&mut self) -> Result<(), ParserError> {
+    pub fn normalize(&mut self) -> Result<(), VolaError<ParserError>> {
         //filter out all assignments, and put them on the top of the block.
         //we do that in reverse, in order to only keep the _last-write_, which is
         //(more or less) what Scad does internally.
@@ -546,7 +546,13 @@ impl ScadBlock {
 
         //finally recurse on any block_carrying stmt
         for stmt in &mut self.stmts {
-            stmt.normalize()?;
+            if let Err(e) = stmt.normalize() {
+                return Err(VolaError::error_here(
+                    e,
+                    stmt.span().unwrap_or(Span::empty()),
+                    "could not normalize this stmt",
+                ));
+            }
         }
 
         //Alright, finished
@@ -561,20 +567,20 @@ impl ScadStmt {
             Self::Overwrite {
                 overwrites: _,
                 block,
-            } => block.normalize(),
+            } => block.normalize().map_err(|e| e.error),
             Self::IfBlock {
                 head_span: _,
                 condition: _,
                 consequence,
                 alternative,
             } => {
-                consequence.normalize()?;
+                consequence.normalize().map_err(|e| e.error)?;
                 if let Some(alt) = alternative {
-                    alt.normalize()?;
+                    alt.normalize().map_err(|e| e.error)?
                 }
                 Ok(())
             }
-            Self::ForBlock { block, .. } => block.normalize(),
+            Self::ForBlock { block, .. } => block.normalize().map_err(|e| e.error),
 
             Self::Comment(comment) => {
                 comment.content = format!("//{}", comment.content);
@@ -583,7 +589,9 @@ impl ScadStmt {
             Self::Chain { chain, span: _ } => {
                 for element in chain {
                     match element {
-                        crate::scad_ast::ChainElement::Block(b) => b.normalize()?,
+                        crate::scad_ast::ChainElement::Block(b) => {
+                            b.normalize().map_err(|e| e.error)?
+                        }
                         crate::scad_ast::ChainElement::Call(c) => c.normalize()?,
                     }
                 }

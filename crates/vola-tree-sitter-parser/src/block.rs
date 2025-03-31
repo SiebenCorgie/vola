@@ -11,12 +11,16 @@ use vola_ast::{
     alge::Expr,
     common::{Block, Branch, Comment, Ident, Loop, Stmt},
 };
-use vola_common::{ariadne::Label, error::error_reporter, report};
+use vola_common::VolaError;
 
 use crate::{error::ParserError, FromTreeSitter, ParserCtx};
 
 impl FromTreeSitter for Loop {
-    fn parse(ctx: &mut ParserCtx, dta: &[u8], node: &tree_sitter::Node) -> Result<Self, ParserError>
+    fn parse(
+        ctx: &mut ParserCtx,
+        dta: &[u8],
+        node: &tree_sitter::Node,
+    ) -> Result<Self, VolaError<ParserError>>
     where
         Self: Sized,
     {
@@ -45,7 +49,11 @@ impl FromTreeSitter for Loop {
 }
 
 impl FromTreeSitter for Branch {
-    fn parse(ctx: &mut ParserCtx, dta: &[u8], node: &tree_sitter::Node) -> Result<Self, ParserError>
+    fn parse(
+        ctx: &mut ParserCtx,
+        dta: &[u8],
+        node: &tree_sitter::Node,
+    ) -> Result<Self, VolaError<ParserError>>
     where
         Self: Sized,
     {
@@ -77,12 +85,7 @@ impl FromTreeSitter for Branch {
                         kind: next_node.kind().to_string(),
                         expected: "else, or nothing".to_owned(),
                     };
-                    report(
-                        error_reporter(err.clone(), ctx.span(&next_node))
-                            .with_label(Label::new(ctx.span(&next_node)).with_message("here"))
-                            .finish(),
-                    );
-                    return Err(err);
+                    return Err(VolaError::error_here(err, ctx.span(&next_node), "here"));
                 }
             }
         }
@@ -102,7 +105,7 @@ impl FromTreeSitter for Block {
         ctx: &mut crate::ParserCtx,
         dta: &[u8],
         node: &tree_sitter::Node,
-    ) -> Result<Self, crate::error::ParserError>
+    ) -> Result<Self, VolaError<ParserError>>
     where
         Self: Sized,
     {
@@ -137,33 +140,22 @@ impl FromTreeSitter for Block {
                                     kind: any.to_owned(),
                                     expected: "\"}\" or comment".to_owned(),
                                 };
-                                report(
-                                    error_reporter(err.clone(), ctx.span(&trailing_node))
-                                        .with_label(Label::new(expr.span.clone()))
-                                        .with_message(
-                                            "This was identified as the return expression so ...",
-                                        )
-                                        .with_label(
-                                            Label::new(ctx.span(&trailing_node)).with_message(
-                                                "... this should be either a \"}\" or a comment",
-                                            ),
-                                        )
-                                        .finish(),
-                                );
-                                return Err(err);
+                                return Err(VolaError::error_here(
+                                    err,
+                                    ctx.span(&trailing_node),
+                                    "This should be either a \"}\" or a comment ...",
+                                )
+                                .with_label(
+                                    expr.span,
+                                    "... since this was identified as the return expression.",
+                                ));
                             }
                         }
                     }
 
                     if !was_closing {
                         let err = ParserError::LevelNotEmpty;
-                        report(
-                            error_reporter(err.clone(), ctx.span(&next_node))
-                                .with_label(Label::new(ctx.span(&next_node))
-                                    .with_message("This should be the last statement of the block, since it's not assigned, and not a control flow expression. Therefore it must be a return expression.")
-                                ).finish()
-                        );
-                        return Err(err);
+                        return Err(VolaError::error_here(err, ctx.span(&next_node), "This should be the last statement of the block, since it's not assigned, and not a control flow expression. Therefore it must be a return expression."));
                     }
                     retexpr = Some(expr);
                     break;
@@ -175,12 +167,7 @@ impl FromTreeSitter for Block {
                         kind: next_node.kind().to_owned(),
                         expected: " \"}\" | comment | stmt | expr".to_owned(),
                     };
-                    report(
-                        error_reporter(err.clone(), ctx.span(&next_node))
-                            .with_label(Label::new(ctx.span(&next_node)).with_message("here"))
-                            .finish(),
-                    );
-                    return Err(err);
+                    return Err(VolaError::error_here(err, ctx.span(&next_node), "here"));
                 }
             }
         }
