@@ -20,7 +20,8 @@ pub use thiserror;
 #[cfg(feature = "dot")]
 pub mod dot;
 
-pub mod error;
+mod error;
+pub use error::{error_reporter, warning_reporter, VolaError};
 mod reporter;
 pub use reporter::{cache_file, report, reset_file_cache};
 
