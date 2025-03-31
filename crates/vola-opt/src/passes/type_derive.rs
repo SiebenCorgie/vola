@@ -25,7 +25,7 @@ use rvsdg::{
     util::abstract_node_type::AbstractNodeType,
     NodeRef, SmallColl,
 };
-use vola_common::{ariadne::Label, error::error_reporter, report, Span};
+use vola_common::{ariadne::Label, error_reporter, report, Span};
 
 use crate::{
     common::{DataType, Shape, Ty},

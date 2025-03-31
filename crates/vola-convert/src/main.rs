@@ -24,7 +24,15 @@ fn main() {
         log::warn!("'{:?}' might no be a OpenScad-file", args.src_file);
     }
 
-    let parsed = vola_tree_sitter_openscad::parse_file(&args.src_file).unwrap();
+    let parsed = match vola_tree_sitter_openscad::parse_file(&args.src_file) {
+        Ok(k) => k,
+        Err(e) => {
+            for err in e {
+                err.report();
+            }
+            panic!("Could not parse file!");
+        }
+    };
     let formated = vola_fmt::Formater::format_ast(&parsed);
     std::fs::write(args.output_name, formated.to_string()).unwrap();
 }

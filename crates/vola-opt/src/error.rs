@@ -16,8 +16,7 @@ use rvsdg::{
 };
 use vola_common::{
     ariadne::Label,
-    error::error_reporter,
-    report,
+    error_reporter, report,
     thiserror::{self, Error},
 };
 

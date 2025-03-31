@@ -27,7 +27,7 @@ use vola_ast::VolaAst;
 
 mod error;
 pub use error::PipelineError;
-use vola_common::reset_file_cache;
+use vola_common::{reset_file_cache, VolaError};
 use vola_opt::Optimizer;
 
 pub mod backends;
@@ -235,25 +235,39 @@ impl Pipeline {
         &mut self,
         data: &[u8],
         workspace: impl AsRef<Path>,
-    ) -> Result<Target, PipelineError> {
+    ) -> Result<Target, Vec<VolaError<PipelineError>>> {
         //NOTE: Always reset file cache, since the files we are reporting on might have changed.
         reset_file_cache();
         let mut parser = vola_tree_sitter_parser::VolaTreeSitterParser;
-        let ast = VolaAst::new_from_bytes(data, &mut parser, workspace)?;
+        let ast = VolaAst::new_from_bytes(data, &mut parser, workspace).map_err(|errors| {
+            errors
+                .into_iter()
+                .map(|err| err.to_error::<PipelineError>())
+                .collect::<Vec<VolaError<PipelineError>>>()
+        })?;
         #[cfg(feature = "dot")]
         if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("VOLA_DUMP_AST").is_ok() {
             vola_ast::dot::ast_to_svg(&ast, "ast.svg");
         }
 
         self.execute_on_ast(ast)
+            .map_err(|e| vec![VolaError::new(e)])
     }
 
     ///Tries to parse `file`, and turn that into a program, based on the pipeline conifguration.
-    pub fn execute_on_file(&mut self, file: &dyn AsRef<Path>) -> Result<Target, PipelineError> {
+    pub fn execute_on_file(
+        &mut self,
+        file: &dyn AsRef<Path>,
+    ) -> Result<Target, Vec<VolaError<PipelineError>>> {
         //NOTE: Always reset file cache, since the files we are reporting on might have changed.
         reset_file_cache();
         let mut parser = vola_tree_sitter_parser::VolaTreeSitterParser;
-        let ast = VolaAst::new_from_file(file, &mut parser)?;
+        let ast = VolaAst::new_from_file(file, &mut parser).map_err(|errors| {
+            errors
+                .into_iter()
+                .map(|err| err.to_error())
+                .collect::<Vec<_>>()
+        })?;
 
         #[cfg(feature = "dot")]
         if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("VOLA_DUMP_AST").is_ok() {
@@ -261,6 +275,7 @@ impl Pipeline {
         }
 
         self.execute_on_ast(ast)
+            .map_err(|e| vec![VolaError::new(e)])
     }
 }
 
@@ -271,7 +286,6 @@ mod test {
     use static_assertions::assert_impl_all;
 
     use crate::Pipeline;
-
     #[test]
     fn impl_send() {
         assert_impl_all!(Pipeline: Send);

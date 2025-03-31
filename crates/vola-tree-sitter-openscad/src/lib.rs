@@ -4,7 +4,7 @@ mod error;
 use std::path::{Path, PathBuf};
 
 use error::ParserError;
-use scad_ast::{ScadBlock, ScadStmt, ScadTopLevel};
+use scad_ast::{ScadStmt, ScadTopLevel};
 use tree_sitter::{Node, Parser};
 use vola_ast::VolaAst;
 use vola_common::{
@@ -176,10 +176,6 @@ fn parse_data(
     data: &[u8],
     src_file: Option<FileString>,
 ) -> Result<VolaAst, Vec<VolaError<ParserError>>> {
-    let empty_ast = VolaAst {
-        entries: Vec::with_capacity(0),
-    };
-
     //parse the ScadAst _fully_. This will also take care of recursively resolving any used modules
     let mut scad_ast = parse_data_scad(data, src_file)?;
 

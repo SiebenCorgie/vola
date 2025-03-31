@@ -62,7 +62,7 @@ use rvsdg::{
     util::abstract_node_type::AbstractNodeType,
     NodeRef,
 };
-use vola_common::{ariadne::Label, error::error_reporter, report, Span};
+use vola_common::{ariadne::Label, error_reporter, report, Span};
 
 type DiffExprCache = AHashMap<OutportLocation, OutportLocation>;
 

@@ -25,11 +25,7 @@ use vola_ast::{
     alge::Expr,
     common::{Block, Branch, Loop, Stmt},
 };
-use vola_common::{
-    ariadne::Label,
-    error::{error_reporter, warning_reporter},
-    report, Span,
-};
+use vola_common::{ariadne::Label, error_reporter, report, warning_reporter, Span};
 
 #[derive(Debug, Clone)]
 pub enum VarDef {

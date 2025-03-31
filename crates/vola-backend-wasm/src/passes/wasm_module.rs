@@ -16,7 +16,7 @@ use rvsdg::{
     region::RegionLocation,
     NodeRef, SmallColl,
 };
-use vola_common::{error::error_reporter, report, Span};
+use vola_common::{error_reporter, report, Span};
 use walrus::{
     ir::{InstrSeqId, Value},
     ConstExpr, ExportItem, FunctionId, GlobalId, GlobalKind, LocalId, Module, ValType,

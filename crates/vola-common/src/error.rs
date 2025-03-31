@@ -1,4 +1,4 @@
-use std::error::Error;
+use std::{error::Error, fmt::Debug};
 
 use ariadne::{Label, Report, ReportBuilder};
 use smallvec::{smallvec, SmallVec};
@@ -102,5 +102,32 @@ impl<E: Error> VolaError<E> {
         reporter = reporter.with_labels(self.labels.clone());
 
         report(reporter.finish())
+    }
+}
+
+impl<E: Error> Debug for VolaError<E> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if let Some(src_span) = &self.source_span {
+            if let Some(file) = src_span.get_file() {
+                write!(
+                    f,
+                    "{} [{}:{}..{}:{}]: {}",
+                    file,
+                    src_span.from.0,
+                    src_span.from.1,
+                    src_span.to.0,
+                    src_span.to.1,
+                    self.error
+                )
+            } else {
+                write!(
+                    f,
+                    "[{}:{}..{}:{}]: {}",
+                    src_span.from.0, src_span.from.1, src_span.to.0, src_span.to.1, self.error
+                )
+            }
+        } else {
+            write!(f, "{}", self.error)
+        }
     }
 }

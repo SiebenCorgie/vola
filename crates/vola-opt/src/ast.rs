@@ -9,7 +9,7 @@
 
 use rvsdg::NodeRef;
 use vola_ast::{AstEntry, TopLevelNode};
-use vola_common::{ariadne::Label, error::error_reporter, report};
+use vola_common::{ariadne::Label, error_reporter, report};
 
 use crate::{error::OptError, Optimizer};
 

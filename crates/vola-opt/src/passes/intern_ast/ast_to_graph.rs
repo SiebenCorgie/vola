@@ -15,7 +15,7 @@ use vola_ast::{
     common::CTArg,
     csg::{CSGConcept, CsgDef, ImplBlock},
 };
-use vola_common::{ariadne::Label, error::error_reporter, report, Span};
+use vola_common::{ariadne::Label, error_reporter, report, Span};
 
 use crate::{
     common::Ty,

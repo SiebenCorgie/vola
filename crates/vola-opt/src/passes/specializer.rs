@@ -12,7 +12,7 @@ use rvsdg::{
     region::RegionLocation,
     NodeRef, SmallColl,
 };
-use vola_common::{ariadne::Label, error::error_reporter, report, Span};
+use vola_common::{ariadne::Label, error_reporter, report, Span};
 
 use crate::{
     alge::EvalNode, common::Ty, csg::CsgOp, graph::auxiliary::ImplKey, OptEdge, OptError, Optimizer,

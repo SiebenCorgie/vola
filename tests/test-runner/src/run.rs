@@ -7,6 +7,7 @@ use std::{
 };
 
 use smallvec::{smallvec, SmallVec};
+use vola_common::VolaError;
 use volac::{backends::BoxedBackend, Pipeline, PipelineError, Target};
 use yansi::Paint;
 
@@ -15,7 +16,7 @@ use crate::config::Config;
 #[derive(Debug, Clone, PartialEq)]
 pub enum ResultType {
     Success,
-    Error(String),
+    Error(Vec<String>),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -94,7 +95,7 @@ impl Display for TestRun {
 }
 
 fn pipeline_res_to_testrun(
-    res: Result<Target, PipelineError>,
+    res: Result<Target, Vec<VolaError<PipelineError>>>,
     config: &Config,
     backend: Backend,
     time: Duration,
@@ -136,27 +137,42 @@ fn pipeline_res_to_testrun(
             }
         }
         Err(e) => {
-            let pipeline_error = e.to_string();
             match &config.expected_result {
                 ResultType::Error(expected_error) => {
-                    //make sure the error matches
-                    if expected_error == &pipeline_error {
-                        TestRun {
-                            backend,
-                            time,
-                            state: TestState::Success,
-                            path: path.clone(),
-                        }
-                    } else {
-                        TestRun {
+                    if expected_error.len() != e.len() {
+                        return TestRun {
                             backend,
                             time,
                             state: TestState::Error(format!(
-                                "Expected error:\n    {}\ngot\n    {}",
-                                expected_error, pipeline_error
+                                "Expected {} errors, but had {}",
+                                expected_error.len(),
+                                e.len()
                             )),
                             path: path.clone(),
+                        };
+                    }
+
+                    for (expected_error, pipeline_error) in expected_error.iter().zip(e) {
+                        //make sure the error matches
+                        if expected_error != &pipeline_error.error.to_string() {
+                            return TestRun {
+                                backend,
+                                time,
+                                state: TestState::Error(format!(
+                                    "Expected error:\n    {}\ngot\n    {}",
+                                    expected_error,
+                                    pipeline_error.error.to_string()
+                                )),
+                                path: path.clone(),
+                            };
                         }
+                    }
+                    //all errors match
+                    TestRun {
+                        backend,
+                        time,
+                        state: TestState::Success,
+                        path: path.clone(),
                     }
                 }
                 ResultType::Success => {
@@ -164,7 +180,7 @@ fn pipeline_res_to_testrun(
                     TestRun {
                         backend,
                         time,
-                        state: TestState::Error(pipeline_error),
+                        state: TestState::Error(format!("Expected errors, but was success")),
                         path: path.clone(),
                     }
                 }

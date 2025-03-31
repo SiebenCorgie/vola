@@ -87,8 +87,10 @@ fn main() {
     };
 
     match pipeline.execute_on_file(&args.src_file) {
-        Err(e) => {
-            eprintln!("CLI Error: {e:?}");
+        Err(errors) => {
+            for error in errors {
+                error.report();
+            }
         }
         Ok(_) => {}
     }
