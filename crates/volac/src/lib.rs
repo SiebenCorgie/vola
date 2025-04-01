@@ -175,38 +175,57 @@ impl Pipeline {
     }
 
     ///Takes an already prepared AST and tries to turn it into a compiled program / module.
-    pub fn execute_on_ast(&mut self, ast: VolaAst) -> Result<Target, PipelineError> {
+    pub fn execute_on_ast(
+        &mut self,
+        ast: VolaAst,
+    ) -> Result<Target, Vec<VolaError<PipelineError>>> {
         let mut opt = Optimizer::new();
         //TODO: add all the _standard_library_stuff_. Would be nice if we'd had them
         //      serialized somewhere.
-        opt.add_ast(ast)?;
+        opt.add_ast(ast).map_err(|errors| {
+            errors
+                .into_iter()
+                .map(|e| e.to_error::<PipelineError>())
+                .collect::<Vec<_>>()
+        })?;
 
         if self.early_cnf {
-            opt.full_graph_cnf()?;
+            opt.full_graph_cnf()
+                .map_err(|e| vec![VolaError::new(PipelineError::CnfError(e))])?;
         }
-        opt.specialize_all_exports()?;
+        opt.specialize_all_exports()
+            .map_err(|e| vec![VolaError::new(PipelineError::OptError(e))])?;
 
         //At this point any used nodes are hooked up. Therfore clean up
         //any unused garbage
-        opt.graph.dead_node_elimination()?;
+        opt.graph
+            .dead_node_elimination()
+            .map_err(|e| vec![VolaError::new(PipelineError::from(e))])?;
 
         if self.late_cnf {
-            opt.full_graph_cnf()?;
+            opt.full_graph_cnf()
+                .map_err(|e| vec![VolaError::new(PipelineError::from(e))])?;
         }
         //NOTE: Inliner can be buggy on undefined edges, clean those up.
-        opt.remove_unused_edges()?;
-        opt.inline_field_exports()?;
+        opt.remove_unused_edges()
+            .map_err(|e| vec![VolaError::new(PipelineError::from(e))])?;
+        opt.inline_field_exports()
+            .map_err(|e| vec![VolaError::new(PipelineError::from(e))])?;
 
         //do some _post_everyting_ cleanup
         if self.late_cne {
-            opt.cne_exports().expect("Failed to execute CNE");
+            opt.cne_exports()
+                .map_err(|e| vec![VolaError::new(PipelineError::CneError(e))])?;
         }
 
         //dispatch autodiff nodes
-        opt.dispatch_autodiff()?;
+        opt.dispatch_autodiff()
+            .map_err(|e| vec![VolaError::new(PipelineError::OptError(e))])?;
 
         //Call _before-finalize-hook_.
-        self.backend.opt_pre_finalize(&mut opt)?;
+        self.backend
+            .opt_pre_finalize(&mut opt)
+            .map_err(|e| vec![VolaError::new(PipelineError::from(e))])?;
 
         opt.cleanup_export_lmd();
 
@@ -218,12 +237,15 @@ impl Pipeline {
             opt.dump_debug_state(&"OptState.bin");
         }
 
-        let result = self.backend.execute(opt)?;
+        let result = self
+            .backend
+            .execute(opt)
+            .map_err(|e| vec![VolaError::new(e)])?;
 
         if self.validate_output {
             self.backend
                 .try_verify()
-                .map_err(|e| PipelineError::ValidationFailed(e))?;
+                .map_err(|e| vec![VolaError::new(PipelineError::ValidationFailed(e))])?;
         }
 
         Ok(result)
@@ -251,7 +273,6 @@ impl Pipeline {
         }
 
         self.execute_on_ast(ast)
-            .map_err(|e| vec![VolaError::new(e)])
     }
 
     ///Tries to parse `file`, and turn that into a program, based on the pipeline conifguration.
@@ -275,7 +296,6 @@ impl Pipeline {
         }
 
         self.execute_on_ast(ast)
-            .map_err(|e| vec![VolaError::new(e)])
     }
 }
 

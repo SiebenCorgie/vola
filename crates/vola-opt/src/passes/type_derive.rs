@@ -25,7 +25,7 @@ use rvsdg::{
     util::abstract_node_type::AbstractNodeType,
     NodeRef, SmallColl,
 };
-use vola_common::{ariadne::Label, error_reporter, report, Span};
+use vola_common::{ariadne::Label, error_reporter, report, Span, VolaError};
 
 use crate::{
     common::{DataType, Shape, Ty},
@@ -41,7 +41,7 @@ use crate::{
 //
 impl Optimizer {
     ///Runs the type resolution pass on all nodes.
-    pub fn type_derive(&mut self) -> Result<(), OptError> {
+    pub fn type_derive(&mut self) -> Result<(), Vec<VolaError<OptError>>> {
         #[cfg(feature = "log")]
         log::info!("type derive");
 
@@ -49,28 +49,40 @@ impl Optimizer {
             self.push_debug_state("pre type derive");
         }
 
-        let mut errors = SmallColl::new();
+        let mut errors = Vec::with_capacity(0);
 
         //we first build the topological order of all nodes in Omega, then
-        //we enter eac
+        //we enter each impl-block and function, since they might not be _in-use_ _yet_.
         let toplevel = self.graph.toplevel_region();
         let topoord = self.graph.topological_order_region(toplevel);
 
         for node in topoord {
             if let Err(e) = self.try_node_type_derive(node) {
-                errors.push(e)
+                if let Some(span) = self.find_span(node.into()) {
+                    errors.push(VolaError::error_here(e, span, "here"))
+                } else {
+                    errors.push(VolaError::new(e));
+                }
             }
         }
 
         for implblock in self.concept_impl.values() {
             if let Err(e) = self.verify_imblblock(implblock) {
-                errors.push(e)
+                errors.push(VolaError::error_here(
+                    e,
+                    implblock.def_span.clone(),
+                    "could not verify block",
+                ))
             }
         }
 
         for f in self.functions.values() {
             if let Err(e) = self.verify_fn(f) {
-                errors.push(e)
+                errors.push(VolaError::error_here(
+                    e,
+                    f.region_span.clone(),
+                    "could not verify function",
+                ))
             }
         }
 
@@ -80,7 +92,7 @@ impl Optimizer {
         }
 
         if errors.len() > 0 {
-            return Err(OptError::ErrorsOccurred(errors.len()));
+            return Err(errors);
         } else {
             Ok(())
         }
@@ -285,7 +297,7 @@ impl Optimizer {
             }
         } else {
             let err = OptError::Any {
-                text: format!("Result is of type \"{:?}\", but there was no return value set. This is a compiler bug!", algefn.return_type),
+                text: format!("Result is of type \"{}\", but there was no return value set. This is a compiler bug!", algefn.return_type),
             };
             report(
                 error_reporter(err.clone(), algefn.def_span.clone())

@@ -25,7 +25,7 @@ use vola_ast::{
     alge::Expr,
     common::{Block, Branch, Loop, Stmt},
 };
-use vola_common::{ariadne::Label, error_reporter, report, warning_reporter, Span};
+use vola_common::{ariadne::Label, error_reporter, report, warning_reporter, Span, VolaError};
 
 #[derive(Debug, Clone)]
 pub enum VarDef {
@@ -286,17 +286,7 @@ impl BlockCtx {
             //Did not find, try to import from parents
             match self.try_import(graph, name) {
                 Ok(port) => Ok(port),
-                Err(err) => {
-                    report(
-                        error_reporter(err.clone(), self.block_span.clone().into())
-                            .with_label(
-                                Label::new(self.block_span.clone().into())
-                                    .with_message("In this region".to_owned()),
-                            )
-                            .finish(),
-                    );
-                    Err(err)
-                }
+                Err(err) => Err(err),
             }
         }
     }
@@ -324,7 +314,7 @@ impl Optimizer {
         region: RegionLocation,
         mut block: Block,
         ctx: &mut BlockCtx,
-    ) -> Result<(), OptError> {
+    ) -> Result<(), VolaError<OptError>> {
         //HACK:
         //if the last stmt in a block is a branch with
         //results, and no return_expression is given, assume that this _is_
@@ -365,29 +355,19 @@ impl Optimizer {
         stmt: Stmt,
         region: RegionLocation,
         ctx: &mut BlockCtx,
-    ) -> Result<(), OptError> {
+    ) -> Result<(), VolaError<OptError>> {
         match stmt {
             Stmt::Assign(assign) => match ctx.find_variable(&mut self.graph, &assign.dst.0) {
                 Ok(_old_src) => {
                     let expr_src = self.build_expr(assign.expr, region, ctx)?;
                     //Rewrite expression-src to new assignment
                     if let Err(err) = ctx.write_var(&assign.dst.0, expr_src) {
-                        report(
-                            error_reporter(err.clone(), assign.span.clone())
-                                .with_label(Label::new(assign.span).with_message("here"))
-                                .finish(),
-                        );
-                        return Err(err);
+                        return Err(VolaError::error_here(err, assign.span.clone(), "here"));
                     }
                     Ok(())
                 }
                 Err(err) => {
-                    report(
-                        error_reporter(err.clone(), assign.span.clone().into())
-                            .with_label(Label::new(assign.span.clone()).with_message("here"))
-                            .finish(),
-                    );
-                    Err(err)
+                    return Err(VolaError::error_here(err, assign.span.clone(), "here"));
                 }
             },
             Stmt::Csg(csg_binding) => {
@@ -410,28 +390,26 @@ impl Optimizer {
                             let err = OptError::Any {
                                 text: format!("Expected a CSG node to be bound to a CSG variable, but \"{}\" is not a CSG operation", node_name),
                             };
-                            let errreport =
-                                error_reporter(err.clone(), csg_binding.span.clone().into());
-                            let labeled_err = if let Some(span) = node_span {
-                                errreport.with_label(
-                                    Label::new(span.into()).with_message("this should be a CSG"),
+                            if let Some(span) = node_span {
+                                return Err(VolaError::error_here(
+                                    err,
+                                    csg_binding.span.clone(),
+                                    "here",
                                 )
+                                .with_label(span, "this should be a CSG-value"));
                             } else {
-                                errreport
+                                return Err(VolaError::error_here(
+                                    err,
+                                    csg_binding.span.clone(),
+                                    "here",
+                                ));
                             };
-                            report(labeled_err.finish());
-                            return Err(err);
                         }
                     }
                 }
 
                 if let Err(error) = ctx.define_var(csg_binding.decl_name.0, expr_src) {
-                    report(
-                        error_reporter(error.clone(), csg_binding.span.clone().into())
-                            .with_label(Label::new(csg_binding.span.clone()).with_message("here"))
-                            .finish(),
-                    );
-                    return Err(error);
+                    return Err(VolaError::error_here(error, csg_binding.span, "here"));
                 }
                 Ok(())
             }
@@ -458,29 +436,30 @@ impl Optimizer {
                                     node_name
                                 ),
                             };
-                            let errreport =
-                                error_reporter(err.clone(), let_binding.span.clone().into());
                             let labeled_err = if let Some(span) = node_span {
-                                errreport.with_label(
-                                    Label::new(span.into())
-                                        .with_message("this should not be a CSG"),
+                                return Err(VolaError::error_here(
+                                    err,
+                                    let_binding.span.clone(),
+                                    "here",
                                 )
+                                .with_label(span, "this should not be a CSG"));
                             } else {
-                                errreport
+                                return Err(VolaError::error_here(
+                                    err,
+                                    let_binding.span.clone(),
+                                    "here",
+                                ));
                             };
-                            report(labeled_err.finish());
-                            return Err(err);
                         }
                     }
                 }
 
                 if let Err(error) = ctx.define_var(let_binding.decl_name.0, expr_src) {
-                    report(
-                        error_reporter(error.clone(), let_binding.span.clone().into())
-                            .with_label(Label::new(let_binding.span.clone()).with_message("here"))
-                            .finish(),
-                    );
-                    return Err(error);
+                    return Err(VolaError::error_here(
+                        error,
+                        let_binding.span.clone(),
+                        "here",
+                    ));
                 }
 
                 Ok(())
@@ -493,14 +472,13 @@ impl Optimizer {
                 self.build_block(region, *b, ctx)?;
                 let closed = ctx.close_scope();
                 if let Some(return_value) = closed.result {
-                    report(
-                        error_reporter(
-                            "Block statement should not have a return value.",
-                            self.find_span(return_value.into()).unwrap_or(Span::empty()),
-                        )
-                        .finish(),
-                    );
-                    return Err(OptError::Any { text: format!("Statement block can not return value. Consider binding the value to a variable, or not returning at all") });
+                    return Err(VolaError::error_here(
+                        OptError::Any {
+                            text: "block has unexpected result".to_owned(),
+                        },
+                        self.find_span(return_value.into()).unwrap_or(Span::empty()),
+                        "Block statement should not have a return-value, consider binding the value to a result",
+                    ));
                 }
                 Ok(())
             }
@@ -514,7 +492,7 @@ impl Optimizer {
         branch: Branch,
         region: RegionLocation,
         ctx: &mut BlockCtx,
-    ) -> Result<(), OptError> {
+    ) -> Result<(), VolaError<OptError>> {
         //TODO: make sure both blocks don't have a result, maybe warn on _unused-result?_
         //      then make sure to overwrite new var-defs, and feed-through any unused, but captured
         //      variables
@@ -703,7 +681,7 @@ impl Optimizer {
         loopstmt: Loop,
         region: RegionLocation,
         ctx: &mut BlockCtx,
-    ) -> Result<(), OptError> {
+    ) -> Result<(), VolaError<OptError>> {
         //We have to write the loop down as a Gamma-Node, where the _no-iteration_ case is handeled by a branch, while the iteration itself
         //is handeled by the theta node.
         //
@@ -913,15 +891,7 @@ impl Optimizer {
                     if idx < 2 {
                         if import_port != last_use {
                             let err = OptError::Any { text: format!("Tried to redefine loop bound \"{var}\" in loop,  which is not allowed!") };
-                            report(
-                                error_reporter(err.clone(), rangespan.clone())
-                                    .with_label(
-                                        Label::new(rangespan.clone())
-                                            .with_message("for this bound"),
-                                    )
-                                    .finish(),
-                            );
-                            return Err(err);
+                            return Err(VolaError::error_here(err, rangespan, "for this bound"));
                         }
                         continue;
                     }

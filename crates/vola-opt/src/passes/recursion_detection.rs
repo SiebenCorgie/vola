@@ -13,20 +13,20 @@ use rvsdg::{
     nodes::StructuralNode,
     NodeRef, SmallColl,
 };
-use vola_common::{ariadne::Label, error_reporter, report, Span};
+use vola_common::{ariadne::Label, error_reporter, report, Span, VolaError};
 
 use crate::{OptError, Optimizer};
 
 impl Optimizer {
     ///Simple pass that finds recursive calls and reports them as errors.
-    pub fn detect_recursive_calls(&self) -> Result<(), OptError> {
+    pub fn detect_recursive_calls(&self) -> Result<(), Vec<VolaError<OptError>>> {
         //we perform this _simply_ testing each node's CV-dependencies (and transitions, if they contain the node)
         //itself.
         //
         //luckily this is simple, we just need to find all λ-declerations that are connected to a node, and their
         //connected CV-λs etc.
 
-        let mut errors = SmallColl::default();
+        let mut errors = Vec::with_capacity(0);
 
         //TODO: We currently only do this for _top-level_ λs.
         //      ATM. it makes no sense to do it for nested ones, but that
@@ -35,15 +35,10 @@ impl Optimizer {
             if self.graph[*node].node_type.is_lambda() {
                 if let Err(e) = self.detect_self(*node) {
                     if let Some(span) = self.find_span(node.into()) {
-                        report(
-                            error_reporter(e.clone(), span.clone())
-                                .with_label(Label::new(span).with_message("in this funtion"))
-                                .finish(),
-                        );
+                        errors.push(VolaError::error_here(e, span, "in this function"))
                     } else {
-                        report(error_reporter(e.clone(), Span::empty()).finish());
+                        errors.push(VolaError::new(e));
                     }
-                    errors.push(e);
                 }
             }
         }
@@ -51,7 +46,7 @@ impl Optimizer {
         //pop the last error after finishin
 
         if errors.len() > 0 {
-            return Err(OptError::ErrorsOccurred(errors.len()));
+            return Err(errors);
         } else {
             Ok(())
         }
