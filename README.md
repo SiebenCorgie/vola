@@ -64,7 +64,8 @@ Note: The techstack is not set in stone. We might switch to a hand written parse
 
 ## Packages
 
-- [tree-sitter-vola](https://gitlab.com/tendsinmende/tree-sitter-vola): Treesitter based parser. Also contains the language grammar.
+- `vola-tree-sitter-parser`: [tree-sitter-vola](https://gitlab.com/tendsinmende/tree-sitter-vola) based parser. Also contains the language grammar.
+- `vola-tree-sitter-openscad`: open-scad parser that converts CSG-expressions to vola. Does not support the full OpenScad featureset (yet).
 - `vola-ast`: The Abstract-Syntax-Tree representation of any Vola program. Can either be build from a file (using `tree-sitter-vola`) or
 by using this as a library. Servers as interface between the Vola frontend, and any middle- / backend.
 - `vola-opt`: The RVSDG based optimizer
@@ -75,10 +76,12 @@ by using this as a library. Servers as interface between the Vola frontend, and 
 - `vola-cli`: Thin CLI interface around `volac`
 - `rvsdg`: A generic [RVSDG](https://dl.acm.org/doi/abs/10.1145/3391902) implementation.
 - `vola-common`: Factors out common components for Vola's compiler stages. These are mostly debugging / error-reporting related.
+- `vola-fmt`: Auto-formater on the Vola AST.
+- `vola-convert`: Foreign syntax -> vola converter. Currently supports converting a `mymodel.scad` OpenScad file to `mymodel.vola`.
 
 ## Status
 
-📖 Reworking the Syntax 📖
+🎛️ _Stability and user-friendliness_ 🎛️
 
 ## Building & Running
 
@@ -86,9 +89,9 @@ Make sure that you are on rust-nightly (eg. `rustup default nightly`). Then just
 
 ### vola-cli
 
-To compile some file to a SPIR-V file, use the `vola-cli` package. By default it'll output a `output_file_name.spv` in the SPIR-V format.
+To compile some file to a SPIR-V file, use the `vola-cli` package.
 ``` shell
-cargo run --bin vola-cli -- path/to/some/file.vola output_file_name
+cargo run --bin vola-cli -- path/to/some/file.vola output_file_name.spv
 ```
 
 ### Caveat
