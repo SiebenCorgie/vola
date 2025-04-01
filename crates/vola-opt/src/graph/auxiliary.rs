@@ -20,6 +20,7 @@ pub struct ImplKey {
 
 ///Reference to some implementation
 pub struct Impl {
+    #[allow(unused)]
     pub region_span: Span,
     pub def_span: Span,
     pub concept: String,

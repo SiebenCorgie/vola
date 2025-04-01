@@ -12,7 +12,7 @@ use rvsdg::{
     region::RegionLocation,
     NodeRef, SmallColl,
 };
-use vola_common::{ariadne::Label, error::error_reporter, report, Span};
+use vola_common::{Span, VolaError};
 
 use crate::{
     alge::EvalNode, common::Ty, csg::CsgOp, graph::auxiliary::ImplKey, OptEdge, OptError, Optimizer,
@@ -27,8 +27,8 @@ struct SpecCtx {
 
 impl Optimizer {
     /// Shortcut to call [Self::specialize_export] for all exported λs
-    pub fn specialize_all_exports(&mut self) -> Result<(), OptError> {
-        let mut errors = SmallColl::new();
+    pub fn specialize_all_exports(&mut self) -> Result<(), Vec<VolaError<OptError>>> {
+        let mut errors = Vec::with_capacity(0);
 
         //specialize all functions:
         //Iterate over all functions in the TopLevel region, topological.
@@ -51,12 +51,16 @@ impl Optimizer {
         //      _pulled-in_ in this process, so whenever a impl-block with eval-nodes is
         //      inlined, the "restart" step will discover that, and ... restart the process.
         for function in topord_functions {
-            let (function_region, function_name) = if let Some(function) =
+            let (function_region, function_name, head_span) = if let Some(function) =
                 self.functions.values().find(|v| v.lambda == function)
             {
-                (function.region(), function.name.clone())
+                (
+                    function.region(),
+                    function.name.clone(),
+                    function.def_span.clone(),
+                )
             } else {
-                errors.push(OptError::Any{text: format!("function node {function:?} was discovered, but not present in function map. This is a bug!")});
+                errors.push(VolaError::new(OptError::Internal(format!("function node {function:?} was discovered, but not present in function map. This is a bug!"))));
                 continue;
             };
             if std::env::var("VOLA_DUMP_ALL").is_ok()
@@ -66,7 +70,7 @@ impl Optimizer {
             }
             //NOTE: defer breaking to _after_ all exports are specialized (or not^^).
             if let Err(e) = self.specialize_region(function_region) {
-                errors.push(e);
+                errors.push(e.with_label(head_span, "on this function"));
             }
 
             if std::env::var("VOLA_DUMP_ALL").is_ok()
@@ -80,7 +84,7 @@ impl Optimizer {
             self.push_debug_state(&format!("post specialize"));
         }
         if errors.len() > 0 {
-            Err(errors.remove(0))
+            Err(errors)
         } else {
             Ok(())
         }
@@ -93,7 +97,7 @@ impl Optimizer {
     ///
     /// Instead a inliner _can_ be used if needed. It also doesn't import values via context variables, but
     /// uses _normal_ arguments to the specific λ-nodes / apply-nodes.
-    pub fn specialize_region(&mut self, region: RegionLocation) -> Result<(), OptError> {
+    pub fn specialize_region(&mut self, region: RegionLocation) -> Result<(), VolaError<OptError>> {
         //NOTE: The new specializer follows the learning of the first one
         //(see https://gitlab.com/tendsinmende/vola/-/blob/cc9624a2c159bac35cc818130f3041409b296419/crates/vola-opt/src/passes/field_dispatch.rs)
         //
@@ -149,10 +153,11 @@ impl Optimizer {
 
         //NOTE inline takes care of bringing all CSG nodes into the same region
         //TODO: Don't inline all, use heuristic instead.
-        self.inline_all_region(region)?;
+        let region_span = self.find_span(region.into()).unwrap_or(Span::empty());
+        self.inline_all_region(region)
+            .map_err(|e| VolaError::error_here(e, region_span.clone(), "in this region"))?;
 
         //Try specializing reverse-topo-ord eval nodes, till we don't have any left
-        //TODO: handle sub-regions first? aka. control-flow csg nodes?
         'restart: loop {
             let topoord = self.graph.topological_order_region(region);
             for node in topoord.into_iter().rev() {
@@ -167,7 +172,9 @@ impl Optimizer {
                 //if this is a eval node, specialize its value, then restart
                 if self.is_node_type::<EvalNode>(node) {
                     //node seems good, start specializer
-                    self.specialize_eval_entry(region, node)?;
+                    let span = self.find_span(node.into()).unwrap_or(region_span.clone());
+                    self.specialize_eval_entry(region, node)
+                        .map_err(|e| e.with_label(span, "while specializing this"))?;
                     continue 'restart;
                 }
             }
@@ -184,7 +191,7 @@ impl Optimizer {
         &mut self,
         host_region: RegionLocation,
         eval: NodeRef,
-    ) -> Result<(), OptError> {
+    ) -> Result<(), VolaError<OptError>> {
         //build the frist eval_spec_ctx
         //for the first connected subtree, then substitude the tree-access node with a eval node
         let src_span = self
@@ -201,7 +208,7 @@ impl Optimizer {
     }
 
     ///Specializes the `eval` node based
-    fn specialize_eval_node(&mut self, spec_ctx: SpecCtx) -> Result<(), OptError> {
+    fn specialize_eval_node(&mut self, spec_ctx: SpecCtx) -> Result<(), VolaError<OptError>> {
         if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("DUMP_BEFORE_SPECIALIZE").is_ok()
         {
             self.push_debug_state(&format!("before specialize {}", spec_ctx.eval_node));
@@ -246,16 +253,11 @@ impl Optimizer {
         //      is no such implblock yet.
         if !self.concept_impl.contains_key(&implkey) && subtree_count == 1 {
             if let Err(e) = self.implement_identity_for_concept(implkey.clone()) {
-                report(
-                    error_reporter(e.clone(), spec_ctx.tree_access_span.clone())
-                        .with_label(
-                            Label::new(spec_ctx.tree_access_span)
-                                .with_message("While specializing this tree-access"),
-                        )
-                        .finish(),
-                );
-
-                return Err(e);
+                return Err(VolaError::error_here(
+                    e,
+                    spec_ctx.tree_access_span,
+                    "While specializing this tree-access",
+                ));
             }
         }
 
@@ -265,8 +267,12 @@ impl Optimizer {
             // and hook it up to the eval node's first input.
             let impl_subtree_conut = concept_impl.subtrees.len();
             let impl_span = concept_impl.def_span.clone();
-            let in_host_region_impl =
-                self.deep_copy_lmd_into_region(concept_impl.lambda, spec_ctx.host_region)?;
+            let in_host_region_impl = self
+                .deep_copy_lmd_into_region(concept_impl.lambda, spec_ctx.host_region)
+                .map_err(|e| {
+                    VolaError::error_here(e, impl_span.clone(), "could not inline this impl-block")
+                        .with_label(spec_ctx.tree_access_span.clone(), "for this tree-access")
+                })?;
 
             //NOTE: Reconnect the context variables that are
 
@@ -288,13 +294,14 @@ impl Optimizer {
                     .unwrap_simple_ref()
                     .span
                     .clone();
-                report(error_reporter(format!("Trying to use the implementation of {csg_name} for {concept_name}: Implementation is for {impl_subtree_conut} sub-trees, but using it for {subtree_count} sub-trees"), errspan.clone()).with_label(Label::new(errspan).with_message(format!("this should have {impl_subtree_conut} sub-trees"))).with_label(Label::new(impl_span).with_message("Trying to use this implementation")).with_label(Label::new(spec_ctx.tree_access_span).with_color(vola_common::ariadne::Color::Green).with_message("Specialization for this eval.")).finish());
-                return Err(OptError::DispatchAnyError {
-                    concept: concept_name,
-                    opname: csg_name,
+                let err = OptError::DispatchAnyError {
+                    concept: concept_name.clone(),
+                    opname: csg_name.clone(),
                     errstring: "Concept implementation CSG-Operand-count does not match usage"
                         .to_owned(),
-                });
+                };
+
+                return Err(VolaError::error_here(err, errspan, format!("Trying to use the implementation of {csg_name} for {concept_name}: Implementation is for {impl_subtree_conut} sub-trees, but using it for {subtree_count} sub-trees")).with_label(impl_span, "Trying to use this implementation").with_label(spec_ctx.tree_access_span.clone(), "Specialization for this eval."));
             }
 
             //now hook up the subtree(s) of the eval-connected csg node to the CVs
@@ -409,7 +416,13 @@ impl Optimizer {
 
             //finally delete the eval node, and connect the applynode instead
 
-            self.graph.remove_node(spec_ctx.eval_node)?;
+            self.graph.remove_node(spec_ctx.eval_node).map_err(|e| {
+                VolaError::error_here(
+                    e.into(),
+                    spec_ctx.tree_access_span.clone(),
+                    "could not delete this",
+                )
+            })?;
             self.graph.on_region(&eval_region, |r| {
                 let (args, argty): (SmallColl<_>, SmallColl<_>) = args.into_iter().fold(
                     (SmallColl::new(), SmallColl::new()),
@@ -457,27 +470,11 @@ impl Optimizer {
                     "Could not find implementation of \"{concept_name}\" for \"{csg_name}\""
                 ),
             };
-            report(
-                error_reporter(err.clone(), span.clone())
-                    .with_label(
-                        Label::new(span)
-                            .with_message("While trying to specialize this eval")
-                            .with_color(vola_common::ariadne::Color::Green),
-                    )
-                    .with_label(
-                        Label::new(csgspan)
-                            .with_message("For this CSG-Node")
-                            .with_color(vola_common::ariadne::Color::Green),
-                    )
-                    .with_label(
-                        Label::new(spec_ctx.tree_access_span.clone())
-                            .with_message("For this tree-access")
-                            .with_color(vola_common::ariadne::Color::Green),
-                    )
-                    .finish(),
+            return Err(
+                VolaError::error_here(err, span, "While trying to specialize this eval")
+                    .with_label(csgspan, "For this CSG-Node")
+                    .with_label(spec_ctx.tree_access_span.clone(), "For this tree-access"),
             );
-
-            return Err(err);
         };
 
         //At this point we successfuly specialized the eval node for this context.
@@ -592,7 +589,7 @@ impl Optimizer {
         tree_access_span: Span,
         host_region: RegionLocation,
         eval: NodeRef,
-    ) -> Result<SpecCtx, OptError> {
+    ) -> Result<SpecCtx, VolaError<OptError>> {
         assert!(self
             .graph
             .node(eval)
@@ -620,24 +617,15 @@ impl Optimizer {
                     if !self.is_node_type::<CsgOp>(prod.node) {
                         let err =
                             OptError::CsgStructureIssue(format!("Non-CSG value used in CSG tree!"));
-                        if let Some(span) = self.find_span(prod.node.into()) {
-                            report(
-                                error_reporter(err.clone(), src_span.clone())
-                                    .with_label(
-                                        Label::new(span).with_message("this should be a CSG value"),
-                                    )
-                                    .finish(),
-                            );
+                        let error = if let Some(span) = self.find_span(prod.node.into()) {
+                            VolaError::error_here(err, src_span.clone(), "here")
+                                .with_label(span, "this should be a CSG value")
                         } else {
-                            report(
-                                error_reporter(err.clone(), src_span.clone())
-                                    .with_label(
-                                        Label::new(tree_access_span).with_message("for this eval"),
-                                    )
-                                    .finish(),
-                            );
-                        }
-                        return Err(err);
+                            VolaError::error_here(err, src_span.clone(), "here")
+                                .with_label(tree_access_span, "for this eval")
+                        };
+
+                        return Err(error);
                     }
                     prod
                 }
@@ -645,31 +633,16 @@ impl Optimizer {
                     let err = OptError::Internal(format!(
                         "Eval wrongly typed first argument. Expected CSGTree, was {other:?}!"
                     ));
-                    report(
-                        error_reporter(err.clone(), src_span.clone())
-                            .with_label(Label::new(src_span.clone()).with_message("here"))
-                            .finish(),
-                    );
-                    return Err(err);
+                    return Err(VolaError::error_here(err, src_span, "here"));
                 }
                 None => {
                     let err = OptError::Internal("Eval untyped first argument!".to_owned());
-                    report(
-                        error_reporter(err.clone(), src_span.clone())
-                            .with_label(Label::new(src_span.clone()).with_message("here"))
-                            .finish(),
-                    );
-                    return Err(err);
+                    return Err(VolaError::error_here(err, src_span, "here"));
                 }
             }
         } else {
             let err = OptError::Internal("Eval node had no csg tree connected!".to_owned());
-            report(
-                error_reporter(err.clone(), src_span.clone())
-                    .with_label(Label::new(src_span.clone()).with_message("here"))
-                    .finish(),
-            );
-            return Err(err);
+            return Err(VolaError::error_here(err, src_span, "here"));
         };
         Ok(SpecCtx {
             tree_access_span,

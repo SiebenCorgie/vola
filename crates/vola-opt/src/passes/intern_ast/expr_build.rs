@@ -9,7 +9,6 @@
 use rvsdg::{
     edge::{InputType, OutportLocation, OutputType},
     region::RegionLocation,
-    smallvec::SmallVec,
 };
 
 use crate::{
@@ -25,7 +24,7 @@ use vola_ast::{
     common::Branch,
     csg::CsgTy,
 };
-use vola_common::{ariadne::Label, error::error_reporter, report, Span};
+use vola_common::{Span, VolaError};
 
 use crate::{
     alge::EvalNode,
@@ -43,7 +42,7 @@ impl Optimizer {
         expr: Expr,
         region: RegionLocation,
         ctx: &mut BlockCtx,
-    ) -> Result<OutportLocation, OptError> {
+    ) -> Result<OutportLocation, VolaError<OptError>> {
         let expr_span = expr.op_span();
         match expr.expr_ty {
             ExprTy::Unary { op, operand } => {
@@ -89,11 +88,11 @@ impl Optimizer {
                     Node(OptNode),
                     Call(OutportLocation),
                 }
-                let args: SmallVec<_> = c
+                let args: SmallColl<_> = c
                     .args
                     .into_iter()
                     .map(|arg| self.build_expr(arg, region, ctx))
-                    .collect::<Result<SmallColl<_>, OptError>>()?;
+                    .collect::<Result<SmallColl<_>, VolaError<OptError>>>()?;
 
                 let res = if let Some(ooe) = self.csg_node_defs.get(&c.ident.0) {
                     //found one, use that as a CSG op
@@ -107,7 +106,9 @@ impl Optimizer {
                         CallResult::Node(intr)
                     } else {
                         //must be some kind of function, try to import it, and place a call
-                        let call_output = ctx.find_variable(&mut self.graph, &c.ident.0)?;
+                        let call_output = ctx
+                            .find_variable(&mut self.graph, &c.ident.0)
+                            .map_err(|e| e.with_label(expr_span.clone(), "here"))?;
                         CallResult::Call(call_output)
                     }
                 };
@@ -142,7 +143,9 @@ impl Optimizer {
 
                 let mut args = SmallColl::new();
                 //first arg is, by definition the _hopefull_ defined var
-                let operand = ctx.find_variable(&mut self.graph, &evalexpr.evaluator.0)?;
+                let operand = ctx
+                    .find_variable(&mut self.graph, &evalexpr.evaluator.0)
+                    .map_err(|e| e.with_label(expr_span.clone(), "here"))?;
                 args.push(operand);
 
                 for arg in evalexpr.params.into_iter() {
@@ -172,7 +175,9 @@ impl Optimizer {
                 //Try to find the access source, if successful, hook the source up to this and
                 // return the value
 
-                let mut src = ctx.find_variable(&mut self.graph, &src.0)?;
+                let mut src = ctx
+                    .find_variable(&mut self.graph, &src.0)
+                    .map_err(|e| e.with_label(expr_span.clone(), "here"))?;
 
                 //Unwrap the `accessors` list into a chain of `ConstantIndex`, each feeding into its
                 //successor.
@@ -183,12 +188,7 @@ impl Optimizer {
                         let err = OptError::Any {
                             text: format!("Could not convert {} to index!", accessor),
                         };
-                        report(
-                            error_reporter(err.clone(), expr_span.clone())
-                                .with_label(Label::new(expr_span.clone()).with_message("here"))
-                                .finish(),
-                        );
-                        return Err(err);
+                        return Err(VolaError::error_here(err, expr_span, "here"));
                     };
 
                     let cinode = OptNode::new(ConstantIndex::new(idx), expr_span.clone());
@@ -209,7 +209,9 @@ impl Optimizer {
             }
             ExprTy::Ident(i) => {
                 //try to resolve the ident, or throw an error if not possible
-                let ident_node = ctx.find_variable(&mut self.graph, &i.0)?;
+                let ident_node = ctx
+                    .find_variable(&mut self.graph, &i.0)
+                    .map_err(|e| e.with_label(expr_span.clone(), "here"))?;
                 Ok(ident_node)
             }
             ExprTy::List(lst) => {
@@ -295,18 +297,8 @@ impl Optimizer {
                 if let Some(operation) = self.csg_node_defs.get(&sc.call.ident.0) {
                     if operation.ty == CsgTy::Entity {
                         let err = OptError::Any { text: format!("Using Entity with sub-trees. Only CSG-Operations can use subtrees!") };
-                        report(
-                            error_reporter(err.clone(), sc.call.span.clone())
-                                .with_label(
-                                    Label::new(sc.call.span.clone()).with_message("called here"),
-                                )
-                                .with_label(
-                                    Label::new(operation.span.clone())
-                                        .with_message("Entity defined here"),
-                                )
-                                .finish(),
-                        );
-                        return Err(err);
+                        return Err(VolaError::error_here(err, sc.call.span, "called here")
+                            .with_label(operation.span.clone(), "Entity defined here"));
                     }
                 } else {
                     //No such entity or operation
@@ -316,14 +308,11 @@ impl Optimizer {
                             sc.call.ident.0
                         ),
                     };
-                    report(
-                        error_reporter(err.clone(), sc.call.span.clone())
-                            .with_label(
-                                Label::new(sc.call.span.clone()).with_message("called here"),
-                            )
-                            .finish(),
-                    );
-                    return Err(err);
+                    return Err(VolaError::error_here(
+                        err,
+                        sc.call.span.clone(),
+                        "called here",
+                    ));
                 }
 
                 //setup the subtree-results
@@ -348,17 +337,12 @@ impl Optimizer {
                         let err = OptError::Any {
                             text: format!("The call's subtree must have a (csg) result"),
                         };
-                        report(
-                            error_reporter(err.clone(), sc.call.span.clone())
-                                .with_label(
-                                    Label::new(sc.call.span.clone()).with_message("called here"),
-                                )
-                                .with_label(
-                                    Label::new(subtree_span.clone()).with_message("This region"),
-                                )
-                                .finish(),
-                        );
-                        return Err(err);
+                        return Err(VolaError::error_here(
+                            err,
+                            sc.call.span.clone(),
+                            "called here",
+                        )
+                        .with_label(subtree_span.clone(), "This region"));
                     }
                 }
 
@@ -391,16 +375,11 @@ impl Optimizer {
                     let err = OptError::Any {
                         text: format!("Splat expression's count cannot be less than 2"),
                     };
-                    report(
-                        error_reporter(err.clone(), expr.span.clone())
-                            .with_label(
-                                Label::new(expr.span.clone())
-                                    .with_message("Consider removing this splat expression"),
-                            )
-                            .finish(),
-                    );
-
-                    return Err(err);
+                    return Err(VolaError::error_here(
+                        err,
+                        expr.span.clone(),
+                        "Consider removing this splat expression",
+                    ));
                 }
 
                 let src_expr = self.build_expr(*expr, region, ctx)?;
@@ -433,7 +412,7 @@ impl Optimizer {
         branch: Branch,
         region: RegionLocation,
         ctx: &mut BlockCtx,
-    ) -> Result<OutportLocation, OptError> {
+    ) -> Result<OutportLocation, VolaError<OptError>> {
         let (condition, if_branch) = branch.conditional;
         //First build the condition in this region
         let condition = self.build_expr(condition, region, ctx)?;
@@ -523,14 +502,11 @@ impl Optimizer {
                 let err = OptError::Any {
                     text: format!("All branches must have an result if used as an expression!"),
                 };
-                report(
-                    error_reporter(err.clone(), branch.span.clone())
-                        .with_label(
-                            Label::new(branch.span.clone()).with_message("on this expression"),
-                        )
-                        .finish(),
-                );
-                return Err(err);
+                return Err(VolaError::error_here(
+                    err,
+                    branch.span.clone(),
+                    "on this expression",
+                ));
             }
         }
 

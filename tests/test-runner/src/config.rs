@@ -102,7 +102,11 @@ impl Config {
             if line.starts_with("//ERROR:") {
                 //strip the error part and push the string
                 if let Some(suffix) = line.strip_prefix("//ERROR:") {
-                    config.expected_result = ResultType::Error(suffix.to_string());
+                    //now split at the '<!!>' marker to collect all errors _in-order_
+
+                    config.expected_result = ResultType::Error(
+                        suffix.split("<!!>").map(|sub| sub.to_string()).collect(),
+                    );
                 } else {
                     return Err(format!(
                         "{} \"ERROR\" string for {:?}",

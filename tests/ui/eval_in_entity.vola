@@ -1,5 +1,5 @@
 //BEGIN-CONFIG
-//ERROR:At least 1 errors occurred while running optimizer.
+//ERROR:Could not find "sub" in any parent scope!
 //END-CONFIG
 
 module std;

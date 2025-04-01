@@ -1,5 +1,5 @@
 //BEGIN-CONFIG
-//ERROR:At least 1 errors occurred while running optimizer.
+//ERROR:Result is of type "scalar<Real>", but there was no return value set.
 //END-CONFIG
 
 concept Sdf3d: vec3 -> real;

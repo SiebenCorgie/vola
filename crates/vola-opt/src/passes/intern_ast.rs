@@ -7,6 +7,7 @@
  */
 use crate::{OptError, Optimizer};
 use vola_ast::{AstEntry, TopLevelNode, VolaAst};
+use vola_common::VolaError;
 mod ast_to_graph;
 mod block_build;
 mod expr_build;
@@ -14,7 +15,7 @@ mod expr_build;
 impl Optimizer {
     ///Adds a [VolaAst] to the optimizer. Might emit errors if the
     /// semantic analysis fails immediately while adding.
-    pub fn add_ast(&mut self, ast: VolaAst) -> Result<(), OptError> {
+    pub fn add_ast(&mut self, ast: VolaAst) -> Result<(), Vec<VolaError<OptError>>> {
         //Interning the ast works in three steps:
         // 1. Serialize all entry-points into the graph
         //    For any function-like _call_ insert a unresolved node
@@ -28,7 +29,7 @@ impl Optimizer {
         #[cfg(feature = "log")]
         log::info!("Adding Ast to Optimizer");
 
-        let mut errors = Vec::with_capacity(0);
+        let mut errors: Vec<VolaError<OptError>> = Vec::with_capacity(0);
 
         //NOTE: we first inter all defines, then the actual code.
         //      needed so we can already infer some basic stuff at interning time.
@@ -55,7 +56,7 @@ impl Optimizer {
         //if we already had an error, we can-not continue, since
         //nothing is valid anyways
         if errors.len() > 0 {
-            return Err(OptError::ErrorsOccurred(errors.len()));
+            return Err(errors);
         }
 
         for entry in ast.entries {
@@ -67,9 +68,9 @@ impl Optimizer {
             let result = match entry {
                 AstEntry::Func(f) => self.build_func_block(span, ct_args, f),
                 AstEntry::ImplBlock(implblock) => self.add_implblock(span, ct_args, implblock),
-                AstEntry::Module(_m) => Err(OptError::Internal(format!(
+                AstEntry::Module(_m) => Err(VolaError::new(OptError::Internal(format!(
                     "Found module, those should be resolved already!"
-                ))),
+                )))),
                 _ => Ok(()),
             };
 
@@ -100,7 +101,7 @@ impl Optimizer {
         }
 
         if errors.len() > 0 {
-            Err(OptError::ErrorsOccurred(errors.len()))
+            Err(errors)
         } else {
             Ok(())
         }

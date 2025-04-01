@@ -25,13 +25,13 @@ use csg::{CSGConcept, CsgDef, ImplBlock};
 
 pub use error::AstError;
 use smallvec::smallvec;
-use std::path::Path;
+use std::{error::Error, path::Path};
 #[cfg(feature = "dot")]
 pub mod dot;
 pub use module::Module;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
-use vola_common::{ariadne::Label, error::error_reporter, report, FileString, Span};
+use vola_common::{FileString, Span, VolaError};
 
 pub mod alge;
 pub mod common;
@@ -110,32 +110,29 @@ pub struct VolaAst {
 }
 
 pub trait VolaParser {
+    type Error: Error;
     fn parse_from_byte(
         &self,
         src_file: Option<FileString>,
         byte: &[u8],
-    ) -> Result<VolaAst, AstError>;
+    ) -> Result<VolaAst, Vec<VolaError<Self::Error>>>;
 }
 
 impl VolaAst {
-    pub fn new_from_file(
+    pub fn new_from_file<E: Error>(
         file: &dyn AsRef<Path>,
-        parser: &dyn VolaParser,
-    ) -> Result<Self, AstError> {
+        parser: &dyn VolaParser<Error = E>,
+    ) -> Result<Self, Vec<VolaError<AstError>>> {
         let root_file = file.as_ref().to_str().unwrap().into();
-        let bytes = std::fs::read(file.as_ref()).map_err(|e| {
-            report(
-                vola_common::ariadne::Report::build(
-                    vola_common::ariadne::ReportKind::Error,
-                    "File not found",
-                    0,
-                )
-                .with_message(format!("Could not find root file {:?}", file.as_ref()))
-                .finish(),
-            );
-            AstError::IoError(e.to_string())
-        })?;
-        let mut root_ast = parser.parse_from_byte(Some(root_file), &bytes)?;
+        let bytes = std::fs::read(file.as_ref())
+            .map_err(|e| vec![VolaError::new(AstError::IoError(e.to_string()))])?;
+        let mut root_ast = parser
+            .parse_from_byte(Some(root_file), &bytes)
+            .map_err(|errs| {
+                errs.into_iter()
+                    .map(|e| AstError::from_parser_error(e))
+                    .collect::<Vec<_>>()
+            })?;
 
         //now resolve relative to the ast all submodules
         let _ = root_ast.resolve_modules(file, parser)?;
@@ -143,17 +140,23 @@ impl VolaAst {
         Ok(root_ast)
     }
 
-    pub fn new_from_bytes(
+    pub fn new_from_bytes<E: Error>(
         bytes: &[u8],
-        parser: &dyn VolaParser,
+        parser: &dyn VolaParser<Error = E>,
         workspace: impl AsRef<Path>,
-    ) -> Result<Self, AstError> {
+    ) -> Result<Self, Vec<VolaError<AstError>>> {
         //build a pseudo file we use for error reporting
         let mut pseudo_file = workspace.as_ref().to_path_buf();
         pseudo_file.push("pseudo_source.vola");
         let root_file: FileString = pseudo_file.as_path().to_str().unwrap().into();
 
-        let mut root_ast = parser.parse_from_byte(Some(root_file), &bytes)?;
+        let mut root_ast = parser
+            .parse_from_byte(Some(root_file), &bytes)
+            .map_err(|errs| {
+                errs.into_iter()
+                    .map(|e| AstError::from_parser_error(e))
+                    .collect::<Vec<_>>()
+            })?;
         let _ = root_ast.resolve_modules(&pseudo_file, parser)?;
         Ok(root_ast)
     }
@@ -161,32 +164,34 @@ impl VolaAst {
     ///Parses `bytes` into [VolaAst], but does not resolve [AstEntry::Module]. Use either [VolaAst::new_from_bytes] to do that automatically, or [VolaAst::resolve_modules] to do that manually.
     ///
     /// On a side node, the file name "pseudo_source.vola" will be used, whenever a source file-name is needed.
-    pub fn new_from_bytes_no_import(
+    pub fn new_from_bytes_no_import<E: Error>(
         bytes: &[u8],
-        parser: &dyn VolaParser,
-    ) -> Result<Self, AstError> {
-        parser.parse_from_byte(None, &bytes)
+        parser: &dyn VolaParser<Error = E>,
+    ) -> Result<Self, Vec<VolaError<AstError>>> {
+        parser.parse_from_byte(None, &bytes).map_err(|errs| {
+            errs.into_iter()
+                .map(|e| AstError::from_parser_error(e))
+                .collect::<Vec<_>>()
+        })
     }
 
     ///Parses `file` into [VolaAst], but does not resolve [AstEntry::Module]. Use either [VolaAst::new_from_file] to do that automatically, or [VolaAst::resolve_modules] to do that manually.
-    pub fn new_from_file_no_import(
+    pub fn new_from_file_no_import<E: Error>(
         file: &dyn AsRef<Path>,
-        parser: &dyn VolaParser,
-    ) -> Result<Self, AstError> {
+        parser: &dyn VolaParser<Error = E>,
+    ) -> Result<Self, Vec<VolaError<AstError>>> {
         let root_file = file.as_ref().to_str().unwrap().into();
         let bytes = std::fs::read(file.as_ref()).map_err(|e| {
-            report(
-                vola_common::ariadne::Report::build(
-                    vola_common::ariadne::ReportKind::Error,
-                    "File not found",
-                    0,
-                )
-                .with_message(format!("Could not find root file {:?}", file.as_ref()))
-                .finish(),
-            );
-            AstError::IoError(e.to_string())
+            let err = VolaError::new(AstError::IoError(e.to_string()));
+            vec![err]
         })?;
-        parser.parse_from_byte(Some(root_file), &bytes)
+        parser
+            .parse_from_byte(Some(root_file), &bytes)
+            .map_err(|errs| {
+                errs.into_iter()
+                    .map(|e| AstError::from_parser_error(e))
+                    .collect::<Vec<_>>()
+            })
     }
 
     pub fn empty() -> Self {
@@ -196,11 +201,11 @@ impl VolaAst {
     }
 
     ///Resloves all imported modules in `Self` relative to the given path.
-    pub fn resolve_modules(
+    pub fn resolve_modules<E: Error>(
         &mut self,
         relative_to: &dyn AsRef<Path>,
-        parser: &dyn VolaParser,
-    ) -> Result<(), AstError> {
+        parser: &dyn VolaParser<Error = E>,
+    ) -> Result<(), Vec<VolaError<AstError>>> {
         let mut seen_modules = AHashSet::default();
         //add our selfs as a _seen_ module
         let self_path = smallvec![crate::common::Ident(
@@ -215,6 +220,7 @@ impl VolaAst {
         seen_modules.insert(self_path);
 
         let base_path = relative_to.as_ref().parent().unwrap().to_path_buf();
+        let mut errors = Vec::new();
         //go through the entry points and recursively parse the modules.
         //We currently do that with a simple restart-loop.
         'module_resolver: loop {
@@ -243,19 +249,22 @@ impl VolaAst {
                     path.set_extension("vola");
 
                     if !path.exists() {
-                        let err = AstError::NoModuleFile { path };
-                        report(
-                            error_reporter(err.clone(), span.clone())
-                                .with_label(
-                                    Label::new(span.clone())
-                                        .with_message("Could not find this module's file"),
-                                )
-                                .finish(),
+                        let err = VolaError::error_here(
+                            AstError::NoModuleFile { path },
+                            span.clone(),
+                            "could not find this module's file",
                         );
-                        return Err(err);
+                        errors.push(err);
+                        continue;
                     }
 
-                    let sub_ast = Self::resolve_module(&path, &stem_path, parser)?;
+                    let sub_ast = match Self::resolve_module(&path, &stem_path, parser) {
+                        Ok(sub) => sub,
+                        Err(mut e) => {
+                            errors.append(&mut e);
+                            continue;
+                        }
+                    };
                     assert!(seen_modules.insert(m.path.clone()));
 
                     //delete the module statement.
@@ -274,7 +283,11 @@ impl VolaAst {
             break 'module_resolver;
         }
 
-        Ok(())
+        if errors.len() > 0 {
+            Err(errors)
+        } else {
+            Ok(())
+        }
     }
 }
 

@@ -1,5 +1,5 @@
 //BEGIN-CONFIG
-//ERROR:At least 2 errors occurred while running optimizer.
+//ERROR:Return type conflict. If branch returns vec2<Real>, but else branch returns vec3<Real><!!>impl-block's output was untyped
 //END-CONFIG
 
 module std;

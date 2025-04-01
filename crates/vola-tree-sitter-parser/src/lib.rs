@@ -16,7 +16,7 @@ use vola_ast::{
     common::{CTArg, Comment},
     AstEntry, TopLevelNode, VolaAst,
 };
-use vola_common::{error::error_reporter, report, FileString, Span};
+use vola_common::{FileString, Span, VolaError};
 pub mod alge;
 pub mod block;
 pub mod common;
@@ -25,7 +25,7 @@ pub mod error;
 pub mod toplevel;
 ///Context on the parser, like the current src file, and errors that occured, but are ignored.
 pub struct ParserCtx {
-    deep_errors: Vec<ParserError>,
+    deep_errors: Vec<VolaError<ParserError>>,
     src_file: FileString,
 }
 
@@ -61,20 +61,21 @@ pub trait FromTreeSitter {
         ctx: &mut ParserCtx,
         dta: &[u8],
         node: &tree_sitter::Node,
-    ) -> Result<Self, ParserError>
+    ) -> Result<Self, VolaError<ParserError>>
     where
         Self: Sized;
 }
 
 ///Parses `file`. Returns the [VolaAst] on success, or a partially parsed AST, and the reported errors, if any
 /// parsing errors happened.
-pub fn parse_file(file: impl AsRef<Path>) -> Result<VolaAst, (VolaAst, Vec<ParserError>)> {
+pub fn parse_file(
+    file: impl AsRef<Path>,
+) -> Result<VolaAst, (VolaAst, Vec<VolaError<ParserError>>)> {
     let dta = match std::fs::read(file.as_ref()) {
         Ok(dta) => dta,
         Err(e) => {
-            let err = ParserError::FSError(e.to_string());
-            vola_common::report(error_reporter(err.clone(), Span::empty()).finish());
-
+            let err = VolaError::new(ParserError::FSError(e.to_string()));
+            err.report();
             return Err((
                 VolaAst {
                     entries: Vec::with_capacity(0),
@@ -89,12 +90,12 @@ pub fn parse_file(file: impl AsRef<Path>) -> Result<VolaAst, (VolaAst, Vec<Parse
 
 ///Parses `string`. Returns the [VolaAst] on success, or a partially parsed AST, and the reported errors, if any
 /// parsing errors happened.
-pub fn parse_string(string: String) -> Result<VolaAst, (VolaAst, Vec<ParserError>)> {
+pub fn parse_string(string: String) -> Result<VolaAst, (VolaAst, Vec<VolaError<ParserError>>)> {
     let as_bytes = string.as_bytes();
     parse_data(as_bytes, None)
 }
 
-pub fn parse_from_bytes(bytes: &[u8]) -> Result<VolaAst, (VolaAst, Vec<ParserError>)> {
+pub fn parse_from_bytes(bytes: &[u8]) -> Result<VolaAst, (VolaAst, Vec<VolaError<ParserError>>)> {
     parse_data(bytes, None)
 }
 
@@ -110,25 +111,13 @@ fn parser() -> Parser {
 pub struct VolaTreeSitterParser;
 
 impl vola_ast::VolaParser for VolaTreeSitterParser {
+    type Error = ParserError;
     fn parse_from_byte(
         &self,
         src_file: Option<FileString>,
         byte: &[u8],
-    ) -> Result<VolaAst, vola_ast::AstError> {
-        #[allow(unused_variables)]
-        parse_data(byte, src_file.clone()).map_err(|(partial_ast, e)| {
-            #[cfg(feature = "dot")]
-            if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("VOLA_DUMP_AST").is_ok() {
-                vola_ast::dot::ast_to_svg(&partial_ast, "partial_ast.svg");
-            }
-
-            vola_ast::AstError::ParsingError {
-                path: src_file
-                    .map(|f| f.to_string())
-                    .unwrap_or("NoFile".to_owned()),
-                err: format!("Parser had {} errors", e.len()),
-            }
-        })
+    ) -> Result<VolaAst, Vec<VolaError<Self::Error>>> {
+        parse_data(byte, src_file.clone()).map_err(|(_rest_ast, e)| e)
     }
 }
 
@@ -136,7 +125,7 @@ impl vola_ast::VolaParser for VolaTreeSitterParser {
 fn parse_data(
     data: &[u8],
     src_file: Option<FileString>,
-) -> Result<VolaAst, (VolaAst, Vec<ParserError>)> {
+) -> Result<VolaAst, (VolaAst, Vec<VolaError<ParserError>>)> {
     let mut ctx = if let Some(src) = src_file {
         ParserCtx::new(src)
     } else {
@@ -151,9 +140,7 @@ fn parse_data(
     let mut parser = parser();
     let syn_tree = match parser.parse(&data, None) {
         None => {
-            let err = ParserError::TreeSitterFailed;
-            report(error_reporter(err.clone(), Span::empty()).finish());
-            return Err((ast, vec![err]));
+            return Err((ast, vec![VolaError::new(ParserError::TreeSitterFailed)]));
         }
         Some(syntree) => syntree,
     };

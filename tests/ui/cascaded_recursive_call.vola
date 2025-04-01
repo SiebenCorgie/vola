@@ -1,5 +1,5 @@
 //BEGIN-CONFIG
-//ERROR:At least 2 errors occurred while running optimizer.
+//ERROR:detected recursive call of "test2"<!!>detected recursive call of "test"
 //END-CONFIG
 
 module std;

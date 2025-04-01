@@ -13,8 +13,6 @@ pub enum PipelineError {
     IoErr(#[from] std::io::Error),
     #[error(transparent)]
     OptError(#[from] OptError),
-    #[error("Parser failed with: {0}")]
-    ParserError(String),
     #[error(transparent)]
     RVSDGError(#[from] GraphError),
     #[cfg(feature = "spirv")]

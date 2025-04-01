@@ -15,7 +15,7 @@ use vola_ast::{
     common::CTArg,
     csg::{CSGConcept, CsgDef, ImplBlock},
 };
-use vola_common::{ariadne::Label, error::error_reporter, report, Span};
+use vola_common::{Span, VolaError};
 
 use crate::{
     common::Ty,
@@ -28,7 +28,7 @@ use super::block_build::BlockCtx;
 impl Optimizer {
     ///Builds the block context for the omega node. This basically appends all named
     ///static data, as well as callable (i.e. non-impl) functions.
-    fn omega_context(&self) -> Result<BlockCtx, OptError> {
+    fn omega_context(&self) -> Result<BlockCtx, VolaError<OptError>> {
         //NOTE: we currently have no static data, but there will be ~data~ at some point.
         let mut ctx = BlockCtx::empty(self.graph.toplevel_region());
         for func in self.functions.values() {
@@ -37,7 +37,8 @@ impl Optimizer {
                 func.name.clone(),
                 func.lambda
                     .as_outport_location(OutputType::LambdaDeclaration),
-            )?;
+            )
+            .map_err(|e| VolaError::error_here(e, func.def_span.clone(), "could not define var"))?
         }
 
         Ok(ctx)
@@ -48,23 +49,15 @@ impl Optimizer {
         _span: Span,
         _ct_args: Vec<CTArg>,
         concept: CSGConcept,
-    ) -> Result<(), OptError> {
+    ) -> Result<(), VolaError<OptError>> {
         if let Some(existing_concept) = self.concepts.get(&concept.name.0) {
             let err = OptError::Any {
                 text: format!("Concept {} was already defined", existing_concept.name.0),
             };
-
-            report(
-                error_reporter(err.clone(), concept.span.clone())
-                    .with_label(
-                        Label::new(existing_concept.span.clone())
-                            .with_message("first defined here"),
-                    )
-                    .with_label(Label::new(concept.span.clone()).with_message("redefined here"))
-                    .finish(),
-            );
-
-            Err(err)
+            Err(
+                VolaError::error_here(err, concept.span.clone(), "redefined here")
+                    .with_label(existing_concept.span.clone(), "first defined here"),
+            )
         } else {
             //No yet in collection, therefore push
             self.concepts.insert(concept.name.0.clone(), concept);
@@ -77,23 +70,16 @@ impl Optimizer {
         _span: Span,
         _ct_args: Vec<CTArg>,
         csgdef: CsgDef,
-    ) -> Result<(), OptError> {
+    ) -> Result<(), VolaError<OptError>> {
         //similar to the concept case, test if there is already one, if not, push
         if let Some(existing_csg) = self.csg_node_defs.get(&csgdef.name.0) {
             let err = OptError::Any {
                 text: format!("Operation or Entity {} was already defined. \nNote that operations and entities share one name space.", existing_csg.name.0),
             };
-
-            report(
-                error_reporter(err.clone(), csgdef.span.clone())
-                    .with_label(
-                        Label::new(existing_csg.span.clone()).with_message("first defined here"),
-                    )
-                    .with_label(Label::new(csgdef.span.clone()).with_message("redefined here"))
-                    .finish(),
-            );
-
-            Err(err)
+            Err(
+                VolaError::error_here(err, csgdef.span.clone(), "redefined here")
+                    .with_label(existing_csg.span.clone(), "first defined here"),
+            )
         } else {
             //No yet in collection, therefore push
             self.csg_node_defs.insert(csgdef.name.0.clone(), csgdef);
@@ -102,23 +88,17 @@ impl Optimizer {
     }
 
     ///Creates the λ node in the omega region,  but does not fill it (yet).
-    pub(crate) fn define_func(&mut self, func: &Func) -> Result<(), OptError> {
+    pub(crate) fn define_func(&mut self, func: &Func) -> Result<(), VolaError<OptError>> {
         //Parse the function signature, and build the entry in the lookup table
         let name = func.name.0.clone();
         if let Some(existing) = self.functions.get(&name) {
             let err = OptError::Any {
                 text: format!("function \"{name}\" already exists!"),
             };
-            report(
-                error_reporter(err.clone(), func.span.clone())
-                    .with_label(
-                        Label::new(existing.def_span.clone().into())
-                            .with_message("first defined here"),
-                    )
-                    .with_label(Label::new(func.head_span().into()).with_message("redefined here"))
-                    .finish(),
+            return Err(
+                VolaError::error_here(err, func.head_span(), "redefined here")
+                    .with_label(existing.def_span.clone(), "first defined here"),
             );
-            return Err(err);
         }
 
         //Also make sure that no concept or csg-def with that name exists
@@ -126,8 +106,7 @@ impl Optimizer {
             let err = OptError::Any {
                 text: format!("function \"{name}\" can not be named after a concept, or CSG-Operation/Entitiy!"),
             };
-            report(error_reporter(err.clone(), func.span.clone()).finish());
-            return Err(err);
+            return Err(VolaError::error_here(err, func.span.clone(), "here"));
         }
 
         let args: SmallColl<(String, Ty)> = func
@@ -177,9 +156,15 @@ impl Optimizer {
         _span: Span,
         _ct_args: Vec<CTArg>,
         func: Func,
-    ) -> Result<(), OptError> {
+    ) -> Result<(), VolaError<OptError>> {
         //Parse the function signature, then launch block building
         let name = func.name.0.clone();
+        let return_span = func
+            .block
+            .retexpr
+            .as_ref()
+            .map(|retex| retex.span.clone())
+            .unwrap_or(func.span.clone());
         //build the omega context
         let mut ctx = self.omega_context()?;
 
@@ -202,7 +187,9 @@ impl Optimizer {
                     .expect("Expected port's type to be set already!");
                 assert!(found_type == &arg.1);
                 //matches, so setup
-                ctx.define_var(arg.0.to_owned(), port)?;
+                ctx.define_var(arg.0.to_owned(), port).map_err(|e| {
+                    VolaError::error_here(e, func.head_span(), "could not define argument")
+                })?;
             }
             //set the active's scope writeout port
             assert!(self.graph[existing.lambda].result_types(0).len() == 1);
@@ -226,13 +213,27 @@ impl Optimizer {
         let function_body_scope = ctx.close_scope();
         //post_serialize, make sure there is a result, and hook it up
         if let Some(result_src) = function_body_scope.result {
-            self.graph.connect(
-                result_src,
-                lambda.as_inport_location(InputType::Result(0)),
-                OptEdge::value_edge_unset(),
-            )?;
+            self.graph
+                .connect(
+                    result_src,
+                    lambda.as_inport_location(InputType::Result(0)),
+                    OptEdge::value_edge_unset(),
+                )
+                .map_err(|e| {
+                    VolaError::error_here(
+                        OptError::from(e),
+                        return_span,
+                        "could not find return type",
+                    )
+                })?;
         } else {
-            todo!("No result in function :(");
+            return Err(VolaError::error_here(
+                OptError::Any {
+                    text: "No result value for function".to_owned(),
+                },
+                return_span,
+                "this function should return a value",
+            ));
         }
 
         //if that didn't fail, we now hve actual working code *_*
@@ -244,18 +245,22 @@ impl Optimizer {
         span: Span,
         _ct_args: Vec<CTArg>,
         implblock: ImplBlock,
-    ) -> Result<(), OptError> {
+    ) -> Result<(), VolaError<OptError>> {
         //Impl blocks function similar to normal functions, but
         //we additionally import all operands at the first n-cvs
         //
         //They are also not _simply_ callable, which is why we do λ-creation and
         //code emission in one go.
-
+        let return_span = implblock
+            .block
+            .retexpr
+            .as_ref()
+            .map(|ret| ret.span.clone())
+            .unwrap_or(implblock.head_span());
         //The concept that is implemented
         let concept = implblock.concept.0.clone();
         //the CSG node it is implemented for
         let csg = implblock.dst.0.clone();
-
         let implkey = ImplKey { concept, node: csg };
 
         if let Some(existing) = self.concept_impl.get(&implkey) {
@@ -265,16 +270,9 @@ impl Optimizer {
                     implkey.node, implkey.concept
                 ),
             };
-            report(
-                error_reporter(err.clone(), span.clone())
-                    .with_label(
-                        Label::new(existing.def_span.clone().into())
-                            .with_message("first defined here"),
-                    )
-                    .with_label(
-                        Label::new(implblock.head_span().into()).with_message("redefined here"),
-                    )
-                    .finish(),
+            return Err(
+                VolaError::error_here(err, implblock.head_span(), "redefined here")
+                    .with_label(existing.def_span.clone(), "first defined here"),
             );
         }
 
@@ -285,14 +283,7 @@ impl Optimizer {
             let err = OptError::Any {
                 text: format!("Concept \"{}\" was undefined!", implkey.concept),
             };
-            report(
-                error_reporter(err.clone(), span.clone().into())
-                    .with_label(
-                        Label::new(implblock.head_span()).with_message("For this implementation"),
-                    )
-                    .finish(),
-            );
-            return Err(err);
+            return Err(VolaError::error_here(err, span, "For this implementation"));
         };
 
         let csgdef = if let Some(csgdef) = self.csg_node_defs.get(&implblock.dst.0) {
@@ -301,14 +292,7 @@ impl Optimizer {
             let err = OptError::Any {
                 text: format!("CSG \"{}\" was undefined!", implkey.node),
             };
-            report(
-                error_reporter(err.clone(), span.clone().into())
-                    .with_label(
-                        Label::new(implblock.head_span()).with_message("For this implementation"),
-                    )
-                    .finish(),
-            );
-            return Err(err);
+            return Err(VolaError::error_here(err, span, "For this implementation"));
         };
 
         //setup the omega context, then directly open the scope for our function
@@ -324,12 +308,7 @@ impl Optimizer {
                     let (outside, within) = lmd.add_context_variable();
                     if let Err(e) = initial_context.define_var(operand.0.clone(), within) {
                         let span = implblock.head_span();
-                        report(
-                            error_reporter(e.clone(), span.clone())
-                                .with_label(Label::new(span).with_message("here"))
-                                .finish(),
-                        );
-                        return Err(e);
+                        return Err(VolaError::error_here(e, span, "here"));
                     }
                     //Directly set to CSG type
                     self.typemap.set(within.into(), Ty::CSG);
@@ -341,12 +320,7 @@ impl Optimizer {
                     let port = lmd.add_argument();
                     if let Err(e) = initial_context.define_var(arg.ident.0.clone(), port) {
                         let span = implblock.head_span();
-                        report(
-                            error_reporter(e.clone(), span.clone())
-                                .with_label(Label::new(span).with_message("here"))
-                                .finish(),
-                        );
-                        return Err(e);
+                        return Err(VolaError::error_here(e, span, "here"));
                     }
                     //setup type
                     self.typemap.set(port.into(), arg.ty.clone().into());
@@ -395,9 +369,22 @@ impl Optimizer {
         //post_serialize, make sure there is a result, and hook it up
         if let Some(result_src) = function_body_scope.result {
             self.graph
-                .connect(result_src, result_port, OptEdge::value_edge_unset())?;
+                .connect(result_src, result_port, OptEdge::value_edge_unset())
+                .map_err(|e| {
+                    VolaError::error_here(
+                        OptError::from(e),
+                        return_span,
+                        "could not find return type",
+                    )
+                })?;
         } else {
-            todo!("No result in function :(");
+            return Err(VolaError::error_here(
+                OptError::Any {
+                    text: "No result value for impl-block".to_owned(),
+                },
+                return_span,
+                "this block should return a value",
+            ));
         }
 
         //At this point everything should be hooked-up and typed. therfore we can return

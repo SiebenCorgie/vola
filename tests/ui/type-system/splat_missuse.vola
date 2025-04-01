@@ -1,5 +1,5 @@
 //BEGIN-CONFIG
-//ERROR:Failed to parse file "tests/ui/type-system/splat_missuse.vola": Parser had 1 errors
+//ERROR:Failed to parse file: Unexpected value .0 expected it to be ]
 //END-CONFIG
 
 export fn test() -> vec3{

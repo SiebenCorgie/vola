@@ -4,14 +4,11 @@ mod error;
 use std::path::{Path, PathBuf};
 
 use error::ParserError;
-use scad_ast::{ScadBlock, ScadStmt, ScadTopLevel};
+use scad_ast::{ScadStmt, ScadTopLevel};
 use tree_sitter::{Node, Parser};
 use vola_ast::VolaAst;
 use vola_common::{
-    FileString, Span,
-    ariadne::Label,
-    error::{error_reporter, warning_reporter},
-    report,
+    FileString, Span, VolaError, ariadne::Label, error_reporter, report, warning_reporter,
 };
 
 mod assignment;
@@ -24,9 +21,9 @@ mod scad_ast;
 mod stmt;
 mod util;
 
-pub fn report_here(error: impl ToString, span: Span) {
+pub fn report_here(err: impl ToString, span: Span) {
     report(
-        error_reporter(error, span.clone())
+        error_reporter(err, span.clone())
             .with_label(Label::new(span).with_message("here"))
             .finish(),
     );
@@ -42,7 +39,7 @@ pub fn warn_here(warn: impl ToString, span: Span) {
 
 ///Context on the parser, like the current src file, and errors that occured, but are ignored.
 pub struct ParserCtx {
-    deep_errors: Vec<ParserError>,
+    deep_errors: Vec<VolaError<ParserError>>,
     pub deep_warnings: Vec<(Span, String)>,
     src_file: FileString,
 
@@ -128,19 +125,13 @@ impl ParserCtx {
 
 ///Parses `file`. Returns the [VolaAst] on success, or a partially parsed AST, and the reported errors, if any
 /// parsing errors happened.
-pub fn parse_file(file: impl AsRef<Path>) -> Result<VolaAst, (VolaAst, Vec<ParserError>)> {
+pub fn parse_file(file: impl AsRef<Path>) -> Result<VolaAst, Vec<VolaError<ParserError>>> {
     let dta = match std::fs::read(file.as_ref()) {
         Ok(dta) => dta,
         Err(e) => {
             let err = ParserError::FSError(e.to_string());
-            vola_common::report(error_reporter(err.clone(), Span::empty()).finish());
 
-            return Err((
-                VolaAst {
-                    entries: Vec::with_capacity(0),
-                },
-                vec![err],
-            ));
+            return Err(vec![VolaError::new(err)]);
         }
     };
     let file_src_str = file.as_ref().to_str().unwrap_or("NonUnicodeFilename");
@@ -149,12 +140,12 @@ pub fn parse_file(file: impl AsRef<Path>) -> Result<VolaAst, (VolaAst, Vec<Parse
 
 ///Parses `string`. Returns the [VolaAst] on success, or a partially parsed AST, and the reported errors, if any
 /// parsing errors happened.
-pub fn parse_string(string: String) -> Result<VolaAst, (VolaAst, Vec<ParserError>)> {
+pub fn parse_string(string: String) -> Result<VolaAst, Vec<VolaError<ParserError>>> {
     let as_bytes = string.as_bytes();
     parse_data(as_bytes, None)
 }
 
-pub fn parse_from_bytes(bytes: &[u8]) -> Result<VolaAst, (VolaAst, Vec<ParserError>)> {
+pub fn parse_from_bytes(bytes: &[u8]) -> Result<VolaAst, Vec<VolaError<ParserError>>> {
     parse_data(bytes, None)
 }
 
@@ -170,34 +161,23 @@ fn parser() -> Parser {
 pub struct OpenScadTreeSitterParser;
 
 impl vola_ast::VolaParser for OpenScadTreeSitterParser {
+    type Error = ParserError;
     fn parse_from_byte(
         &self,
         src_file: Option<FileString>,
         byte: &[u8],
-    ) -> Result<VolaAst, vola_ast::AstError> {
+    ) -> Result<VolaAst, Vec<VolaError<Self::Error>>> {
         #[allow(unused_variables)]
-        parse_data(byte, src_file.clone()).map_err(|(partial_ast, e)| {
-            vola_ast::AstError::ParsingError {
-                path: src_file
-                    .map(|f| f.to_string())
-                    .unwrap_or("NoFile".to_owned()),
-                err: format!("Parser had {} errors", e.len()),
-            }
-        })
+        parse_data(byte, src_file.clone())
     }
 }
 
 fn parse_data(
     data: &[u8],
     src_file: Option<FileString>,
-) -> Result<VolaAst, (VolaAst, Vec<ParserError>)> {
-    let empty_ast = VolaAst {
-        entries: Vec::with_capacity(0),
-    };
-
+) -> Result<VolaAst, Vec<VolaError<ParserError>>> {
     //parse the ScadAst _fully_. This will also take care of recursively resolving any used modules
-    let mut scad_ast =
-        parse_data_scad(data, src_file).map_err(|(_scad_ast, e)| (empty_ast.clone(), e))?;
+    let mut scad_ast = parse_data_scad(data, src_file)?;
 
     //At this point we have a fully parsed, (and valid) ScadAST. Now is the time to _somehow_ transform that into volacode.
     //This includes several ScadAST transformations, in order to _cleanup_ semantics for us.
@@ -210,15 +190,15 @@ fn parse_data(
     // 1. Its calling something unsupported like `dxf_dim(file="..", ..)`, in that case we bail,
     // 2. Its calling some kind of supported domain specific _thing_, i.e. `color(some_vec_3)`. Is that case we insert the appropriate
     //    CSGOperation. We maintain a Scad compatible standard library, that (tries to) mirrors oScad's functionality like union, intersect, color, translate etc.
-    scad_ast.normalize().map_err(|e| (empty_ast.clone(), e))?;
-    scad_ast.into_vola_ast().map_err(|e| (empty_ast, e))
+    scad_ast.normalize()?;
+    scad_ast.into_vola_ast()
 }
 
 ///Internal parser implementation
 fn parse_data_scad(
     data: &[u8],
     src_file: Option<FileString>,
-) -> Result<ScadTopLevel, (ScadTopLevel, Vec<ParserError>)> {
+) -> Result<ScadTopLevel, Vec<VolaError<ParserError>>> {
     let mut ctx = if let Some(src) = src_file {
         ParserCtx::new(src)
     } else {
@@ -230,17 +210,7 @@ fn parse_data_scad(
     let syn_tree = match parser.parse(&data, None) {
         None => {
             let err = ParserError::TreeSitterFailed;
-            report(error_reporter(err.clone(), Span::empty()).finish());
-            return Err((
-                scad_ast::ScadTopLevel {
-                    main: ScadBlock {
-                        stmts: Vec::with_capacity(0),
-                        span: Span::empty(),
-                    },
-                    modules: Vec::with_capacity(0),
-                },
-                vec![err],
-            ));
+            return Err(vec![VolaError::new(err)]);
         }
         Some(syntree) => syntree,
     };
@@ -273,14 +243,15 @@ fn parse_data_scad(
             }
             "include_statement" => {
                 if let Err(e) = stmt::file_use_stmt(&mut ctx, false, data, &node) {
-                    report_here(e, ctx.span(&node));
+                    ctx.deep_errors
+                        .push(VolaError::error_here(e, ctx.span(&node), "here"));
                 }
             }
             "module_declaration" => match entry_decl::module_decl(&mut ctx, data, &node) {
                 Ok(module) => tl.modules.push(module),
                 Err(e) => {
-                    report_here(e.clone(), ctx.span(&node));
-                    ctx.deep_errors.push(e);
+                    ctx.deep_errors
+                        .push(VolaError::error_here(e, ctx.span(&node), "here"));
                 }
             },
             "function_declecration" => match entry_decl::function_decl(&mut ctx, data, &node) {
@@ -288,8 +259,8 @@ fn parse_data_scad(
                     panic!("function-decl not yet supported")
                 }
                 Err(e) => {
-                    report_here(e.clone(), ctx.span(&node));
-                    ctx.deep_errors.push(e);
+                    ctx.deep_errors
+                        .push(VolaError::error_here(e, ctx.span(&node), "here"));
                 }
             },
             "assignment" => {
@@ -300,8 +271,8 @@ fn parse_data_scad(
                     }
                     Err(ParserError::Ignored) => {}
                     Err(e) => {
-                        report_here(e.clone(), ctx.span(&node));
-                        ctx.deep_errors.push(e);
+                        ctx.deep_errors
+                            .push(VolaError::error_here(e, ctx.span(&node), "here"));
                     }
                 }
             }
@@ -316,9 +287,11 @@ fn parse_data_scad(
                     //Was not a _valid_ statement, print the error, then also emit the _invalid_ error
                     Err(e) => {
                         if e != ParserError::Ignored {
-                            report_here(e.clone(), ctx.span(&node));
-                            ctx.deep_errors
-                                .push(ParserError::Unexpected(other.to_owned()))
+                            ctx.deep_errors.push(VolaError::error_here(
+                                ParserError::Unexpected(other.to_owned()),
+                                ctx.span(&node),
+                                "here",
+                            ));
                         }
                     }
                 }
@@ -335,17 +308,24 @@ fn parse_data_scad(
         .chain(ctx.resolve_includes.into_iter().map(|incl| (incl, true)))
     {
         match std::fs::read(&path).map_err(|e| ParserError::FSError(e.to_string())) {
-            Err(e) => ctx.deep_errors.push(e),
+            Err(e) => ctx.deep_errors.push(VolaError::new(e)),
             Ok(content) => {
-                let mut sub_ast =
-                    parse_data_scad(&content, Some(FileString::from_str(path.to_str().unwrap())))?;
+                let mut sub_ast = match parse_data_scad(
+                    &content,
+                    Some(FileString::from_str(path.to_str().unwrap())),
+                ) {
+                    Err(mut e) => {
+                        ctx.deep_errors.append(&mut e);
+                        continue;
+                    }
+                    Ok(k) => k,
+                };
 
                 if is_include {
                     tl.main.stmts.append(&mut sub_ast.main.stmts);
                 }
 
                 tl.modules.append(&mut sub_ast.modules);
-                println!("Merge function!");
             }
         }
     }
@@ -359,7 +339,7 @@ fn parse_data_scad(
     }
 
     if ctx.deep_errors.len() > 0 {
-        Err((tl, ctx.deep_errors))
+        Err(ctx.deep_errors)
     } else {
         Ok(tl)
     }

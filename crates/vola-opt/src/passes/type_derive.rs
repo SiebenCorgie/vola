@@ -25,7 +25,7 @@ use rvsdg::{
     util::abstract_node_type::AbstractNodeType,
     NodeRef, SmallColl,
 };
-use vola_common::{ariadne::Label, error::error_reporter, report, Span};
+use vola_common::{Span, VolaError};
 
 use crate::{
     common::{DataType, Shape, Ty},
@@ -41,7 +41,7 @@ use crate::{
 //
 impl Optimizer {
     ///Runs the type resolution pass on all nodes.
-    pub fn type_derive(&mut self) -> Result<(), OptError> {
+    pub fn type_derive(&mut self) -> Result<(), Vec<VolaError<OptError>>> {
         #[cfg(feature = "log")]
         log::info!("type derive");
 
@@ -49,16 +49,16 @@ impl Optimizer {
             self.push_debug_state("pre type derive");
         }
 
-        let mut errors = SmallColl::new();
+        let mut errors = Vec::with_capacity(0);
 
         //we first build the topological order of all nodes in Omega, then
-        //we enter eac
+        //we enter each impl-block and function, since they might not be _in-use_ _yet_.
         let toplevel = self.graph.toplevel_region();
         let topoord = self.graph.topological_order_region(toplevel);
 
         for node in topoord {
             if let Err(e) = self.try_node_type_derive(node) {
-                errors.push(e)
+                errors.push(e);
             }
         }
 
@@ -70,7 +70,7 @@ impl Optimizer {
 
         for f in self.functions.values() {
             if let Err(e) = self.verify_fn(f) {
-                errors.push(e)
+                errors.push(e);
             }
         }
 
@@ -80,14 +80,14 @@ impl Optimizer {
         }
 
         if errors.len() > 0 {
-            return Err(OptError::ErrorsOccurred(errors.len()));
+            return Err(errors);
         } else {
             Ok(())
         }
     }
 
     //Verifies that the implblock has the correct input and output signature set on all edges
-    fn verify_imblblock(&self, block: &Impl) -> Result<(), OptError> {
+    fn verify_imblblock(&self, block: &Impl) -> Result<(), VolaError<OptError>> {
         //NOTE: we currently only check that the return type matches, since the input types are
         // always pre-set by the impblock builder, based on the concept's deceleration. So there would be some
         // kind of type conflict within the region.
@@ -126,15 +126,11 @@ impl Optimizer {
                     let err = OptError::Any {
                         text: format!("impl-block's output was untyped"),
                     };
-                    report(
-                        error_reporter(err.clone(), block.def_span.clone())
-                            .with_label(
-                                Label::new(block.region_span.clone())
-                                    .with_message("in this region"),
-                            )
-                            .finish(),
-                    );
-                    Err(err)
+                    Err(VolaError::error_here(
+                        err,
+                        block.def_span.clone(),
+                        "in this region",
+                    ))
                 }
                 Some(t) => {
                     if *t != expected_result_type {
@@ -145,14 +141,11 @@ impl Optimizer {
                                     t, expected_result_type
                                 ),
                             };
-                            report(
-                                error_reporter(err.clone(), s.clone())
-                                    .with_label(
-                                        Label::new(s.clone()).with_message("Tried to return this"),
-                                    )
-                                    .finish(),
-                            );
-                            Err(err)
+                            Err(VolaError::error_here(
+                                err,
+                                s.clone(),
+                                "Tried to return this",
+                            ))
                         } else {
                             let err = OptError::Any {
                                 text: format!(
@@ -160,15 +153,11 @@ impl Optimizer {
                                     t, expected_result_type
                                 ),
                             };
-                            report(
-                                error_reporter(err.clone(), block.def_span.clone())
-                                    .with_label(
-                                        Label::new(block.region_span.clone())
-                                            .with_message("In this region"),
-                                    )
-                                    .finish(),
-                            );
-                            Err(err)
+                            Err(VolaError::error_here(
+                                err,
+                                block.def_span.clone(),
+                                "In this region",
+                            ))
                         }
                     } else {
                         Ok(())
@@ -179,18 +168,15 @@ impl Optimizer {
             let err = OptError::Any {
                 text: format!("ImplBlocks's output was not connected"),
             };
-            report(
-                error_reporter(err.clone(), block.def_span.clone())
-                    .with_label(
-                        Label::new(block.region_span.clone()).with_message("In this region"),
-                    )
-                    .finish(),
-            );
-            Err(err)
+            Err(VolaError::error_here(
+                err,
+                block.def_span.clone(),
+                "In this region",
+            ))
         }
     }
 
-    fn verify_fn(&self, algefn: &Function) -> Result<(), OptError> {
+    fn verify_fn(&self, algefn: &Function) -> Result<(), VolaError<OptError>> {
         //Make sure that the result-connected edge is of the right type,
         //and the argument-connected edges are correct as well
         for (argidx, (_name, argty)) in algefn.args.iter().enumerate() {
@@ -207,31 +193,27 @@ impl Optimizer {
                     //if the types do not match, bail as well
                     if ty != argty {
                         let err = OptError::Any {
-                            text: format!("Argument {argidx} is of typ \"{argty:?}\", but was used as \"{ty:?}\". This is a compiler bug!"),
+                            text: format!("Argument {argidx} is of typ \"{argty:?}\", but was used as \"{ty:?}\"."),
                         };
-                        report(
-                            error_reporter(err.clone(), algefn.def_span.clone())
-                                .with_label(Label::new(algefn.region_span.clone()).with_message(
-                                    &format!("user of argument {argidx} in this region"),
-                                ))
-                                .finish(),
-                        );
-                        return Err(err);
+                        return Err(VolaError::error_here(
+                            err,
+                            algefn.def_span.clone(),
+                            &format!("user of argument {argidx} in this region"),
+                        ));
                     }
                 } else {
                     let err = OptError::Any {
-                        text: format!("Argument {argidx} is of type \"{argty:?}\", but connected edge was untyped. This is a compiler bug!"),
+                        text: format!("Argument {argidx} is of type \"{argty:?}\", but connected edge was untyped."),
                     };
-                    report(
-                        error_reporter(err.clone(), algefn.def_span.clone())
-                            .with_label(
-                                Label::new(algefn.region_span.clone()).with_message(&format!(
-                                    "user of argument {argidx} in this region"
-                                )),
-                            )
-                            .finish(),
-                    );
-                    return Err(err);
+                    return Err(VolaError::error_here(
+                        err,
+                        algefn.def_span.clone(),
+                        "for this function",
+                    )
+                    .with_label(
+                        algefn.region_span.clone(),
+                        &format!("user of argument {argidx} in this region"),
+                    ));
                 }
             }
         }
@@ -254,48 +236,47 @@ impl Optimizer {
                             algefn.return_type
                         ),
                     };
-                    report(
-                        error_reporter(err.clone(), algefn.def_span.clone())
-                            .with_label(Label::new(algefn.region_span.clone()).with_message(
-                                &format!(
-                                    "result producer in this region should be {}",
-                                    algefn.return_type
-                                ),
-                            ))
-                            .finish(),
-                    );
-                    return Err(err);
+                    return Err(VolaError::error_here(
+                        err,
+                        algefn.def_span.clone(),
+                        "for this function",
+                    )
+                    .with_label(
+                        algefn.region_span.clone(),
+                        format!(
+                            "result producer in this region should be {}",
+                            algefn.return_type
+                        ),
+                    ));
                 }
             } else {
                 let err = OptError::TypeDeriveError {
                     text: format!(
-                        "Result is of type \"{}\", but result was untyped. This is a compiler bug!",
+                        "Result is of type \"{}\", but result was untyped.",
                         algefn.return_type
                     ),
                 };
-                report(
-                    error_reporter(err.clone(), algefn.def_span.clone())
-                        .with_label(
-                            Label::new(algefn.region_span.clone())
-                                .with_message("result producer in this region"),
-                        )
-                        .finish(),
-                );
-                return Err(err);
+                return Err(VolaError::error_here(
+                    err,
+                    algefn.def_span.clone(),
+                    "for this function",
+                )
+                .with_label(algefn.region_span.clone(), "result producer in this region"));
             }
         } else {
             let err = OptError::Any {
-                text: format!("Result is of type \"{:?}\", but there was no return value set. This is a compiler bug!", algefn.return_type),
+                text: format!(
+                    "Result is of type \"{}\", but there was no return value set.",
+                    algefn.return_type
+                ),
             };
-            report(
-                error_reporter(err.clone(), algefn.def_span.clone())
+            return Err(
+                VolaError::error_here(err, algefn.def_span.clone(), "for this function")
                     .with_label(
-                        Label::new(algefn.region_span.clone())
-                            .with_message("no result producer in this region"),
-                    )
-                    .finish(),
+                        algefn.region_span.clone(),
+                        "no result producer in this region",
+                    ),
             );
-            return Err(err);
         }
 
         Ok(())
@@ -306,7 +287,7 @@ impl Optimizer {
         node: NodeRef,
         apply: &ApplyNode,
         region_src_span: &Span,
-    ) -> Result<(Ty, OutportLocation), OptError> {
+    ) -> Result<(Ty, OutportLocation), VolaError<OptError>> {
         #[cfg(feature = "log")]
         log::info!("Type derive Apply node");
 
@@ -336,12 +317,7 @@ impl Optimizer {
                         let err = OptError::Any {
                             text: "This call's src function output type was not set!".to_owned(),
                         };
-                        report(
-                            error_reporter(err.clone(), span.clone())
-                                .with_label(Label::new(span.clone()).with_message("consider checking this function for errors (and file an issue on GitLab, this is likely a compiler bug)"))
-                                .finish(),
-                        );
-                        return Err(err);
+                        return Err(VolaError::error_here(err, span, "consider checking this function for errors (and file an issue on GitLab, this is likely a compiler bug)"));
                     }
                 };
 
@@ -361,12 +337,7 @@ impl Optimizer {
                             ),
                         };
 
-                        report(
-                            error_reporter(err.clone(), span.clone())
-                                .with_label(Label::new(span.clone()).with_message("Of this λ-Node"))
-                                .finish(),
-                        );
-                        return Err(err);
+                        return Err(VolaError::error_here(err, span, "Of this λ-Node"));
                     }
                 }
 
@@ -384,17 +355,11 @@ impl Optimizer {
                                     text: format!("argument {i} of this call has no type"),
                                 };
 
-                                if let Some(span) = self.find_span(node.into()) {
-                                    report(
-                                        error_reporter(err.clone(), span.clone())
-                                            .with_label(
-                                                Label::new(span).with_message("for this call"),
-                                            )
-                                            .finish(),
-                                    );
+                                let err = if let Some(span) = self.find_span(node.into()) {
+                                    VolaError::error_here(err, span, "for this call")
                                 } else {
-                                    report(error_reporter(err.clone(), Span::empty()).finish());
-                                }
+                                    VolaError::new(err)
+                                };
 
                                 return Err(err);
                             };
@@ -403,15 +368,11 @@ impl Optimizer {
                             let err = OptError::Any {
                                 text: format!("apply node's {i}-th input has no connected edge."),
                             };
-                            report(
-                                error_reporter(err.clone(), region_src_span.clone())
-                                    .with_label(
-                                        Label::new(region_src_span.clone())
-                                            .with_message("In this region"),
-                                    )
-                                    .finish(),
-                            );
-                            return Err(err);
+                            return Err(VolaError::error_here(
+                                err,
+                                region_src_span.clone(),
+                                "In this region",
+                            ));
                         }
                     }
 
@@ -428,15 +389,10 @@ impl Optimizer {
                             ),
                         };
                         let call_span = self.find_span(node.into()).unwrap_or(Span::empty());
-                        report(
-                            error_reporter(err.clone(), span.clone())
-                                .with_label(Label::new(call_span).with_message("For this call"))
-                                .with_label(
-                                    Label::new(span.clone()).with_message("of this function"),
-                                )
-                                .finish(),
+                        return Err(
+                            VolaError::error_here(err, call_span.clone(), "For this call")
+                                .with_label(span.clone(), "on this function"),
                         );
-                        return Err(err);
                     }
                 }
                 //If we finished till here, then its all-right
@@ -446,32 +402,28 @@ impl Optimizer {
                 let err = OptError::Any {
                     text: format!("apply node's call-edge hat no callable producer."),
                 };
-                report(
-                    error_reporter(err.clone(), region_src_span.clone())
-                        .with_label(
-                            Label::new(region_src_span.clone()).with_message("In this region"),
-                        )
-                        .finish(),
-                );
-                Err(err)
+                Err(VolaError::error_here(
+                    err,
+                    region_src_span.clone(),
+                    "In this region",
+                ))
             }
         } else {
             let err = OptError::Any {
                 text: format!("apply node's calledge was not connected"),
             };
-            report(
-                error_reporter(err.clone(), region_src_span.clone())
-                    .with_label(Label::new(region_src_span.clone()).with_message("In this region"))
-                    .finish(),
-            );
-            Err(err)
+            Err(VolaError::error_here(
+                err,
+                region_src_span.clone(),
+                "In this region",
+            ))
         }
     }
 
     fn gamma_derive(
         &mut self,
         gamma: NodeRef,
-    ) -> Result<SmallColl<(Ty, OutportLocation)>, OptError> {
+    ) -> Result<SmallColl<(Ty, OutportLocation)>, VolaError<OptError>> {
         //Check that the condional port is a boolean, then
         //map all connected (and used) ports into both regions
         //
@@ -493,15 +445,11 @@ impl Optimizer {
                                     "Condition must be an expression of type Bool, was {ty}"
                                 ),
                             };
-                            report(
-                                error_reporter(err.clone(), predicate_span.clone())
-                                    .with_label(
-                                        Label::new(predicate_span.clone())
-                                            .with_message("Consider changing this expression!"),
-                                    )
-                                    .finish(),
-                            );
-                            return Err(err);
+                            return Err(VolaError::error_here(
+                                err,
+                                predicate_span,
+                                "Consider changing this expression!",
+                            ));
                         }
                     } else {
                         let err = OptError::TypeDeriveError {
@@ -509,15 +457,11 @@ impl Optimizer {
                                 "Condition must be an expression of type Bool, but had no type!"
                             ),
                         };
-                        report(
-                            error_reporter(err.clone(), predicate_span.clone())
-                                .with_label(
-                                    Label::new(predicate_span.clone())
-                                        .with_message("Consider changing this expression!"),
-                                )
-                                .finish(),
-                        );
-                        return Err(err);
+                        return Err(VolaError::error_here(
+                            err,
+                            predicate_span,
+                            "Consider changing this expression",
+                        ));
                     }
                 }
                 InputType::EntryVariableInput(ev) => {
@@ -539,14 +483,7 @@ impl Optimizer {
                                         "Gamma input[{ev}] has no type set, but is in use in branch {region_idx}!"
                                     ),
                                 };
-                                report(
-                                    error_reporter(err.clone(), gamma_span.clone())
-                                        .with_label(
-                                            Label::new(gamma_span.clone()).with_message("Here!"),
-                                        )
-                                        .finish(),
-                                );
-                                return Err(err);
+                                return Err(VolaError::error_here(err, gamma_span, "here"));
                             }
                         }
                     }
@@ -563,15 +500,10 @@ impl Optimizer {
             };
             if let Err(e) = self.derive_region(reg, gamma_span.clone()) {
                 let branch_span = self.find_span(reg.into()).unwrap_or(Span::empty());
-                let intermediat_error = OptError::TypeDeriveError {
-                    text: format!("Could not derive type for branch {region_index}"),
-                };
-                report(
-                    error_reporter(intermediat_error, branch_span.clone())
-                        .with_label(Label::new(branch_span.clone()).with_message("Here!"))
-                        .finish(),
-                );
-                return Err(e);
+                return Err(e.with_label(
+                    branch_span,
+                    format!("Could not derive type for branch {region_index}"),
+                ));
             }
         }
 
@@ -654,20 +586,15 @@ impl Optimizer {
                                 if_branch_ty, else_branch_ty
                             ),
                         };
-                        report(
-                            error_reporter(err.clone(), head_span)
-                                .with_label(
-                                    Label::new(if_branch_span.clone()).with_message(format!(
-                                        "\"If\"-branch returns {if_branch_ty}"
-                                    )),
-                                )
-                                .with_label(Label::new(else_branch_span.clone()).with_message(
-                                    format!("\"Else\"-branch returns {else_branch_ty}"),
-                                ))
-                                .finish(),
-                        );
-
-                        return Err(err);
+                        return Err(VolaError::error_here(err, head_span, "on this loop")
+                            .with_label(
+                                if_branch_span,
+                                format!("'If' branch returns {if_branch_ty}"),
+                            )
+                            .with_label(
+                                else_branch_span,
+                                format!("'Else' branch returns {else_branch_ty}"),
+                            ));
                     }
                 }
                 _ => panic!("Malformed Gamma output: {output:?}"),
@@ -680,7 +607,7 @@ impl Optimizer {
     fn theta_type_derive(
         &mut self,
         theta: NodeRef,
-    ) -> Result<SmallColl<(Ty, OutportLocation)>, OptError> {
+    ) -> Result<SmallColl<(Ty, OutportLocation)>, VolaError<OptError>> {
         let theta_span = self.find_span(theta.into()).unwrap_or(Span::empty());
         //at the start, check input types.
         //we must be sure that the loop bounds (input 0 & 1) are natural numbers.
@@ -707,12 +634,7 @@ impl Optimizer {
                                     ty
                                 ),
                             };
-                            report(
-                                error_reporter(err.clone(), arg_span.clone())
-                                    .with_label(Label::new(arg_span).with_message("Here"))
-                                    .finish(),
-                            );
-                            return Err(err);
+                            return Err(VolaError::error_here(err, arg_span, "here"));
                         } else {
                             ty
                         }
@@ -724,12 +646,7 @@ impl Optimizer {
                                 Ty::SCALAR_INT
                             ),
                         };
-                        report(
-                            error_reporter(err.clone(), arg_span.clone())
-                                .with_label(Label::new(arg_span).with_message("Here"))
-                                .finish(),
-                        );
-                        return Err(err);
+                        return Err(VolaError::error_here(err, arg_span, "here"));
                     }
                 }
                 InputType::Input(other) => {
@@ -748,12 +665,7 @@ impl Optimizer {
                         let err = OptError::TypeDeriveError {
                             text: format!("Loop argument[{other}] should be typed but wasn't!"),
                         };
-                        report(
-                            error_reporter(err.clone(), arg_span.clone())
-                                .with_label(Label::new(arg_span).with_message("Here"))
-                                .finish(),
-                        );
-                        return Err(err);
+                        return Err(VolaError::error_here(err, arg_span, "here"));
                     }
                 }
                 other => {
@@ -786,12 +698,7 @@ impl Optimizer {
                         ty
                     ),
                 };
-                report(
-                    error_reporter(err.clone(), theta_span.clone())
-                        .with_label(Label::new(theta_span).with_message("Here"))
-                        .finish(),
-                );
-                return Err(err);
+                return Err(VolaError::error_here(err, theta_span, "here"));
             }
         } else {
             let err = OptError::TypeDeriveError {
@@ -800,12 +707,7 @@ impl Optimizer {
                     Ty::SCALAR_BOOL,
                 ),
             };
-            report(
-                error_reporter(err.clone(), theta_span.clone())
-                    .with_label(Label::new(theta_span.clone()).with_message("Here"))
-                    .finish(),
-            );
-            return Err(err);
+            return Err(VolaError::error_here(err, theta_span, "here"));
         }
 
         //now map all results out of the theta node and build the signature
@@ -825,12 +727,7 @@ impl Optimizer {
                     let err = OptError::TypeDeriveError {
                         text: format!("Loop output should be typed, but had no type!"),
                     };
-                    report(
-                        error_reporter(err.clone(), theta_span.clone())
-                            .with_label(Label::new(theta_span).with_message("Here"))
-                            .finish(),
-                    );
-                    return Err(err);
+                    return Err(VolaError::error_here(err, theta_span, "here"));
                 }
             };
 
@@ -855,12 +752,7 @@ impl Optimizer {
                         let err = OptError::TypeDeriveError {
                             text: format!("Loop-Variable type missmatch: Argument was imported as {argty}, but resulted in {ty}!"),
                         };
-                        report(
-                            error_reporter(err.clone(), theta_span.clone())
-                                .with_label(Label::new(theta_span).with_message("Here"))
-                                .finish(),
-                        );
-                        return Err(err);
+                        return Err(VolaError::error_here(err, theta_span, "here"));
                     } else {
                         ty
                     }
@@ -874,7 +766,7 @@ impl Optimizer {
         Ok(output_sig)
     }
 
-    fn derive_lambda(&mut self, lambda: NodeRef) -> Result<(), OptError> {
+    fn derive_lambda(&mut self, lambda: NodeRef) -> Result<(), VolaError<OptError>> {
         //The only thing we need to do is check that all CVs are set (and map them into the region),
         //and that all arguments have a type.
         assert_eq!(self.graph[lambda].into_abstract(), AbstractNodeType::Lambda);
@@ -901,12 +793,7 @@ impl Optimizer {
                                 "Expected function's argument[{a}] to be type set, but wasn't"
                             ),
                         };
-                        report(
-                            error_reporter(err.clone(), argspan.clone())
-                                .with_label(Label::new(argspan.clone()).with_message("Here"))
-                                .finish(),
-                        );
-                        return Err(err);
+                        return Err(VolaError::error_here(err, argspan, "here"));
                     }
                 }
                 OutputType::ContextVariableArgument(idx) => {
@@ -935,24 +822,14 @@ impl Optimizer {
                                 "Function's context-variable[{idx}] was not yet type set!"
                             ),
                         };
-                        report(
-                            error_reporter(err.clone(), argspan.clone())
-                                .with_label(Label::new(argspan.clone()).with_message("Here"))
-                                .finish(),
-                        );
-                        return Err(err);
+                        return Err(VolaError::error_here(err, argspan, "here"));
                     }
                 }
                 _ => {
                     let err = OptError::TypeDeriveError {
                         text: format!("Function had unexpected argument type {argty:?}"),
                     };
-                    report(
-                        error_reporter(err.clone(), span.clone())
-                            .with_label(Label::new(span.clone()).with_message("Here"))
-                            .finish(),
-                    );
-                    return Err(err);
+                    return Err(VolaError::error_here(err, span, "here"));
                 }
             }
         }
@@ -970,7 +847,9 @@ impl Optimizer {
             .find_consumer_out(lambda.as_outport_location(OutputType::LambdaDeclaration));
         for consumer in consumers {
             let path = self.graph.trace_path(consumer);
-            let t = self.type_path(&path)?;
+            let t = self.type_path(&path).map_err(|e| {
+                VolaError::error_here(e, span.clone(), "type collision for user of this value")
+            })?;
             assert_eq!(t, Ty::Callable);
         }
 
@@ -989,7 +868,7 @@ impl Optimizer {
     pub fn try_node_type_derive(
         &mut self,
         node: NodeRef,
-    ) -> Result<SmallColl<(Ty, OutportLocation)>, OptError> {
+    ) -> Result<SmallColl<(Ty, OutportLocation)>, VolaError<OptError>> {
         //gather input types, those must be present, by definition
         let mut input_config = SmallColl::default();
         for input in self.graph.inports(node) {
@@ -1006,9 +885,9 @@ impl Optimizer {
                         text: format!(
                         "Argument {} ({node:?}) is not connected, but also not type-set, which is an error",
                         input.input
-                    ),
-                    };
-                    return Err(err);
+                    )};
+                    let span = self.find_span(node.into()).unwrap_or(Span::empty());
+                    return Err(VolaError::error_here(err, span, "here"));
                 }
             };
             input_config.push(ty);
@@ -1017,9 +896,11 @@ impl Optimizer {
         //gather all inputs and let the node try to resolve itself
         let payload: SmallColl<(Ty, OutportLocation)> = match &self.graph.node(node).node_type {
             NodeType::Simple(s) => {
-                let ty =
-                    s.node
-                        .try_derive_type(&input_config, &self.concepts, &self.csg_node_defs)?;
+                let span = self.find_span(node.into()).unwrap_or(Span::empty());
+                let ty = s
+                    .node
+                    .try_derive_type(&input_config, &self.concepts, &self.csg_node_defs)
+                    .map_err(|e| VolaError::error_here(e, span, "here"))?;
                 smallvec![(ty, node.output(0))]
             }
             NodeType::Apply(a) => {
@@ -1050,7 +931,7 @@ impl Optimizer {
                 let err = OptError::Any {
                     text: format!("Unexpected node type {t} in graph while doing type resolution."),
                 };
-                return Err(err);
+                return Err(VolaError::new(err));
             }
         };
 
@@ -1062,7 +943,7 @@ impl Optimizer {
         &mut self,
         reg: RegionLocation,
         region_src_span: Span,
-    ) -> Result<(), OptError> {
+    ) -> Result<(), VolaError<OptError>> {
         //The idea is pretty simple: we build the topological order of all nodes, and
         //derive the type for each.
         //
@@ -1083,15 +964,11 @@ impl Optimizer {
                         let err = OptError::Any {
                             text: format!("Edge was already set to {:?}, but was about to be overwritten with an incompatible type {:?}", preset, ty),
                         };
-                        report(
-                            error_reporter(err.clone(), region_src_span.clone())
-                                .with_label(
-                                    Label::new(region_src_span.clone())
-                                        .with_message("In this region"),
-                                )
-                                .finish(),
-                        );
-                        return Err(err);
+                        return Err(VolaError::error_here(
+                            err,
+                            region_src_span,
+                            "In this region",
+                        ));
                     }
                 } else {
                     self.graph.edge_mut(*edg).ty = OptEdge::Value {
@@ -1107,20 +984,15 @@ impl Optimizer {
             let resolved_values = match self.try_node_type_derive(node) {
                 Ok(values) => values,
                 Err(e) => {
-                    if let Some(span) = self.find_span(node.into()) {
-                        report(
-                            error_reporter(e.clone(), span.clone())
-                                .with_label(
-                                    Label::new(span.clone()).with_message("on this operation"),
-                                )
-                                .finish(),
-                        )
+                    let err = if let Some(span) = self.find_span(node.into()) {
+                        //TODO: maybe remove, if that pollutes too much
+                        e.with_label(span, "while working here")
                     } else {
-                        report(error_reporter(e.clone(), Span::empty()).finish());
-                    }
+                        e
+                    };
                     //Immediately abort, since we have no way of finishing.
                     // TODO: We could also collect all error at this point...
-                    return Err(e);
+                    return Err(err);
                 }
             };
 
@@ -1133,16 +1005,11 @@ impl Optimizer {
                                 "Type collision, declared as {old:?}, but derived to {ty:?}"
                             ),
                         };
-                        if let Some(span) = self.find_span(port.node.into()) {
-                            report(
-                                error_reporter(err.clone(), span.clone())
-                                    .with_label(Label::new(span))
-                                    .with_message(format!("Sould be {old:?}"))
-                                    .finish(),
-                            );
+                        let err = if let Some(span) = self.find_span(port.node.into()) {
+                            VolaError::error_here(err, span, format!("Should be {old}"))
                         } else {
-                            report(error_reporter(err.clone(), Span::empty()).finish());
-                        }
+                            VolaError::new(err)
+                        };
 
                         return Err(err);
                     }
@@ -1150,17 +1017,11 @@ impl Optimizer {
                 //And propagate to all edges
                 for edg in self.graph[port].edges.clone().iter() {
                     if let Err(e) = self.graph[*edg].ty.set_derived_state(ty.clone()) {
-                        if let Some(span) = self.find_span(port.node.into()) {
-                            report(
-                                error_reporter(e.clone(), span.clone())
-                                    .with_label(
-                                        Label::new(span.clone()).with_message("On this node"),
-                                    )
-                                    .finish(),
-                            );
+                        let e = if let Some(span) = self.find_span(port.node.into()) {
+                            VolaError::error_here(e, span, "here")
                         } else {
-                            report(error_reporter(e.clone(), Span::empty()).finish());
-                        }
+                            VolaError::new(e)
+                        };
 
                         return Err(e);
                     }

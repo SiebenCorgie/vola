@@ -14,8 +14,8 @@ use rvsdg::{
     smallvec::smallvec,
     util::graph_type_transform::{GraphMapping, GraphTypeTransformer, GraphTypeTransformerError},
 };
-use vola_common::{error::error_reporter, report, Span};
-// use vola_common::{error::error_reporter, report, Span};
+use vola_common::{error_reporter, report, Span};
+// use vola_common::{error_reporter, report, Span};
 use vola_opt::{
     alge::{
         arithmetic::{BinaryArith, UnaryArith, UnaryArithOp},
@@ -49,15 +49,14 @@ impl GraphTypeTransformer for InterningTransformer {
         //This basically just erases the type information atm.
         match src_edge {
             OptEdge::State => BackendEdge::State,
-            OptEdge::Value { ty } => {
-                BackendEdge::Value(
-                    ty.get_type()
-                        .map(|t| {
-                            let tc = t.clone();
-                            if let Ok(converted) = t.try_into() {
-                                converted
-                            } else {
-                                report(
+            OptEdge::Value { ty } => BackendEdge::Value(
+                ty.get_type()
+                    .map(|t| {
+                        let tc = t.clone();
+                        if let Ok(converted) = t.try_into() {
+                            converted
+                        } else {
+                            report(
                                     error_reporter(
                                         BackendSpirvError::Any {
                                             text: format!(
@@ -68,12 +67,11 @@ impl GraphTypeTransformer for InterningTransformer {
                                     )
                                     .finish(),
                                 );
-                                SpvType::Undefined
-                            }
-                        })
-                        .unwrap_or(SpvType::undefined()),
-                )
-            }
+                            SpvType::Undefined
+                        }
+                    })
+                    .unwrap_or(SpvType::undefined()),
+            ),
         }
     }
     fn transform_simple_node(&mut self, src_node: &Self::SrcNode) -> Self::DstNode {

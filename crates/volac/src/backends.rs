@@ -15,6 +15,7 @@ pub use spriv::Spirv;
 
 #[cfg(feature = "wasm")]
 mod wasm;
+use vola_common::VolaError;
 #[cfg(feature = "wasm")]
 pub use wasm::Wasm;
 
@@ -36,10 +37,10 @@ pub type BoxedBackend = Box<dyn PipelineBackend + Send + Sync + UnwindSafe>;
 
 pub trait PipelineBackend {
     ///Gets executed before the optimizer is finalized.
-    fn opt_pre_finalize(&self, opt: &mut Optimizer) -> Result<(), PipelineError>;
+    fn opt_pre_finalize(&self, opt: &mut Optimizer) -> Result<(), Vec<VolaError<PipelineError>>>;
 
     ///Moves ownership of the (finalized) optimizer to the backend. Returns the final binary (path or buffer)
-    fn execute(&mut self, opt: Optimizer) -> Result<Target, PipelineError>;
+    fn execute(&mut self, opt: Optimizer) -> Result<Target, Vec<VolaError<PipelineError>>>;
 
     ///If implemented tries to use installed tools to verify the emitted artifact.
     fn try_verify(&self) -> Result<(), String> {
@@ -54,15 +55,15 @@ impl Default for StubBackend {
     }
 }
 impl PipelineBackend for StubBackend {
-    fn execute(&mut self, _opt: Optimizer) -> Result<Target, PipelineError> {
-        Err(PipelineError::IsStub)
+    fn execute(&mut self, _opt: Optimizer) -> Result<Target, Vec<VolaError<PipelineError>>> {
+        Err(vec![VolaError::new(PipelineError::IsStub)])
     }
 
     fn try_verify(&self) -> Result<(), String> {
         Ok(())
     }
 
-    fn opt_pre_finalize(&self, _opt: &mut Optimizer) -> Result<(), PipelineError> {
-        Err(PipelineError::IsStub)
+    fn opt_pre_finalize(&self, _opt: &mut Optimizer) -> Result<(), Vec<VolaError<PipelineError>>> {
+        Err(vec![VolaError::new(PipelineError::IsStub)])
     }
 }
