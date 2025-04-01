@@ -194,7 +194,7 @@ impl Pipeline {
                 .map_err(|e| vec![VolaError::new(PipelineError::CnfError(e))])?;
         }
         opt.specialize_all_exports()
-            .map_err(|e| vec![VolaError::new(PipelineError::OptError(e))])?;
+            .map_err(|e| e.into_iter().map(|e| e.to_error()).collect::<Vec<_>>())?;
 
         //At this point any used nodes are hooked up. Therfore clean up
         //any unused garbage
