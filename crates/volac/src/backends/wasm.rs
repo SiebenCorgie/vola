@@ -8,6 +8,8 @@
 
 use std::{io::Write, process::Stdio};
 
+use vola_common::VolaError;
+
 use crate::Target;
 
 use super::PipelineBackend;
@@ -23,18 +25,29 @@ impl Wasm {
 }
 
 impl PipelineBackend for Wasm {
-    fn opt_pre_finalize(&self, opt: &mut vola_opt::Optimizer) -> Result<(), crate::PipelineError> {
+    fn opt_pre_finalize(
+        &self,
+        opt: &mut vola_opt::Optimizer,
+    ) -> Result<(), Vec<VolaError<crate::PipelineError>>> {
         //NOTE: Our WASM backend currently does not support calls, so we gotta inline all :/
-        opt.inline_all()?;
-        opt.imm_scalarize()?;
-        opt.remove_unused_edges()?;
+        opt.inline_all()
+            .map_err(|e| vec![VolaError::new(e.into())])?;
+        opt.imm_scalarize()
+            .map_err(|e| vec![VolaError::new(e.into())])?;
+        opt.remove_unused_edges()
+            .map_err(|e| vec![VolaError::new(e.into())])?;
         opt.cleanup_export_lmd();
         Ok(())
     }
 
-    fn execute(&mut self, opt: vola_opt::Optimizer) -> Result<Target, crate::PipelineError> {
+    fn execute(
+        &mut self,
+        opt: vola_opt::Optimizer,
+    ) -> Result<Target, Vec<VolaError<crate::PipelineError>>> {
         let mut backend = vola_backend_wasm::WasmBackend::new();
-        backend.intern_module(&opt)?;
+        backend
+            .intern_module(&opt)
+            .map_err(|e| vec![VolaError::new(e.into())])?;
 
         if std::env::var("VOLA_DUMP_ALL").is_ok()
             || std::env::var("VOLA_DUMP_WASM_BEFORE_CFG").is_ok()
@@ -44,7 +57,9 @@ impl PipelineBackend for Wasm {
 
         //This transforms the RVSDG into a WASM module
         //By loading the runtime, and then adding all exported functions to that.
-        let mut module = backend.into_wasm_module()?;
+        let mut module = backend
+            .into_wasm_module()
+            .map_err(|e| vec![VolaError::new(e.into())])?;
 
         //Run garbage collection
         vola_backend_wasm::walrus::passes::gc::run(&mut module);

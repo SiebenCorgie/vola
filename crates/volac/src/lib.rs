@@ -223,9 +223,7 @@ impl Pipeline {
             .map_err(|e| vec![VolaError::new(PipelineError::OptError(e))])?;
 
         //Call _before-finalize-hook_.
-        self.backend
-            .opt_pre_finalize(&mut opt)
-            .map_err(|e| vec![VolaError::new(PipelineError::from(e))])?;
+        self.backend.opt_pre_finalize(&mut opt)?;
 
         opt.cleanup_export_lmd();
 
@@ -237,10 +235,7 @@ impl Pipeline {
             opt.dump_debug_state(&"OptState.bin");
         }
 
-        let result = self
-            .backend
-            .execute(opt)
-            .map_err(|e| vec![VolaError::new(e)])?;
+        let result = self.backend.execute(opt)?;
 
         if self.validate_output {
             self.backend

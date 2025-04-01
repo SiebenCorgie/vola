@@ -10,6 +10,7 @@ use std::{io::Write, process::Stdio};
 
 use vola_backend_spirv::rspirv::binary::Assemble;
 pub use vola_backend_spirv::SpirvConfig;
+use vola_common::VolaError;
 
 use crate::{PipelineError, Target};
 
@@ -30,19 +31,33 @@ impl Spirv {
 }
 
 impl PipelineBackend for Spirv {
-    fn opt_pre_finalize(&self, opt: &mut vola_opt::Optimizer) -> Result<(), PipelineError> {
-        opt.imm_scalarize()?;
-        opt.cne_exports()?;
+    fn opt_pre_finalize(
+        &self,
+        opt: &mut vola_opt::Optimizer,
+    ) -> Result<(), Vec<VolaError<PipelineError>>> {
+        opt.imm_scalarize()
+            .map_err(|e| vec![VolaError::new(e.into())])?;
+        opt.cne_exports()
+            .map_err(|e| vec![VolaError::new(e.into())])?;
 
         Ok(())
     }
 
-    fn execute(&mut self, opt: vola_opt::Optimizer) -> Result<Target, PipelineError> {
+    fn execute(
+        &mut self,
+        opt: vola_opt::Optimizer,
+    ) -> Result<Target, Vec<VolaError<PipelineError>>> {
         let mut backend = vola_backend_spirv::SpirvBackend::new(self.config.clone());
 
-        backend.intern_module(&opt)?;
-        backend.hl_to_spv_nodes()?;
-        backend.legalize()?;
+        backend
+            .intern_module(&opt)
+            .map_err(|e| vec![VolaError::new(e.into())])?;
+        backend
+            .hl_to_spv_nodes()
+            .map_err(|e| vec![VolaError::new(e.into())])?;
+        backend
+            .legalize()
+            .map_err(|e| vec![VolaError::new(e.into())])?;
 
         if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("VOLA_SPIRV_FINAL").is_ok() {
             backend.push_debug_state("Final SPIR-V Graph");

@@ -9,6 +9,7 @@
 use super::PipelineBackend;
 use crate::Target;
 use std::fs;
+use vola_common::VolaError;
 use wasmtime::CodeBuilder;
 
 pub struct Native {
@@ -28,7 +29,10 @@ impl Native {
 }
 
 impl PipelineBackend for Native {
-    fn execute(&mut self, opt: vola_opt::Optimizer) -> Result<crate::Target, crate::PipelineError> {
+    fn execute(
+        &mut self,
+        opt: vola_opt::Optimizer,
+    ) -> Result<crate::Target, Vec<VolaError<crate::PipelineError>>> {
         let wasmcode = self.wasm_backend.execute(opt)?.unwrap_buffer();
 
         let config = wasmtime::Config::new();
@@ -51,7 +55,10 @@ impl PipelineBackend for Native {
         Ok(self.target.clone())
     }
 
-    fn opt_pre_finalize(&self, opt: &mut vola_opt::Optimizer) -> Result<(), crate::PipelineError> {
+    fn opt_pre_finalize(
+        &self,
+        opt: &mut vola_opt::Optimizer,
+    ) -> Result<(), Vec<VolaError<crate::PipelineError>>> {
         self.wasm_backend.opt_pre_finalize(opt)
     }
 

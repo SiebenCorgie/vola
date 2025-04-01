@@ -9,7 +9,6 @@
 use rvsdg::{
     edge::{InputType, OutportLocation, OutputType},
     region::RegionLocation,
-    smallvec::SmallVec,
 };
 
 use crate::{
@@ -25,7 +24,7 @@ use vola_ast::{
     common::Branch,
     csg::CsgTy,
 };
-use vola_common::{ariadne::Label, error_reporter, report, Span, VolaError};
+use vola_common::{Span, VolaError};
 
 use crate::{
     alge::EvalNode,

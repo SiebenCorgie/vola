@@ -436,7 +436,7 @@ impl Optimizer {
                                     node_name
                                 ),
                             };
-                            let labeled_err = if let Some(span) = node_span {
+                            if let Some(span) = node_span {
                                 return Err(VolaError::error_here(
                                     err,
                                     let_binding.span.clone(),
@@ -449,7 +449,7 @@ impl Optimizer {
                                     let_binding.span.clone(),
                                     "here",
                                 ));
-                            };
+                            }
                         }
                     }
                 }

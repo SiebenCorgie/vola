@@ -13,7 +13,7 @@ use rvsdg::{
     nodes::StructuralNode,
     NodeRef, SmallColl,
 };
-use vola_common::{ariadne::Label, error_reporter, report, Span, VolaError};
+use vola_common::VolaError;
 
 use crate::{OptError, Optimizer};
 
