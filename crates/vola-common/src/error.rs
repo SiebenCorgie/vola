@@ -60,8 +60,29 @@ impl<E: Error> VolaError<E> {
         }
     }
 
+    ///Pushes a simple _info_ label to the error
     pub fn with_label(mut self, span: Span, message: impl ToString) -> Self {
         self.labels.push(Label::new(span).with_message(message));
+        self
+    }
+
+    ///Pushes a warning-label to the error
+    pub fn with_warning(mut self, span: Span, message: impl ToString) -> Self {
+        self.labels.push(
+            Label::new(span)
+                .with_message(message)
+                .with_color(ariadne::Color::Yellow),
+        );
+        self
+    }
+
+    ///Marks the `span` as an additional error message
+    pub fn with_error(mut self, span: Span, message: impl ToString) -> Self {
+        self.labels.push(
+            Label::new(span)
+                .with_message(message)
+                .with_color(ariadne::Color::Red),
+        );
         self
     }
 
