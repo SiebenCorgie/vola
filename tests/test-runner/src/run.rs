@@ -152,21 +152,20 @@ fn pipeline_res_to_testrun(
                         };
                     }
 
-                    for (expected_error, pipeline_error) in expected_error.iter().zip(e) {
-                        //make sure the error matches
-                        if expected_error != &pipeline_error.error.to_string() {
+                    for pipeline_error in e.iter().map(|e| e.error.to_string()) {
+                        if !expected_error.contains(&pipeline_error) {
                             return TestRun {
                                 backend,
                                 time,
                                 state: TestState::Error(format!(
-                                    "Expected error:\n    {}\ngot\n    {}",
-                                    expected_error,
-                                    pipeline_error.error.to_string()
+                                    "Had error {}, but expected one of\n\t{:?}",
+                                    pipeline_error, expected_error
                                 )),
                                 path: path.clone(),
                             };
                         }
                     }
+
                     //all errors match
                     TestRun {
                         backend,

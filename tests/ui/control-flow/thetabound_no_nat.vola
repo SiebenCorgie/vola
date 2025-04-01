@@ -1,5 +1,5 @@
 //BEGIN-CONFIG
-//ERROR:At least 2 errors occurred while running optimizer.
+//ERROR:Lt expectes the same type for both operands, got scalar<Integer> & scalar<Real><!!>impl-block's output was untyped
 //END-CONFIG
 
 

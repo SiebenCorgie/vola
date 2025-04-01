@@ -1,5 +1,5 @@
 //BEGIN-CONFIG
-//ERROR:At least 2 errors occurred while running optimizer.
+//ERROR:Matrix-Vector multiplication expects the Matrix's "width" to be equal to Vector's "width". Matrix width = 4 & vector_width = 3<!!>Type derive failed: Result is of type "scalar<Real>", but result was untyped. This is a compiler bug!
 //END-CONFIG
 
 module std;
