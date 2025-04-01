@@ -1,5 +1,5 @@
 //BEGIN-CONFIG
-//ERROR:Result is of type "scalar<Real>", but there was no return value set. This is a compiler bug!
+//ERROR:Result is of type "scalar<Real>", but there was no return value set.
 //END-CONFIG
 
 fn eval_in_alge(someattr: real) -> real{

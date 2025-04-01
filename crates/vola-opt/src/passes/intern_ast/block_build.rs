@@ -25,7 +25,7 @@ use vola_ast::{
     alge::Expr,
     common::{Block, Branch, Loop, Stmt},
 };
-use vola_common::{ariadne::Label, error_reporter, report, warning_reporter, Span, VolaError};
+use vola_common::{ariadne::Label, report, warning_reporter, Span, VolaError};
 
 #[derive(Debug, Clone)]
 pub enum VarDef {
@@ -116,7 +116,11 @@ impl BlockCtx {
         Ok(())
     }
 
-    pub fn write_var(&mut self, name: &str, new_origin: OutportLocation) -> Result<(), OptError> {
+    pub fn write_var(
+        &mut self,
+        name: &str,
+        new_origin: OutportLocation,
+    ) -> Result<(), VolaError<OptError>> {
         if let Some(lastdef) = self.active_scope.vars.get_mut(name) {
             match lastdef {
                 VarDef::FirstDef {
@@ -136,7 +140,7 @@ impl BlockCtx {
                     name
                 ),
             };
-            return Err(err);
+            return Err(VolaError::new(err));
         }
     }
 
@@ -145,7 +149,7 @@ impl BlockCtx {
         graph: &mut OptGraph,
         name: &str,
         new_origin: OutportLocation,
-    ) -> Result<(), OptError> {
+    ) -> Result<(), VolaError<OptError>> {
         //try to write to an existing
         if self.write_var(name, new_origin).is_ok() {
             return Ok(());
@@ -164,7 +168,7 @@ impl BlockCtx {
         &mut self,
         graph: &mut OptGraph,
         name: &str,
-    ) -> Result<OutportLocation, OptError> {
+    ) -> Result<OutportLocation, VolaError<OptError>> {
         //This is a two pass process. Frist we reverse-iterate all parent scopes (which is a AST concept),
         //till we find `name`. If this ends, without finding the name, we can exit, if it finds the name, we can
         //then import the variable.
@@ -201,7 +205,7 @@ impl BlockCtx {
             let err = OptError::Any {
                 text: format!("Could not find \"{name}\" in any parent scope!"),
             };
-            return Err(err);
+            return Err(VolaError::new(err));
         };
 
         //we _silent-import_, if the port is already in the correct region. This happens if there is only a scope distinction on a AST
@@ -223,8 +227,7 @@ impl BlockCtx {
                     let err = OptError::Internal(format!(
                         "Could not route \"{name}\" into region. This is a bug!"
                     ));
-                    report(error_reporter(err.clone(), Span::empty()).finish());
-                    return Err(err);
+                    return Err(VolaError::new(err));
                 }
             };
 
@@ -240,20 +243,21 @@ impl BlockCtx {
                             name
                         ),
                     };
-                    report(
-                        error_reporter(err.clone(), self.block_span.clone())
-                            .with_label(
-                                Label::new(self.block_span.clone()).with_message("In this region"),
-                            )
-                            .finish(),
-                    );
-                    return Err(err);
+                    return Err(VolaError::error_here(
+                        err,
+                        self.block_span.clone(),
+                        "In this region",
+                    ));
                 }
 
-                let (port, _path) = graph.import_context(port, self.active_scope.region)?;
+                let (port, _path) = graph
+                    .import_context(port, self.active_scope.region)
+                    .map_err(|e| VolaError::new(e.into()))?;
                 port
             } else {
-                let (port, _path) = graph.import_argument(port, self.active_scope.region)?;
+                let (port, _path) = graph
+                    .import_argument(port, self.active_scope.region)
+                    .map_err(|e| VolaError::new(e.into()))?;
                 port
             }
         };
@@ -278,7 +282,7 @@ impl BlockCtx {
         &mut self,
         graph: &mut OptGraph,
         name: &str,
-    ) -> Result<OutportLocation, OptError> {
+    ) -> Result<OutportLocation, VolaError<OptError>> {
         if let Some(src) = self.active_scope.get_var_use(name) {
             //Found on this scope
             Ok(src)
@@ -362,12 +366,12 @@ impl Optimizer {
                     let expr_src = self.build_expr(assign.expr, region, ctx)?;
                     //Rewrite expression-src to new assignment
                     if let Err(err) = ctx.write_var(&assign.dst.0, expr_src) {
-                        return Err(VolaError::error_here(err, assign.span.clone(), "here"));
+                        return Err(err.with_label(assign.span.clone(), "here"));
                     }
                     Ok(())
                 }
                 Err(err) => {
-                    return Err(VolaError::error_here(err, assign.span.clone(), "here"));
+                    return Err(err.with_label(assign.span.clone(), "here"));
                 }
             },
             Stmt::Csg(csg_binding) => {

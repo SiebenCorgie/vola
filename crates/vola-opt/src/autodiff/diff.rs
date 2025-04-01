@@ -307,7 +307,8 @@ impl Optimizer {
         _region: RegionLocation,
         node: NodeRef,
     ) -> Result<AdResponse, AutoDiffError> {
-        println!("TODO: implement boolean differential calculus");
+        #[cfg(feature = "log")]
+        log::warn!("TODO: implement boolean differential calculus");
 
         Ok(AdResponse::new(node.output(0), node.output(0)))
         //Err(AutoDiffError::NoAdImpl(self.graph[node].name().to_string()))

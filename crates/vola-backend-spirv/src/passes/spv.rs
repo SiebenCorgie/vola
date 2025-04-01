@@ -1126,7 +1126,7 @@ impl SpirvBackend {
         let caller = self.graph.find_caller(lmd)?;
         if caller.len() == 0 {
             #[cfg(feature = "log")]
-            log::error!("Cannot produce signature from caller, since λ {lmd} is never called. Substituting unknown args with Void.");
+            log::info!("Cannot produce signature from caller, since λ {lmd} is never called. Substituting unknown args with Void.");
 
             return Some(
                 internal_sig

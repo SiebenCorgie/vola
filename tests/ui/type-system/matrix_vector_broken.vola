@@ -1,5 +1,5 @@
 //BEGIN-CONFIG
-//ERROR:Matrix-Vector multiplication expects the Matrix's "width" to be equal to Vector's "width". Matrix width = 4 & vector_width = 3<!!>Type derive failed: Result is of type "scalar<Real>", but result was untyped. This is a compiler bug!
+//ERROR:Matrix-Vector multiplication expects the Matrix's "width" to be equal to Vector's "width". Matrix width = 4 & vector_width = 3<!!>Type derive failed: Result is of type "scalar<Real>", but result was untyped.
 //END-CONFIG
 
 module std;

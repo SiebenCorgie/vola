@@ -253,7 +253,8 @@ impl Optimizer {
                 let span = self
                     .find_span(parent_region.into())
                     .unwrap_or(Span::empty());
-                self.derive_region(parent_region, span)
+                //TODO: do not discard context of error
+                self.derive_region(parent_region, span).map_err(|e| e.error)
             }
         }
     }

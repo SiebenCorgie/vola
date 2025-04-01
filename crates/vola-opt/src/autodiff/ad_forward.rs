@@ -62,7 +62,7 @@ use rvsdg::{
     util::abstract_node_type::AbstractNodeType,
     NodeRef,
 };
-use vola_common::{ariadne::Label, error_reporter, report, Span};
+use vola_common::{Span, VolaError};
 
 type DiffExprCache = AHashMap<OutportLocation, OutportLocation>;
 
@@ -76,16 +76,18 @@ struct ForwardADCtx {
 impl Optimizer {
     ///Executes forward-ad pass on `entrypoint`. Assumes that it is a `AutoDiff` node. If that is the case, the node will be replaced
     /// with the differentiated value(s) after this pass (successfuly) ends.
-    pub fn forward_ad(&mut self, entrypoint: NodeRef) -> Result<(), OptError> {
+    pub fn forward_ad(&mut self, entrypoint: NodeRef) -> Result<(), VolaError<OptError>> {
         if !self.is_node_type::<AutoDiff>(entrypoint) {
-            return Err(OptError::Internal(format!(
+            return Err(VolaError::new(OptError::Internal(format!(
                 "AD Entrypoint was not of type AutoDiff"
-            )));
+            ))));
         }
 
         //If the wrt-arg is a constructor, linearize the ad-entrypoint into
         // multiple AD-Nodes with a single (scalar) WRT-Arg.
-        let entrypoints = self.linearize_ad(entrypoint)?;
+        let entrypoints = self
+            .linearize_ad(entrypoint)
+            .map_err(|e| VolaError::new(e))?;
 
         let region = self.graph[entrypoint].parent.unwrap();
         //TODO: Can speed up thing, or make them slower, do heuristically
@@ -96,7 +98,8 @@ impl Optimizer {
         }
 
         for entrypoint in &entrypoints {
-            self.canonicalize_for_ad(*entrypoint)?;
+            self.canonicalize_for_ad(*entrypoint)
+                .map_err(|e| VolaError::new(e))?;
         }
 
         if std::env::var("VOLA_DUMP_ALL").is_ok()
@@ -108,9 +111,11 @@ impl Optimizer {
         //do type derive and dead-node elemination in order to have
         // a) clean DAG (faster / easier transformation)
         // b) type information to emit correct zero-nodes
-        self.graph.dne_region(region)?;
+        self.graph
+            .dne_region(region)
+            .map_err(|e| VolaError::new(e.into()))?;
         let span = self.find_span(region.into()).unwrap_or(Span::empty());
-        self.derive_region(region, span)?;
+        self.derive_region(region, span.clone())?;
 
         //All entrypoints are with respect to a single scalar at this point,
         //and hooked up to the vector-value_creator already (if-needed).
@@ -118,7 +123,13 @@ impl Optimizer {
         // canonicalization is also taken care of, so we can just dispatch the forward
         // diff for all of them.
         for entrypoint in entrypoints {
-            self.forward_diff(entrypoint)?;
+            self.forward_diff(entrypoint).map_err(|e| {
+                VolaError::error_here(
+                    e,
+                    span.clone(),
+                    "while dispatching this AutoDiff entrypoint",
+                )
+            })?;
         }
 
         Ok(())
@@ -224,7 +235,11 @@ impl Optimizer {
 
         //Before ending, always do a final type derive though
         let span = self.find_span(region.into()).unwrap_or(Span::empty());
-        self.derive_region(region, span)?;
+        self.derive_region(region, span).map_err(|e| {
+            //report error immediatly, since we'll discard the context
+            e.report();
+            e.error
+        })?;
 
         Ok(derivative_src)
     }
@@ -292,14 +307,6 @@ impl Optimizer {
                         .fwd_handle_alge_node(region, node, ctx)
                         .map_err(|e| e.into()),
                     "autodiff" => {
-                        report(
-                            error_reporter(
-                                OptError::from(AutoDiffError::UnexpectedAutoDiffNode),
-                                Span::empty(),
-                            )
-                            .finish(),
-                        );
-
                         return Err(AutoDiffError::UnexpectedAutoDiffNode.into());
                     }
                     "imm" => {
@@ -481,11 +488,11 @@ impl Optimizer {
             Ok(t) => t,
             Err(e) => {
                 if let Some(span) = self.find_span(node.into()) {
-                    report(
-                        error_reporter(e.clone(), span.clone())
-                            .with_label(Label::new(span).with_message("On this operation"))
-                            .finish(),
-                    );
+                    //TODO: at some point, propagate this upwards
+                    {
+                        let verror = VolaError::error_here(e.clone(), span, "On this operation");
+                        verror.report();
+                    }
                     return Err(e.into());
                 } else {
                     return Err(e.into());

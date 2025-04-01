@@ -15,16 +15,18 @@
 
 use ahash::AHashSet;
 use rvsdg::{region::RegionLocation, NodeRef, SmallColl};
-use vola_common::{ariadne::Label, error_reporter, report, Span};
+use vola_common::{Span, VolaError};
 
 use crate::{autodiff::AutoDiff, OptError, Optimizer};
 
 impl Optimizer {
-    pub fn dispatch_autodiff(&mut self) -> Result<(), OptError> {
+    pub fn dispatch_autodiff(&mut self) -> Result<(), VolaError<OptError>> {
         let mut dispatch_nodes = SmallColl::new();
         //Regardless, always dead-node elemination before that pass, since most of the algorithms assume that anything that is connected is
         //also alive.
-        self.graph.dead_node_elimination()?;
+        self.graph
+            .dead_node_elimination()
+            .map_err(|e| VolaError::new(e.into()))?;
 
         //First top-down exploration of AD nodes.
         self.enque_ad_nodes_region(self.graph.toplevel_region(), &mut dispatch_nodes);
@@ -51,16 +53,7 @@ impl Optimizer {
 
             let span = self.find_span(node.into()).unwrap_or(Span::empty());
             if let Err(e) = self.forward_ad(node) {
-                report(
-                    error_reporter(e.clone(), span.clone())
-                        .with_label(
-                            Label::new(span)
-                                .with_message("While forward differentiating this node"),
-                        )
-                        .finish(),
-                );
-
-                return Err(e);
+                return Err(e.with_label(span, "While forward differentiation of this"));
             }
 
             if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("DUMP_POST_AD").is_ok() {
@@ -77,13 +70,10 @@ impl Optimizer {
         for region in touched_regions {
             let span = self.find_span(region.into()).unwrap_or(Span::empty());
             if let Err(e) = self.derive_region(region, span.clone()) {
-                report(
-                    error_reporter(e.clone(), span)
-                        .with_note("Failed to type derive region after auto-differentiation")
-                        .finish(),
-                );
-
-                return Err(e);
+                return Err(e.with_label(
+                    span,
+                    "Failed to type-derive region after auto-differentiation",
+                ));
             }
         }
 

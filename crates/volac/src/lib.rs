@@ -219,8 +219,7 @@ impl Pipeline {
         }
 
         //dispatch autodiff nodes
-        opt.dispatch_autodiff()
-            .map_err(|e| vec![VolaError::new(PipelineError::OptError(e))])?;
+        opt.dispatch_autodiff().map_err(|e| vec![e.to_error()])?;
 
         //Call _before-finalize-hook_.
         self.backend.opt_pre_finalize(&mut opt)?;
