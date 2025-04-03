@@ -1,5 +1,5 @@
 //BEGIN-CONFIG
-//ERROR:Result is of type "scalar<Real>", but there was no return value set.
+//ERROR:Expected a CSG node to be bound to a CSG variable, but "1f" is not a CSG operation
 //END-CONFIG
 
 module std;

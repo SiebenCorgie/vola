@@ -1,0 +1,25 @@
+//BEGIN-CONFIG
+//EXEC-FN:myfield
+//EXEC-ARGS:0.0,0.0,0.0
+//EXEC-EPS:0.1
+//EXEC-RES:3
+//END-CONFIG
+//
+
+module std;
+
+
+fn mydag() -> csg{
+    csg mysphere = Sphere(1.0);
+
+    Union(){
+        Translate([1.0, 0.0, 0.0]){mysphere}
+    }{
+        Translate([-1.0, 0.0, 0.0]){mysphere}
+    }
+}
+
+export fn myFn(at: vec3) -> real{
+	csg f = mydag();
+	eval f.SDF3D(at)
+}

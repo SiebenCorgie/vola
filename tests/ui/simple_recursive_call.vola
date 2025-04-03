@@ -1,5 +1,5 @@
 //BEGIN-CONFIG
-//ERROR:Result is of type "scalar<Real>", but there was no return value set.
+//ERROR:Had error Cannot use "test", as this would create a recursivecall, but expected one of
 //END-CONFIG
 
 module std;

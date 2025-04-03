@@ -83,6 +83,10 @@ impl Optimizer {
             self.push_debug_state("AST interned");
         }
 
+        if errors.len() > 0 {
+            return Err(errors);
+        }
+
         //try to detect recurisve calls
         self.detect_recursive_calls()?;
 
