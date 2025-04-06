@@ -52,6 +52,7 @@ impl From<&CSGConcept> for FormatTree {
     fn from(value: &CSGConcept) -> Self {
         FormatTree::Seq(vec![
             FormatTree::Keyword(Keyword::Concept),
+            FormatTree::from(&value.name),
             FormatTree::TypeEnd,
             FormatTree::from(&value.src_ty),
             FormatTree::Keyword(Keyword::ResultArrow),

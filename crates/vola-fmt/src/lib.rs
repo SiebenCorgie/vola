@@ -326,7 +326,6 @@ impl FormatTree {
                 Keyword::Range => false,
                 Keyword::ElseBranch => false,
                 Keyword::AccessDot => false,
-                Keyword::Concept => false,
 
                 _ => true,
             },
