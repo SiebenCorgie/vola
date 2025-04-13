@@ -34,6 +34,7 @@ pub mod node_equality;
 #[cfg(feature = "parse")]
 pub mod parse;
 pub mod region_utils;
+pub mod theta_utils;
 pub mod unroll;
 
 ///Path of multiple edges from `start` to `end`.

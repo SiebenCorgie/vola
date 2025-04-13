@@ -178,6 +178,12 @@ impl InputType {
             _ => None,
         }
     }
+
+    ///Converts the input type to a node location on `node`. The caller must take care to either ensure
+    ///this is a valid location, or that invalid locations are taken care of.
+    pub fn to_location(self, node: NodeRef) -> InportLocation {
+        InportLocation { node, input: self }
+    }
 }
 
 #[derive(Debug, Hash, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
@@ -353,6 +359,12 @@ impl OutputType {
             Self::Argument(i) => Some(InputType::Input(*i)),
             _ => None,
         }
+    }
+
+    ///Converts the output type to a node location on `node`. The caller must take care to either ensure
+    ///this is a valid location, or that invalid locations are taken care of.
+    pub fn to_location(self, node: NodeRef) -> OutportLocation {
+        OutportLocation { node, output: self }
     }
 }
 
