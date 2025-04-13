@@ -158,7 +158,7 @@ fn pipeline_res_to_testrun(
                                 backend,
                                 time,
                                 state: TestState::Error(format!(
-                                    "Had error {}, but expected one of\n\t{:?}",
+                                    "Had error '{}', but expected one of:\n\t{:?}",
                                     pipeline_error, expected_error
                                 )),
                                 path: path.clone(),
@@ -179,7 +179,7 @@ fn pipeline_res_to_testrun(
                     TestRun {
                         backend,
                         time,
-                        state: TestState::Error(format!("Expected errors, but was success")),
+                        state: TestState::Error(format!("Expected success, but was error")),
                         path: path.clone(),
                     }
                 }
