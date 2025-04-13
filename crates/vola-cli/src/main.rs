@@ -51,6 +51,10 @@ struct Args {
     #[arg(long, default_value_t = false)]
     validate: bool,
 
+    ///Writes the optimizer state to file, if an error ocures.
+    #[arg(long, short, default_value_t = false)]
+    write_state_on_error: bool,
+
     ///Specifies the emitted format.
     #[arg(long, short, value_enum, default_value_t = Format::Spirv)]
     format: Format,
@@ -84,7 +88,12 @@ fn main() {
         late_cnf: !args.no_opt && !args.no_cnf,
         early_cnf: !args.no_opt && !args.no_cnf,
         validate_output: args.validate,
+        write_state_on_error: false,
     };
+
+    if args.write_state_on_error {
+        pipeline = pipeline.write_on_error();
+    }
 
     match pipeline.execute_on_file(&args.src_file) {
         Err(errors) => {

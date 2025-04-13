@@ -20,7 +20,6 @@ use crate::{
 
 struct SpecCtx {
     tree_access_span: Span,
-    host_region: RegionLocation,
     csg_tree: OutportLocation,
     eval_node: NodeRef,
 }
@@ -51,18 +50,19 @@ impl Optimizer {
         //      _pulled-in_ in this process, so whenever a impl-block with eval-nodes is
         //      inlined, the "restart" step will discover that, and ... restart the process.
         for function in topord_functions {
-            let (function_region, function_name, head_span) = if let Some(function) =
-                self.functions.values().find(|v| v.lambda == function)
-            {
-                (
-                    function.region(),
-                    function.name.clone(),
-                    function.def_span.clone(),
-                )
-            } else {
-                errors.push(VolaError::new(OptError::Internal(format!("function node {function:?} was discovered, but not present in function map. This is a bug!"))));
-                continue;
-            };
+            let (function_region, function_name, head_span) =
+                if let Some(function) = self.functions.values().find(|v| v.lambda == function) {
+                    (
+                        function.region(),
+                        function.name.clone(),
+                        function.def_span.clone(),
+                    )
+                } else {
+                    errors.push(VolaError::new(OptError::Internal(format!(
+                    "function node {function:?} was discovered, but not present in function map."
+                ))));
+                    continue;
+                };
             if std::env::var("VOLA_DUMP_ALL").is_ok()
                 || std::env::var("DUMP_BEFORE_SPECIALIZE").is_ok()
             {
@@ -90,7 +90,7 @@ impl Optimizer {
         }
     }
 
-    ///The _new_ specializer pass. Transforms a tree of CSG nodes into a
+    ///The specializer pass for one region. Transforms a tree of CSG nodes into a
     /// call tree of specialized _alge_-dialect based λ-nodes.
     ///
     /// Contrary to the _old_ specializer this one doesn't have to inline all calls.
@@ -173,7 +173,7 @@ impl Optimizer {
                 if self.is_node_type::<EvalNode>(node) {
                     //node seems good, start specializer
                     let span = self.find_span(node.into()).unwrap_or(region_span.clone());
-                    self.specialize_eval_entry(region, node)
+                    self.specialize_eval_entry(node)
                         .map_err(|e| e.with_label(span, "while specializing this"))?;
                     continue 'restart;
                 }
@@ -187,11 +187,7 @@ impl Optimizer {
     }
 
     ///Specializes the whole tree-access tree.
-    pub fn specialize_eval_entry(
-        &mut self,
-        host_region: RegionLocation,
-        eval: NodeRef,
-    ) -> Result<(), VolaError<OptError>> {
+    pub fn specialize_eval_entry(&mut self, eval: NodeRef) -> Result<(), VolaError<OptError>> {
         //build the frist eval_spec_ctx
         //for the first connected subtree, then substitude the tree-access node with a eval node
         let src_span = self
@@ -202,7 +198,7 @@ impl Optimizer {
             .span
             .clone();
 
-        let spec = self.eval_node_to_spec_ctx(src_span, host_region, eval)?;
+        let spec = self.eval_node_to_spec_ctx(src_span, eval)?;
         //now start the actual replacement descent
         self.specialize_eval_node(spec)
     }
@@ -215,9 +211,7 @@ impl Optimizer {
         }
         //The first step is to find the correct specialization impl block based on the called
         // csg-tree root node, and the called concept of the root node.
-        let concept_name = self
-            .graph
-            .node(spec_ctx.eval_node)
+        let concept_name = self.graph[spec_ctx.eval_node]
             .node_type
             .unwrap_simple_ref()
             .try_downcast_ref::<EvalNode>()
@@ -225,9 +219,7 @@ impl Optimizer {
             .called_concept
             .clone();
 
-        let csg_name = self
-            .graph
-            .node(spec_ctx.csg_tree.node)
+        let csg_name = self.graph[spec_ctx.csg_tree.node]
             .node_type
             .unwrap_simple_ref()
             .try_downcast_ref::<CsgOp>()
@@ -240,16 +232,17 @@ impl Optimizer {
             node: csg_name.clone(),
         };
 
-        let subtree_count = self
-            .graph
-            .node(spec_ctx.csg_tree.node)
+        let subtree_count = self.graph[spec_ctx.csg_tree.node]
             .node_type
             .unwrap_simple_ref()
             .try_downcast_ref::<CsgOp>()
             .unwrap()
             .subtree_count;
 
-        //NOTE: we prepare the identity implementation at this point, if the subtree-count is 0 and there
+        //The region in which the specialized CSG node is placed. Either the eval-nodes's region, or a parent.
+        let csg_region = self.graph[spec_ctx.csg_tree.node].parent.unwrap();
+
+        //NOTE: we prepare the identity implementation at this point, if the subtree-count is 1 and there
         //      is no such implblock yet.
         if !self.concept_impl.contains_key(&implkey) && subtree_count == 1 {
             if let Err(e) = self.implement_identity_for_concept(implkey.clone()) {
@@ -265,10 +258,17 @@ impl Optimizer {
         let created_spec_node = if let Some(concept_impl) = self.concept_impl.get(&implkey) {
             //If we found a concept impl for that tree, import it into the _host_region_
             // and hook it up to the eval node's first input.
-            let impl_subtree_conut = concept_impl.subtrees.len();
+            let impl_subtree_count = concept_impl.subtrees.len();
             let impl_span = concept_impl.def_span.clone();
-            let in_host_region_impl = self
-                .deep_copy_lmd_into_region(concept_impl.lambda, spec_ctx.host_region)
+
+            //We always build the specialized λ in the region, in which the CSG-node resides.
+            //This might be the region of the calling eval-node, or a parent region
+            //println!(
+            //"Copy {}:{} into {}",
+            //implkey.node, implkey.concept, csg_region
+            //);
+            let csg_impl_lambda = self
+                .deep_copy_lmd_into_region(concept_impl.lambda, csg_region)
                 .map_err(|e| {
                     VolaError::error_here(e, impl_span.clone(), "could not inline this impl-block")
                         .with_label(spec_ctx.tree_access_span.clone(), "for this tree-access")
@@ -278,7 +278,7 @@ impl Optimizer {
 
             //tag with debug info
             self.names.set(
-                in_host_region_impl.into(),
+                csg_impl_lambda.into(),
                 format!(
                     "impl {} for {} specialized for {}",
                     concept_name, csg_name, spec_ctx.eval_node
@@ -286,7 +286,7 @@ impl Optimizer {
             );
 
             //Make sure that the actual subtree-count matches the sub-tree-count of the implementation.
-            if impl_subtree_conut != subtree_count {
+            if impl_subtree_count != subtree_count {
                 let errspan = self
                     .graph
                     .node(spec_ctx.eval_node)
@@ -301,7 +301,11 @@ impl Optimizer {
                         .to_owned(),
                 };
 
-                return Err(VolaError::error_here(err, errspan, format!("Trying to use the implementation of {csg_name} for {concept_name}: Implementation is for {impl_subtree_conut} sub-trees, but using it for {subtree_count} sub-trees")).with_label(impl_span, "Trying to use this implementation").with_label(spec_ctx.tree_access_span.clone(), "Specialization for this eval."));
+                return Err(
+                    VolaError::error_here(err, errspan, format!("Trying to use the implementation of {csg_name} for {concept_name}: Implementation is for {impl_subtree_count} sub-trees, but using it for {subtree_count} sub-trees"))
+                        .with_label(impl_span.clone(), "Trying to use this implementation")
+                        .with_label(spec_ctx.tree_access_span.clone(), "Specialization for this eval.")
+                );
             }
 
             //now hook up the subtree(s) of the eval-connected csg node to the CVs
@@ -322,16 +326,24 @@ impl Optimizer {
                 let subtree_src = self.graph.edge(edg).src().clone();
                 let opt_edge = self.graph.edge(edg).ty.clone();
                 assert!(opt_edge.get_type() == Some(&Ty::CSG));
+
+                //println!("Subtree {subtree_idx} from {subtree_src} -> {in_host_region_impl:?}:CV{subtree_idx}");
                 self.graph
                     .connect(
                         subtree_src,
                         InportLocation {
-                            node: in_host_region_impl,
+                            node: csg_impl_lambda,
                             input: InputType::ContextVariableInput(subtree_idx),
                         },
                         opt_edge,
                     )
-                    .unwrap();
+                    .map_err(|e| {
+                        VolaError::error_here(
+                            OptError::InternalGraphError(e),
+                            impl_span.clone(),
+                            "while working on this",
+                        )
+                    })?;
             }
 
             //For the arguments we have to respect the call-convention
@@ -354,23 +366,22 @@ impl Optimizer {
             let eval_ty = self
                 .find_type(&spec_ctx.eval_node.output(0).into())
                 .expect("expected eval to be typed!");
-            let call_src =
-                if self.graph.node(spec_ctx.eval_node).parent != Some(spec_ctx.host_region) {
-                    self.import_context(
-                        OutportLocation {
-                            node: in_host_region_impl,
-                            output: OutputType::LambdaDeclaration,
-                        },
-                        eval_region,
-                    )
-                    .unwrap()
-                } else {
-                    //If the eval is in the host region, we can use the call-source as is
+            let call_src = if eval_region != csg_region {
+                self.import_context(
                     OutportLocation {
-                        node: in_host_region_impl,
+                        node: csg_impl_lambda,
                         output: OutputType::LambdaDeclaration,
-                    }
-                };
+                    },
+                    eval_region,
+                )
+                .unwrap()
+            } else {
+                //If the eval is in the host region, we can use the call-source as is
+                OutportLocation {
+                    node: csg_impl_lambda,
+                    output: OutputType::LambdaDeclaration,
+                }
+            };
             let mut args = SmallColl::new();
             for csg_arg_idx in 0..arg_count {
                 if let Some(connected_edge) = self
@@ -449,7 +460,7 @@ impl Optimizer {
                 }
             });
 
-            in_host_region_impl
+            csg_impl_lambda
         } else {
             let span = self
                 .graph
@@ -482,15 +493,13 @@ impl Optimizer {
         // tree, by exploring all evals in the
         // just created region
 
-        for eval in self.find_all_evals(RegionLocation {
+        let new_lambda_region = RegionLocation {
             node: created_spec_node,
             region_index: 0,
-        }) {
-            let new_spec_ctx = self.eval_node_to_spec_ctx(
-                spec_ctx.tree_access_span.clone(),
-                spec_ctx.host_region,
-                eval,
-            )?;
+        };
+        for eval in self.find_all_evals(new_lambda_region) {
+            let new_spec_ctx =
+                self.eval_node_to_spec_ctx(spec_ctx.tree_access_span.clone(), eval)?;
             self.specialize_eval_node(new_spec_ctx)?;
         }
 
@@ -587,7 +596,6 @@ impl Optimizer {
     fn eval_node_to_spec_ctx(
         &self,
         tree_access_span: Span,
-        host_region: RegionLocation,
         eval: NodeRef,
     ) -> Result<SpecCtx, VolaError<OptError>> {
         assert!(self
@@ -646,7 +654,6 @@ impl Optimizer {
         };
         Ok(SpecCtx {
             tree_access_span,
-            host_region,
             csg_tree,
             eval_node: eval,
         })

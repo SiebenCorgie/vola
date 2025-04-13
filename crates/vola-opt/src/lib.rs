@@ -23,7 +23,6 @@
 //! Used to represent algebraic expressions.
 
 //NOTE: We need that trait for the OptNode, so we can Upcast `DialectNode: Any` to `Any`.
-#![feature(trait_upcasting)]
 #![doc(html_logo_url = "https://gitlab.com/tendsinmende/vola/-/raw/main/resources/vola_icon.svg")]
 
 use ahash::AHashMap;
@@ -165,14 +164,13 @@ impl Optimizer {
     }
 
     #[cfg(feature = "viewer")]
-    pub fn dump_debug_state(&self, path: &dyn AsRef<std::path::Path>) {
+    pub fn dump_debug_state(&self, path: impl AsRef<std::path::Path>) {
         println!("Writing debug state to {:?}", path.as_ref());
-
         if std::env::var("VOLA_DUMP_SVG").is_ok() {
             let mut svg_path = path.as_ref().to_path_buf();
             svg_path.set_extension("svg");
             self.dump_svg(svg_path.to_str().unwrap(), false);
         }
-        self.viewer_state.write_to_file(path)
+        self.viewer_state.write_to_file(&path)
     }
 }
