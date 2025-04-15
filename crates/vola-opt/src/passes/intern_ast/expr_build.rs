@@ -109,7 +109,17 @@ impl Optimizer {
                         let call_output = ctx
                             .find_variable(&mut self.graph, &c.ident.0)
                             .map_err(|e| e.with_label(expr_span.clone(), "here"))?;
-                        CallResult::Call(call_output)
+                        //make sure this is actually a callable
+                        if let Some(_callable) = self.graph.find_callabel_def(call_output) {
+                            CallResult::Call(call_output)
+                        } else {
+                            let err = VolaError::error_here(OptError::Any { text: format!("Could not find a function '{}', because it was already defined as a value", &c.ident.0) }, expr_span, "trying to call this");
+                            if let Some(outspan) = self.find_span(call_output.into()) {
+                                return Err(err.with_label(outspan, "found this"));
+                            } else {
+                                return Err(err);
+                            }
+                        }
                     }
                 };
 
