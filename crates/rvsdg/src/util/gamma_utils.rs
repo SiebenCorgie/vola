@@ -165,7 +165,7 @@ impl<N: LangNode, E: LangEdge> Rvsdg<N, E> {
                 }
             } else {
                 //Could not map, so some kind of invalid setup.
-                #[cfg(feature = "logging")]
+                #[cfg(feature = "log")]
                 log::warn!("Could not map {exit_variable:?} to region {region_index}, possibly inconsistent node-state");
 
                 return false;

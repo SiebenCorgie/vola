@@ -6,16 +6,22 @@
  * 2024 Tendsin Mende
  */
 
+use std::env::consts::OS;
+
 use rvsdg::{
     edge::{InportLocation, InputType, LangEdge, OutportLocation, OutputType},
+    err::GraphError,
     nodes::{NodeType, StructuralNode},
     region::RegionLocation,
+    smallvec::smallvec,
+    util::copy::StructuralClone,
     NodeRef, SmallColl,
 };
-use vola_common::{Span, VolaError};
+use vola_common::{ariadne::Label, report, warning_reporter, Span, VolaError};
 
 use crate::{
-    alge::EvalNode, common::Ty, csg::CsgOp, graph::auxiliary::ImplKey, OptEdge, OptError, Optimizer,
+    alge::EvalNode, common::Ty, csg::CsgOp, graph::auxiliary::ImplKey, DialectNode, OptEdge,
+    OptError, Optimizer,
 };
 
 struct SpecCtx {
@@ -198,12 +204,15 @@ impl Optimizer {
             .span
             .clone();
 
-        let spec = self.eval_node_to_spec_ctx(src_span, eval)?;
-        //now start the actual replacement descent
-        self.specialize_eval_node(spec)
+        for spec in self.eval_node_to_spec_ctx(src_span, eval)? {
+            //now start the actual replacement descent
+            self.specialize_eval_node(spec)?
+        }
+        Ok(())
     }
 
-    ///Specializes the `eval` node based
+    ///Specializes the `eval` node based on `spec_ctx`. Assumes that the eval-node is in the same region
+    /// as the csg-value it is connected to.
     fn specialize_eval_node(&mut self, spec_ctx: SpecCtx) -> Result<(), VolaError<OptError>> {
         if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("DUMP_BEFORE_SPECIALIZE").is_ok()
         {
@@ -263,10 +272,6 @@ impl Optimizer {
 
             //We always build the specialized λ in the region, in which the CSG-node resides.
             //This might be the region of the calling eval-node, or a parent region
-            //println!(
-            //"Copy {}:{} into {}",
-            //implkey.node, implkey.concept, csg_region
-            //);
             let csg_impl_lambda = self
                 .deep_copy_lmd_into_region(concept_impl.lambda, csg_region)
                 .map_err(|e| {
@@ -301,11 +306,20 @@ impl Optimizer {
                         .to_owned(),
                 };
 
-                return Err(
-                    VolaError::error_here(err, errspan, format!("Trying to use the implementation of {csg_name} for {concept_name}: Implementation is for {impl_subtree_count} sub-trees, but using it for {subtree_count} sub-trees"))
-                        .with_label(impl_span.clone(), "Trying to use this implementation")
-                        .with_label(spec_ctx.tree_access_span.clone(), "Specialization for this eval.")
-                );
+                return Err(VolaError::error_here(
+                    err,
+                    errspan,
+                    format!(
+                        "Trying to use the implementation of\
+                        {csg_name} for {concept_name}: Implementation is for\
+                        {impl_subtree_count} sub-trees, but using it for {subtree_count} sub-trees"
+                    ),
+                )
+                .with_label(impl_span.clone(), "Trying to use this implementation")
+                .with_label(
+                    spec_ctx.tree_access_span.clone(),
+                    "Specialization for this eval.",
+                ));
             }
 
             //now hook up the subtree(s) of the eval-connected csg node to the CVs
@@ -327,7 +341,6 @@ impl Optimizer {
                 let opt_edge = self.graph.edge(edg).ty.clone();
                 assert!(opt_edge.get_type() == Some(&Ty::CSG));
 
-                //println!("Subtree {subtree_idx} from {subtree_src} -> {in_host_region_impl:?}:CV{subtree_idx}");
                 self.graph
                     .connect(
                         subtree_src,
@@ -498,10 +511,12 @@ impl Optimizer {
             region_index: 0,
         };
         for eval in self.find_all_evals(new_lambda_region) {
-            let new_spec_ctx =
-                self.eval_node_to_spec_ctx(spec_ctx.tree_access_span.clone(), eval)?;
-            self.specialize_eval_node(new_spec_ctx)?;
+            for spectx in self.eval_node_to_spec_ctx(spec_ctx.tree_access_span.clone(), eval)? {
+                self.specialize_eval_node(spectx)?;
+            }
         }
+
+        //once we are done, check if we need to route the result out of our region.
 
         //for good measures, remove unused CVs on the λ we just build
         self.graph
@@ -513,13 +528,7 @@ impl Optimizer {
     fn find_all_evals(&self, host_region: RegionLocation) -> SmallColl<NodeRef> {
         let mut evals = SmallColl::new();
         for node in &self.graph.region(&host_region).unwrap().nodes {
-            let is_eval = if let NodeType::Simple(s) = &self.graph.node(*node).node_type {
-                s.try_downcast_ref::<EvalNode>().is_some()
-            } else {
-                false
-            };
-
-            if is_eval {
+            if self.is_node_type::<EvalNode>(*node) {
                 evals.push(*node);
             } else {
                 //If not eval, check if there are sub_regions. if so, try to find evals in there as well
@@ -544,6 +553,7 @@ impl Optimizer {
         //NOTE: This is similar to an inlining, but easier. We just copy over the lmd and fix
         //      up the context variables
         let in_host_region_impl = self.graph.deep_copy_node(lmd, region);
+        self.copy_node_attributes(lmd, in_host_region_impl);
         let cvcount = self
             .graph
             .node(in_host_region_impl)
@@ -593,11 +603,13 @@ impl Optimizer {
         Ok(in_host_region_impl)
     }
 
+    ///Takes care of preparing a eval-node, in order to be _specializeable_. As
+    ///specially when handling control-flow, a single eval-node might become multiple.
     fn eval_node_to_spec_ctx(
-        &self,
+        &mut self,
         tree_access_span: Span,
         eval: NodeRef,
-    ) -> Result<SpecCtx, VolaError<OptError>> {
+    ) -> Result<SmallColl<SpecCtx>, VolaError<OptError>> {
         assert!(self
             .graph
             .node(eval)
@@ -613,49 +625,366 @@ impl Optimizer {
             .span
             .clone();
 
-        let csg_tree = if let Some(edg) = self.graph.node(eval).inputs()[0].edge {
+        //Find all specialization contexts.
+        //if `eval` is connceted to `just` a CSG-node, this is easy, since there is only
+        //the context to that node.
+        //
+        //However, if it is connected to a control-flow node, or an apply-node, then we have to _step-into_ the referenced
+        //region (i.e. both branches, loop-body, or function-body), and specialize in there.
+        //once that specialization is done, the value has to be exported _correctly_
+        //
+        //# Methode for Gamma
+        //1. Check if the eval-node is connected to CF node.
+        //2. If so, find producers of the value in the CF-Node
+        //3. Create eval node there, import all needed context to _make it work_
+        //4. Remove original eval node, instead, route the final value out of the CF-Node, and connect it to the original _result_ port of
+        //   the just deleted eval node.
+        //
+        //# Methode for Loop
+        //
+        //If we cross a theta boundary for a eval-node, we just _unroll_ the loop, and possibly emit a warning if the loop is _big_.
+        //The reason is, that we'd have to come up with a way to assemble the unrolled CSG anyways. The cool thing about _just_ unrolling the loop is,
+        //that the we can also eval partial _in-iteration_ trees _while_ assembling a new one (see PR !55).
+
+        if let Some(edg) = self.graph.node(eval).inputs()[0].edge {
             let edge = self.graph.edge(edg);
             match edge.ty.get_type() {
                 Some(&Ty::CSG) => {
-                    let prod = self
-                        .graph
-                        .find_producer_out(edge.src().clone())
-                        .expect("Expected a producer for the eval's CSG-Tree");
-
-                    if !self.is_node_type::<CsgOp>(prod.node) {
-                        let err =
-                            OptError::CsgStructureIssue(format!("Non-CSG value used in CSG tree!"));
-                        let error = if let Some(span) = self.find_span(prod.node.into()) {
-                            VolaError::error_here(err, src_span.clone(), "here")
-                                .with_label(span, "this should be a CSG value")
-                        } else {
-                            VolaError::error_here(err, src_span.clone(), "here")
-                                .with_label(tree_access_span, "for this eval")
-                        };
-
-                        return Err(error);
+                    //is some kind of csg node, call the canonicalized
+                    //and then wrapp all canonicalizede evals into a context
+                    let mut collected = SmallColl::new();
+                    for (canon_eval, csg_src) in self
+                        .spec_canonicalize_eval_node(eval)
+                        .map_err(|e| e.with_label(src_span, "on this eval"))?
+                    {
+                        collected.push(SpecCtx {
+                            tree_access_span: tree_access_span.clone(),
+                            csg_tree: csg_src,
+                            eval_node: canon_eval,
+                        })
                     }
-                    prod
+
+                    Ok(collected)
                 }
                 Some(other) => {
-                    let err = OptError::Internal(format!(
+                    let err = OptError::CsgStructureIssue(format!(
                         "Eval wrongly typed first argument. Expected CSGTree, was {other:?}!"
                     ));
-                    return Err(VolaError::error_here(err, src_span, "here"));
+                    Err(VolaError::error_here(err, src_span, "here"))
                 }
                 None => {
-                    let err = OptError::Internal("Eval untyped first argument!".to_owned());
-                    return Err(VolaError::error_here(err, src_span, "here"));
+                    let err =
+                        OptError::CsgStructureIssue("Eval untyped first argument!".to_owned());
+                    Err(VolaError::error_here(err, src_span, "here"))
                 }
             }
         } else {
-            let err = OptError::Internal("Eval node had no csg tree connected!".to_owned());
-            return Err(VolaError::error_here(err, src_span, "here"));
+            let err =
+                OptError::CsgStructureIssue("Eval node had no csg tree connected!".to_owned());
+            Err(VolaError::error_here(err, src_span, "here"))
+        }
+    }
+
+    ///Recursion wrapper that turns the `eval` node in the canonical-form that can be handeled by the specializer.
+    ///Returns all (eval-node, csg-producer) pairs that need to be specialized for this _canonicalized_ node.
+    fn spec_canonicalize_eval_node(
+        &mut self,
+        eval: NodeRef,
+    ) -> Result<SmallColl<(NodeRef, OutportLocation)>, VolaError<OptError>> {
+        //find the CSG-Producer of the eval node
+
+        let mut prod = self
+            .graph
+            .find_producer_out(self.graph[eval].input_src(&self.graph, 0).unwrap())
+            .expect("Expected a producer for the eval's CSG-Tree");
+
+        //if the producer is a apply-node, inline the apply node, since it _must_ (according to typing)
+        //be some kind of CSG-Tree
+        //
+        //NOTE: we'd have to build a specialized λ-regardless, so we can also just inline it at this point.
+        if self.graph[prod.node].node_type.is_apply() {
+            self.graph.inline_apply_node(prod.node).unwrap();
+            //update the producer afterwards
+            prod = self
+                .graph
+                .find_producer_out(self.graph[eval].input_src(&self.graph, 0).unwrap())
+                .unwrap();
+        }
+
+        //try to find out which type of node is connected to the eval:
+
+        //Is just simply a CsgOp, can return a single csg-value
+        //NOTE: this is also the _standard_ case. Most _normal_ trees will just
+        //      return here. The whole rest if for the _functions or CF in CSG-Trees_ case.
+        if self.is_node_type::<CsgOp>(prod.node) {
+            return Ok(smallvec![(eval, prod)]);
+        }
+
+        //is the gamma case, use our preparation helper to yield all _new_ eval nodes, and return a context for each.
+        if self.graph[prod.node].node_type.is_gamma() {
+            if std::env::var("VOLA_DUMP_ALL").is_ok()
+                || std::env::var("DUMP_BEFORE_GAMMA_PREP").is_ok()
+            {
+                self.push_debug_state(&format!("before gamma-preparation {}", eval));
+            }
+            return self.prepare_gamma_eval(eval, prod);
+        }
+
+        //Is a theta node. Try to find the loop-bound, and iff successful, unroll
+        if self.graph[prod.node].node_type.is_theta() {
+            //NOTE: loops should always be annotated.
+            let loop_span = self.find_span(prod.node.into());
+            let count = self.loop_count(prod.node).map_err(|e| {
+                let err = VolaError::new(e.into());
+                if let Some(span) = loop_span.clone() {
+                    err.with_label(
+                        span,
+                        "Tried unrolling loop in order to\
+                                use as CSG value, but loop is not statically bound"
+                            .to_owned(),
+                    )
+                } else {
+                    err
+                }
+            })?;
+
+            if count > 2 {
+                let mut warner = warning_reporter(
+                    format!(
+                        "Unrolling loop {count}-times for CSG Node. \
+                                Consider using implicit repetition instead. See https://mercury.sexy/hg_sdf/ 'domain operators'"
+                    ),
+                    loop_span.clone().unwrap_or(Span::empty()),
+                );
+                if let Some(ls) = &loop_span {
+                    warner = warner.with_label(Label::new(ls.clone()).with_message("For this loop"))
+                }
+                report(warner.finish());
+            }
+
+            self.graph
+                .unroll_replace_theta(prod.node, count)
+                .map_err(|e| {
+                    let err = VolaError::new(e.into());
+                    if let Some(ls) = loop_span {
+                        err.with_label(ls, "Failed to unroll this loop for the CSG value!")
+                    } else {
+                        err
+                    }
+                })?;
+
+            //now retrace the CSG-producer and return
+            prod = self
+                .graph
+                .find_producer_out(self.graph[eval].input_src(&self.graph, 0).unwrap())
+                .unwrap();
+
+            return Ok(smallvec![(eval, prod)]);
+        }
+
+        //Was not a CsgNode nor a CF-Node, so is some kind of _wrong_ tree.
+        let err = OptError::CsgStructureIssue("Non-CSG value used in CSG tree!".to_owned());
+        let error = if let Some(span) = self.find_span(prod.node.into()) {
+            VolaError::error_here(err, span.clone(), "this should be a CSG value")
+        } else {
+            VolaError::new(err)
         };
-        Ok(SpecCtx {
-            tree_access_span,
-            csg_tree,
-            eval_node: eval,
-        })
+
+        Err(error)
+    }
+
+    ///Splits and moves the `eval` node into the connected gamma-node. Then return the new eval
+    ///node, and its connected CSG-Node.
+    fn prepare_gamma_eval(
+        &mut self,
+        eval: NodeRef,
+        gamma_prod: OutportLocation,
+    ) -> Result<SmallColl<(NodeRef, OutportLocation)>, VolaError<OptError>> {
+        assert!(self.graph[gamma_prod.node].node_type.is_gamma());
+
+        //we have to take care of two _cases_: Moving _into_ a gamma-node
+        //and moving _out_ of a gamma-node.
+        let exit_variable = match gamma_prod.output {
+            OutputType::ExitVariableOutput(exv) => {
+                //this is the hard case, where we have to pull stuff _into_ the branch. We'll continue below.
+                exv
+            }
+            OutputType::EntryVariableArgument {
+                branch,
+                entry_variable: _,
+            } => {
+                //just walking outside the branch. This is, structurely, the same case
+                //as using a context-value-csg from _within_ a λ. So we can just return the tuple of the acutal producer and the
+                //eval node.
+                //
+                //TODO: There is an edge case, if the _actual-producer_ is a gamma/theta node as well. We currently just test for that. However
+                //      at some point we should probably handle that. Maybe by inserting a dummy-node or something...
+
+                let actual_producer = {
+                    let entry_ty = gamma_prod.output.map_out_of_region().unwrap();
+                    let prod = self
+                        .graph
+                        .inport_src(entry_ty.to_location(gamma_prod.node))
+                        .unwrap();
+
+                    if !self.is_node_type::<CsgOp>(prod.node) {
+                        let e = OptError::CsgStructureIssue(format!("Could not specialize branch [{branch}]: The branch uses a CSG-value, that itself comes from a branch. Which is an edge-case we currently don't support. Please file an issue!"));
+                        let err = if let Some(span) = self.find_span(prod.node.into()) {
+                            VolaError::error_here(e, span, "The CSG-value comes from here. Consider moving that out of a branch for now!")
+                        } else {
+                            VolaError::new(e)
+                        };
+                        return Err(err);
+                    }
+                    prod
+                };
+                return Ok(smallvec![(eval, actual_producer)]);
+            }
+            other => {
+                return Err(VolaError::new(OptError::CsgStructureIssue(format!(
+                    "Encountered none-gamma port while specializing gamma-node: {:?}!",
+                    other
+                ))));
+            }
+        };
+
+        //find the actual producers in each branch, build a new eval node that uses that, then build a new gamma-result
+        //from which we route the specialized value _out_.
+        //
+        //NOTE: we don't _replace_ the CSG-result, since another eval might use the branch's produced CSG-value to specialize _something else_.
+
+        //Create the exit-var we'll connect all branches to
+        let specialized_exv = self.graph[gamma_prod.node]
+            .node_type
+            .unwrap_gamma_mut()
+            .add_exit_var();
+        //collect all context-srcs of the eval node. By definition the first is the csg-src we are currently working on
+        //the rest must be imported whenever we build the substitution eval
+        let mut needed_context_ports = self.graph[eval].input_srcs(&self.graph);
+        let csgsrc = needed_context_ports.remove(0);
+        assert!(csgsrc == Some(gamma_prod));
+        let evalspan = self.graph[eval].node_type.unwrap_simple_ref().span.clone();
+        let eval_node_template = self
+            .try_unwrap_node::<EvalNode>(eval)
+            .unwrap()
+            .structural_copy(evalspan.clone());
+        let eval_parent = self.graph[eval].parent.unwrap();
+
+        let mut collected = SmallColl::new();
+        for branch in 0..self.graph[gamma_prod.node].regions().len() {
+            //find the actual source of the exit_variables's result
+            let src = self
+                .graph
+                .inport_src(
+                    InputType::ExitVariableResult {
+                        branch,
+                        exit_variable,
+                    }
+                    .to_location(gamma_prod.node),
+                )
+                .unwrap();
+
+            let branch_region = RegionLocation {
+                node: gamma_prod.node,
+                region_index: branch,
+            };
+
+            // add the src (csg-typed, but not necessarly csg-node) and import the context (import dedups :) )
+            // needed to create the _same_ semantics
+            let mut local_context_ports = SmallColl::new();
+            //first, push the _by-definition_ csg-arg;
+            local_context_ports.push(src);
+            //now append all context values needed, by importing them
+            for ctx_var in needed_context_ports.iter() {
+                let in_region_port = if let Some(src) = ctx_var {
+                    let (imported_src, _) = self
+                        .graph
+                        .import_argument(*src, branch_region)
+                        .map_err(|e| {
+                            VolaError::error_here(
+                                OptError::InternalGraphError(e),
+                                evalspan.clone(),
+                                "while trying to specialize this eval for branch",
+                            )
+                        })?;
+                    imported_src
+                } else {
+                    return Err(VolaError::error_here(
+                        OptError::CsgStructureIssue(
+                            "Eval node's argument was unconnected".to_owned(),
+                        ),
+                        evalspan.clone(),
+                        "for this eval",
+                    ));
+                };
+
+                local_context_ports.push(in_region_port);
+            }
+
+            //create a eval-node, and connect all (imported) args and the CSG node
+            let created_eval = self
+                .graph
+                .on_region(&branch_region, |reg| {
+                    let (node, _edges) = reg
+                        .connect_node(
+                            eval_node_template.structural_copy().into(),
+                            local_context_ports,
+                        )
+                        .unwrap();
+                    //hookup the new _produced_ value to the prepared exit variable
+                    reg.ctx_mut()
+                        .connect(
+                            node.output(0),
+                            gamma_prod
+                                .node
+                                .as_inport_location(InputType::ExitVariableResult {
+                                    branch,
+                                    exit_variable: specialized_exv,
+                                }),
+                            OptEdge::value_edge_unset(),
+                        )
+                        .unwrap();
+                    node
+                })
+                .unwrap();
+
+            //now again, two cases:
+            //1. Is _just_ a CsgOp. In that case, we can just return the created (in-branch) eval-node and csg pair.
+            //2. Is some kind of CF-Node. This is where we recurse. We insert a dummy eval
+            //   We just _pretend_ that the there is a eval-node, and call the spec-ctx-builder
+            if self.is_node_type::<CsgOp>(src.node) {
+                //finally push the new eval-producer combination
+                collected.push((created_eval, src));
+            } else {
+                //must be some kind of argument. There are now two ways (yet again :D)
+                //1. This is a argument, in that case we'd continue by placing a eval here
+                //2. This is a result, in that case we have to do the _move eval into region_ trick from before.
+                //
+                // So what we actually did is place a eval-node here (pretending that works), connect the CSG source, from which we don't really know whats going on,
+                // and recurse the canonicalization. This will handle both cases. Either it'll just return the eval-node and the actual _outside_ CSG (case 1)
+                // or it handels moving the eval even further into the CF, and replacing everything that comes with it.
+                let mut new_pairs = self.spec_canonicalize_eval_node(created_eval)?;
+                //now append all new pairs we found in the recursion
+                collected.append(&mut new_pairs);
+            }
+        }
+
+        //before returning, route the values out of their gamma-node and replace the original
+        //eval consumer's source with the routed value.
+        let producer_port = gamma_prod
+            .node
+            .as_outport_location(OutputType::ExitVariableOutput(specialized_exv));
+        for consumer in self.graph[eval].output_dsts(&self.graph, 0).unwrap() {
+            let edg = self.graph[consumer].edge.unwrap();
+            let edge = self.graph.disconnect(edg).unwrap();
+            self.graph.connect(producer_port, consumer, edge).unwrap();
+        }
+        //now delete the old eval-node, so it won't be re-discovered
+        let _ = self.graph.remove_node(eval).unwrap();
+        //and re-type the parent region
+        let eval_region_span = self.find_span(eval_parent.into()).unwrap_or(Span::empty());
+        self.derive_region(eval_parent, eval_region_span)?;
+
+        Ok(collected)
     }
 }

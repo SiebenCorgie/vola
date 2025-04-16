@@ -331,7 +331,7 @@ impl View for OptEdge {
 impl Optimizer {
     //Tries to find a span for this node or port.
     //This'll first check if a span tag is active, if not,
-    //tries to use the simple-node's span, or tries one of the porst
+    //tries to use the simple-node's span, or tries one of the ports
     pub fn find_span(&self, loc: AttribLocation) -> Option<Span> {
         if let Some(s) = self.span_tags.get(&loc) {
             return Some(s.clone());
