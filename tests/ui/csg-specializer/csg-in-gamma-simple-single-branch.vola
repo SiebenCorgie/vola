@@ -1,0 +1,36 @@
+//BEGIN-CONFIG
+//EXEC-FN:myfield
+//EXEC-ARGS:0.0,0.0,0.0
+//EXEC-EPS:0.1
+//EXEC-RES:-1
+//END-CONFIG
+//
+
+module std;
+
+
+operation Switcher(myswitch: bool);
+impl Switcher<sub> for SDF3D(at){
+    csg newsub = Sphere(1.0);
+
+    if myswitch{
+        newsub = Union(){
+            newsub
+        }{
+            Box([1.0; 3])
+        };
+    }
+
+    eval newsub.SDF3D(at)
+}
+
+
+export fn myfield(at: vec3) -> real{
+    csg t = Switcher(true){
+        Translate([1.0, 0.0, 0.0]){
+            Sphere(2.0)
+        }
+    };
+
+    eval t.SDF3D(at)
+}

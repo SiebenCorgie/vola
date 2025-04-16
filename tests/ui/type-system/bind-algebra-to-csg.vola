@@ -1,0 +1,17 @@
+//BEGIN-CONFIG
+//ERROR:Called function should return `scalar<Csg>`, but returns 'scalar<Real>', consider using a let statement instead
+//END-CONFIG
+
+module std;
+
+fn my_fn(test: csg) -> real{
+    1.0
+}
+
+
+export fn myfield(at: vec3) -> real{
+    csg t = Box([1.0; 3]);
+    csg r = my_fn(t);
+
+    eval r.SDF3D(at)
+}

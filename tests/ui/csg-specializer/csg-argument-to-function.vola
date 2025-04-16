@@ -1,0 +1,25 @@
+//BEGIN-CONFIG
+//EXEC-FN:myfield
+//EXEC-ARGS:0.0,0.0,0.0
+//EXEC-EPS:0.1
+//EXEC-RES:-1
+//END-CONFIG
+//
+
+module std;
+
+fn my_fn_with_csg(test: csg) -> csg{
+    Union(){
+        test
+    }{
+        Sphere(1.0)
+    }
+}
+
+
+export fn myfield(at: vec3) -> real{
+    csg t = Box([1.0; 3]);
+    csg r = my_fn_with_csg(t);
+
+    eval r.SDF3D(at)
+}
