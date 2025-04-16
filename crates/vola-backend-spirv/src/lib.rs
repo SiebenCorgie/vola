@@ -131,10 +131,10 @@ impl SpirvBackend {
     /// Assumes that all nodes that are live/reachable (from any ω-result) are in the "alge" dialect.
     pub fn intern_module(&mut self, opt: &Optimizer) -> Result<(), BackendSpirvError> {
         let res = self
-            .intern_opt_graph(opt)
-            .map_err(|e| BackendSpirvError::InterningError(e));
+            .lower_opt_graph(opt)
+            .map_err(|e| BackendSpirvError::LoweringError(e));
 
-        if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("VOLA_DUMP_SPV_INTERNED").is_ok()
+        if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("VOLA_DUMP_SPV_LOWERED").is_ok()
         {
             self.push_debug_state("Opt interned into SPIR-V");
         }

@@ -12,7 +12,7 @@ use rvsdg::{
 };
 
 use crate::{
-    csg::CsgOp, imm::ImmBool, passes::intern_ast::block_build::VarDef,
+    csg::CsgOp, imm::ImmBool, passes::lower_ast::block_build::VarDef,
     typelevel::NonUniformConstruct, OptEdge, Optimizer,
 };
 

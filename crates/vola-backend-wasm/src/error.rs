@@ -24,8 +24,8 @@ pub enum WasmError {
     Any(Box<dyn Error + Sync + Send + 'static>),
     #[error(transparent)]
     WalrusError(walrus::ErrorKind),
-    #[error("Failed to intern optimizer state")]
-    InterningFailed,
+    #[error("Failed to lower optimizer state")]
+    LoweringFailed,
     #[error(transparent)]
     GraphTransError(#[from] GraphTypeTransformerError),
     #[error("Encountered unsupported optimizer operation \"{0}\"")]

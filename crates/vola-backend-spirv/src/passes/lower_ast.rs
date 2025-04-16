@@ -37,9 +37,9 @@ use crate::{
     BackendSpirvError, SpirvBackend,
 };
 
-pub struct InterningTransformer;
+pub struct LoweringTransformer;
 
-impl GraphTypeTransformer for InterningTransformer {
+impl GraphTypeTransformer for LoweringTransformer {
     type SrcNode = OptNode;
     type SrcEdge = OptEdge;
     type DstNode = BackendNode;
@@ -130,7 +130,7 @@ impl GraphTypeTransformer for InterningTransformer {
 }
 
 impl SpirvBackend {
-    pub fn intern_opt_graph(&mut self, opt: &Optimizer) -> Result<(), GraphTypeTransformerError> {
+    pub fn lower_opt_graph(&mut self, opt: &Optimizer) -> Result<(), GraphTypeTransformerError> {
         //right now we do expect the module to have no imports at all. Since we don't expect to link anything
         assert!(
             opt.graph
@@ -142,7 +142,7 @@ impl SpirvBackend {
             "Unexpected import on optimizer graph!"
         );
 
-        let mut transformer = InterningTransformer;
+        let mut transformer = LoweringTransformer;
         //to be sure that we carry over all exports, first transform into a local graph, then merge with the existing one.
         let (new_graph, remapping) = opt.graph.transform_new(&mut transformer)?;
 
@@ -162,7 +162,7 @@ impl SpirvBackend {
             }
         }
 
-        //As part of the interning progress we try to recover all known type information from the opt-graph
+        //As part of the lowering progress we try to recover all known type information from the opt-graph
         //and move that into the backend-graph.
         self.graph = new_graph;
 
@@ -170,8 +170,8 @@ impl SpirvBackend {
         self.transfer_debug_info(&remapping, opt);
         self.transfer_type_info(&remapping, opt);
 
-        if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("VOLA_OPT_INTERN").is_ok() {
-            self.push_debug_state("Post opt interning");
+        if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("VOLA_OPT_LOWERING").is_ok() {
+            self.push_debug_state("Post opt lowering");
         }
 
         Ok(())

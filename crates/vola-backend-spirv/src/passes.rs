@@ -5,8 +5,8 @@
  *
  * 2024 Tendsin Mende
  */
-mod intern_opt;
 mod legalization;
+mod lower_ast;
 mod spv;
 pub use spv::EmitCtx;
 mod hl_dispatch;
