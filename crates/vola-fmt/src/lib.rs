@@ -313,6 +313,7 @@ impl FormatTree {
                 Keyword::Equal => true,
                 Keyword::ResultArrow => true,
                 Keyword::For => true,
+                Keyword::LoopIn => true,
                 _ => false,
             },
             _ => false,
@@ -326,7 +327,7 @@ impl FormatTree {
                 Keyword::Range => false,
                 Keyword::ElseBranch => false,
                 Keyword::AccessDot => false,
-
+                Keyword::LoopIn => true,
                 _ => true,
             },
             Self::TypeEnd => true,
