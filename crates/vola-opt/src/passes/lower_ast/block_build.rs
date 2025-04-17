@@ -223,13 +223,17 @@ impl BlockCtx {
                 //If we can't find the producer, check if it is a context variable. In that case, we are likely trying to import
                 //unset context (for instance when building an impl block).
                 //for those its okay to _just use_ that port, without having a producer
-                if let OutputType::ContextVariableArgument(_i) = port.output {
-                    port
-                } else {
-                    let err = OptError::Internal(format!(
-                        "Could not route \"{name}\" into region. This is a bug!"
-                    ));
-                    return Err(VolaError::new(err));
+
+                match (graph[port.node].into_abstract(), port.output) {
+                    (AbstractNodeType::Theta, OutputType::Argument(_)) => port,
+                    (AbstractNodeType::Gamma, OutputType::EntryVariableArgument { .. }) => port,
+                    (AbstractNodeType::Lambda, OutputType::ContextVariableArgument(_)) => port,
+                    _other => {
+                        let err = OptError::Internal(format!(
+                            "Could not route \"{name}\" into region. This is a bug!"
+                        ));
+                        return Err(VolaError::new(err));
+                    }
                 }
             };
 
