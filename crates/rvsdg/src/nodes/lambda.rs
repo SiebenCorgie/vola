@@ -20,7 +20,6 @@ use super::StructuralNode;
 /// [LambdaNode].
 #[derive(Debug, Clone)]
 pub struct ApplyNode {
-    ///Function being called, must be a edge to a lambdaNode
     pub(crate) inputs: SmallColl<Input>,
     pub(crate) outputs: SmallColl<Output>,
 }

@@ -6,12 +6,9 @@
  * 2024 Tendsin Mende
  */
 
-use std::env::consts::OS;
-
 use rvsdg::{
     edge::{InportLocation, InputType, LangEdge, OutportLocation, OutputType},
-    err::GraphError,
-    nodes::{NodeType, StructuralNode},
+    nodes::StructuralNode,
     region::RegionLocation,
     smallvec::smallvec,
     util::copy::StructuralClone,
@@ -861,8 +858,10 @@ impl Optimizer {
         //collect all context-srcs of the eval node. By definition the first is the csg-src we are currently working on
         //the rest must be imported whenever we build the substitution eval
         let mut needed_context_ports = self.graph[eval].input_srcs(&self.graph);
-        let csgsrc = needed_context_ports.remove(0);
-        assert!(csgsrc == Some(gamma_prod));
+        //NOTE: this is only the context-variable, at which the csg-var is in, we handel this _specifically_
+        //      in the first part of the per-branch loop.
+        let _csgsrc = needed_context_ports.remove(0);
+
         let evalspan = self.graph[eval].node_type.unwrap_simple_ref().span.clone();
         let eval_node_template = self
             .try_unwrap_node::<EvalNode>(eval)
@@ -871,6 +870,8 @@ impl Optimizer {
         let eval_parent = self.graph[eval].parent.unwrap();
 
         let mut collected = SmallColl::new();
+        //Tracks the
+        let mut most_outer_region = eval_parent.clone();
         for branch in 0..self.graph[gamma_prod.node].regions().len() {
             //find the actual source of the exit_variables's result
             let src = self
@@ -897,17 +898,103 @@ impl Optimizer {
             //now append all context values needed, by importing them
             for ctx_var in needed_context_ports.iter() {
                 let in_region_port = if let Some(src) = ctx_var {
-                    let (imported_src, _) = self
-                        .graph
-                        .import_argument(*src, branch_region)
-                        .map_err(|e| {
-                            VolaError::error_here(
-                                OptError::InternalGraphError(e),
+                    match src.output {
+                        OutputType::ContextVariableArgument(_cv) => {
+                            //CVs can just be traced and imported. Find the actual producer...
+                            let producer = self.graph.find_producer_out(*src).unwrap();
+                            //... and import it into our branch
+                            let (import_cv, _) = self
+                                .graph
+                                .import_argument(producer, branch_region)
+                                .map_err(|e| {
+                                    VolaError::error_here(
+                                        OptError::InternalGraphError(e),
+                                        evalspan.clone(),
+                                        "while trying to specialize this eval for branch",
+                                    )
+                                })?;
+                            import_cv
+                        }
+                        OutputType::Argument(argidx) => {
+                            //for arguments its a little harder, we have to find the argument
+                            //that is being supplied at the call-site.
+                            //We do this by trying to find the (already) specialized callsite, and then try to find the producer of the argument.
+                            //if that succeeds, we _should_ be able to import it as context into the gamma-node, where we'll evaluate the CSG.
+                            if let Some(parent_lmd) = self.graph.find_parent_lambda_or_phi(eval) {
+                                if let Some(mut callsites) = self.graph.find_caller(parent_lmd) {
+                                    assert_eq!(
+                                        callsites.len(),
+                                        1,
+                                        "specialized callsites should only be called once!"
+                                    );
+
+                                    let callsite = callsites.remove(0);
+                                    assert!(self.graph[callsite].node_type.is_apply());
+
+                                    let argument_edge = self.graph[callsite]
+                                        .node_type
+                                        .unwrap_apply_ref()
+                                        .argument_input(argidx)
+                                        .unwrap()
+                                        .edge
+                                        .unwrap();
+                                    let argument_src = self
+                                        .graph
+                                        .find_producer_out(*self.graph[argument_edge].src())
+                                        .unwrap();
+                                    //update _most_outer_region_
+                                    if let Some(parent) = self.graph[argument_src.node].parent {
+                                        //if is not in parent, it is _more_ outside, so update
+                                        if !self
+                                            .graph
+                                            .is_in_parent(parent.node, most_outer_region.node)
+                                        {
+                                            most_outer_region = parent;
+                                        }
+                                    } else {
+                                        //fallback to omega region.
+                                        most_outer_region = self.graph.toplevel_region();
+                                    }
+
+                                    let (import_cv, _) = self
+                                        .graph
+                                        .import_context(argument_src, branch_region)
+                                        .map_err(|e| {
+                                            VolaError::error_here(
+                                                OptError::InternalGraphError(e),
+                                                evalspan.clone(),
+                                                "while trying to specialize this eval for branch",
+                                            )
+                                        })?;
+
+                                    import_cv
+                                } else {
+                                    return Err(VolaError::error_here(
+                                        OptError::Internal("Could not find callsites".to_owned()),
+                                        evalspan.clone(),
+                                        "for this eval",
+                                    ));
+                                }
+                            } else {
+                                return Err(VolaError::error_here(
+                                    OptError::Internal(
+                                        "Could not find specialized function".to_owned(),
+                                    ),
+                                    evalspan.clone(),
+                                    "for this eval",
+                                ));
+                            }
+                        }
+                        _other => {
+                            return Err(VolaError::error_here(
+                                OptError::CsgStructureIssue(
+                                    "could not resolve context for evaluation".to_owned(),
+                                ),
                                 evalspan.clone(),
-                                "while trying to specialize this eval for branch",
-                            )
-                        })?;
-                    imported_src
+                                "for this eval",
+                            ));
+                        }
+                    }
                 } else {
                     return Err(VolaError::error_here(
                         OptError::CsgStructureIssue(
@@ -977,13 +1064,18 @@ impl Optimizer {
         for consumer in self.graph[eval].output_dsts(&self.graph, 0).unwrap() {
             let edg = self.graph[consumer].edge.unwrap();
             let edge = self.graph.disconnect(edg).unwrap();
-            self.graph.connect(producer_port, consumer, edge).unwrap();
+            let imported_producer = self.import_context(producer_port, eval_parent).unwrap();
+            self.graph
+                .connect(imported_producer, consumer, edge)
+                .unwrap();
         }
         //now delete the old eval-node, so it won't be re-discovered
         let _ = self.graph.remove_node(eval).unwrap();
         //and re-type the parent region
-        let eval_region_span = self.find_span(eval_parent.into()).unwrap_or(Span::empty());
-        self.derive_region(eval_parent, eval_region_span)?;
+        let type_region_span = self
+            .find_span(most_outer_region.into())
+            .unwrap_or(Span::empty());
+        self.derive_region(most_outer_region, type_region_span)?;
 
         Ok(collected)
     }

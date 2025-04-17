@@ -1,6 +1,10 @@
 //BEGIN-CONFIG
-//ERROR:CSG-Tree structure issue: Non-CSG value used in CSG tree!
+//EXEC-FN:myfield
+//EXEC-ARGS:0.0,2.0,0.0
+//EXEC-EPS:0.0
+//EXEC-RES:0.0
 //END-CONFIG
+//NOTE: for x = 0.0, c spawns a box, which in turn should place [0.0, 2.0, 0.0] directly on top of the box
 
 module std;
 
@@ -8,13 +12,13 @@ export fn myfield(at: vec3) -> real{
     csg c = if at.x > 0.0{
         Sphere(1.0)
     }else{
-        Box([1.0; 3])
+        Box([2.0; 3])
     };
 
     csg t = Union(){
         c
     }{
-        Sphere(2.0)
+        Sphere(1.0)
     };
 
     eval t.SDF3D(at)
