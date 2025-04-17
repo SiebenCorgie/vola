@@ -73,9 +73,9 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
         let src = self[edge].src();
         let dst = self[edge].dst();
 
-        //NOTE: We only delete edge, if we _know_ that they are dead. So we don't, if we don't know the liveness
-        liveness.get(&src.into()).cloned().unwrap_or(true)
-            || liveness.get(&dst.into()).cloned().unwrap_or(true)
+        //We consider edges alive if either src or dst are marked live
+        liveness.get(&src.into()).cloned().unwrap_or(false)
+            || liveness.get(&dst.into()).cloned().unwrap_or(false)
     }
 
     fn dne_dfs_sweep(
