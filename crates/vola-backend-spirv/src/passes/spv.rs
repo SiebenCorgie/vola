@@ -1,4 +1,5 @@
 use core::panic;
+use std::collections::VecDeque;
 
 use ahash::{AHashMap, AHashSet};
 use rspirv::{
@@ -10,7 +11,10 @@ use rvsdg::{
     nodes::{NodeType, StructuralNode},
     region::RegionLocation,
     smallvec::smallvec,
-    util::cfg::{Cfg, CfgNode, CfgRef},
+    util::{
+        abstract_node_type::AbstractNodeType,
+        cfg::{Cfg, CfgNode, CfgRef},
+    },
     NodeRef, SmallColl,
 };
 
@@ -38,8 +42,10 @@ impl EmitCtx {
     }
 
     //Might overwrite and return the last known port
-    pub fn set_port_id(&mut self, port: OutportLocation, id: Word) -> Option<Word> {
-        self.node_mapping.insert(port, id)
+    pub fn set_port_id(&mut self, port: OutportLocation, id: Word) {
+        if let Some(idx) = self.node_mapping.insert(port, id) {
+            panic!("Tried setting {port} to %{}, but was %{} already", id, idx);
+        }
     }
 }
 
@@ -80,7 +86,11 @@ impl SpirvBackend {
         Ok(b.module())
     }
 
-    fn emit_into(&self, ctx: &mut EmitCtx, builder: &mut Builder) -> Result<(), BackendSpirvError> {
+    fn emit_into(
+        &mut self,
+        ctx: &mut EmitCtx,
+        builder: &mut Builder,
+    ) -> Result<(), BackendSpirvError> {
         //Our strategy is a bottom-up procedure, where we assign each node a
         //id in the module.
         //
@@ -203,7 +213,7 @@ impl SpirvBackend {
     }
 
     fn emit_lmd(
-        &self,
+        &mut self,
         builder: &mut Builder,
         ctx: &mut EmitCtx,
         lmd: NodeRef,
@@ -308,8 +318,23 @@ impl SpirvBackend {
             region_index: 0,
         };
 
-        //TODO fill function and provide all the ids.
+        //Pre-allocates all needed IDs for the λ-region, and sub-regions.
+        self.allocate_ids_region(ctx, builder, lmdregion)?;
 
+        /*
+        println!("Preset {} ports", ctx.node_mapping.len());
+        {
+            //overwrite all IDs
+            let mut idmap = FlagStore::new();
+            for (port, id) in &ctx.node_mapping {
+                idmap.set(port.clone().into(), *id);
+            }
+            self.push_debug_state_with(&format!("IdAllocate {lmdregion}"), |b| {
+                b.with_flags("preset_ids", &idmap)
+            });
+            self.dump_debug_state(&"teddy.bin");
+        }
+        */
         //NOTE: There are three cases for a return.
         //      1: Void -> in that case, just call ret.
         //      2: Single value, is easy call return as intended
@@ -372,6 +397,168 @@ impl SpirvBackend {
         Ok(fid)
     }
 
+    ///traverses this, and all sub regions, and allocates IDs for any value producer.
+    fn allocate_ids_region(
+        &self,
+        ctx: &mut EmitCtx,
+        builder: &mut Builder,
+        reg: RegionLocation,
+    ) -> Result<(), BackendSpirvError> {
+        //Collects all sub-regions we encounter for later traversal
+        let mut subregions = VecDeque::new();
+
+        subregions.push_back(reg);
+
+        while let Some(region) = subregions.pop_front() {
+            for node in self.graph.topological_order_region(region) {
+                match self.graph[node].into_abstract() {
+                    AbstractNodeType::Simple => {
+                        for outty in self.graph[node].outport_types() {
+                            let port = outty.to_location(node);
+                            //Assign new id, if there is none
+                            ctx.set_port_id(port, builder.id());
+                        }
+                    }
+                    //For control-flow, pre-set a id for each _in_use_ port
+                    AbstractNodeType::Gamma => {
+                        //allocate a new id, if the output is in use
+                        for outty in self.graph[node].outport_types() {
+                            let mut in_use = false;
+                            for region_index in 0..self.graph[node].regions().len() {
+                                if let Some(in_region_result) = outty.map_to_in_region(region_index)
+                                {
+                                    let port = in_region_result.to_location(node);
+                                    let src = self.graph.inport_src(port);
+                                    //make sure the source is not the node iteself, in that case its branch invariant
+                                    if let Some(src) = src {
+                                        if src.node != node {
+                                            in_use = true;
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                            if in_use {
+                                //is in use, and not branch/loop invariant
+                                ctx.set_port_id(outty.to_location(node), builder.id());
+                            } else {
+                                //is not in use, therfore assign the
+                            }
+                        }
+
+                        //for gamma-nodes, just find the actual producer, and use that for the entry-argument
+                        for inputty in self.graph[node].inport_types() {
+                            //ignore predicate tho
+                            if inputty == InputType::GammaPredicate {
+                                continue;
+                            }
+                            if let Some(producer) = self.graph.inport_src(inputty.to_location(node))
+                            {
+                                //there should already be a producer-id, since we traversing top-down
+                                let id = ctx.get_port_id(&producer).expect("ID should be present");
+                                //assign it to all branches
+                                for region_index in 0..self.graph[node].regions().len() {
+                                    let in_region_arg =
+                                        inputty.map_to_in_region(region_index).unwrap();
+                                    ctx.set_port_id(in_region_arg.to_location(node), id);
+                                }
+                            }
+                        }
+
+                        //push recursion if neede
+                        for region_index in 0..self.graph[node].regions().len() {
+                            subregions.push_back(RegionLocation { node, region_index });
+                        }
+                    }
+                    AbstractNodeType::Theta => {
+                        //For theta, we have to resolve the hen-egg problem.
+                        //For loop-variables that are invariant, we _just_ use the supplied ID.
+                        //For loop-variables that are NOT invariant, we allocate a new id for the loop-argument,
+                        //    the PHI node will then select whether to use the id from _outside_, for the first iteration, or from
+                        //    _inside_ for n+1 iterations.
+
+                        for lv in 0..self.graph[node]
+                            .node_type
+                            .unwrap_theta_ref()
+                            .loop_variable_count()
+                        {
+                            let loop_input = InputType::Input(lv).to_location(node);
+                            let loop_argument = OutputType::Argument(lv).to_location(node);
+                            let loop_output = OutputType::Output(lv).to_location(node);
+                            //bail on unused lv, but check that it is not invalid
+                            if self.graph[loop_input].edge.is_none() {
+                                if !self.graph[loop_argument].edges.is_empty() {
+                                    return Err(BackendSpirvError::Any { text: "malformed loop, uses loop-variable, but does not initializes it!".to_owned() });
+                                }
+                                continue;
+                            }
+
+                            if !self.graph.is_loop_invariant(node, lv) {
+                                //new id for the loop-value, which will be selected in the head
+                                let lvid = builder.id();
+                                //Set that value for both, the argument and output.
+                                ctx.set_port_id(loop_argument, lvid);
+                            } else {
+                                //NOTE: for this case we have to recurse, because we already have to know, where the
+                                //      loop-body will write the result to.
+
+                                //Is invariant, so just re-use the existing value
+                                let seeding_src = self.graph.inport_src(loop_input).unwrap();
+                                let seeding_id = ctx.get_port_id(&seeding_src).unwrap();
+                                //id for the argument is the id we _come-from_ in the first iteration
+                                ctx.set_port_id(loop_argument, seeding_id);
+                                //overwrite the output to _just_ use the input.
+                                ctx.set_port_id(loop_output, seeding_id);
+                            }
+                        }
+
+                        self.allocate_ids_region(
+                            ctx,
+                            builder,
+                            RegionLocation {
+                                node,
+                                region_index: 0,
+                            },
+                        )?;
+
+                        //Post-fix all non-invariant outputs to use the just-derived in-loop result
+                        for lv in 0..self.graph[node]
+                            .node_type
+                            .unwrap_theta_ref()
+                            .loop_variable_count()
+                        {
+                            let loop_input = InputType::Input(lv).to_location(node);
+                            let loop_argument = OutputType::Argument(lv).to_location(node);
+                            let loop_output = OutputType::Output(lv).to_location(node);
+                            //bail on unused lv, but check that it is not invalid
+                            if self.graph[loop_input].edge.is_none() {
+                                if !self.graph[loop_argument].edges.is_empty() {
+                                    return Err(BackendSpirvError::Any { text: "malformed loop, uses loop-variable, but does not initializes it!".to_owned() });
+                                }
+                                continue;
+                            }
+
+                            if !self.graph.is_loop_invariant(node, lv) {
+                                let in_loop_src = self
+                                    .graph
+                                    .inport_src(InputType::Result(lv).to_location(node))
+                                    .unwrap();
+                                let in_loop_id = ctx.get_port_id(&in_loop_src).unwrap();
+                                ctx.set_port_id(loop_output, in_loop_id);
+                            }
+                        }
+                    }
+                    other => {
+                        return Err(BackendSpirvError::Any {
+                            text: format!("Unexpected node type in function: {:?}", other),
+                        })
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
     ///Emits `reg` into `builder`, assuming the builder has just begone a new block. If the return-type is not Void,
     ///returns the result id. This includes a constructed composite in case of multiple results.
     fn emit_region(
@@ -407,40 +594,7 @@ impl SpirvBackend {
             })
             .collect::<AHashMap<_, _>>();
 
-        //Now setup all simple-node-output ids.
-        //this lets us fetch node-ids before they are actually emitted later on
-        for cfg_node in cfg.nodes.values() {
-            match cfg_node {
-                CfgNode::BasicBlock(bb) => {
-                    for simple_node in &bb.nodes {
-                        ctx.node_mapping.insert(simple_node.output(0), builder.id());
-                    }
-                }
-                //Pre-declare all used output as well
-                CfgNode::LoopHeader { src_node, .. } | CfgNode::BranchHeader { src_node, .. } => {
-                    for output in self.graph.node(*src_node).outport_types() {
-                        let port = OutportLocation {
-                            node: *src_node,
-                            output,
-                        };
-                        let in_use = self
-                            .graph
-                            .node(*src_node)
-                            .outport(&output)
-                            .unwrap()
-                            .edges
-                            .len()
-                            > 0;
-                        if in_use {
-                            ctx.node_mapping.insert(port, builder.id());
-                        }
-                    }
-                }
-                _ => {}
-            }
-        }
-
-        //Now start the CFG walker that emit our node _in-oreder_.
+        //Now start the CFG walker that emit our node _in-order_.
         self.serialize_cfg_node(ctx, builder, &cfg, &bb_label, cfg.root)
     }
 
@@ -528,6 +682,7 @@ impl SpirvBackend {
                 // use both to mark the loop-argument output with the generated result id of
                 // the phi-instruction
                 for i in 0..lvcount {
+                    //bail for not-in-use ports
                     if self
                         .graph
                         .find_consumer_in(InportLocation {
@@ -549,47 +704,28 @@ impl SpirvBackend {
                         node: *src_node,
                         input: InputType::Result(i),
                     };
-                    let lv_input_port = InportLocation {
-                        node: *src_node,
-                        input: InputType::Input(i),
-                    };
+                    let lv_output = OutputType::Output(i).to_location(*src_node);
                     //Is modified in loop, if the connected node is not the src_node
-                    let is_modified_in_loop =
-                        if let Some(insrc) = self.graph.inport_src(lv_result_inport) {
-                            insrc.node != *src_node
-                        } else {
-                            false
-                        };
+                    let is_modified_in_loop = !self.graph.is_loop_invariant(*src_node, i);
 
+                    let loop_arg_port = OutportLocation {
+                        node: *src_node,
+                        output: OutputType::Argument(i),
+                    };
+
+                    //In modification case, make sure the phi-id is different to the out-of-loop and in-loop source
                     if is_modified_in_loop {
-                        //create a new id, that is used by the phi-instruction later on
-                        let loop_variable_id = builder.id();
-                        ctx.set_port_id(
-                            OutportLocation {
-                                node: *src_node,
-                                output: OutputType::Argument(i),
-                            },
-                            loop_variable_id,
-                        );
+                        let loop_variable_id = ctx.get_port_id(&loop_arg_port).unwrap();
+                        let loop_out_id = ctx.get_port_id(&lv_output).unwrap();
+                        let result_srcport = self.graph.inport_src(lv_result_inport).unwrap();
+                        let loop_in_id = ctx.get_port_id(&result_srcport).unwrap();
+                        assert_ne!(loop_variable_id, loop_out_id);
+                        assert_ne!(loop_variable_id, loop_in_id);
                     } else {
-                        //in the unmodified case, we just copy over the old id to the
-                        //new port.
-                        let value_producer = self.graph.inport_src(lv_input_port);
-
-                        if let Some(prod) = value_producer {
-                            //if there is an actual producer,
-                            //set the _in-loop-id_
-                            let prod_id = ctx.get_port_id(&prod).unwrap();
-                            ctx.set_port_id(
-                                OutportLocation {
-                                    node: *src_node,
-                                    output: OutputType::Argument(i),
-                                },
-                                prod_id,
-                            );
-                        } else {
-                            panic!("Value producer unconnected!")
-                        }
+                        //in the unmodified case, make sure that the in-loop id is the same as the out-loop-id
+                        let loop_variable_id = ctx.get_port_id(&loop_arg_port).unwrap();
+                        let loop_out_id = ctx.get_port_id(&lv_output).unwrap();
+                        assert_eq!(loop_variable_id, loop_out_id);
                     }
                 }
 
@@ -606,6 +742,7 @@ impl SpirvBackend {
 
                 //let ctrl_bb_id = *bb_label.get(&ctrl_tail).unwrap();
                 let last_loop_bb_id = *bb_label.get(&last_loop_bb).unwrap();
+                //let last_loop_bb_id = ctrl_bb_id;
                 for i in 0..lvcount {
                     if self
                         .graph
@@ -642,18 +779,16 @@ impl SpirvBackend {
                             continue;
                         }
 
-                        let pre_loop_origin_id = *ctx.node_mapping.get(&pre_loop_origin).unwrap();
+                        let pre_loop_origin_id = ctx.get_port_id(&pre_loop_origin).unwrap();
+                        let in_loop_origin_id = ctx.get_port_id(&in_loop_origin).unwrap();
 
-                        let in_loop_origin_id = *ctx.node_mapping.get(&in_loop_origin).unwrap();
-
-                        let argument_id = *ctx
-                            .node_mapping
-                            .get(&OutportLocation {
+                        let argument_id = ctx
+                            .get_port_id(&OutportLocation {
                                 node: *src_node,
                                 output: OutputType::Argument(i),
                             })
                             .unwrap();
-                        //NOTE: currently theta can only produce one outpu
+
                         let result_type = self
                             .find_type(
                                 OutportLocation {
@@ -689,7 +824,7 @@ impl SpirvBackend {
                 post_loop_bb,
                 condition_src,
                 header: _,
-                src_node,
+                src_node: _,
             } => {
                 //after the loop body, add the merge and conditional branch
                 // _outside_ of the loop body. Then start the next block
@@ -699,7 +834,7 @@ impl SpirvBackend {
                 //let loop_header_id = *bb_label.get(header).unwrap();
                 let post_loop_id = *bb_label.get(post_loop_bb).unwrap();
                 let last_bb_id = *bb_label.get(last_bb).unwrap();
-                let condition_id = *ctx.node_mapping.get(condition_src).unwrap();
+                let condition_id = ctx.get_port_id(condition_src).unwrap();
 
                 //Placing the loop merge is somewhat complex. So the rules
                 //says, that the loop header is the block that ends on the loop-merge+branch
@@ -714,11 +849,18 @@ impl SpirvBackend {
                 builder.select_block(Some(entry_bb_index)).unwrap();
                 //iff we insert the merge into the same block, don't offest, since the cond-branch is not yet
                 //appended
-                let offset = if current_block == Some(entry_bb_index) {
-                    0
+                let is_merge_head = current_block == Some(entry_bb_index);
+                let offset = if is_merge_head { 0 } else { 1 };
+
+                //IF the merge-block is also the head block, allocate a new block id
+                let merge_block = if is_merge_head {
+                    builder.id()
                 } else {
-                    1
+                    post_loop_id
                 };
+
+                //Use the chosen merge block to append the OpLoopMerge to the head block.
+                //This basically tells SPIRV: "we'll converge cf at the merge block".
                 builder
                     .insert_into_block(
                         rspirv::dr::InsertPoint::FromEnd(offset),
@@ -727,7 +869,7 @@ impl SpirvBackend {
                             None,
                             None,
                             vec![
-                                Operand::IdRef(post_loop_id),
+                                Operand::IdRef(merge_block),
                                 Operand::IdRef(last_bb_id),
                                 Operand::LoopControl(LoopControl::empty()),
                             ],
@@ -737,49 +879,23 @@ impl SpirvBackend {
                 //change back to the currently build block
                 builder.select_block(current_block).unwrap();
 
-                builder
-                    .branch_conditional(condition_id, loop_entry_id, post_loop_id, [])
-                    .unwrap();
-                //mapping from each connected lv_output to its loop-internal src if there is any
-
-                let lvcount = self
-                    .graph
-                    .node(*src_node)
-                    .node_type
-                    .unwrap_theta_ref()
-                    .loop_variable_count();
-                for lv in 0..lvcount {
-                    if self
-                        .graph
-                        .node(*src_node)
-                        .node_type
-                        .unwrap_theta_ref()
-                        .lv_output(lv)
-                        .unwrap()
-                        .edges
-                        .len()
-                        == 0
-                    {
-                        continue;
-                    }
-
-                    let in_loop_src = self
-                        .graph
-                        .inport_src(InportLocation {
-                            node: *src_node,
-                            input: InputType::Result(lv),
-                        })
-                        .expect("If the loop output is used, a result is expected");
-                    let src_id = *ctx.node_mapping.get(&in_loop_src).unwrap();
-                    ctx.node_mapping.insert(
-                        OutportLocation {
-                            node: *src_node,
-                            output: OutputType::Output(lv),
-                        },
-                        src_id,
-                    );
+                //if the head is also the merge branch, add an additional _ad-hoc_
+                //block at the end, in order to let the tail post-dominate the head
+                if is_merge_head {
+                    //branch into adhoc bb intead
+                    builder
+                        .branch_conditional(condition_id, loop_entry_id, merge_block, [])
+                        .unwrap();
+                    builder.begin_block(Some(merge_block)).unwrap();
+                    builder.branch(post_loop_id).unwrap();
+                } else {
+                    //is not the same, so its enought to just branch to the post-loop-block
+                    builder
+                        .branch_conditional(condition_id, loop_entry_id, post_loop_id, [])
+                        .unwrap();
                 }
-
+                //Regardless, the of the merge-block, at this point we should have converged at the post-loop
+                //block
                 builder.begin_block(Some(post_loop_id)).unwrap();
                 //recurse to next block
                 self.serialize_cfg_node(ctx, builder, cfg, bb_label, *post_loop_bb)
@@ -844,18 +960,19 @@ impl SpirvBackend {
                         continue;
                     }
 
-                    let src_id = *ctx.node_mapping.get(&src).unwrap();
+                    let src_id = ctx.get_port_id(&src).unwrap();
+                    //For sanity, check that the allocated, and derived ids match.
+                    //so basically check, that both branches use the src-value
                     for bidx in 0..2 {
-                        ctx.node_mapping.insert(
-                            OutportLocation {
-                                node: *src_node,
-                                output: OutputType::EntryVariableArgument {
-                                    branch: bidx,
-                                    entry_variable: ev,
-                                },
+                        let branch_entry_port = OutportLocation {
+                            node: *src_node,
+                            output: OutputType::EntryVariableArgument {
+                                branch: bidx,
+                                entry_variable: ev,
                             },
-                            src_id,
-                        );
+                        };
+                        let get_id = ctx.get_port_id(&branch_entry_port).unwrap();
+                        assert_eq!(get_id, src_id)
                     }
                 }
 
@@ -923,7 +1040,7 @@ impl SpirvBackend {
                             },
                         })
                         .unwrap();
-                    let in_true_src_id = *ctx.node_mapping.get(&in_true_src).unwrap();
+                    let in_true_src_id = ctx.get_port_id(&in_true_src).unwrap();
 
                     let in_false_src = self
                         .graph
@@ -935,11 +1052,11 @@ impl SpirvBackend {
                             },
                         })
                         .unwrap();
-                    let in_false_src_id = *ctx.node_mapping.get(&in_false_src).unwrap();
+                    let in_false_src_id = ctx.get_port_id(&in_false_src).unwrap();
                     //now write the phi node into the builder with the given
                     //id
 
-                    let phi_id = *ctx.node_mapping.get(&ev_location).unwrap();
+                    let phi_id = ctx.get_port_id(&ev_location).unwrap();
                     let result_type = self.find_type(ev_location.into()).unwrap();
                     let result_type_id = register_or_get_type(builder, ctx, &result_type);
                     builder
@@ -1008,10 +1125,10 @@ impl SpirvBackend {
                 //Collect the SPIR-V ids of all inputs
                 let src_ids = input_srcs
                     .iter()
-                    .map(|node| *ctx.node_mapping.get(node).unwrap())
+                    .map(|srcport| ctx.get_port_id(srcport).unwrap())
                     .collect::<SmallColl<Word>>();
 
-                let result_id = *ctx.node_mapping.get(&node.output(0)).unwrap();
+                let result_id = ctx.get_port_id(&node.output(0)).unwrap();
                 let result_type_id = register_or_get_type(builder, ctx, result_type);
                 let instruction =
                     spvop.build_instruction(&ctx, &src_ids, result_type_id, result_id);
@@ -1027,7 +1144,6 @@ impl SpirvBackend {
                         .unwrap();
                 }
                 //insert int emit_ctx
-                ctx.node_mapping.insert(node.output(0), result_id);
                 Ok(result_id)
             }
             BackendOp::HlOp(o) => panic!("Unexpected HlOp in SPIR-V serialization: {o:?}"),
@@ -1045,7 +1161,7 @@ impl SpirvBackend {
     ) -> Result<Word, BackendSpirvError> {
         let mut src_ids = input_srcs
             .iter()
-            .map(|node| *ctx.node_mapping.get(node).unwrap())
+            .map(|node| ctx.get_port_id(node).unwrap())
             .collect::<SmallColl<Word>>();
         //allways translates to a call.
         //The region construction allready took care of forwarding the λ-def to the cv-ports,
@@ -1063,10 +1179,10 @@ impl SpirvBackend {
                     input: InputType::Input(0),
                 })
                 .unwrap();
-            *ctx.node_mapping.get(&lmddef).unwrap()
+            ctx.get_port_id(&lmddef).unwrap()
         };
 
-        let result_id = *ctx.node_mapping.get(&node.output(0)).unwrap();
+        let result_id = ctx.get_port_id(&node.output(0)).unwrap();
         let _ = builder
             .function_call(result_type_id, Some(result_id), call_id, src_ids)
             .unwrap();
