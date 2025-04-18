@@ -15,7 +15,6 @@ use clap::{Parser, ValueEnum};
 use std::path::PathBuf;
 use volac::{
     backends::{BoxedBackend, Native, Spirv, StubBackend, Wasm},
-    vola_ast::VolaAst,
     Target,
 };
 
