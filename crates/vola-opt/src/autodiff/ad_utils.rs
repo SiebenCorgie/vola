@@ -217,24 +217,36 @@ impl Optimizer {
 
     //Tries to get the type of the port, If that is not possible, tries to derive a type. Panics if that is not possible, since the graph
     //should always be able to derive a type for any output.
-    pub(crate) fn get_or_derive_type(&mut self, output: OutportLocation) -> Ty {
-        match self.find_type(&output.into()) {
-            Some(t) => return t,
-            None => {}
+    pub(crate) fn get_or_derive_type(
+        &mut self,
+        output: OutportLocation,
+        ignore_dead_nodes: bool,
+    ) -> Ty {
+        if let Some(t) = self.find_type(&output.into()) {
+            return t;
         }
 
-        self.type_derive_and_propagate(output.node).unwrap();
-        //try again or panic
+        match self.type_derive_and_propagate(output.node, ignore_dead_nodes) {
+            Ok(_) => {}
+            Err(e) => {
+                panic!("Could not type-derive while AutoDiff, this is probably a bug in the AD-Pipeline: {e}");
+            }
+        }
+
         self.find_type(&output.into()).unwrap()
     }
 
     ///Handles type derive and propagation of a node that is added while canonicalizing.
-    pub(crate) fn type_derive_and_propagate(&mut self, node: NodeRef) -> Result<(), OptError> {
+    pub(crate) fn type_derive_and_propagate(
+        &mut self,
+        node: NodeRef,
+        ignore_dead_nodes: bool,
+    ) -> Result<(), OptError> {
         //We first try to just do a per-node derivation. Most of our canonicalizations just replace with _one_ level
         //of nodes.
         //However, this'll fail, if the canonicalization adds _many_ nodes.
         //in that case we'll start a full pass.
-        match self.try_node_type_derive(node) {
+        match self.try_node_type_derive(node, ignore_dead_nodes) {
             Ok(typed_ports) => {
                 for (ty, outport) in typed_ports {
                     self.typemap.set(outport.into(), ty.clone());
@@ -254,7 +266,8 @@ impl Optimizer {
                     .find_span(parent_region.into())
                     .unwrap_or(Span::empty());
                 //TODO: do not discard context of error
-                self.derive_region(parent_region, span).map_err(|e| e.error)
+                self.derive_region(parent_region, span, ignore_dead_nodes)
+                    .map_err(|e| e.error)
             }
         }
     }

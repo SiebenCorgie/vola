@@ -91,7 +91,7 @@ impl Optimizer {
         self.detect_recursive_calls()?;
 
         //do initial type resolving
-        self.type_derive()?;
+        self.type_derive(false)?;
 
         #[cfg(feature = "profile")]
         println!(

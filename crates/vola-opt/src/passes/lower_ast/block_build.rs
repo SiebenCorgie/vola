@@ -309,6 +309,7 @@ impl BlockCtx {
         //now push the _old_ active scope to the parents
         self.parent_scopes.push(new_scope);
     }
+
     ///Closes the scope, and pops back the last parent. Returns the active scope at _closing_ time.
     pub fn close_scope(&mut self) -> Scope {
         //pop last parent, then switch it back to active and return the _old_ scope
@@ -370,6 +371,8 @@ impl Optimizer {
             Stmt::Assign(assign) => match ctx.find_variable(&mut self.graph, &assign.dst.0) {
                 Ok(_old_src) => {
                     let expr_src = self.build_expr(assign.expr, region, ctx)?;
+                    self.names
+                        .set(expr_src.into(), format!("assign {} = ", assign.dst.0));
                     //Rewrite expression-src to new assignment
                     if let Err(err) = ctx.write_var(&assign.dst.0, expr_src) {
                         return Err(err.with_label(assign.span.clone(), "here"));
@@ -382,6 +385,10 @@ impl Optimizer {
             },
             Stmt::Csg(csg_binding) => {
                 let expr_src = self.build_expr(csg_binding.expr, region, ctx)?;
+                self.names.set(
+                    expr_src.into(),
+                    format!("csg {} = ", csg_binding.decl_name.0),
+                );
                 //NOTE: We make sure that the produced value's src is a CSG node, otherwise we fail, because thats
                 //the semantic of the node
                 let producer = self.graph.find_producer_simple(expr_src);
@@ -419,7 +426,7 @@ impl Optimizer {
                         AbstractNodeType::Apply => {
                             //if this is a apply node, make sure it does _not_ return a csg-type.
                             //try to deduce the type of this node
-                            let ty = self.get_or_derive_type(prod);
+                            let ty = self.get_or_derive_type(prod, false);
                             if ty != Ty::CSG {
                                 let err = OptError::Any {
                                     text: format!(
@@ -459,6 +466,10 @@ impl Optimizer {
             Stmt::Let(let_binding) => {
                 let expr_src = self.build_expr(let_binding.expr, region, ctx)?;
                 let producer = self.graph.find_producer_simple(expr_src);
+                self.names.set(
+                    expr_src.into(),
+                    format!("let {} = ", let_binding.decl_name.0),
+                );
                 for prod in producer {
                     //note we can only check nodes that are created _here_.
                     let node_name = self.graph[prod.node].name();
@@ -499,7 +510,7 @@ impl Optimizer {
                         AbstractNodeType::Apply => {
                             //if this is a apply node, make sure it does _not_ return a csg-type.
                             //try to deduce the type of this node
-                            let ty = self.get_or_derive_type(prod);
+                            let ty = self.get_or_derive_type(prod, false);
                             if ty == Ty::CSG {
                                 let err = OptError::Any {
                                     text: format!(
@@ -975,8 +986,14 @@ impl Optimizer {
                     panic!("assumed argument port!");
                 };
 
+                //NOTE: if a import-routine has alread pulled a edge to the result, disconnect it
+                if let Some(edg) = self.graph[result_lv].edge.clone() {
+                    let _ = self.graph.disconnect(edg).unwrap();
+                }
+
                 if import_port == last_use {
                     //is used, but not redefined, map back to its own lv
+
                     self.graph
                         .connect(*import_port, result_lv, OptEdge::value_edge_unset())
                         .unwrap();
@@ -1059,6 +1076,23 @@ impl Optimizer {
                 gamma.as_outport_location(OutputType::ExitVariableOutput(export_ex)),
             )
             .unwrap();
+        }
+
+        //fix up all loop-variables that where imported read-only.
+        //This can happen if an nested expression/stmt _imports_ somehing, but doesn't overwrite it.
+        for lv in 0..self.graph[theta]
+            .node_type
+            .unwrap_theta_ref()
+            .loop_variable_count()
+        {
+            let lv_result = InputType::Result(lv).to_location(theta);
+            if self.graph[lv_result].edge.is_none() {
+                //map as loop-invariant value
+                let lv_argument = OutputType::Argument(lv).to_location(theta);
+                self.graph
+                    .connect(lv_argument, lv_result, OptEdge::value_edge_unset())
+                    .unwrap();
+            }
         }
 
         Ok(())

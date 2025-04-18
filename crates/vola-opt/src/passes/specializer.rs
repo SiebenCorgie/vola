@@ -566,10 +566,10 @@ impl Optimizer {
                 let in_context_port = self.import_context(producer, region)?;
                 //Set type for import path
                 let ty = if let Some(ty) = self.find_type(&in_context_port.clone().into()) {
-                    ty
+                    OptEdge::value_edge().with_type(ty)
                 } else {
-                    log::warn!("Could not find type for imported prototype, using Callable");
-                    Ty::Callable
+                    log::warn!("Could not find type for imported prototype, using none");
+                    OptEdge::value_edge_unset()
                 };
                 //now hook up to the
                 let _edg = self.graph.connect(
@@ -578,7 +578,7 @@ impl Optimizer {
                         node: in_host_region_impl,
                         input: InputType::ContextVariableInput(cvidx),
                     },
-                    OptEdge::value_edge().with_type(ty),
+                    ty,
                 )?;
             } else {
                 //For sanity, make sure that it shouldn't be connected indeed
@@ -916,73 +916,97 @@ impl Optimizer {
                             import_cv
                         }
                         OutputType::Argument(argidx) => {
-                            //for arguments its a little harder, we have to find the argument
+                            //for arguments its a little harder, we might have to find the argument
                             //that is being supplied at the call-site.
                             //We do this by trying to find the (already) specialized callsite, and then try to find the producer of the argument.
                             //if that succeeds, we _should_ be able to import it as context into the gamma-node, where we'll evaluate the CSG.
-                            if let Some(parent_lmd) = self.graph.find_parent_lambda_or_phi(eval) {
-                                if let Some(mut callsites) = self.graph.find_caller(parent_lmd) {
-                                    assert_eq!(
-                                        callsites.len(),
-                                        1,
-                                        "specialized callsites should only be called once!"
-                                    );
+                            //
+                            //Hovere, there is a shortcut: If the argument is already in a parent-region, we can just import it as-is.
+                            if self.graph.is_in_parent(branch_region.node, src.node) {
+                                //The data source is already in a parent, so we can _just_ import it.
+                                let (import_cv, _) = self
+                                    .graph
+                                    .import_context(*src, branch_region)
+                                    .map_err(|e| {
+                                        VolaError::error_here(
+                                            OptError::InternalGraphError(e),
+                                            evalspan.clone(),
+                                            "while trying to specialize this eval for branch",
+                                        )
+                                    })?;
+                                import_cv
+                            } else {
+                                //data source is not in parent, try to find the specialized call-source, and
+                                //try to import it. That can fail though.
 
-                                    let callsite = callsites.remove(0);
-                                    assert!(self.graph[callsite].node_type.is_apply());
+                                if let Some(parent_lmd) = self.graph.find_parent_lambda_or_phi(eval)
+                                {
+                                    if let Some(mut callsites) = self.graph.find_caller(parent_lmd)
+                                    {
+                                        assert_eq!(
+                                            callsites.len(),
+                                            1,
+                                            "specialized callsites should only be called once!"
+                                        );
 
-                                    let argument_edge = self.graph[callsite]
-                                        .node_type
-                                        .unwrap_apply_ref()
-                                        .argument_input(argidx)
-                                        .unwrap()
-                                        .edge
-                                        .unwrap();
-                                    let argument_src = self
-                                        .graph
-                                        .find_producer_out(*self.graph[argument_edge].src())
-                                        .unwrap();
-                                    //update _most_outer_region_
-                                    if let Some(parent) = self.graph[argument_src.node].parent {
-                                        //if is not in parent, it is _more_ outside, so update
-                                        if !self
+                                        let callsite = callsites.remove(0);
+                                        assert!(self.graph[callsite].node_type.is_apply());
+
+                                        let argument_edge = self.graph[callsite]
+                                            .node_type
+                                            .unwrap_apply_ref()
+                                            .argument_input(argidx)
+                                            .unwrap()
+                                            .edge
+                                            .unwrap();
+                                        let argument_src = self
                                             .graph
-                                            .is_in_parent(parent.node, most_outer_region.node)
-                                        {
-                                            most_outer_region = parent;
+                                            .find_producer_out(*self.graph[argument_edge].src())
+                                            .unwrap();
+                                        //update _most_outer_region_
+                                        if let Some(parent) = self.graph[argument_src.node].parent {
+                                            //if is not in parent, it is _more_ outside, so update
+                                            if !self
+                                                .graph
+                                                .is_in_parent(parent.node, most_outer_region.node)
+                                            {
+                                                most_outer_region = parent;
+                                            }
+                                        } else {
+                                            //fallback to omega region.
+                                            most_outer_region = self.graph.toplevel_region();
                                         }
+
+                                        let (import_cv, _) = self
+                                                                        .graph
+                                                                        .import_context(argument_src, branch_region)
+                                                                        .map_err(|e| {
+                                                                            VolaError::error_here(
+                                                                                OptError::InternalGraphError(e),
+                                                                                evalspan.clone(),
+                                                                                "while trying to specialize this eval for branch",
+                                                                            )
+                                                                        })?;
+
+                                        import_cv
                                     } else {
-                                        //fallback to omega region.
-                                        most_outer_region = self.graph.toplevel_region();
+                                        return Err(VolaError::error_here(
+                                            OptError::Internal(
+                                                "Could not find callsites".to_owned(),
+                                            ),
+                                            evalspan.clone(),
+                                            "for this eval",
+                                        ));
                                     }
-
-                                    let (import_cv, _) = self
-                                        .graph
-                                        .import_context(argument_src, branch_region)
-                                        .map_err(|e| {
-                                            VolaError::error_here(
-                                                OptError::InternalGraphError(e),
-                                                evalspan.clone(),
-                                                "while trying to specialize this eval for branch",
-                                            )
-                                        })?;
-
-                                    import_cv
                                 } else {
                                     return Err(VolaError::error_here(
-                                        OptError::Internal("Could not find callsites".to_owned()),
+                                        OptError::Internal(
+                                            "Could not find specialized function".to_owned(),
+                                        ),
                                         evalspan.clone(),
                                         "for this eval",
                                     ));
                                 }
-                            } else {
-                                return Err(VolaError::error_here(
-                                    OptError::Internal(
-                                        "Could not find specialized function".to_owned(),
-                                    ),
-                                    evalspan.clone(),
-                                    "for this eval",
-                                ));
                             }
                         }
                         _other => {
@@ -1075,7 +1099,7 @@ impl Optimizer {
         let type_region_span = self
             .find_span(most_outer_region.into())
             .unwrap_or(Span::empty());
-        self.derive_region(most_outer_region, type_region_span)?;
+        self.derive_region(most_outer_region, type_region_span, true)?;
 
         Ok(collected)
     }

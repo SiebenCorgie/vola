@@ -24,14 +24,12 @@ impl Optimizer {
         region: &RegionLocation,
         node: NodeRef,
     ) -> Result<(), OptError> {
-        //self.push_debug_state(&format!("WhallaBrudi_{node}"));
-
         //checkout what kind of inputs / outputs we have
         let left_src = self.graph.inport_src(node.input(0)).unwrap();
         let right_src = self.graph.inport_src(node.input(1)).unwrap();
 
-        let left_type = self.get_or_derive_type(left_src);
-        let right_type = self.get_or_derive_type(right_src);
+        let left_type = self.get_or_derive_type(left_src, true);
+        let right_type = self.get_or_derive_type(right_src, true);
 
         match (left_type.clone(), right_type.clone()) {
             (

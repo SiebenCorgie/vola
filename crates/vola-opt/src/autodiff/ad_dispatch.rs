@@ -69,7 +69,7 @@ impl Optimizer {
 
         for region in touched_regions {
             let span = self.find_span(region.into()).unwrap_or(Span::empty());
-            if let Err(e) = self.derive_region(region, span.clone()) {
+            if let Err(e) = self.derive_region(region, span.clone(), true) {
                 return Err(e.with_label(
                     span,
                     "Failed to type-derive region after auto-differentiation",

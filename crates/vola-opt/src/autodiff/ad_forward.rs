@@ -115,7 +115,7 @@ impl Optimizer {
             .dne_region(region)
             .map_err(|e| VolaError::new(e.into()))?;
         let span = self.find_span(region.into()).unwrap_or(Span::empty());
-        self.derive_region(region, span.clone())?;
+        self.derive_region(region, span.clone(), true)?;
 
         //All entrypoints are with respect to a single scalar at this point,
         //and hooked up to the vector-value_creator already (if-needed).
@@ -235,7 +235,7 @@ impl Optimizer {
 
         //Before ending, always do a final type derive though
         let span = self.find_span(region.into()).unwrap_or(Span::empty());
-        self.derive_region(region, span).map_err(|e| {
+        self.derive_region(region, span, true).map_err(|e| {
             //report error immediatly, since we'll discard the context
             e.report();
             e.error
@@ -401,6 +401,7 @@ impl Optimizer {
                         region_index: 0,
                     },
                     Span::empty(),
+                    true,
                 )
                 .unwrap();
 
