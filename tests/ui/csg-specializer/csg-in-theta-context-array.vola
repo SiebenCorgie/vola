@@ -1,0 +1,38 @@
+//BEGIN-CONFIG
+//EXEC-FN:myfield
+//EXEC-ARGS:0.0,0.0,0.0
+//EXEC-EPS:0.1
+//EXEC-RES:-1
+//END-CONFIG
+//
+
+module std;
+
+operation MyArray(count: int, offset: real);
+impl MyArray<sub> for SDF3D(at){
+    let t = 0.0;
+    csg builder = sub;
+
+    for c in 0..8{
+        t = t + offset;
+        builder = Union(){
+            Sphere(1.0)
+        }{
+            builder
+        };
+    }
+    eval builder.SDF3D(at)
+}
+
+
+
+
+export fn myfield(at: vec3) -> real{
+    csg t = Translate([1.0, 0.0, 0.0]){
+        MyArray(8, 5.0){
+            Sphere(2.0)
+        }
+    };
+
+    eval t.SDF3D(at)
+}
