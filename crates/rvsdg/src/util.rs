@@ -125,6 +125,13 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
                 NodeType::Theta(t) => {
                     //TODO: Is that correct, or do we want _normal_ arguments to a loop as well?
                     let lv_idx = t.add_loop_variable();
+                    //pre-build the loop-invariant, since we are in _cv_-mode.
+                    self.connect(
+                        OutputType::Argument(lv_idx).to_location(reg.node),
+                        InputType::Result(lv_idx).to_location(reg.node),
+                        E::value_edge(),
+                    )
+                    .unwrap();
                     (
                         reg.node.as_inport_location(InputType::Input(lv_idx)),
                         reg.node.as_outport_location(OutputType::Argument(lv_idx)),
@@ -236,6 +243,12 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
                     NodeType::Theta(t) => {
                         //TODO: Is that correct, or do we want _normal_ arguments to a loop as well?
                         let lv_idx = t.add_loop_variable();
+                        self.connect(
+                            OutputType::Argument(lv_idx).to_location(reg.node),
+                            InputType::Result(lv_idx).to_location(reg.node),
+                            E::value_edge(),
+                        )
+                        .unwrap();
                         (
                             reg.node.as_inport_location(InputType::Input(lv_idx)),
                             reg.node.as_outport_location(OutputType::Argument(lv_idx)),
