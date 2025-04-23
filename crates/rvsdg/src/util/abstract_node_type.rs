@@ -6,6 +6,8 @@
  * 2024 Tendsin Mende
  */
 
+use std::fmt::Display;
+
 use crate::nodes::{LangNode, NodeType};
 
 ///A contentless [crate::NodeType]. Helps you match nodes based on
@@ -33,6 +35,21 @@ impl<'a, N: LangNode + 'static> From<&'a NodeType<N>> for AbstractNodeType {
             NodeType::Phi(_) => Self::Phi,
             NodeType::Simple(_) => Self::Simple,
             NodeType::Theta(_) => Self::Theta,
+        }
+    }
+}
+
+impl Display for AbstractNodeType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Apply => write!(f, "Apply | Call"),
+            Self::Delta => write!(f, "Delta | δ"),
+            Self::Gamma => write!(f, "Gamma | γ"),
+            Self::Lambda => write!(f, "Lambda | λ"),
+            Self::Omega => write!(f, "Omega | ω"),
+            Self::Phi => write!(f, "Phi | ϕ"),
+            Self::Simple => write!(f, "Simple"),
+            Self::Theta => write!(f, "Theta | ϑ"),
         }
     }
 }
