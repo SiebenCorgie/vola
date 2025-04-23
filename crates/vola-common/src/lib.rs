@@ -43,7 +43,7 @@ pub struct Span {
 
 impl Span {
     ///The filename used in a reported span, if no file is set
-    pub const FALLBACK_FILE: &'static str = ".vola_error_fallback";
+    pub const FALLBACK_FILE: &'static str = "no-span-source";
     pub fn empty() -> Self {
         Span {
             file: FileString::default(),

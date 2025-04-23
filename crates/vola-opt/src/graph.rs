@@ -15,7 +15,7 @@ use crate::imm::ImmBool;
 use crate::{common::Ty, Optimizer};
 use ahash::AHashMap;
 use rvsdg::attrib::AttribLocation;
-use rvsdg::edge::OutportLocation;
+use rvsdg::edge::{InportLocation, OutportLocation};
 use rvsdg::nodes::NodeType;
 use rvsdg::region::RegionLocation;
 use rvsdg::util::cnf::ConstantFoldable;
@@ -349,7 +349,18 @@ impl Optimizer {
                     }
                 }
 
+                for input in self.graph[n].inport_types() {
+                    if let Some(s) = self.find_span(input.to_location(n).into()) {
+                        return Some(s);
+                    }
+                }
+
                 None
+            }
+            //for ports, try to find the ports's node's span
+            AttribLocation::InPort(InportLocation { node, .. })
+            | AttribLocation::OutPort(OutportLocation { node, .. }) => {
+                self.span_tags.get(&node.into()).cloned()
             }
             _ => None,
         }
