@@ -3,7 +3,7 @@ use std::{error::Error, fmt::Debug};
 use ariadne::{Label, Report, ReportBuilder};
 use smallvec::{smallvec, SmallVec};
 
-use crate::{report, Span};
+use crate::{report, reporter::report_with_fallback_to_string, Span};
 
 pub fn error_reporter<'a>(err: impl ToString, span: Span) -> ReportBuilder<'a, Span> {
     let builder = Report::build(
@@ -100,7 +100,7 @@ impl<E: Error> VolaError<E> {
         }
     }
 
-    ///Reports the full error
+    ///Reports the full error to stdout.
     pub fn report(&self) {
         let mut reporter = if let Some(source_span) = &self.source_span {
             Report::build(
@@ -123,6 +123,31 @@ impl<E: Error> VolaError<E> {
         reporter = reporter.with_labels(self.labels.clone());
 
         report(reporter.finish())
+    }
+
+    ///Prints the error to string. Uses `source` as the source-code string that is being reported on.
+    pub fn report_to_string(&self, source: &str) -> String {
+        let mut reporter = if let Some(source_span) = &self.source_span {
+            Report::build(
+                ariadne::ReportKind::Error,
+                std::path::Path::new(source_span.file.as_str()),
+                source_span.byte_start,
+            )
+            .with_config(ariadne::Config::default().with_index_type(ariadne::IndexType::Byte))
+            .with_message(self.error.to_string())
+        } else {
+            Report::build(
+                ariadne::ReportKind::Error,
+                std::path::Path::new("unknown file"),
+                0,
+            )
+            .with_config(ariadne::Config::default().with_index_type(ariadne::IndexType::Byte))
+            .with_message(self.error.to_string())
+        };
+
+        reporter = reporter.with_labels(self.labels.clone());
+
+        report_with_fallback_to_string(reporter.finish(), source)
     }
 }
 
