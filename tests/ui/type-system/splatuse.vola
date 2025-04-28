@@ -1,5 +1,5 @@
 //NOTE: Splatuse is just the improved bezier implementation.
-module std;
+module super::std;
 
 
 fn step(edge: real, x: real) -> real{

@@ -6,7 +6,7 @@
 //END-CONFIG
 //
 
-module std;
+module super::std;
 
 
 fn myswitcher(is: bool) -> csg{

@@ -5,7 +5,7 @@
 //EXEC-RES:4.1
 //END-CONFIG
 
-module std;
+module super::std;
 
 //Uses the automatic identity impelementation feature to derive SetColor for
 // SDF3D

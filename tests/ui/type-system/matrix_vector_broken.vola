@@ -2,7 +2,7 @@
 //ERROR:Matrix-Vector multiplication expects the Matrix's "width" to be equal to Vector's "width". Matrix width = 4 & vector_width = 3<!!>Type derive failed: Result is of type "scalar<Real>", but result was untyped.
 //END-CONFIG
 
-module std;
+module super::std;
 
 export fn myField(at: vec3) -> real{
 	let t = [

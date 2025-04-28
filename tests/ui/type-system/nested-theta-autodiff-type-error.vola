@@ -1,8 +1,6 @@
-module std;
-
+module super::std;
 
 concept GradientSpace: vec3 -> vec3;
-
 
 fn sign_v2(a: vec2) -> vec2{
 	let x = if a.x > 0.0{

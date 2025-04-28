@@ -2,7 +2,7 @@
 //ERROR:Called function should return `scalar<Csg>`, but returns 'scalar<Real>', consider using a let statement instead
 //END-CONFIG
 
-module std;
+module super::std;
 
 fn my_fn(test: csg) -> real{
     1.0

@@ -6,7 +6,7 @@
 //END-CONFIG
 //
 
-module std;
+module super::std;
 
 //Moves two cubes sideways, left and right. So we _should_ be exactly on the boundary
 fn mydag() -> csg{

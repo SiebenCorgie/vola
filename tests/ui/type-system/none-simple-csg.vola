@@ -3,7 +3,7 @@
 //END-CONFIG
 
 //NOTE: this should error some way or another.
-module std;
+module super::std;
 export fn myfield(at: vec3) -> real{
     csg t = [Sphere(1.0); 3];
     eval t.SDF(at)

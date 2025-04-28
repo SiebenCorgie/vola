@@ -5,7 +5,7 @@
 //EXEC-RES:1.0
 //END-CONFIG
 
-module std;
+module super::std;
 
 operation MyAdOp();
 

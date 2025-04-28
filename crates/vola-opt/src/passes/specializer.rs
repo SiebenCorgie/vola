@@ -28,7 +28,7 @@ struct SpecCtx {
 }
 
 impl Optimizer {
-    /// Shortcut to call [Self::specialize_export] for all exported λs
+    /// Shortcut to call [Self::specialize_region] for all exported λs
     pub fn specialize_all_exports(&mut self) -> Result<(), Vec<VolaError<OptError>>> {
         let mut errors = Vec::with_capacity(0);
 

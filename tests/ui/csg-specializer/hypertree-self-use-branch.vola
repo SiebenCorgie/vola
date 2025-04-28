@@ -2,7 +2,7 @@
 //ERROR:CSG-Tree structure issue: Detected CSG-Graph cycle: uses HyperOp from within HyperOp.
 //END-CONFIG
 
-module std;
+module super::std;
 
 
 operation HyperOp();

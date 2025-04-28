@@ -240,8 +240,14 @@ impl VolaAst {
 
                     //is an entry. Try to parse it, and if it worked, replace the idx with that.
                     let mut path = base_path.clone();
+                    //Resolve the `super` path component to unix-style
+                    //"super".
                     for p in &m.path {
-                        path.push(p.0.clone());
+                        if p.0.as_str() == "super" {
+                            path.push("..");
+                        } else {
+                            path.push(p.0.clone());
+                        }
                     }
 
                     let mut stem_path = m.path.clone();
@@ -257,6 +263,12 @@ impl VolaAst {
                         errors.push(err);
                         continue;
                     }
+
+                    let path = if let Ok(canonical) = path.canonicalize() {
+                        canonical
+                    } else {
+                        path
+                    };
 
                     let sub_ast = match Self::resolve_module(&path, &stem_path, parser) {
                         Ok(sub) => sub,

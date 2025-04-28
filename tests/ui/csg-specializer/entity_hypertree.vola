@@ -6,7 +6,7 @@
 //END-CONFIG
 //NOTE: We should be _on the cylinder_ at -1
 
-module std;
+module super::std;
 
 entity Circle(rad: real);
 impl Circle for SDF2D(at){

@@ -7,7 +7,7 @@
 //This should be possible, since binding sub to always _the next_ ensures progress on the DAG.
 //In this case we build the minimum of a twice-translated sphere, and the not-translated sphere
 
-module std;
+module super::std;
 
 
 operation HyperOp();

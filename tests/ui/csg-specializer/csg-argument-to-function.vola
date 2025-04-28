@@ -6,7 +6,7 @@
 //END-CONFIG
 //
 
-module std;
+module super::std;
 
 fn my_fn_with_csg(test: csg) -> csg{
     Union(){

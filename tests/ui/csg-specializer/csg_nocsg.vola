@@ -2,7 +2,7 @@
 //ERROR:Expected a CSG node to be bound to a CSG variable, but "1f" is not a CSG operation
 //END-CONFIG
 
-module std;
+module super::std;
 
 export fn test(a: real) -> real{
     csg t = if a > 10.0{

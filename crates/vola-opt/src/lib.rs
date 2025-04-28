@@ -9,18 +9,37 @@
 //!
 //! The vola optimizer.
 //!
-//! Currently is based on two high-level dialects with a shared type system. As well as one low-level dialect
-//! that is SPIR-V like.
+//! The optimizer employs different _dialects_ to handle aspects of the input-language. Those dialects are
+//! lowered at some point to the [_alge_](alge) dialect. This graph can then be handed off to backends to generate
+//! code.
 //!
-//! ### CSG-Dialect
+//! ## Dialects
+//! ### [CSG](csg)
 //!
 //! Models the CSG Trees that are defined in the language and ultimately exported. Takes care
 //! of building the final tree, by resolving sub trees, and uses the access descriptors to build the
 //! tree's data flow.
 //!
-//! ### Alge-Dialect
+//! ### [AutoDiff](autodiff)
 //!
-//! Used to represent algebraic expressions.
+//! Represents differentiation in the graph. Lowering performs auto-differentiation of the input expression with respect to any other expression(s).
+//! Is only defined on algebraic expressions.
+//!
+//! ### [Alge](alge)
+//!
+//! Used to represent algebraic, logic and boolean expressions.
+//!
+//! ### [Imm](imm)
+//!
+//! Immediate, so usually constant values in the graph. Also forms the basis for many static code optimizations.
+//!
+//! ### [TypeLevel](typelevel)
+//!
+//! Models type-level nodes, constructing and destructing composite-types at the moment.
+//!
+//! ## Passes
+//!
+//! Lowering, checks and transformation passes are defined as functions on [Optimizer]. See [Optimizer::full_graph_cnf] or [Optimizer::specialize_all_exports] for examples.
 
 //NOTE: We need that trait for the OptNode, so we can Upcast `DialectNode: Any` to `Any`.
 #![doc(html_logo_url = "https://gitlab.com/tendsinmende/vola/-/raw/main/resources/vola_icon.svg")]
@@ -37,10 +56,10 @@ use vola_common::Span;
 
 pub mod alge;
 pub mod common;
-mod csg;
+pub mod csg;
 mod error;
 pub use error::OptError;
-mod autodiff;
+pub mod autodiff;
 pub mod config;
 mod graph;
 pub mod imm;
@@ -143,7 +162,7 @@ impl Optimizer {
         }
 
         let layout_config = LayoutConfig {
-            ignore_dead_node: false,
+            ignore_dead_node: true,
             ..Default::default()
         };
 

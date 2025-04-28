@@ -6,7 +6,7 @@
 //END-CONFIG
 //
 
-module std;
+module super::std;
 
 operation MyArray(count: int, offset: real);
 impl MyArray<sub> for SDF3D(at){

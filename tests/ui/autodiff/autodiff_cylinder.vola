@@ -5,7 +5,7 @@
 //EXEC-RES:0.0,0.0,-1.0
 //END-CONFIG
 
-module std;
+module super::std;
 
 concept FieldGrad: vec3 -> vec3;
 operation MyAdOp();

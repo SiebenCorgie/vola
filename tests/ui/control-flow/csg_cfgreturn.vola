@@ -6,7 +6,7 @@
 //END-CONFIG
 //NOTE: for x = 0.0, c spawns a box, which in turn should place [0.0, 2.0, 0.0] directly on top of the box
 
-module std;
+module super::std;
 
 export fn myfield(at: vec3) -> real{
     csg c = if at.x > 0.0{
