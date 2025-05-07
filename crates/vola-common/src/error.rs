@@ -1,9 +1,9 @@
 use std::{error::Error, fmt::Debug};
 
-use ariadne::{Label, Report, ReportBuilder};
-use smallvec::{smallvec, SmallVec};
-
 use crate::{report, reporter::report_with_fallback_to_string, Span};
+use ariadne::{Label, Report, ReportBuilder};
+use backtrace::Backtrace;
+use smallvec::{smallvec, SmallVec};
 
 pub fn error_reporter<'a>(err: impl ToString, span: Span) -> ReportBuilder<'a, Span> {
     let builder = Report::build(
@@ -40,23 +40,38 @@ pub struct VolaError<E: Error> {
     pub source_span: Option<Span>,
     ///All labels that might be attached to the error.
     pub labels: SmallVec<[Label<Span>; 4]>,
+    pub backtrace: Option<Box<Backtrace>>,
 }
 
 impl<E: Error> VolaError<E> {
     pub fn new(error: E) -> Self {
+        let backtrace = if std::env::var("VOLA_BACKTRACE").is_ok() {
+            Some(Box::new(Backtrace::new()))
+        } else {
+            None
+        };
+
         VolaError {
             error,
             source_span: None,
             labels: SmallVec::new(),
+            backtrace,
         }
     }
 
     ///Creates an error that reports `message` at the given `span`.
     pub fn error_here(error: E, span: Span, message: impl ToString) -> Self {
+        let backtrace = if std::env::var("VOLA_BACKTRACE").is_ok() {
+            Some(Box::new(Backtrace::new()))
+        } else {
+            None
+        };
+
         Self {
             error,
             source_span: Some(span.clone()),
             labels: smallvec![Label::new(span).with_message(message)],
+            backtrace,
         }
     }
 
@@ -97,6 +112,7 @@ impl<E: Error> VolaError<E> {
             error: self.error.into(),
             source_span: self.source_span,
             labels: self.labels,
+            backtrace: self.backtrace,
         }
     }
 
@@ -122,7 +138,11 @@ impl<E: Error> VolaError<E> {
 
         reporter = reporter.with_labels(self.labels.clone());
 
-        report(reporter.finish())
+        report(reporter.finish());
+        if let Some(bt) = &self.backtrace {
+            println!("Backtrace:");
+            println!("{:?}", *bt)
+        }
     }
 
     ///Prints the error to string. Uses `source` as the source-code string that is being reported on.

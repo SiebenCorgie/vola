@@ -6,7 +6,6 @@
  * 2024 Tendsin Mende
  */
 use ariadne::Cache;
-use backtrace::Backtrace;
 
 use lazy_static::lazy_static;
 use std::{ops::Deref, sync::Mutex};
@@ -38,9 +37,6 @@ pub fn report<'a>(err: ariadne::Report<'a, Span>) {
             }
         }
         Err(_) => println!("Failed to report error, could not lock source-files!"),
-    }
-    if std::env::var("VOLA_BACKTRACE").is_ok() {
-        println!("Backtrace: {:#?}", Backtrace::new())
     }
 }
 
