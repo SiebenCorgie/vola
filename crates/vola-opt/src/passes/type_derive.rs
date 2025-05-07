@@ -874,11 +874,7 @@ impl Optimizer {
         Ok(())
     }
 
-    pub fn try_node_type_derive(
-        &mut self,
-        node: NodeRef,
-        ignore_dead_nodes: bool,
-    ) -> Result<SmallColl<(Ty, OutportLocation)>, VolaError<OptError>> {
+    fn get_simple_input_config(&self, node: NodeRef) -> Result<SmallColl<Ty>, VolaError<OptError>> {
         //gather input types, those must be present, by definition
         let mut input_config = SmallColl::default();
         for input in self.graph.inports(node) {
@@ -902,11 +898,21 @@ impl Optimizer {
             };
             input_config.push(ty);
         }
+        Ok(input_config)
+    }
 
+    pub fn try_node_type_derive(
+        &mut self,
+        node: NodeRef,
+        ignore_dead_nodes: bool,
+    ) -> Result<SmallColl<(Ty, OutportLocation)>, VolaError<OptError>> {
         //gather all inputs and let the node try to resolve itself
         let payload: SmallColl<(Ty, OutportLocation)> = match &self.graph.node(node).node_type {
             NodeType::Simple(s) => {
                 let span = self.find_span(node.into()).unwrap_or(Span::empty());
+                let input_config = self.get_simple_input_config(node).map_err(|e| {
+                    e.with_label(span.clone(), "could not get all input-types to this node")
+                })?;
                 let ty = s
                     .node
                     .try_derive_type(&input_config, &self.concepts, &self.csg_node_defs)

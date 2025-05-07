@@ -5,7 +5,7 @@
  *
  * 2024 Tendsin Mende
  */
-//! Module that definse the OptNode and OptEdge related structures.
+//! Module that defines the OptNode and OptEdge related structures.
 
 use core::panic;
 use std::{any::Any, fmt::Debug};
@@ -27,7 +27,6 @@ use rvsdg::{
 };
 
 use rvsdg_viewer::{Color, View};
-use vola_ast::csg::{CSGConcept, CsgDef};
 use vola_common::Span;
 
 pub(crate) mod attribute_copy;
@@ -35,6 +34,8 @@ pub(crate) mod auxiliary;
 pub(crate) mod convention;
 pub(crate) mod impl_utils;
 pub(crate) mod splat_ty;
+pub use auxiliary::{Function, Impl, ImplKey};
+pub use vola_ast::csg::{CSGConcept, CsgDef};
 
 ///A node of some dialect
 pub trait DialectNode: LangNode + Any + View {
@@ -382,8 +383,21 @@ impl Optimizer {
                     .unwrap()
                     .edge
                 {
-                    self.graph.edge(edg).ty.get_type().cloned()
+                    let edge_type = self.graph.edge(edg).ty.get_type().cloned();
+                    //if edge has a type, use that, otherwise try at the source port
+                    if edge_type.is_some() {
+                        return edge_type;
+                    } else {
+                        if let Some(src) = self.graph.inport_src(*portloc) {
+                            //note we don't do recursion, otherwise this might end in infinite recursion
+                            //with the same routine for output-ports
+                            self.typemap.get(&src.into()).cloned()
+                        } else {
+                            None
+                        }
+                    }
                 } else {
+                    //If this port is unset, and has no edge, we can also not check the source
                     None
                 }
             }
