@@ -187,6 +187,8 @@ impl Pipeline {
         ast: VolaAst,
     ) -> Result<Target, Vec<VolaError<PipelineError>>> {
         let mut opt = Optimizer::new();
+        opt.config.dump_on_error = self.write_state_on_error;
+
         //TODO: add all the _standard_library_stuff_. Would be nice if we'd had them
         //      serialized somewhere.
         opt.add_ast(ast).map_err(|errors| {
