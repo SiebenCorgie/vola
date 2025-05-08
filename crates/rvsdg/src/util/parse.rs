@@ -10,7 +10,19 @@
 //!
 //! Those are used to build parsers for structures that need a way back from [Display] into their original representation.
 
-use chumsky::{error::Simple, prelude::just, text::TextParser, Parser};
+use chumsky::{
+    error::Simple,
+    prelude::{choice, just},
+    text::TextParser,
+    Parser,
+};
+
+use crate::{
+    attrib::AttribLocation,
+    edge::{InportLocation, InputType, OutportLocation, OutputType},
+    region::RegionLocation,
+    EdgeRef, NodeRef,
+};
 
 ///Accepts a radix10 usize
 pub fn usize_parser() -> impl Parser<char, usize, Error = Simple<char>> {
@@ -41,4 +53,175 @@ pub fn any_string() -> impl Parser<char, String, Error = Simple<char>> {
         s.extend(chars);
         s
     })
+}
+impl NodeRef {
+    pub fn parser() -> impl Parser<char, Self, Error = chumsky::prelude::Simple<char>> {
+        chumsky::primitive::just("NodeRef")
+            .then(
+                u64_parser()
+                    .then_ignore(just('v'))
+                    .then(u64_parser())
+                    .delimited_by(chumsky::primitive::just('('), chumsky::primitive::just(')')),
+            )
+            .map(|(_, (index, version))| Self::from_ffi(version << 32 | index))
+    }
+}
+
+impl std::str::FromStr for NodeRef {
+    type Err = Vec<chumsky::prelude::Simple<char>>;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        NodeRef::parser().parse(s)
+    }
+}
+
+impl EdgeRef {
+    pub fn parser() -> impl Parser<char, Self, Error = chumsky::prelude::Simple<char>> {
+        chumsky::primitive::just("EdgeRef")
+            .then(
+                u64_parser()
+                    .then_ignore(just('v'))
+                    .then(u64_parser())
+                    .delimited_by(chumsky::primitive::just('('), chumsky::primitive::just(')')),
+            )
+            .map(|(_, (index, version))| Self::from_ffi(version << 32 | index))
+    }
+}
+
+impl std::str::FromStr for EdgeRef {
+    type Err = Vec<chumsky::prelude::Simple<char>>;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        EdgeRef::parser()
+            .then_ignore(chumsky::prelude::end())
+            .parse(s)
+    }
+}
+
+impl InportLocation {
+    pub fn parser() -> impl Parser<char, Self, Error = chumsky::prelude::Simple<char>> {
+        just("Inport")
+            .then(
+                NodeRef::parser()
+                    .then_ignore(just(',').padded())
+                    .then(InputType::parser())
+                    .delimited_by(just('['), just(']')),
+            )
+            .map(|(_start, (node, input))| InportLocation { node, input })
+    }
+}
+
+impl std::str::FromStr for InportLocation {
+    type Err = Vec<chumsky::prelude::Simple<char>>;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        InportLocation::parser()
+            .then_ignore(chumsky::prelude::end())
+            .parse(s)
+    }
+}
+
+impl OutportLocation {
+    pub fn parser() -> impl Parser<char, Self, Error = chumsky::prelude::Simple<char>> {
+        just("Outport")
+            .then(
+                NodeRef::parser()
+                    .then_ignore(just(',').padded())
+                    .then(OutputType::parser())
+                    .delimited_by(just('['), just(']')),
+            )
+            .map(|(_start, (node, output))| OutportLocation { node, output })
+    }
+}
+
+impl std::str::FromStr for OutportLocation {
+    type Err = Vec<chumsky::prelude::Simple<char>>;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        OutportLocation::parser()
+            .then_ignore(chumsky::prelude::end())
+            .parse(s)
+    }
+}
+
+impl RegionLocation {
+    pub fn parser() -> impl Parser<char, Self, Error = chumsky::prelude::Simple<char>> {
+        just("Region")
+            .then(
+                NodeRef::parser()
+                    .then_ignore(just(',').padded())
+                    .then(usize_parser())
+                    .delimited_by(just('['), just(']')),
+            )
+            .map(|(_, (node, region_index))| RegionLocation { node, region_index })
+    }
+}
+impl std::str::FromStr for RegionLocation {
+    type Err = Vec<chumsky::prelude::Simple<char>>;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        RegionLocation::parser()
+            .then_ignore(chumsky::prelude::end())
+            .parse(s)
+    }
+}
+
+impl AttribLocation {
+    pub fn parser() -> impl Parser<char, Self, Error = chumsky::prelude::Simple<char>> {
+        choice((
+            InportLocation::parser().map(|i| AttribLocation::from(i)),
+            OutportLocation::parser().map(|i| AttribLocation::from(i)),
+            NodeRef::parser().map(|i| AttribLocation::from(i)),
+            EdgeRef::parser().map(|i| AttribLocation::from(i)),
+            RegionLocation::parser().map(|i| AttribLocation::from(i)),
+        ))
+    }
+}
+
+impl std::str::FromStr for AttribLocation {
+    type Err = Vec<chumsky::prelude::Simple<char>>;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        AttribLocation::parser()
+            .then_ignore(chumsky::prelude::end())
+            .parse(s)
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::{
+        edge::{InportLocation, InputType, OutportLocation},
+        EdgeRef, NodeRef,
+    };
+
+    #[test]
+    fn noderef_parse() {
+        let n = NodeRef::from_ffi(0);
+        let s = format!("{}", n);
+        assert_eq!(s.parse::<NodeRef>().unwrap(), n);
+    }
+
+    #[test]
+    fn edgeref_parse() {
+        let n = EdgeRef::from_ffi(0);
+        let s = format!("{}", n);
+        assert_eq!(s.parse::<EdgeRef>().unwrap(), n);
+    }
+
+    #[test]
+    fn inportlocation_parse() {
+        let l = InportLocation {
+            node: NodeRef::from_ffi(42),
+            input: InputType::GammaPredicate,
+        };
+
+        let s = format!("{l}");
+        assert_eq!(s.parse::<InportLocation>().unwrap(), l, "{l} failed");
+    }
+
+    #[test]
+    fn outportlocation_parse() {
+        let l = OutportLocation {
+            node: NodeRef::from_ffi(42),
+            output: crate::edge::OutputType::LambdaDeclaration,
+        };
+
+        let s = format!("{l}");
+        assert_eq!(s.parse::<OutportLocation>().unwrap(), l);
+    }
 }

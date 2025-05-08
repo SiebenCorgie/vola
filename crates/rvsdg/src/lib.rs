@@ -119,6 +119,12 @@ impl EdgeRef {
     pub fn as_ffi(&self) -> u64 {
         self.0.as_ffi()
     }
+    ///Builds a edge ref from a ffi value obtained by [Self::as_ffi]. Is undefined if that is not the case.
+    ///
+    /// Have a look at [KeyData::as_ffi] and [KeyData::from_ffi] for more infomation.
+    pub fn from_ffi(ffi: u64) -> Self {
+        EdgeRef::from(KeyData::from_ffi(ffi))
+    }
 }
 
 ///The RVSDG state. Contains the actual nodes as well as edge definitions.

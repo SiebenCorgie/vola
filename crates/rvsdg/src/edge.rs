@@ -71,8 +71,7 @@ impl InputType {
             enum_with_usize("EVIn", Self::EntryVariableInput),
             enum_with_usize("RVRes", Self::RecursionVariableResult),
             enum_with_usize("CVIn", Self::ContextVariableInput),
-        ))
-        .then_ignore(end());
+        ));
         parser
     }
 }
@@ -89,7 +88,9 @@ impl FromStr for InputType {
     /// assert_eq!(a, format!("{}", a).parse().unwrap());
     ///```
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        InputType::parser().parse(s)
+        InputType::parser()
+            .then_ignore(chumsky::primitive::end())
+            .parse(s)
     }
 }
 
@@ -261,8 +262,7 @@ impl OutputType {
             enum_with_usize("RVArg", Self::RecursionVariableArgument),
             enum_with_usize("EVOut", Self::ExitVariableOutput),
             enum_with_usize("CVArg", Self::ContextVariableArgument),
-        ))
-        .then_ignore(end());
+        ));
         parser
     }
 }
@@ -279,7 +279,9 @@ impl FromStr for OutputType {
     /// assert_eq!(a, format!("{}",a).parse().unwrap());
     ///```
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        OutputType::parser().parse(s)
+        OutputType::parser()
+            .then_ignore(chumsky::primitive::end())
+            .parse(s)
     }
 }
 
@@ -462,7 +464,15 @@ mod test {
     }
 
     #[test]
-    fn input_type_parse_fails() {
+    fn input_type_parse_fails_pre() {
+        let a = InputType::ContextVariableInput(6548);
+        assert!(format!("something{a}something")
+            .parse::<InputType>()
+            .is_err());
+    }
+
+    #[test]
+    fn input_type_parse_fails_post() {
         let a = InputType::ContextVariableInput(6548);
         assert!(format!("{a}something").parse::<InputType>().is_err());
     }
