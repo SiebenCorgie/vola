@@ -35,6 +35,8 @@ use crate::{
     OptEdge, Optimizer, TypeState,
 };
 
+mod util;
+
 //NOTE: At the moment we rely on `eval` expressions being already tagged, as well as all inputs to an λ-Node being tagged as well.
 // This basically lets us "push-down" all definitions. The only somewhat _hard_ nodes are the eval-nodes, since those will be replaced
 // by call-sites at some point. However, since we knew the `concept` being used at that call site, we at-least know the return type, so we call walk
@@ -482,7 +484,7 @@ impl Optimizer {
                             if self.graph[in_region_port].edges.len() > 0 {
                                 let err = OptError::TypeDeriveError {
                                     text: format!(
-                                        "Gamma input[{ev}] has no type set, but is in use in branch {region_idx}!"
+                                        "Branch input[{ev}] has no type set, but is in use in branch {region_idx}!"
                                     ),
                                 };
                                 return Err(VolaError::error_here(err, gamma_span, "here"));
@@ -888,10 +890,8 @@ impl Optimizer {
                     Ty::Callable
                 } else {
                     let err = OptError::TypeDeriveError {
-                        text: format!(
-                        "Argument {} ({node:?}) is not connected, but also not type-set, which is an error",
-                        input.input
-                    )};
+                        text: format!("Argument {input} for {node:?} is not type-set",),
+                    };
                     let span = self.find_span(node.into()).unwrap_or(Span::empty());
                     return Err(VolaError::error_here(err, span, "here"));
                 }

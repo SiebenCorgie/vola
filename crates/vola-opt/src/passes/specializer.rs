@@ -162,6 +162,7 @@ impl Optimizer {
 
         //Try specializing reverse-topo-ord eval nodes, till we don't have any left
         'restart: loop {
+            let liveness = self.graph.liveness_region(region);
             let topoord = self.graph.topological_order_region(region);
             for node in topoord.into_iter().rev() {
                 for subreg in 0..self.graph[node].regions().len() {
@@ -174,6 +175,22 @@ impl Optimizer {
                 }
                 //if this is a eval node, specialize its value, then restart
                 if self.is_node_type::<EvalNode>(node) {
+                    //ignore dead eval nodes
+                    if !liveness.get(&node.into()).cloned().unwrap_or(false) {
+                        if let Some(span) = self.find_span(node.into()) {
+                            report(
+                                warning_reporter("unused eval", span.clone())
+                                    .with_label(
+                                        Label::new(span.clone())
+                                            .with_message("result is never used"),
+                                    )
+                                    .finish(),
+                            );
+                        }
+
+                        continue;
+                    }
+
                     //node seems good, start specializer
                     let span = self.find_span(node.into()).unwrap_or(region_span.clone());
                     self.specialize_eval_entry(node)
@@ -215,6 +232,7 @@ impl Optimizer {
         {
             self.push_debug_state(&format!("before specialize {}", spec_ctx.eval_node));
         }
+
         //The first step is to find the correct specialization impl block based on the called
         // csg-tree root node, and the called concept of the root node.
         let concept_name = self.graph[spec_ctx.eval_node]
@@ -373,9 +391,21 @@ impl Optimizer {
                 .output_dsts(&self.graph, 0)
                 .clone()
                 .unwrap();
-            let eval_ty = self
-                .find_type(&spec_ctx.eval_node.output(0).into())
-                .expect("expected eval to be typed!");
+            let span = self
+                .find_span(spec_ctx.eval_node.into())
+                .unwrap_or(spec_ctx.tree_access_span.clone());
+            //NOTE: this _shouldn't_ happen, but its better to report, instead of
+            //      panicing
+            let eval_ty = self.find_type(&spec_ctx.eval_node.output(0).into()).ok_or(
+                VolaError::error_here(
+                    OptError::CsgStructureIssue(format!(
+                        "Expected eval ({}) to be typed",
+                        spec_ctx.eval_node
+                    )),
+                    span,
+                    "here",
+                ),
+            )?;
             let call_src = if eval_region != csg_region {
                 self.import_context(
                     OutportLocation {
@@ -524,7 +554,12 @@ impl Optimizer {
 
     fn find_all_evals(&self, host_region: RegionLocation) -> SmallColl<NodeRef> {
         let mut evals = SmallColl::new();
+        let liveness = self.graph.liveness_region(host_region);
         for node in &self.graph.region(&host_region).unwrap().nodes {
+            //skip dead nodes
+            if !liveness.get(&node.into()).cloned().unwrap_or(false) {
+                continue;
+            }
             if self.is_node_type::<EvalNode>(*node) {
                 evals.push(*node);
             } else {
