@@ -142,6 +142,14 @@ impl OmegaNode {
     pub fn get_export_mut(&mut self, n: usize) -> Option<&mut RegResult> {
         self.body.results.get_mut(n)
     }
+
+    pub fn import_count(&self) -> usize {
+        self.body.arguments.len()
+    }
+
+    pub fn export_count(&self) -> usize {
+        self.body.results.len()
+    }
 }
 
 #[cfg(test)]
