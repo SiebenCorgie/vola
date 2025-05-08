@@ -128,10 +128,39 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
         Ok(())
     }
 
+    ///Disconnects any context variables of `node` that is not used in the body of `node`. Assems that `node` is either a lambda or phi node.
+    pub fn disconnect_unused_context_variables(&mut self, node: NodeRef) {
+        let nty = self[node].into_abstract();
+        if nty != AbstractNodeType::Lambda && nty != AbstractNodeType::Phi {
+            return;
+        }
+
+        let cvcount = match &self[node].node_type {
+            NodeType::Phi(p) => p.cv_count,
+            NodeType::Lambda(l) => l.cv_count,
+            _ => unreachable!(),
+        };
+
+        for cv in 0..cvcount {
+            let cvport = OutputType::ContextVariableArgument(cv).to_location(node);
+            if self[cvport].edges.is_empty() {
+                let cvarg = InputType::ContextVariableInput(cv).to_location(node);
+                if let Some(edg) = self[cvarg].edge {
+                    let _ = self.disconnect(edg).unwrap();
+                }
+            }
+        }
+    }
+
     ///Removes all unused context variables of the lambda or Phi `node`.
     ///
     /// This will remove all cv-nodes that are not used within the region of `node`, regardless if
     /// they are connected from the outside.
+    ///
+    /// # Safety
+    ///
+    /// While all used CVs are kept, and compacted, this won't keep the CV-port indices stabel. So if you are
+    /// using any annotations that rely on the ports being stable, consider using [disconnect_unused_context_variables] instead.
     pub fn remove_unused_context_variables(&mut self, node: NodeRef) {
         let cvcount = match &self.node(node).node_type {
             NodeType::Lambda(l) => l.context_variable_count(),
