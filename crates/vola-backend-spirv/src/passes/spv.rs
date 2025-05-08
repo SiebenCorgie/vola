@@ -421,28 +421,14 @@ impl SpirvBackend {
                     }
                     //For control-flow, pre-set a id for each _in_use_ port
                     AbstractNodeType::Gamma => {
-                        //allocate a new id, if the output is in use
+                        //allocate a new id, if the output is in use, othewise
+                        //the builder later on will reuse the id assigned
+                        //to the producing value
                         for outty in self.graph[node].outport_types() {
-                            let mut in_use = false;
-                            for region_index in 0..self.graph[node].regions().len() {
-                                if let Some(in_region_result) = outty.map_to_in_region(region_index)
-                                {
-                                    let port = in_region_result.to_location(node);
-                                    let src = self.graph.inport_src(port);
-                                    //make sure the source is not the node iteself, in that case its branch invariant
-                                    if let Some(src) = src {
-                                        if src.node != node {
-                                            in_use = true;
-                                            break;
-                                        }
-                                    }
-                                }
-                            }
-                            if in_use {
+                            let exitvar = outty.to_location(node);
+                            if !self.graph.is_ev_untouched(exitvar) {
                                 //is in use, and not branch/loop invariant
-                                ctx.set_port_id(outty.to_location(node), builder.id());
-                            } else {
-                                //is not in use, therfore assign the
+                                ctx.set_port_id(exitvar, builder.id());
                             }
                         }
 
@@ -1013,16 +999,16 @@ impl SpirvBackend {
                     .unwrap_gamma_ref()
                     .exit_var_count();
                 //now collect all ev connected ev ports
-                for ev in 0..exit_var_count {
-                    let ev_location = OutportLocation {
+                for ex in 0..exit_var_count {
+                    let ex_location = OutportLocation {
                         node: *src_node,
-                        output: OutputType::ExitVariableOutput(ev),
+                        output: OutputType::ExitVariableOutput(ex),
                     };
                     //Do nothing if the exit variable is not connected
                     if self
                         .graph
-                        .node(ev_location.node)
-                        .outport(&ev_location.output)
+                        .node(ex_location.node)
+                        .outport(&ex_location.output)
                         .unwrap()
                         .edges
                         .len()
@@ -1036,7 +1022,7 @@ impl SpirvBackend {
                             node: *src_node,
                             input: InputType::ExitVariableResult {
                                 branch: 0,
-                                exit_variable: ev,
+                                exit_variable: ex,
                             },
                         })
                         .unwrap();
@@ -1048,16 +1034,15 @@ impl SpirvBackend {
                             node: *src_node,
                             input: InputType::ExitVariableResult {
                                 branch: 1,
-                                exit_variable: ev,
+                                exit_variable: ex,
                             },
                         })
                         .unwrap();
                     let in_false_src_id = ctx.get_port_id(&in_false_src).unwrap();
                     //now write the phi node into the builder with the given
                     //id
-
-                    let phi_id = ctx.get_port_id(&ev_location).unwrap();
-                    let result_type = self.find_type(ev_location.into()).unwrap();
+                    let phi_id = ctx.get_port_id(&ex_location).unwrap();
+                    let result_type = self.find_type(ex_location.into()).unwrap();
                     let result_type_id = register_or_get_type(builder, ctx, &result_type);
                     builder
                         .phi(

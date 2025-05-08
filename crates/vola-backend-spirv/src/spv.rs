@@ -586,7 +586,7 @@ impl TryFrom<vola_opt::common::Ty> for SpvType {
         let res = match value {
             vola_opt::common::Ty::VOID => Self::Void,
             vola_opt::common::Ty::SCALAR_INT => Self::Arith(ArithTy {
-                base: ArithBaseTy::Integer { signed: false },
+                base: ArithBaseTy::Integer { signed: true },
                 shape: TyShape::Scalar,
                 resolution: 32,
             }),
