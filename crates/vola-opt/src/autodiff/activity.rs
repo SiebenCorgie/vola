@@ -220,7 +220,11 @@ impl Activity {
                             node,
                             input: result,
                         };
-                        let src = opt.graph.inport_src(result_port).unwrap();
+                        let src = if let Some(src) = opt.graph.inport_src(result_port) {
+                            src
+                        } else {
+                            continue;
+                        };
                         let is_src_active = self.is_active_port(opt, src);
                         //now set the result and map that _out_of_region_
                         //NOTE: we prefer the _is_active_ state. So if one region outputs an inactive result, and the other outputs
@@ -269,7 +273,7 @@ impl Activity {
                         InputType::Input(0) => continue,
                         //normal args
                         InputType::Input(n) => n - 1,
-                        _ => panic!("Malformed λ"),
+                        _ => unreachable!("Malformed λ"),
                     };
 
                     let input_src = opt
@@ -304,7 +308,7 @@ impl Activity {
                     let result_index = if let InputType::Result(i) = result {
                         i
                     } else {
-                        panic!("Malformed λ");
+                        unreachable!("Malformed λ");
                     };
                     let src = opt
                         .graph
@@ -330,7 +334,9 @@ impl Activity {
                 self.active.set(node.into(), any_active);
                 any_active
             }
-            ty => panic!("unhandled activity for node type {ty:?}"),
+            ty => {
+                unreachable!("Unexpected node type {ty} (node={node})");
+            }
         }
     }
 }

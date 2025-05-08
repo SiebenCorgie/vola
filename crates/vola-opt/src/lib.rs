@@ -47,25 +47,27 @@
 use ahash::AHashMap;
 use common::Ty;
 use config::Config;
-use graph::auxiliary::{Function, Impl, ImplKey};
+use graph::{
+    auxiliary::{Function, Impl, ImplKey},
+    CSGConcept, CsgDef,
+};
 use rvsdg::{attrib::FlagStore, Rvsdg};
 
 use rvsdg_viewer::layout::LayoutConfig;
-use vola_ast::csg::{CSGConcept, CsgDef};
 use vola_common::Span;
 
 pub mod alge;
 pub mod common;
 pub mod csg;
-mod error;
+pub mod error;
 pub use error::OptError;
 pub mod autodiff;
 pub mod config;
-mod graph;
+pub mod graph;
 pub mod imm;
-mod passes;
+pub mod passes;
 pub mod typelevel;
-mod util;
+pub mod util;
 
 //Re-Export all of these, since they basically form the basis of _everything_.
 pub use graph::{DialectNode, OptEdge, OptNode, TypeState};
@@ -79,15 +81,16 @@ pub struct Optimizer {
 
     ///All known concept definitions keyed by their name
     //NOTE: using the name, since thats how we reference them all the time.
-    pub(crate) concepts: AHashMap<String, CSGConcept>,
-    ///All known entity and operation defs
-    pub(crate) csg_node_defs: AHashMap<String, CsgDef>,
+    pub concepts: AHashMap<String, CSGConcept>,
+
+    ///All known entity and operation definitions.
+    pub csg_node_defs: AHashMap<String, CsgDef>,
 
     ///lookup table for the λ-Nodes of entity implementation of concepts
-    pub(crate) concept_impl: AHashMap<ImplKey, Impl>,
+    pub concept_impl: AHashMap<ImplKey, Impl>,
 
-    ///Lookup table for all alge functions.
-    pub(crate) functions: AHashMap<String, Function>,
+    ///Lookup table for all functions that are not part of an implementation.
+    pub functions: AHashMap<String, Function>,
 
     ///All known type tags of ports and nodes. Can be used to do type checking, or infer edge types.
     pub typemap: FlagStore<Ty>,
@@ -153,7 +156,6 @@ impl Optimizer {
         F: FnOnce(rvsdg_viewer::GraphStateBuilder) -> rvsdg_viewer::GraphStateBuilder,
     {
         //NOTE propbably do not rebuild this each time?
-
         let mut typemap = self.typemap.clone();
         for edge in self.graph.edges() {
             if let Some(ty) = self.graph.edge(edge).ty.get_type() {
@@ -162,7 +164,7 @@ impl Optimizer {
         }
 
         let layout_config = LayoutConfig {
-            ignore_dead_node: true,
+            ignore_dead_node: false,
             ..Default::default()
         };
 
@@ -180,6 +182,43 @@ impl Optimizer {
         if std::env::var("VOLA_ALWAYS_WRITE_DUMP").is_ok() {
             self.dump_debug_state(&format!("{name}.bin"));
         }
+    }
+
+    ///Shortcut to immediatly write debug state, without pushing it to the chain.
+    #[cfg(feature = "viewer")]
+    #[allow(unused)]
+    pub(crate) fn write_debug_state<F>(&self, name: &str, with: F)
+    where
+        F: FnOnce(rvsdg_viewer::GraphStateBuilder) -> rvsdg_viewer::GraphStateBuilder,
+    {
+        //NOTE propbably do not rebuild this each time?
+        let mut typemap = self.typemap.clone();
+        for edge in self.graph.edges() {
+            if let Some(ty) = self.graph.edge(edge).ty.get_type() {
+                typemap.set(rvsdg::attrib::AttribLocation::Edge(edge).into(), ty.clone());
+            }
+        }
+
+        let layout_config = LayoutConfig {
+            ignore_dead_node: true,
+            ..Default::default()
+        };
+
+        let mut viewer_state = rvsdg_viewer::ViewerState::new();
+        {
+            let builder = viewer_state
+                .new_state_builder(name, &self.graph, &layout_config)
+                .with_flags("Type", &typemap)
+                .with_flags("Span", &self.span_tags)
+                .with_flags("Name", &self.names)
+                .with_flags("Variable Producer", &self.var_producer);
+
+            with(builder).build();
+        }
+
+        let path = format!("{name}.bin");
+        println!("Writing debug state to {:?}", path);
+        viewer_state.write_to_file(&path);
     }
 
     #[cfg(feature = "viewer")]

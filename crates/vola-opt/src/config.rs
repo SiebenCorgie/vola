@@ -35,4 +35,6 @@ impl Default for ConfigAutoDiff {
 #[derive(Debug, Clone, Default)]
 pub struct Config {
     pub autodiff: ConfigAutoDiff,
+    //True if the compiler should dump its state on error
+    pub dump_on_error: bool,
 }

@@ -10,12 +10,13 @@ use vola_common::Span;
 
 use crate::common::Ty;
 
+///Identifies an implementation by the concept and csg-operation or entity.
 #[derive(Debug, Clone, PartialEq, Hash, Eq)]
 pub struct ImplKey {
     ///The concept that is implemented
     pub concept: String,
     ///The entity or operation that is implemented
-    pub node: String,
+    pub csgdef: String,
 }
 
 ///Reference to some implementation

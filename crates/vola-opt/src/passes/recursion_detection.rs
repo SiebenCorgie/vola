@@ -233,12 +233,12 @@ impl Optimizer {
                 //2. Not-our-self
                 let span = span.expect("expected span for simple node");
                 if let Some(node) = self.try_unwrap_node::<CsgOp>(csg.node) {
-                    if node.op == key.node {
+                    if node.op == key.csgdef {
                         Err(VolaError::error_here(
                             OptError::CsgStructureIssue(
                                 format!(
                                     "Detected CSG-Graph cycle: uses {} from within {}.",
-                                    key.node, key.node
+                                    key.csgdef, key.csgdef
                                 )
                                 .to_owned(),
                             ),

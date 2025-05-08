@@ -235,7 +235,7 @@ impl Optimizer {
 
         let implkey = ImplKey {
             concept: concept_name.clone(),
-            node: csg_name.clone(),
+            csgdef: csg_name.clone(),
         };
 
         let subtree_count = self.graph[spec_ctx.csg_tree.node]

@@ -71,8 +71,8 @@ impl Optimizer {
                 //there should not be a matrix-matrix, matrix-vector or vector-matrix multiplication.
                 //Only scalar-scalar are _right now_ implemented
 
-                let left_type = self.find_type(&left_src.into()).unwrap();
-                let right_type = self.find_type(&right_src.into()).unwrap();
+                let left_type = self.get_or_derive_type(left_src, false);
+                let right_type = self.get_or_derive_type(right_src, false);
 
                 let left_active = activity.is_active_port(self, left_src);
                 let right_active = activity.is_active_port(self, right_src);
@@ -309,81 +309,10 @@ impl Optimizer {
                 }
 
                 let x_src = self.graph.inport_src(node.input(0)).unwrap();
-                let x_ty = self.find_type(&x_src.into()).unwrap();
+                let x_ty = self.get_or_derive_type(x_src, false);
                 let one = self.splat_scalar(region, ImmScalar::new(1.0), x_ty);
-                /*
-                                let result = self
-                                    .graph
-                                    .on_region(&region, |g| {
-                                        let (x_abs, _) = g
-                                            .connect_node(
-                                                OptNode::new(UnaryArith::new(UnaryArithOp::Abs), span.clone()),
-                                                [x_src]
-                                            )
-                                            .unwrap();
-
-                                        let (div_out, _) = g
-                                            .connect_node(
-                                                OptNode::new(BinaryArith::new(BinaryArithOp::Div), span),
-                                                [x_abs.output(0), x_src],
-                                            )
-                                            .unwrap();
-
-                                        div_out
-                                    })
-                                    .unwrap();
-                */
                 Ok(self.build_chain_rule_for(&region, node.output(0), one, x_src))
             }
         }
     }
-    /*
-    //This is our special vector-matrix derivative handler.
-    //will analyse the active part of the vector, and
-    fn build_active_vector_matrix_diff(
-        &mut self,
-        region: RegionLocation,
-        node: NodeRef,
-        activity: &mut Activity,
-    ) -> Result<
-        (
-            OutportLocation,
-            SmallColl<(OutportLocation, SmallColl<InportLocation>)>,
-        ),
-        AutoDiffError,
-    > {
-        //Our strategy in this case is _just_ building the whole multiplication,
-        //then yielding. This'll effectively index into the right part of the
-        if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("DUMP_YEET").is_ok() {
-            self.push_debug_state_with(&format!("fw-autodiff-{node}-at-yeet"), |builder| {
-                builder.with_flags("activity", &activity.active)
-            });
-        }
-
-        todo!()
-    }
-
-    //This is our special matrix*vector derivative handler.
-    //will analyse the active part of the vector, and
-    fn build_matrix_active_vector_diff(
-        &mut self,
-        region: RegionLocation,
-        node: NodeRef,
-        activity: &mut Activity,
-    ) -> Result<
-        (
-            OutportLocation,
-            SmallColl<(OutportLocation, SmallColl<InportLocation>)>,
-        ),
-        AutoDiffError,
-    > {
-        if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("DUMP_YEET").is_ok() {
-            self.push_debug_state_with(&format!("fw-autodiff-{node}-at-yeet"), |builder| {
-                builder.with_flags("activity", &activity.active)
-            });
-        }
-
-        todo!()
-    }
-    */
 }

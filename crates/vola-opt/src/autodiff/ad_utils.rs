@@ -12,7 +12,10 @@
 
 use ahash::AHashSet;
 use rvsdg::{
-    edge::OutportLocation, region::RegionLocation, smallvec::smallvec, NodeRef, SmallColl,
+    edge::{OutportLocation, OutputType},
+    region::RegionLocation,
+    smallvec::smallvec,
+    NodeRef, SmallColl,
 };
 use vola_common::Span;
 
@@ -38,9 +41,7 @@ impl Optimizer {
         region: RegionLocation,
         port: OutportLocation,
     ) -> OutportLocation {
-        let ty = self
-            .find_type(&port.into())
-            .expect("Expected port's output to be set");
+        let ty = self.get_or_derive_type(port, true);
         self.splat_scalar(region, ImmScalar::new(0.0), ty)
     }
 
@@ -232,8 +233,15 @@ impl Optimizer {
                 panic!("Could not type-derive while AutoDiff, this is probably a bug in the AD-Pipeline: {e}");
             }
         }
-
-        self.find_type(&output.into()).unwrap()
+        match self.find_type(&output.into()) {
+            Some(t) => t,
+            None => {
+                if self.config.dump_on_error {
+                    self.push_debug_state(&format!("{} could not derive type", output));
+                }
+                panic!("Could not generate type");
+            }
+        }
     }
 
     ///Handles type derive and propagation of a node that is added while canonicalizing.
@@ -260,7 +268,6 @@ impl Optimizer {
             }
             Err(_e) => {
                 //Simple pass failed, therfore start the real-deal
-
                 let parent_region = self.graph[node].parent.unwrap();
                 let span = self
                     .find_span(parent_region.into())
@@ -269,6 +276,55 @@ impl Optimizer {
                 self.derive_region(parent_region, span, ignore_dead_nodes)
                     .map_err(|e| e.error)
             }
+        }
+    }
+
+    ///Checks that all, or no edge is conneted in any branch of `gamma_node` for `exit_variable`
+    ///Returns if any is connected, or error, if only _some_ are connected.
+    pub(crate) fn all_connected(
+        &self,
+        gamma_node: NodeRef,
+        exit_variable: OutputType,
+    ) -> Result<bool, ()> {
+        assert!(if let OutputType::ExitVariableOutput(_) = exit_variable {
+            true
+        } else {
+            false
+        });
+        assert!(self.graph[gamma_node].node_type.is_gamma());
+
+        let branch_count = self.graph[gamma_node].regions().len();
+        let result = (0..branch_count).fold(None, |set_state, region| {
+            let result_port = exit_variable
+                .map_to_in_region(region)
+                .unwrap()
+                .to_location(gamma_node);
+            match set_state {
+                None => {
+                    //Non set yet, just read and set as okay
+                    let is_connected = self.graph[result_port].edge.is_some();
+                    Some(Ok(is_connected))
+                }
+                Some(Ok(should_state)) => {
+                    let is_connected = self.graph[result_port].edge.is_some();
+                    if should_state != is_connected {
+                        Some(Err(()))
+                    } else {
+                        //State equals
+                        Some(Ok(should_state))
+                    }
+                }
+                Some(Err(e)) => Some(Err(e)),
+            }
+        });
+
+        match result {
+            //some collision happened
+            Some(Err(_e)) => Err(()),
+            //All connected or unconnetced
+            Some(Ok(all_connected)) => Ok(all_connected),
+            //no branch encountered (unlikely)
+            None => Ok(false),
         }
     }
 }
