@@ -2,7 +2,7 @@
 //ERROR:Failed to dispatch field for Union and concept SDF3D: Concept implementation CSG-Operand-count does not match usage!
 //END-CONFIG
 //
-module std;
+module super::std;
 export fn myFn(at: vec3) -> real{
 	csg f = Union(){
 		Sphere(1.0)

@@ -16,8 +16,14 @@ use vola_ast::csg::{CsgDef, CsgTy};
 use vola_common::Span;
 
 use crate::{
-    alge::EvalNode, common::Ty, graph::auxiliary::Impl, imm::ImmNat, OptEdge, OptError, OptNode,
-    Optimizer,
+    alge::{
+        arithmetic::{UnaryArith, UnaryArithOp},
+        EvalNode,
+    },
+    common::Ty,
+    graph::auxiliary::Impl,
+    imm::ImmNat,
+    OptEdge, OptError, OptNode, Optimizer,
 };
 
 use super::auxiliary::ImplKey;
@@ -33,11 +39,11 @@ impl Optimizer {
         if self.concept_impl.contains_key(&key) {
             return Err(OptError::AIIFailed(format!(
                 "There was already a implementation present for {}::{}",
-                key.concept, key.node,
+                key.concept, key.csgdef,
             )));
         }
 
-        match self.csg_node_defs.get(&key.node) {
+        match self.csg_node_defs.get(&key.csgdef) {
             Some(CsgDef {
                 span: _,
                 ty: CsgTy::Entity,
@@ -58,7 +64,7 @@ impl Optimizer {
             None => {
                 return Err(OptError::AIIFailed(format!(
                     "Could not find operation definition named \"{}\", consider adding it first!",
-                    key.node
+                    key.csgdef
                 )))
             }
         }
@@ -106,7 +112,7 @@ impl Optimizer {
         //Add the _unused_ csg-args
         //NOTE: Not really needed, but its the convention, and we don't know at this point if any
         //      pass depends on the convention.
-        for csg_aty in self.csg_node_defs.get(&key.node).unwrap().args.iter() {
+        for csg_aty in self.csg_node_defs.get(&key.csgdef).unwrap().args.iter() {
             //add all the ports and type them
             let argidx = self
                 .graph
@@ -214,7 +220,7 @@ impl Optimizer {
         //last part is tagging it with a name and adding it to the collection of impl blocks
         self.names.set(
             lmd.into(),
-            format!("AII impl {} for {}", key.node, key.concept),
+            format!("AII impl {} for {}", key.csgdef, key.concept),
         );
 
         let mut operands = SmallColl::default();
@@ -259,6 +265,39 @@ impl Optimizer {
         }
     }
 
+    //tries to convert `node` into a static signed integer. Fails if `node` is not a ImmNat or negated ImmNat
+    fn as_integer(&self, node: NodeRef) -> Option<isize> {
+        if let Some(immnat) = self.try_unwrap_node::<ImmNat>(node) {
+            return Some(immnat.lit.try_into().unwrap());
+        }
+
+        //If this is a unary op, try to get the input as integer, and then apply the operation
+        if let Some(unaryop) = self.try_unwrap_node::<UnaryArith>(node) {
+            let value = if let Some(src) = self
+                .graph
+                .find_producer_inp(InputType::Input(0).to_location(node))
+            {
+                //try recursion
+                if let Some(integer) = self.as_integer(src.node) {
+                    integer
+                } else {
+                    return None;
+                }
+            } else {
+                return None;
+            };
+
+            match unaryop.op {
+                UnaryArithOp::Abs => Some(value.abs()),
+                UnaryArithOp::Neg => Some(-value),
+                UnaryArithOp::Ceil | UnaryArithOp::Floor | UnaryArithOp::Round => Some(value),
+                UnaryArithOp::Fract => Some(0),
+            }
+        } else {
+            None
+        }
+    }
+
     ///Analyses the `theta` node loop bound. Returns an error if this is not a theta node.
     pub fn loop_count(&self, theta: NodeRef) -> Result<usize, UnrollError> {
         if !self.graph[theta].node_type.is_theta() {
@@ -280,24 +319,24 @@ impl Optimizer {
             return Err(UnrollError::NonStaticBounds);
         }
 
-        //println!("Loopcount for {theta} ended at: \n    {low_src:?}\n    {high_src:?}");
+        //Note: we assume that that _iff_ the loop bound is static, then the
+        //      constant-folding will have already produced an input of the nature
+        //      1. ImmNat
+        //      2. Neg <- ImmNat
+        //      So either a natural number, or a negated natural number.
 
         //unwrap both bounds and check for natural numbers
-        let lower = if let Some(nat) = self.try_unwrap_node::<ImmNat>(lower_src.unwrap().node) {
-            nat.lit
-        } else {
-            return Err(UnrollError::NonStaticBounds);
-        };
+        let lower = self
+            .as_integer(lower_src.unwrap().node)
+            .ok_or(UnrollError::NonStaticBounds)?;
 
-        let higher = if let Some(nat) = self.try_unwrap_node::<ImmNat>(higher_src.unwrap().node) {
-            nat.lit
-        } else {
-            return Err(UnrollError::NonStaticBounds);
-        };
+        let higher = self
+            .as_integer(higher_src.unwrap().node)
+            .ok_or(UnrollError::NonStaticBounds)?;
 
         assert!(lower <= higher);
 
-        Ok((higher - lower) as usize)
+        Ok((higher - lower).try_into().unwrap())
     }
 
     ///Tries to build a single unified type for all branches of `gamma` that make the `exit_variable`'s type.

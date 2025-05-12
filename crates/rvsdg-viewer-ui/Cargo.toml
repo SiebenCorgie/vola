@@ -5,5 +5,5 @@ edition = "2021"
 
 [dependencies]
 rvsdg-viewer = { workspace = true, features = ["viewer"] }
-rvsdg.workspace = true
-iced = { version = "0.12", features = ["canvas", "debug"] }
+rvsdg = { workspace = true, features = ["parse"] }
+iced = { version = "0.13", features = ["canvas", "debug"] }

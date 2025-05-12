@@ -129,13 +129,14 @@ impl Target {
 pub struct Pipeline {
     pub backend: BoxedBackend,
 
-    //If the early constant-node-fold is executed before specializing
+    /// If the early constant-node-fold is executed before specializing
     pub early_cnf: bool,
-    //If the late, post specializing cnf is executed
+    /// If the late, post specializing cnf is executed
     pub late_cnf: bool,
-    //If the post-specializing cne is done
+    /// If the post-specializing cne is done
     pub late_cne: bool,
-
+    /// If true, writes the optimizer state to file, if an error occures.
+    pub write_state_on_error: bool,
     pub validate_output: bool,
 }
 
@@ -148,6 +149,7 @@ impl Pipeline {
             late_cnf: true,
             late_cne: true,
             validate_output: false,
+            write_state_on_error: false,
         }
     }
 
@@ -174,15 +176,27 @@ impl Pipeline {
         self
     }
 
+    pub fn write_on_error(mut self) -> Self {
+        self.write_state_on_error = true;
+        self
+    }
+
     ///Takes an already prepared AST and tries to turn it into a compiled program / module.
     pub fn execute_on_ast(
         &mut self,
         ast: VolaAst,
     ) -> Result<Target, Vec<VolaError<PipelineError>>> {
         let mut opt = Optimizer::new();
+        opt.config.dump_on_error = self.write_state_on_error;
+
         //TODO: add all the _standard_library_stuff_. Would be nice if we'd had them
         //      serialized somewhere.
         opt.add_ast(ast).map_err(|errors| {
+            if self.write_state_on_error {
+                opt.push_debug_state("intern-ast");
+                opt.dump_debug_state("intern-ast.bin");
+            }
+
             errors
                 .into_iter()
                 .map(|e| e.to_error::<PipelineError>())
@@ -190,21 +204,41 @@ impl Pipeline {
         })?;
 
         if self.early_cnf {
-            opt.full_graph_cnf()
-                .map_err(|e| vec![VolaError::new(PipelineError::CnfError(e))])?;
+            opt.full_graph_cnf().map_err(|e| {
+                if self.write_state_on_error {
+                    opt.push_debug_state("early-cnf");
+                    opt.dump_debug_state("early-cnf.bin");
+                }
+
+                vec![VolaError::new(PipelineError::CnfError(e))]
+            })?;
         }
-        opt.specialize_all_exports()
-            .map_err(|e| e.into_iter().map(|e| e.to_error()).collect::<Vec<_>>())?;
+        opt.specialize_all_exports().map_err(|e| {
+            if self.write_state_on_error {
+                opt.push_debug_state("specialize");
+                opt.dump_debug_state("specialize.bin");
+            }
+            e.into_iter().map(|e| e.to_error()).collect::<Vec<_>>()
+        })?;
 
         //At this point any used nodes are hooked up. Therfore clean up
         //any unused garbage
-        opt.graph
-            .dead_node_elimination()
-            .map_err(|e| vec![VolaError::new(PipelineError::from(e))])?;
+        opt.graph.dead_node_elimination().map_err(|e| {
+            if self.write_state_on_error {
+                opt.push_debug_state("early-dne");
+                opt.dump_debug_state("early-dne.bin");
+            }
+            vec![VolaError::new(PipelineError::from(e))]
+        })?;
 
         if self.late_cnf {
-            opt.full_graph_cnf()
-                .map_err(|e| vec![VolaError::new(PipelineError::from(e))])?;
+            opt.full_graph_cnf().map_err(|e| {
+                if self.write_state_on_error {
+                    opt.push_debug_state("late-cnf");
+                    opt.dump_debug_state("late-cnf.bin");
+                }
+                vec![VolaError::new(PipelineError::from(e))]
+            })?;
         }
         //NOTE: Inliner can be buggy on undefined edges, clean those up.
         opt.remove_unused_edges()

@@ -1,6 +1,6 @@
 [package]
 name = "vola-cli"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 license = "MPL-2.0"
 
@@ -8,4 +8,5 @@ license = "MPL-2.0"
 clap = { workspace = true, features = ["derive"] }
 volac.workspace = true
 vola-common.workspace = true
+vola-fmt.workspace = true
 pretty_env_logger.workspace = true

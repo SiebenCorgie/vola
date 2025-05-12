@@ -1,4 +1,4 @@
-module std;
+module super::std;
 
 entity nSpheres(n: int);
 impl nSpheres for SDF3D(at){

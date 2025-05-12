@@ -1,5 +1,3 @@
-
-
 entity Sphere(rad: real);
 concept Sdf: vec3 -> real;
 

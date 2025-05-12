@@ -131,10 +131,10 @@ impl SpirvBackend {
     /// Assumes that all nodes that are live/reachable (from any ω-result) are in the "alge" dialect.
     pub fn intern_module(&mut self, opt: &Optimizer) -> Result<(), BackendSpirvError> {
         let res = self
-            .intern_opt_graph(opt)
-            .map_err(|e| BackendSpirvError::InterningError(e));
+            .lower_opt_graph(opt)
+            .map_err(|e| BackendSpirvError::LoweringError(e));
 
-        if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("VOLA_DUMP_SPV_INTERNED").is_ok()
+        if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("VOLA_DUMP_SPV_LOWERED").is_ok()
         {
             self.push_debug_state("Opt interned into SPIR-V");
         }
@@ -162,6 +162,14 @@ impl SpirvBackend {
 
     #[cfg(feature = "viewer")]
     pub fn push_debug_state(&mut self, name: &str) {
+        self.push_debug_state_with(name, |f| f);
+    }
+
+    #[cfg(feature = "viewer")]
+    pub fn push_debug_state_with<F>(&mut self, name: &str, with: F)
+    where
+        F: FnOnce(rvsdg_viewer::GraphStateBuilder) -> rvsdg_viewer::GraphStateBuilder,
+    {
         use rvsdg_viewer::layout::LayoutConfig;
 
         let mut local_typemap = self.typemap.clone();
@@ -176,14 +184,17 @@ impl SpirvBackend {
             ..Default::default()
         };
 
-        self.viewer
-            .new_state_builder(name, &self.graph, &layout_config)
-            .with_flags("Name", &self.idents)
-            .with_flags("Span", &self.spans)
-            .with_flags("Type", &local_typemap)
-            .with_flags("SPIRV-ID", &self.spirv_id_map)
-            .build();
+        {
+            let builder = self
+                .viewer
+                .new_state_builder(name, &self.graph, &layout_config)
+                .with_flags("Name", &self.idents)
+                .with_flags("Span", &self.spans)
+                .with_flags("Type", &local_typemap)
+                .with_flags("SPIRV-ID", &self.spirv_id_map);
 
+            with(builder).build();
+        }
         if std::env::var("VOLA_ALWAYS_WRITE_DUMP").is_ok() {
             self.dump_debug_state(&format!("{name}.bin"));
         }

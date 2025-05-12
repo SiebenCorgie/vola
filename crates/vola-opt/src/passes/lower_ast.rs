@@ -16,7 +16,7 @@ impl Optimizer {
     ///Adds a [VolaAst] to the optimizer. Might emit errors if the
     /// semantic analysis fails immediately while adding.
     pub fn add_ast(&mut self, ast: VolaAst) -> Result<(), Vec<VolaError<OptError>>> {
-        //Interning the ast works in three steps:
+        //Lowering the ast works in three steps:
         // 1. Serialize all entry-points into the graph
         //    For any function-like _call_ insert a unresolved node
         // 2. Launche resolve pass, that finds, all inter-procedurale calls. We do this based on the _at some point_
@@ -32,7 +32,7 @@ impl Optimizer {
         let mut errors: Vec<VolaError<OptError>> = Vec::with_capacity(0);
 
         //NOTE: we first inter all defines, then the actual code.
-        //      needed so we can already infer some basic stuff at interning time.
+        //      needed so we can already infer some basic stuff at lowering time.
         for entry in &ast.entries {
             let TopLevelNode {
                 span,
@@ -79,8 +79,8 @@ impl Optimizer {
             }
         }
 
-        if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("DUMP_AFTER_INTERN").is_ok() {
-            self.push_debug_state("AST interned");
+        if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("DUMP_AFTER_LOWERING").is_ok() {
+            self.push_debug_state("AST Lowering");
         }
 
         if errors.len() > 0 {
@@ -91,7 +91,7 @@ impl Optimizer {
         self.detect_recursive_calls()?;
 
         //do initial type resolving
-        self.type_derive()?;
+        self.type_derive(false)?;
 
         #[cfg(feature = "profile")]
         println!(

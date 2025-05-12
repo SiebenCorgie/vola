@@ -5,7 +5,7 @@
 //EXEC-RES:0.577
 //END-CONFIG
 
-module std;
+module super::std;
 
 operation OpWithCall();
 

@@ -31,6 +31,7 @@ impl AstError {
             error: internal,
             source_span: error.source_span,
             labels: error.labels,
+            backtrace: error.backtrace,
         }
     }
 }

@@ -1,0 +1,34 @@
+//BEGIN-CONFIG
+//ERROR:CSG-Tree structure issue: Detected CSG-Graph cycle: uses HyperOp from within HyperOp.
+//END-CONFIG
+
+module super::std;
+
+
+operation HyperOp();
+
+impl HyperOp<sub> for SDF3D(at){
+    csg t = Union(){
+        Sphere(1.0)
+    }{
+        HyperOp(){
+            Box([1.0; 3])
+        }
+    };
+
+    let dist = eval t.SDF3D(at - [-1.0, 0.0, 0.0]);
+    let sdist = eval sub.SDF3D(at);
+
+    min(dist, sdist)
+}
+
+
+export fn myfield(at: vec3) -> real{
+    csg t = HyperOp(){
+        Translate([1.0, 0.0, 0.0]){
+            Sphere(2.0)
+        }
+    };
+
+    eval t.SDF3D(at)
+}

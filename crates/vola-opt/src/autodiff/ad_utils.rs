@@ -12,7 +12,10 @@
 
 use ahash::AHashSet;
 use rvsdg::{
-    edge::OutportLocation, region::RegionLocation, smallvec::smallvec, NodeRef, SmallColl,
+    edge::{OutportLocation, OutputType},
+    region::RegionLocation,
+    smallvec::smallvec,
+    NodeRef, SmallColl,
 };
 use vola_common::Span;
 
@@ -38,9 +41,7 @@ impl Optimizer {
         region: RegionLocation,
         port: OutportLocation,
     ) -> OutportLocation {
-        let ty = self
-            .find_type(&port.into())
-            .expect("Expected port's output to be set");
+        let ty = self.get_or_derive_type(port, true);
         self.splat_scalar(region, ImmScalar::new(0.0), ty)
     }
 
@@ -215,47 +216,52 @@ impl Optimizer {
         Ok(())
     }
 
-    //Tries to get the type of the port, If that is not possible, tries to derive a type. Panics if that is not possible, since the graph
-    //should always be able to derive a type for any output.
-    pub(crate) fn get_or_derive_type(&mut self, output: OutportLocation) -> Ty {
-        match self.find_type(&output.into()) {
-            Some(t) => return t,
-            None => {}
-        }
+    ///Checks that all, or no edge is conneted in any branch of `gamma_node` for `exit_variable`
+    ///Returns if any is connected, or error, if only _some_ are connected.
+    pub(crate) fn all_connected(
+        &self,
+        gamma_node: NodeRef,
+        exit_variable: OutputType,
+    ) -> Result<bool, ()> {
+        assert!(if let OutputType::ExitVariableOutput(_) = exit_variable {
+            true
+        } else {
+            false
+        });
+        assert!(self.graph[gamma_node].node_type.is_gamma());
 
-        self.type_derive_and_propagate(output.node).unwrap();
-        //try again or panic
-        self.find_type(&output.into()).unwrap()
-    }
-
-    ///Handles type derive and propagation of a node that is added while canonicalizing.
-    pub(crate) fn type_derive_and_propagate(&mut self, node: NodeRef) -> Result<(), OptError> {
-        //We first try to just do a per-node derivation. Most of our canonicalizations just replace with _one_ level
-        //of nodes.
-        //However, this'll fail, if the canonicalization adds _many_ nodes.
-        //in that case we'll start a full pass.
-        match self.try_node_type_derive(node) {
-            Ok(typed_ports) => {
-                for (ty, outport) in typed_ports {
-                    self.typemap.set(outport.into(), ty.clone());
-                    //push type on port into edges
-                    for edg in self.graph[outport].edges.clone() {
-                        self.graph[edg].ty.set_type(ty.clone());
+        let branch_count = self.graph[gamma_node].regions().len();
+        let result = (0..branch_count).fold(None, |set_state, region| {
+            let result_port = exit_variable
+                .map_to_in_region(region)
+                .unwrap()
+                .to_location(gamma_node);
+            match set_state {
+                None => {
+                    //Non set yet, just read and set as okay
+                    let is_connected = self.graph[result_port].edge.is_some();
+                    Some(Ok(is_connected))
+                }
+                Some(Ok(should_state)) => {
+                    let is_connected = self.graph[result_port].edge.is_some();
+                    if should_state != is_connected {
+                        Some(Err(()))
+                    } else {
+                        //State equals
+                        Some(Ok(should_state))
                     }
                 }
-
-                Ok(())
+                Some(Err(e)) => Some(Err(e)),
             }
-            Err(_e) => {
-                //Simple pass failed, therfore start the real-deal
+        });
 
-                let parent_region = self.graph[node].parent.unwrap();
-                let span = self
-                    .find_span(parent_region.into())
-                    .unwrap_or(Span::empty());
-                //TODO: do not discard context of error
-                self.derive_region(parent_region, span).map_err(|e| e.error)
-            }
+        match result {
+            //some collision happened
+            Some(Err(_e)) => Err(()),
+            //All connected or unconnetced
+            Some(Ok(all_connected)) => Ok(all_connected),
+            //no branch encountered (unlikely)
+            None => Ok(false),
         }
     }
 }

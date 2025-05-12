@@ -23,6 +23,7 @@ use rvsdg::{
     edge::{InportLocation, InputType, OutportLocation},
     region::{Input, Output},
     rvsdg_derive_lang::LangNode,
+    smallvec::smallvec,
     util::abstract_node_type::AbstractNodeType,
     SmallColl,
 };
@@ -35,10 +36,8 @@ use crate::{
 
 ///Generic respons of a differentiation implementation of some node
 pub struct AdResponse {
-    //the original output value that we carry the derivative in `diff_output` of.
-    pub src_output: OutportLocation,
-    //The result port of the expression's derivative
-    pub diff_output: OutportLocation,
+    ///Maps any generated differntial pairs as `(orginal_value, differential_value)`
+    pub diff_mapping: SmallColl<(OutportLocation, OutportLocation)>,
     ///Signals for which Outport we need to know the derivative, and to which inport those must be connected.
     pub chained_derivatives: SmallColl<(OutportLocation, SmallColl<InportLocation>)>,
 }
@@ -46,8 +45,14 @@ pub struct AdResponse {
 impl AdResponse {
     pub fn new(src_output: OutportLocation, differentiated_output: OutportLocation) -> Self {
         Self {
-            src_output,
-            diff_output: differentiated_output,
+            diff_mapping: smallvec![(src_output, differentiated_output)],
+            chained_derivatives: SmallColl::new(),
+        }
+    }
+
+    pub fn with_pairs(pairs: SmallColl<(OutportLocation, OutportLocation)>) -> Self {
+        Self {
+            diff_mapping: pairs,
             chained_derivatives: SmallColl::new(),
         }
     }
@@ -93,6 +98,8 @@ pub enum AutoDiffError {
     CanonicalizationFailed(String),
     #[error("Port {0:?} was not yet handeled")]
     FwPortUnhandeled(OutportLocation),
+    #[error("GammaExitVariable {0:?} was connected in one branch, but not in the other")]
+    GammaExitInvalid(OutportLocation),
 }
 
 //Macro that implements the "View" trait for the Autodiff

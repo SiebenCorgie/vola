@@ -17,6 +17,7 @@
 //! The pass itself just tries to find a fix-point style resolution, which basically comes down to calling try-derive on all _just changed nodes_ till
 //! either all are resolved, or nothing changes and we end in an _unresolved_ state.
 
+use ahash::AHashSet;
 use rvsdg::{
     edge::{InportLocation, InputType, OutportLocation, OutputType},
     nodes::{ApplyNode, NodeType},
@@ -34,6 +35,8 @@ use crate::{
     OptEdge, Optimizer, TypeState,
 };
 
+mod util;
+
 //NOTE: At the moment we rely on `eval` expressions being already tagged, as well as all inputs to an λ-Node being tagged as well.
 // This basically lets us "push-down" all definitions. The only somewhat _hard_ nodes are the eval-nodes, since those will be replaced
 // by call-sites at some point. However, since we knew the `concept` being used at that call site, we at-least know the return type, so we call walk
@@ -41,7 +44,7 @@ use crate::{
 //
 impl Optimizer {
     ///Runs the type resolution pass on all nodes.
-    pub fn type_derive(&mut self) -> Result<(), Vec<VolaError<OptError>>> {
+    pub fn type_derive(&mut self, ignore_dead_nodes: bool) -> Result<(), Vec<VolaError<OptError>>> {
         #[cfg(feature = "log")]
         log::info!("type derive");
 
@@ -57,7 +60,7 @@ impl Optimizer {
         let topoord = self.graph.topological_order_region(toplevel);
 
         for node in topoord {
-            if let Err(e) = self.try_node_type_derive(node) {
+            if let Err(e) = self.try_node_type_derive(node, ignore_dead_nodes) {
                 errors.push(e);
             }
         }
@@ -423,6 +426,7 @@ impl Optimizer {
     fn gamma_derive(
         &mut self,
         gamma: NodeRef,
+        ignore_dead_nodes: bool,
     ) -> Result<SmallColl<(Ty, OutportLocation)>, VolaError<OptError>> {
         //Check that the condional port is a boolean, then
         //map all connected (and used) ports into both regions
@@ -480,7 +484,7 @@ impl Optimizer {
                             if self.graph[in_region_port].edges.len() > 0 {
                                 let err = OptError::TypeDeriveError {
                                     text: format!(
-                                        "Gamma input[{ev}] has no type set, but is in use in branch {region_idx}!"
+                                        "Branch input[{ev}] has no type set, but is in use in branch {region_idx}!"
                                     ),
                                 };
                                 return Err(VolaError::error_here(err, gamma_span, "here"));
@@ -498,7 +502,7 @@ impl Optimizer {
                 node: gamma,
                 region_index,
             };
-            if let Err(e) = self.derive_region(reg, gamma_span.clone()) {
+            if let Err(e) = self.derive_region(reg, gamma_span.clone(), ignore_dead_nodes) {
                 let branch_span = self.find_span(reg.into()).unwrap_or(Span::empty());
                 return Err(e.with_label(
                     branch_span,
@@ -607,6 +611,7 @@ impl Optimizer {
     fn theta_type_derive(
         &mut self,
         theta: NodeRef,
+        ignore_dead_nodes: bool,
     ) -> Result<SmallColl<(Ty, OutportLocation)>, VolaError<OptError>> {
         let theta_span = self.find_span(theta.into()).unwrap_or(Span::empty());
         //at the start, check input types.
@@ -685,6 +690,7 @@ impl Optimizer {
                 region_index: 0,
             },
             theta_span.clone(),
+            ignore_dead_nodes,
         )?;
         //make sure the theta-predicate is a bool now
         if let Some(ty) =
@@ -766,7 +772,11 @@ impl Optimizer {
         Ok(output_sig)
     }
 
-    fn derive_lambda(&mut self, lambda: NodeRef) -> Result<(), VolaError<OptError>> {
+    fn derive_lambda(
+        &mut self,
+        lambda: NodeRef,
+        ignore_dead_nodes: bool,
+    ) -> Result<(), VolaError<OptError>> {
         //The only thing we need to do is check that all CVs are set (and map them into the region),
         //and that all arguments have a type.
         assert_eq!(self.graph[lambda].into_abstract(), AbstractNodeType::Lambda);
@@ -860,15 +870,13 @@ impl Optimizer {
                 region_index: 0,
             },
             span,
+            ignore_dead_nodes,
         )?;
 
         Ok(())
     }
 
-    pub fn try_node_type_derive(
-        &mut self,
-        node: NodeRef,
-    ) -> Result<SmallColl<(Ty, OutportLocation)>, VolaError<OptError>> {
+    fn get_simple_input_config(&self, node: NodeRef) -> Result<SmallColl<Ty>, VolaError<OptError>> {
         //gather input types, those must be present, by definition
         let mut input_config = SmallColl::default();
         for input in self.graph.inports(node) {
@@ -882,21 +890,29 @@ impl Optimizer {
                     Ty::Callable
                 } else {
                     let err = OptError::TypeDeriveError {
-                        text: format!(
-                        "Argument {} ({node:?}) is not connected, but also not type-set, which is an error",
-                        input.input
-                    )};
+                        text: format!("Argument {input} for {node:?} is not type-set",),
+                    };
                     let span = self.find_span(node.into()).unwrap_or(Span::empty());
                     return Err(VolaError::error_here(err, span, "here"));
                 }
             };
             input_config.push(ty);
         }
+        Ok(input_config)
+    }
 
+    pub fn try_node_type_derive(
+        &mut self,
+        node: NodeRef,
+        ignore_dead_nodes: bool,
+    ) -> Result<SmallColl<(Ty, OutportLocation)>, VolaError<OptError>> {
         //gather all inputs and let the node try to resolve itself
         let payload: SmallColl<(Ty, OutportLocation)> = match &self.graph.node(node).node_type {
             NodeType::Simple(s) => {
                 let span = self.find_span(node.into()).unwrap_or(Span::empty());
+                let input_config = self.get_simple_input_config(node).map_err(|e| {
+                    e.with_label(span.clone(), "could not get all input-types to this node")
+                })?;
                 let ty = s
                     .node
                     .try_derive_type(&input_config, &self.concepts, &self.csg_node_defs)
@@ -911,16 +927,16 @@ impl Optimizer {
                 smallvec![res]
             }
             NodeType::Gamma(_g) => {
-                let result = self.gamma_derive(node)?;
+                let result = self.gamma_derive(node, ignore_dead_nodes)?;
                 result
             }
             //NOTE: by convention the θ-Node resolves to output 2
             NodeType::Theta(_t) => {
-                let result = self.theta_type_derive(node)?;
+                let result = self.theta_type_derive(node, ignore_dead_nodes)?;
                 result
             }
             NodeType::Lambda(_l) => {
-                self.derive_lambda(node)?;
+                self.derive_lambda(node, ignore_dead_nodes)?;
                 //lambdas alwas return a single callable
                 smallvec![(
                     Ty::Callable,
@@ -943,6 +959,7 @@ impl Optimizer {
         &mut self,
         reg: RegionLocation,
         region_src_span: Span,
+        ignore_dead_nodes: bool,
     ) -> Result<(), VolaError<OptError>> {
         //The idea is pretty simple: we build the topological order of all nodes, and
         //derive the type for each.
@@ -979,9 +996,21 @@ impl Optimizer {
         }
 
         let topoord = self.graph.topological_order_region(reg);
+        let liveness = if ignore_dead_nodes {
+            self.graph
+                .live_nodes_in_region(reg)
+                .into_iter()
+                .collect::<AHashSet<_>>()
+        } else {
+            AHashSet::with_capacity(0)
+        };
 
         for node in topoord {
-            let resolved_values = match self.try_node_type_derive(node) {
+            if ignore_dead_nodes && !liveness.contains(&node) {
+                continue;
+            }
+
+            let resolved_values = match self.try_node_type_derive(node, ignore_dead_nodes) {
                 Ok(values) => values,
                 Err(e) => {
                     let err = if let Some(span) = self.find_span(node.into()) {

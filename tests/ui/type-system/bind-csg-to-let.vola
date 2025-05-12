@@ -1,0 +1,21 @@
+//BEGIN-CONFIG
+//ERROR:Called function should return not return `scalar<Csg>`, consider using a csg-binding instead
+//END-CONFIG
+
+module super::std;
+
+fn my_fn_with_csg(test: csg) -> csg{
+    Union(){
+        test
+    }{
+        Sphere(1.0)
+    }
+}
+
+
+export fn myfield(at: vec3) -> real{
+    csg t = Box([1.0; 3]);
+    let r = my_fn_with_csg(t);
+
+    eval r.SDF3D(at)
+}

@@ -184,7 +184,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> PredWalkerNodesRegion<'a,
         //Seed walker with all predecessors
         for pred in ctx.unique_src_nodes(node) {
             //do not push boundary node
-            if pred == boundary.node {
+            if pred == boundary.node || !ctx.is_in_parent(pred, boundary.node) {
                 continue;
             }
             stack.push_back(pred);

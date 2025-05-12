@@ -1,0 +1,36 @@
+//BEGIN-CONFIG
+//EXEC-FN:myfield
+//EXEC-ARGS:0.0,-1.0,0.0
+//EXEC-EPS:0.1
+//EXEC-RES:0
+//END-CONFIG
+//NOTE: We should be _on the cylinder_ at -1
+
+module super::std;
+
+entity Circle(rad: real);
+impl Circle for SDF2D(at){
+    length(at) - rad
+}
+
+operation MyExtrude(height: real);
+impl MyExtrude<sub> for SDF3D(at){
+    let d = eval sub.SDF2D([at.x, at.y]);
+	let bound = abs(at.z) - height;
+	min(max(d, bound), 0.0) + length(max([d, bound], [0.0, 0.0]))
+}
+
+entity MyCylinder(rad: real, height: real);
+impl MyCylinder for SDF3D(at){
+    csg t = MyExtrude(height){
+        Circle(1.0)
+    };
+
+    eval t.SDF3D(at)
+}
+
+
+export fn myfield(at: vec3) -> real{
+    csg t = MyCylinder(1.0, 2.0);
+    eval t.SDF3D(at)
+}

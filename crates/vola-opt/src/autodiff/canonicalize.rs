@@ -416,10 +416,10 @@ impl Optimizer {
                         .unwrap();
 
                     //type derive the min and max nodes before canonicalizing them
-                    self.type_derive_and_propagate(max)?;
+                    self.type_derive_and_propagate(max, true)?;
                     //sub_canonicalize min and max
                     self.handle_canon_node(max)?;
-                    self.type_derive_and_propagate(min)?;
+                    self.type_derive_and_propagate(min, true)?;
                     self.handle_canon_node(min)?;
 
                     //if succesful, replace

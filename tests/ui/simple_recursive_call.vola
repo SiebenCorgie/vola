@@ -1,5 +1,5 @@
 //BEGIN-CONFIG
-//ERROR:Had error Cannot use "test", as this would create a recursivecall, but expected one of
+//ERROR:Cannot use "test", as this would create a recursivecall
 //END-CONFIG
 
 module std;

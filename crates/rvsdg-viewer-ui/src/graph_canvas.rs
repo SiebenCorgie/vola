@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 /*
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
@@ -25,6 +27,7 @@ use crate::collide;
 
 pub struct GraphCanvas {
     cache: canvas::Cache,
+    pub(crate) selection: std::sync::Arc<std::sync::Mutex<Option<AttribLocation>>>,
 }
 
 pub enum GraphCanvasMessage {
@@ -36,6 +39,7 @@ impl GraphCanvas {
     pub fn new() -> Self {
         GraphCanvas {
             cache: canvas::Cache::default(),
+            selection: Arc::new(std::sync::Mutex::new(None)),
         }
     }
 
@@ -100,6 +104,10 @@ impl<'a> canvas::Program<GraphCanvasMessage> for GraphDrawer<'a> {
         bounds: iced::Rectangle,
         cursor: mouse::Cursor,
     ) -> (canvas::event::Status, Option<GraphCanvasMessage>) {
+        if let Some(newly_selected) = self.gs.selection.lock().unwrap().take() {
+            state.selected = Some(newly_selected);
+        }
+
         let cursor_position = if let Some(cp) = cursor.position_in(bounds) {
             cp
         } else {

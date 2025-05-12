@@ -1,0 +1,39 @@
+//BEGIN-CONFIG
+//EXEC-FN:mysdf
+//EXEC-ARGS:0.0,2.0,0.0
+//EXEC-EPS:0.01
+//EXEC-RES:0.0
+//END-CONFIG
+
+
+module super::std;
+
+operation MySwitch(t: real);
+impl MySwitch<l, r> for SDF3D(at){
+    //let dl = eval l.Sdf3d(at);
+    let dr = eval r.SDF3D(at);
+    if at.x < t{
+        dr
+    }else{
+        dr
+    }
+}
+
+operation MyAdOp();
+
+impl MyAdOp<sub> for SDF3D(at){
+    let sd = eval sub.SDF3D(at);
+    let res = diff(sd, at);
+    res.y
+}
+
+export fn mysdf(at: vec3) -> real{
+    csg sphere = MyAdOp(){
+        MySwitch(0.0){
+            Sphere(1.0)
+        }{
+            Sphere(1.0)
+        }
+    };
+    eval sphere.SDF3D(at)
+}

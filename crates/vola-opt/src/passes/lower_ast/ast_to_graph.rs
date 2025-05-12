@@ -261,13 +261,16 @@ impl Optimizer {
         let concept = implblock.concept.0.clone();
         //the CSG node it is implemented for
         let csg = implblock.dst.0.clone();
-        let implkey = ImplKey { concept, node: csg };
+        let implkey = ImplKey {
+            concept,
+            csgdef: csg,
+        };
 
         if let Some(existing) = self.concept_impl.get(&implkey) {
             let err = OptError::Any {
                 text: format!(
                     "implementation for {}::{} already exists!",
-                    implkey.node, implkey.concept
+                    implkey.csgdef, implkey.concept
                 ),
             };
             return Err(
@@ -290,7 +293,7 @@ impl Optimizer {
             csgdef
         } else {
             let err = OptError::Any {
-                text: format!("CSG \"{}\" was undefined!", implkey.node),
+                text: format!("CSG \"{}\" was undefined!", implkey.csgdef),
             };
             return Err(VolaError::error_here(err, span, "For this implementation"));
         };
@@ -391,7 +394,7 @@ impl Optimizer {
 
         self.names.set(
             lambda.into(),
-            format!("impl {} for {}", implkey.node, implkey.concept),
+            format!("impl {} for {}", implkey.csgdef, implkey.concept),
         );
 
         let interned = Impl {

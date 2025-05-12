@@ -23,7 +23,7 @@ pub mod dot;
 mod error;
 pub use error::{error_reporter, warning_reporter, VolaError};
 mod reporter;
-pub use reporter::{cache_file, report, reset_file_cache};
+pub use reporter::{cache_file, report, report_with_fallback, reset_file_cache, set_fallback_file};
 
 pub type FileString = SmallString<[u8; 32]>;
 
@@ -42,6 +42,8 @@ pub struct Span {
 }
 
 impl Span {
+    ///The filename used in a reported span, if no file is set
+    pub const FALLBACK_FILE: &'static str = "no-span-source";
     pub fn empty() -> Self {
         Span {
             file: FileString::default(),
@@ -93,7 +95,11 @@ impl Display for Span {
 impl ariadne::Span for Span {
     type SourceId = std::path::Path;
     fn source(&self) -> &Self::SourceId {
-        &std::path::Path::new(self.file.as_str())
+        if self.file.is_empty() {
+            &std::path::Path::new(Self::FALLBACK_FILE)
+        } else {
+            &std::path::Path::new(self.file.as_str())
+        }
     }
     fn start(&self) -> usize {
         self.byte_start

@@ -1,17 +1,16 @@
 //BEGIN-CONFIG
 //EXEC-FN:myfield
 //EXEC-ARGS:0.0,0.0,0.0
-//EXEC-EPS:0.1
-//EXEC-RES:3
+//EXEC-EPS:0.001
+//EXEC-RES:0
 //END-CONFIG
 //
 
-module std;
+module super::std;
 
-
+//Moves two cubes sideways, left and right. So we _should_ be exactly on the boundary
 fn mydag() -> csg{
     csg mysphere = Sphere(1.0);
-
     Union(){
         Translate([1.0, 0.0, 0.0]){mysphere}
     }{
@@ -19,7 +18,7 @@ fn mydag() -> csg{
     }
 }
 
-export fn myFn(at: vec3) -> real{
+export fn myfield(at: vec3) -> real{
 	csg f = mydag();
 	eval f.SDF3D(at)
 }

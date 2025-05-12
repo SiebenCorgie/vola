@@ -1,0 +1,13 @@
+//BEGIN-CONFIG
+//EXEC-FN:myfield
+//EXEC-ARGS:3.0,1.0,4.0
+//EXEC-EPS:0.1
+//EXEC-RES:4.1
+//END-CONFIG
+
+module super::std;
+
+export fn myfield(at: vec3) -> real{
+    csg s = Sphere(1.0);
+    eval s.SDF3D(at)
+}

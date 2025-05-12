@@ -10,6 +10,7 @@ use crate::{
         arithmetic::{BinaryArith, BinaryArithOp},
         relational::{BinaryRel, BinaryRelOp},
     },
+    common::Ty,
     imm::ImmNat,
     OptEdge, OptError, OptGraph, OptNode, Optimizer,
 };
@@ -18,6 +19,7 @@ use rvsdg::{
     edge::{InportLocation, InputType, OutportLocation, OutputType},
     region::RegionLocation,
     smallvec::SmallVec,
+    util::abstract_node_type::AbstractNodeType,
     SmallColl,
 };
 use rvsdg_viewer::View;
@@ -221,13 +223,17 @@ impl BlockCtx {
                 //If we can't find the producer, check if it is a context variable. In that case, we are likely trying to import
                 //unset context (for instance when building an impl block).
                 //for those its okay to _just use_ that port, without having a producer
-                if let OutputType::ContextVariableArgument(_i) = port.output {
-                    port
-                } else {
-                    let err = OptError::Internal(format!(
-                        "Could not route \"{name}\" into region. This is a bug!"
-                    ));
-                    return Err(VolaError::new(err));
+
+                match (graph[port.node].into_abstract(), port.output) {
+                    (AbstractNodeType::Theta, OutputType::Argument(_)) => port,
+                    (AbstractNodeType::Gamma, OutputType::EntryVariableArgument { .. }) => port,
+                    (AbstractNodeType::Lambda, OutputType::ContextVariableArgument(_)) => port,
+                    _other => {
+                        let err = OptError::Internal(format!(
+                            "Could not route \"{name}\" into region. This is a bug!"
+                        ));
+                        return Err(VolaError::new(err));
+                    }
                 }
             };
 
@@ -303,6 +309,7 @@ impl BlockCtx {
         //now push the _old_ active scope to the parents
         self.parent_scopes.push(new_scope);
     }
+
     ///Closes the scope, and pops back the last parent. Returns the active scope at _closing_ time.
     pub fn close_scope(&mut self) -> Scope {
         //pop last parent, then switch it back to active and return the _old_ scope
@@ -364,6 +371,8 @@ impl Optimizer {
             Stmt::Assign(assign) => match ctx.find_variable(&mut self.graph, &assign.dst.0) {
                 Ok(_old_src) => {
                     let expr_src = self.build_expr(assign.expr, region, ctx)?;
+                    self.names
+                        .set(expr_src.into(), format!("assign {} = ", assign.dst.0));
                     //Rewrite expression-src to new assignment
                     if let Err(err) = ctx.write_var(&assign.dst.0, expr_src) {
                         return Err(err.with_label(assign.span.clone(), "here"));
@@ -376,40 +385,77 @@ impl Optimizer {
             },
             Stmt::Csg(csg_binding) => {
                 let expr_src = self.build_expr(csg_binding.expr, region, ctx)?;
+                self.names.set(
+                    expr_src.into(),
+                    format!("csg {} = ", csg_binding.decl_name.0),
+                );
                 //NOTE: We make sure that the produced value's src is a CSG node, otherwise we fail, because thats
                 //the semantic of the node
                 let producer = self.graph.find_producer_simple(expr_src);
                 for prod in producer {
-                    //can only test for simple-node producers, otherwise the type-derive will catch it later on.
-                    if self.graph[prod.node].node_type.is_simple() {
-                        if self.graph[prod.node]
-                            .node_type
-                            .unwrap_simple_ref()
-                            .node
-                            .dialect()
-                            != "csg"
-                        {
-                            let node_name = self.graph[prod.node].name();
-                            let node_span = self.find_span(prod.node.into());
-                            let err = OptError::Any {
-                                text: format!("Expected a CSG node to be bound to a CSG variable, but \"{}\" is not a CSG operation", node_name),
-                            };
-                            if let Some(span) = node_span {
-                                return Err(VolaError::error_here(
-                                    err,
-                                    csg_binding.span.clone(),
-                                    "here",
-                                )
-                                .with_label(span, "this should be a CSG-value"));
-                            } else {
-                                return Err(VolaError::error_here(
-                                    err,
-                                    csg_binding.span.clone(),
-                                    "here",
-                                ));
-                            };
+                    let node_name = self.graph[prod.node].name();
+                    let node_span = self.find_span(prod.node.into());
+                    match self.graph[prod.node].into_abstract() {
+                        AbstractNodeType::Simple => {
+                            if self.graph[prod.node]
+                                .node_type
+                                .unwrap_simple_ref()
+                                .node
+                                .dialect()
+                                != "csg"
+                            {
+                                let err = OptError::Any {
+                                    text: format!("Expected a CSG node to be bound to a CSG variable, but \"{}\" is not a CSG operation", node_name),
+                                };
+                                if let Some(span) = node_span {
+                                    return Err(VolaError::error_here(
+                                        err,
+                                        csg_binding.span.clone(),
+                                        "here",
+                                    )
+                                    .with_label(span, "this should be a CSG-value"));
+                                } else {
+                                    return Err(VolaError::error_here(
+                                        err,
+                                        csg_binding.span.clone(),
+                                        "here",
+                                    ));
+                                };
+                            }
                         }
+                        AbstractNodeType::Apply => {
+                            //if this is a apply node, make sure it does _not_ return a csg-type.
+                            //try to deduce the type of this node
+                            let ty = self.get_or_derive_type(prod, false);
+                            if ty != Ty::CSG {
+                                let err = OptError::Any {
+                                    text: format!(
+                                        "Called function should return `{}`, but returns '{}', consider using a let statement instead",
+                                        Ty::CSG,
+                                        ty
+                                    ),
+                                };
+                                if let Some(span) = node_span {
+                                    return Err(VolaError::error_here(
+                                        err,
+                                        csg_binding.span.clone(),
+                                        "here",
+                                    )
+                                    .with_label(span, "for this function"));
+                                } else {
+                                    return Err(VolaError::error_here(
+                                        err,
+                                        csg_binding.span.clone(),
+                                        "here",
+                                    ));
+                                }
+                            }
+                        }
+                        _ => {}
                     }
+
+                    //can only test for simple-node producers, otherwise the type-derive will catch it later on.
+                    if self.graph[prod.node].node_type.is_simple() {}
                 }
 
                 if let Err(error) = ctx.define_var(csg_binding.decl_name.0, expr_src) {
@@ -419,42 +465,77 @@ impl Optimizer {
             }
             Stmt::Let(let_binding) => {
                 let expr_src = self.build_expr(let_binding.expr, region, ctx)?;
-                //NOTE: We make sure that the produced value's src is a CSG node, otherwise we fail, because thats
-                //the semantic of the node
                 let producer = self.graph.find_producer_simple(expr_src);
+                self.names.set(
+                    expr_src.into(),
+                    format!("let {} = ", let_binding.decl_name.0),
+                );
                 for prod in producer {
                     //note we can only check nodes that are created _here_.
-                    if self.graph[prod.node].node_type.is_simple() {
-                        if self.graph[prod.node]
-                            .node_type
-                            .unwrap_simple_ref()
-                            .node
-                            .dialect()
-                            == "csg"
-                        {
-                            let node_name = self.graph[prod.node].name();
-                            let node_span = self.find_span(prod.node.into());
-                            let err = OptError::Any {
-                                text: format!(
-                                    "Expected a no CSG node to be bound to a variable, but {} is CSG",
-                                    node_name
-                                ),
-                            };
-                            if let Some(span) = node_span {
-                                return Err(VolaError::error_here(
-                                    err,
-                                    let_binding.span.clone(),
-                                    "here",
-                                )
-                                .with_label(span, "this should not be a CSG"));
-                            } else {
-                                return Err(VolaError::error_here(
-                                    err,
-                                    let_binding.span.clone(),
-                                    "here",
-                                ));
+                    let node_name = self.graph[prod.node].name();
+                    let node_span = self.find_span(prod.node.into());
+                    match self.graph[prod.node].into_abstract() {
+                        AbstractNodeType::Simple => {
+                            if self.graph[prod.node]
+                                .node_type
+                                .unwrap_simple_ref()
+                                .node
+                                .dialect()
+                                == "csg"
+                            {
+                                //NOTE: We make sure that the produced value's src is a CSG node, otherwise we fail, because thats
+                                //the semantic of the node
+                                let err = OptError::Any {
+                                    text: format!(
+                                        "Expected a none-CSG node to be bound to a variable, but {} is CSG",
+                                        node_name
+                                    ),
+                                };
+                                if let Some(span) = node_span {
+                                    return Err(VolaError::error_here(
+                                        err,
+                                        let_binding.span.clone(),
+                                        "here",
+                                    )
+                                    .with_label(span, "this should not be a CSG"));
+                                } else {
+                                    return Err(VolaError::error_here(
+                                        err,
+                                        let_binding.span.clone(),
+                                        "here",
+                                    ));
+                                }
                             }
                         }
+                        AbstractNodeType::Apply => {
+                            //if this is a apply node, make sure it does _not_ return a csg-type.
+                            //try to deduce the type of this node
+                            let ty = self.get_or_derive_type(prod, false);
+                            if ty == Ty::CSG {
+                                let err = OptError::Any {
+                                    text: format!(
+                                        "Called function should return not return `{}`, consider using a csg-binding instead",
+                                        ty
+                                    ),
+                                };
+                                if let Some(span) = node_span {
+                                    return Err(VolaError::error_here(
+                                        err,
+                                        let_binding.span.clone(),
+                                        "here",
+                                    )
+                                    .with_label(span, "for this function"));
+                                } else {
+                                    return Err(VolaError::error_here(
+                                        err,
+                                        let_binding.span.clone(),
+                                        "here",
+                                    ));
+                                }
+                            }
+                        }
+                        //Rest is not checkt semantically atm
+                        _ => {}
                     }
                 }
 
@@ -905,8 +986,14 @@ impl Optimizer {
                     panic!("assumed argument port!");
                 };
 
+                //NOTE: if a import-routine has alread pulled a edge to the result, disconnect it
+                if let Some(edg) = self.graph[result_lv].edge.clone() {
+                    let _ = self.graph.disconnect(edg).unwrap();
+                }
+
                 if import_port == last_use {
                     //is used, but not redefined, map back to its own lv
+
                     self.graph
                         .connect(*import_port, result_lv, OptEdge::value_edge_unset())
                         .unwrap();
@@ -989,6 +1076,23 @@ impl Optimizer {
                 gamma.as_outport_location(OutputType::ExitVariableOutput(export_ex)),
             )
             .unwrap();
+        }
+
+        //fix up all loop-variables that where imported read-only.
+        //This can happen if an nested expression/stmt _imports_ somehing, but doesn't overwrite it.
+        for lv in 0..self.graph[theta]
+            .node_type
+            .unwrap_theta_ref()
+            .loop_variable_count()
+        {
+            let lv_result = InputType::Result(lv).to_location(theta);
+            if self.graph[lv_result].edge.is_none() {
+                //map as loop-invariant value
+                let lv_argument = OutputType::Argument(lv).to_location(theta);
+                self.graph
+                    .connect(lv_argument, lv_result, OptEdge::value_edge_unset())
+                    .unwrap();
+            }
         }
 
         Ok(())

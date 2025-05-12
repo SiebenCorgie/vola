@@ -5,7 +5,7 @@
 //EXEC-RES:42.0
 //END-CONFIG
 
-module std;
+module super::std;
 
 entity Switch();
 

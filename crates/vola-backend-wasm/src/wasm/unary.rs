@@ -48,6 +48,9 @@ impl From<&Trig> for WasmNode {
             TrigOp::ASin => WasmNode::Runtime(WasmRuntimeOp::new_with_signature(1, ExternOp::ASin)),
             TrigOp::ACos => WasmNode::Runtime(WasmRuntimeOp::new_with_signature(1, ExternOp::ACos)),
             TrigOp::ATan => WasmNode::Runtime(WasmRuntimeOp::new_with_signature(1, ExternOp::ATan)),
+            other => {
+                panic!("Wasm does not support {other:?}");
+            }
         }
     }
 }

@@ -5,7 +5,7 @@
 //EXEC-RES:3.0,1.0,1.0,1.0
 //END-CONFIG
 
-module std;
+module super::std;
 
 export fn myField(at: vec3) -> (real, vec3){
 	csg t = Sphere(1.0);

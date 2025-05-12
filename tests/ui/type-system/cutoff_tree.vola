@@ -5,7 +5,7 @@
 //EXEC-RES:-0.7556544,0.0,0.0,1.0
 //END-CONFIG
 
-module std;
+module super::std;
 
 impl Box for Color(at){
 	[0.0, 1.0, 0.0]

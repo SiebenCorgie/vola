@@ -60,7 +60,7 @@ use rvsdg::{
     edge::{InportLocation, OutportLocation, OutputType},
     region::RegionLocation,
     util::abstract_node_type::AbstractNodeType,
-    NodeRef,
+    NodeRef, SmallColl,
 };
 use vola_common::{Span, VolaError};
 
@@ -93,6 +93,10 @@ impl Optimizer {
         //TODO: Can speed up thing, or make them slower, do heuristically
         //self.graph.dne_region(region)?;
 
+        if let Some(parent_lmd) = self.graph.find_parent_lambda_or_phi(entrypoint) {
+            self.graph.disconnect_unused_context_variables(parent_lmd);
+        }
+
         if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("DUMP_FWAD_LINEARIZED").is_ok() {
             self.push_debug_state(&format!("fw-autodiff-{entrypoint}-linearized"));
         }
@@ -115,7 +119,7 @@ impl Optimizer {
             .dne_region(region)
             .map_err(|e| VolaError::new(e.into()))?;
         let span = self.find_span(region.into()).unwrap_or(Span::empty());
-        self.derive_region(region, span.clone())?;
+        self.derive_region(region, span.clone(), true)?;
 
         //All entrypoints are with respect to a single scalar at this point,
         //and hooked up to the vector-value_creator already (if-needed).
@@ -142,6 +146,7 @@ impl Optimizer {
         value: OutportLocation,
     ) -> Vec<NodeRef> {
         //build dependency node list for diff node's expression
+
         let mut dependencies: Vec<_> = self
             .graph
             .walk_predecessor_nodes_region(value.node, region)
@@ -235,7 +240,7 @@ impl Optimizer {
 
         //Before ending, always do a final type derive though
         let span = self.find_span(region.into()).unwrap_or(Span::empty());
-        self.derive_region(region, span).map_err(|e| {
+        self.derive_region(region, span, true).map_err(|e| {
             //report error immediatly, since we'll discard the context
             e.report();
             e.error
@@ -259,10 +264,10 @@ impl Optimizer {
         //handle node derivative
         let response = self.fwad_handle_node(parent_region, node, ctx)?;
 
-        assert_eq!(response.src_output, self.value_producer_port(node).unwrap());
+        //assert_eq!(response.src_output, self.value_producer_port(node).unwrap());
         //push active derivative into cache
-        ctx.expr_cache
-            .insert(response.src_output, response.diff_output);
+        //ctx.expr_cache
+        //    .insert(response.src_output, response.diff_output);
 
         //now hookup all post-connection ports that are signaled by the node handler.
         for (post_diff_src, targets) in response.chained_derivatives {
@@ -280,6 +285,7 @@ impl Optimizer {
     }
 
     /// Handles the creation of the derivative of a node, as well as generating additional connection data.
+    /// This will produce _all_ differentials in case of CF-nodes
     fn fwad_handle_node(
         &mut self,
         region: RegionLocation,
@@ -401,6 +407,7 @@ impl Optimizer {
                         region_index: 0,
                     },
                     Span::empty(),
+                    true,
                 )
                 .unwrap();
 
@@ -418,8 +425,6 @@ impl Optimizer {
                 //We handle active gamma nodes by deep-copying them, and then recursing the forward-algorithm
                 //within that region. Once that region returns,
                 //we return the gamma-node's result
-                let original_value_output =
-                    node.as_outport_location(OutputType::ExitVariableOutput(0));
                 let gamma_cpy = self.graph.deep_copy_node(node, region);
                 //Copy over connections
                 self.copy_input_connections(node, gamma_cpy);
@@ -435,37 +440,98 @@ impl Optimizer {
                 ctx.activity.trace_node_activity(self, gamma_cpy);
                 //Now with the activity and producer-state set,
                 //let the recursion handle all region's outputs.
-                for reg in 0..self.graph[gamma_cpy].regions().len() {
-                    let subregion = RegionLocation {
-                        node: gamma_cpy,
-                        region_index: reg,
-                    };
 
-                    for resultty in self.graph[gamma_cpy].result_types(reg) {
-                        let result_port = InportLocation {
-                            node: gamma_cpy,
-                            input: resultty,
-                        };
-                        if let Some(value_edge) = self.graph[result_port].edge {
-                            let src = *self.graph[value_edge].src();
-                            let output = self.forward_diff_in_region(subregion, ctx, src)?;
-                            //disconnect old edge, connect new edge
-                            let _old_value = self.graph.disconnect(value_edge).unwrap();
-                            //Don't know the type yet though
-                            self.graph
-                                .connect(output, result_port, OptEdge::value_edge_unset())?;
+                let regcount = self.graph[gamma_cpy].regions().len();
+                let mut diff_pairs = SmallColl::new();
+                for ex in self.graph[gamma_cpy].outport_types() {
+                    let original_value_output = node.as_outport_location(ex);
+                    let ex_diff_output = ex.to_location(gamma_cpy);
+
+                    //create derivative for the ex-value in both branches, rewire, and publish
+                    //derivative mapping to context
+
+                    //NOTE: for sanity we check that all are connected, if any is connected
+                    match self.all_connected(gamma_cpy, ex) {
+                        Ok(any_connected) => {
+                            //Bail if none are connected
+                            if !any_connected {
+                                continue;
+                            }
+                        }
+                        Err(_) => {
+                            return Err(
+                                AutoDiffError::GammaExitInvalid(ex.to_location(gamma_cpy)).into()
+                            );
                         }
                     }
+
+                    //build differential in both branches
+                    for branch in 0..regcount {
+                        let subregion = RegionLocation {
+                            node: gamma_cpy,
+                            region_index: branch,
+                        };
+                        let exresult = ex_diff_output
+                            .output
+                            .map_to_in_region(branch)
+                            .unwrap()
+                            .to_location(gamma_cpy);
+                        let src = if let Some(ex_source) = self.graph.inport_src(exresult) {
+                            ex_source
+                        } else {
+                            //had no source, but that should have been caught before.
+                            unreachable!();
+                        };
+
+                        //there is an edge case, where the _src_ is the argument of the just copied
+                        //gamma-node. This is the case if the gamma basically just
+                        //acts an _select_. In that case, dispatch for the entry-variable
+                        if src.output.is_argument() && src.node == gamma_cpy {
+                            //The actual source of the value
+                            let ev_input = src
+                                .output
+                                .map_out_of_region()
+                                .unwrap()
+                                .to_location(gamma_cpy);
+                            let actual_source = self.graph.inport_src(ev_input).unwrap();
+                            let parent_region = self.graph[gamma_cpy].parent.unwrap();
+
+                            //fetch the old value edge
+                            let old_value_edge = self.graph[ev_input].edge.unwrap();
+                            let output =
+                                self.forward_diff_in_region(parent_region, ctx, actual_source)?;
+                            //rewire ev-input to diffed-source
+                            let _old_value = self.graph.disconnect(old_value_edge).unwrap();
+                            self.graph
+                                .connect(output, ev_input, OptEdge::value_edge_unset())?;
+                        } else {
+                            //This is the standard case, where we can just fice the fw_diff for the branch region, and rewire
+                            //the result to be the differential.
+
+                            //fetch the old value edge
+                            let old_value_edge = self.graph[exresult].edge.unwrap();
+                            let output = self.forward_diff_in_region(subregion, ctx, src)?;
+                            //disconnect old edge, connect new edge
+                            let _old_value = self.graph.disconnect(old_value_edge).unwrap();
+                            //Don't know the type yet though
+                            self.graph
+                                .connect(output, exresult, OptEdge::value_edge_unset())?;
+                        }
+                    }
+
+                    //Push diff pair
+                    diff_pairs.push((original_value_output, ex_diff_output));
+                    //publish result to rewireing
+                    ctx.expr_cache.insert(original_value_output, ex_diff_output);
                 }
 
                 self.names
                     .set(gamma_cpy.into(), format!("Derivative of {node}"));
 
-                let result_port = gamma_cpy.as_outport_location(OutputType::ExitVariableOutput(0));
-                //register the diffed output in the cache for the gamma-nodes output.
-                ctx.expr_cache.insert(original_value_output, result_port);
-                //finaly return the gamma's output as the diff value
-                Ok(AdResponse::new(original_value_output, result_port))
+                //Return the
+                //NOTE: We also marked all additional results with derivatives.
+
+                Ok(AdResponse::with_pairs(diff_pairs))
             }
             other => return Err(AutoDiffError::FwadUnexpectedNodeType(other).into()),
         }
@@ -500,6 +566,11 @@ impl Optimizer {
             }
         };
 
+        //insert response into expression_cache
+        for (src_output, diff_output) in &response.diff_mapping {
+            let _old = ctx.expr_cache.insert(*src_output, *diff_output);
+        }
+
         Ok(response)
     }
 
@@ -521,7 +592,6 @@ impl Optimizer {
             //
             //      For vectors this means initing _the-right_ index with one, same for matrix.
             //      We have that information from the activity trace, which if why we'll use that.
-            //println!("Getting {port:?} : {:?}", activity.wrt_producer.get(&port));
             Ok(ctx
                 .activity
                 .build_diff_init_value_for_wrt(self, region, port))

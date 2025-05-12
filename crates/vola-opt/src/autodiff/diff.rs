@@ -24,7 +24,7 @@ use vola_common::Span;
 use crate::{
     alge::{
         arithmetic::{BinaryArith, BinaryArithOp, UnaryArith, UnaryArithOp},
-        buildin::Buildin,
+        buildin::{Buildin, BuildinOp},
         logical::{BinaryBool, UnaryBool},
         matrix::UnaryMatrix,
         relational::BinaryRel,
@@ -374,12 +374,128 @@ impl Optimizer {
                 //See https://math.stackexchange.com/questions/1108131/what-is-cos%C2%B2x
                 todo!("{trigop:?} not implemented")
             }
-            _ => todo!("{trigop:?} not implemented"),
+            TrigOp::ASin => {
+                //asin(x)' = 1 / sqrt(1.0 - x^2)
+                let diffout = self
+                    .graph
+                    .on_region(&region, |g| {
+                        let one = g.insert_node(OptNode::new(ImmScalar::new(1.0), span.clone()));
+                        let two = g.insert_node(OptNode::new(ImmScalar::new(2.0), span.clone()));
+                        let (powout, _) = g
+                            .connect_node(
+                                OptNode::new(Buildin::new(BuildinOp::Pow), span.clone()),
+                                [src, two.output(0)],
+                            )
+                            .unwrap();
+                        let (subout, _) = g
+                            .connect_node(
+                                OptNode::new(BinaryArith::new(BinaryArithOp::Add), span.clone()),
+                                [one.output(0), powout.output(0)],
+                            )
+                            .unwrap();
+                        let (sqrtout, _) = g
+                            .connect_node(
+                                OptNode::new(Buildin::new(BuildinOp::SquareRoot), span.clone()),
+                                [subout.output(0)],
+                            )
+                            .unwrap();
+                        let (div, _) = g
+                            .connect_node(
+                                OptNode::new(BinaryArith::new(BinaryArithOp::Div), span.clone()),
+                                [one.output(0), sqrtout.output(0)],
+                            )
+                            .unwrap();
+
+                        div.output(0)
+                    })
+                    .unwrap();
+
+                Ok(self.build_chain_rule_for(&region, node.output(0), diffout, src))
+            }
+            TrigOp::ACos => {
+                //acos(x)' = -(1/sqrt(1.0 - x^2))
+                let diffout = self
+                    .graph
+                    .on_region(&region, |g| {
+                        let one = g.insert_node(OptNode::new(ImmScalar::new(1.0), span.clone()));
+                        let two = g.insert_node(OptNode::new(ImmScalar::new(2.0), span.clone()));
+                        let (powout, _) = g
+                            .connect_node(
+                                OptNode::new(Buildin::new(BuildinOp::Pow), span.clone()),
+                                [src, two.output(0)],
+                            )
+                            .unwrap();
+                        let (subout, _) = g
+                            .connect_node(
+                                OptNode::new(BinaryArith::new(BinaryArithOp::Add), span.clone()),
+                                [one.output(0), powout.output(0)],
+                            )
+                            .unwrap();
+                        let (sqrtout, _) = g
+                            .connect_node(
+                                OptNode::new(Buildin::new(BuildinOp::SquareRoot), span.clone()),
+                                [subout.output(0)],
+                            )
+                            .unwrap();
+                        let (div, _) = g
+                            .connect_node(
+                                OptNode::new(BinaryArith::new(BinaryArithOp::Div), span.clone()),
+                                [one.output(0), sqrtout.output(0)],
+                            )
+                            .unwrap();
+                        let (neg, _) = g
+                            .connect_node(
+                                OptNode::new(UnaryArith::new(UnaryArithOp::Neg), span.clone()),
+                                [div.output(0)],
+                            )
+                            .unwrap();
+                        neg.output(0)
+                    })
+                    .unwrap();
+
+                Ok(self.build_chain_rule_for(&region, node.output(0), diffout, src))
+            }
+            TrigOp::ATan => {
+                //atan(x)' = 1/(x^2 + 1)
+                let diffout = self
+                    .graph
+                    .on_region(&region, |g| {
+                        let one = g.insert_node(OptNode::new(ImmScalar::new(1.0), span.clone()));
+                        let two = g.insert_node(OptNode::new(ImmScalar::new(2.0), span.clone()));
+                        let (powout, _) = g
+                            .connect_node(
+                                OptNode::new(Buildin::new(BuildinOp::Pow), span.clone()),
+                                [src, two.output(0)],
+                            )
+                            .unwrap();
+                        let (addout, _) = g
+                            .connect_node(
+                                OptNode::new(BinaryArith::new(BinaryArithOp::Add), span.clone()),
+                                [powout.output(0), two.output(0)],
+                            )
+                            .unwrap();
+                        let (div, _) = g
+                            .connect_node(
+                                OptNode::new(BinaryArith::new(BinaryArithOp::Div), span.clone()),
+                                [one.output(0), addout.output(0)],
+                            )
+                            .unwrap();
+                        div.output(0)
+                    })
+                    .unwrap();
+
+                Ok(self.build_chain_rule_for(&region, node.output(0), diffout, src))
+            }
+            //TrigOp::ATan2 => {
+            //See https://de.wikipedia.org/wiki/Arctan2#Ableitungen (german)
+            //    we use the general form
+            //}
+            _ => todo!("differentiation of {trigop:?} not implemented"),
         }
     }
 
-    //Small helper that makes chaining derivatives easier (building the chain rule).
-    //Basically for a given f(g(x)) you supply `f'(g(x))` (`diffed_output`), and tell it what the source of `g(x)` is (active_sub_src). It'll return the outport of `f'(g'(x)) * g'(x)` where `g'(x)` is enqued in the deferred list.
+    ///Small helper that makes chaining derivatives easier (building the chain rule).
+    ///Basically for a given f(g(x)) you supply `f'(g(x))` (`diffed_output`), and tell it what the source of `g(x)` is (active_sub_src). It'll return the outport of `f'(g'(x)) * g'(x)` where `g'(x)` is enqued in the deferred list.
     fn build_chain_rule_for(
         &mut self,
         region: &RegionLocation,

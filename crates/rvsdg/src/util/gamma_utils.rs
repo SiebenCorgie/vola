@@ -9,7 +9,7 @@
 //! Implements gamma-node (if-then-else) utility functions. For instance specializing for a chosen branch.
 
 use crate::{
-    edge::{InportLocation, InputType, LangEdge},
+    edge::{InportLocation, InputType, LangEdge, OutportLocation, OutputType},
     nodes::LangNode,
     region::RegionLocation,
     NodeRef, Rvsdg,
@@ -124,5 +124,54 @@ impl<N: LangNode + StructuralClone + 'static, E: LangEdge + StructuralClone + 's
 
         //finally remove the whole gamma node
         self.remove_node(gamma_node).unwrap();
+    }
+}
+
+impl<N: LangNode, E: LangEdge> Rvsdg<N, E> {
+    ///Returns true if the exit variable is connected to the same entry variable in both branches.
+    ///
+    ///Returns false if the port is either is not a exit_variable, or the former case is not given.
+    pub fn is_ev_untouched(&self, exit_variable: OutportLocation) -> bool {
+        match exit_variable.output {
+            OutputType::ExitVariableOutput(_) => {}
+            _ => return false,
+        }
+
+        let mut found_entry_variable_index = None;
+        for region_index in 0..self[exit_variable.node].regions().len() {
+            if let Some(inregion) = exit_variable.output.map_to_in_region(region_index) {
+                if let Some(source) = self.inport_src(inregion.to_location(exit_variable.node)) {
+                    match source.output {
+                        OutputType::EntryVariableArgument { .. } => {
+                            if let Some(found) = found_entry_variable_index {
+                                //We already have a ev we search for. However, its not the same. So bail
+                                if found != source.output {
+                                    return false;
+                                }
+                            } else {
+                                //If this is not the first region, this means that the first region was not connected to an ev, so we
+                                //must bail.
+                                if region_index != 0 {
+                                    return false;
+                                } else {
+                                    //If this is the first region, and it is connected to an ev, set the found ev.
+                                    found_entry_variable_index = Some(source.output);
+                                }
+                            }
+                        }
+                        //Bail if not connected to a entry variable argument
+                        _ => return false,
+                    }
+                }
+            } else {
+                //Could not map, so some kind of invalid setup.
+                #[cfg(feature = "log")]
+                log::warn!("Could not map {exit_variable:?} to region {region_index}, possibly inconsistent node-state");
+
+                return false;
+            }
+        }
+
+        true
     }
 }

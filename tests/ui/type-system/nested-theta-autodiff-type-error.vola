@@ -1,0 +1,83 @@
+module super::std;
+
+concept GradientSpace: vec3 -> vec3;
+
+fn sign_v2(a: vec2) -> vec2{
+	let x = if a.x > 0.0{
+		1.0
+	}else{
+    	if a.x < 0.0{
+    		-1.0
+    	}else{
+    		0.0
+    	}
+	};
+	let y = if a.y > 0.0{
+		1.0
+	}else{
+    	if a.y < 0.0{
+    		-1.0
+    	}else{
+    		0.0
+    	}
+	};
+
+	[x,y]
+}
+
+
+operation Sdf3dGradient();
+impl Sdf3dGradient<sub> for GradientSpace(at){
+    let sdf = eval sub.SDF3D(at);
+    diff(sdf, at)
+}
+
+operation TrueRepeat(extend: vec2);
+impl TrueRepeat<sub> for SDF3D(at){
+    let p = [at.x, at.z];
+    let id = round(p / extend);
+    let o = sign_v2(p - extend * id);
+    let d = eval sub.SDF3D(at);
+    let js = 0.0;
+    let is = 0.0;
+
+    for j in 0..2
+    {
+        is = 0.0;
+        for i in 0..2
+        {
+            let rid = id + [is, js] * o;
+            let r = p - extend * rid;
+            let subev = eval sub.SDF3D([r.x, at.y, r.y]);
+            d = min(d, subev);
+            is = is + 1.0;
+        }
+        js = js + 1.0;
+    }
+    d
+}
+
+
+
+
+//export fn myField(at: vec3) -> vec3{
+//	csg f = Sdf3dGradient(){TrueRepeat([5.0; 2]){
+//		Translate([0.0, 1.0, 0.0]){
+//			Sphere(1.0)
+//		}
+//	}};
+//
+//	eval f.GradientSpace(at)
+//}
+
+
+
+export fn mysdf(at: vec3) -> real{
+	csg f = TrueRepeat([5.0; 2]){
+		Translate([0.0, 1.0, 0.0]){
+			Sphere(1.0)
+		}
+	};
+
+	eval f.SDF3D(at)
+}

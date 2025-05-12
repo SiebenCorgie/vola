@@ -19,12 +19,12 @@ use crate::{
     WasmBackend,
 };
 
-struct InterningTransformer<'a> {
+struct LoweringTransformer<'a> {
     opt: &'a Optimizer,
     has_failed_transform: bool,
 }
 
-impl<'a> GraphTypeTransformer for InterningTransformer<'a> {
+impl<'a> GraphTypeTransformer for LoweringTransformer<'a> {
     type SrcNode = OptNode;
     type SrcEdge = OptEdge;
     type DstNode = WasmNode;
@@ -102,19 +102,19 @@ impl<'a> GraphTypeTransformer for InterningTransformer<'a> {
 
 impl WasmBackend {
     pub(crate) fn intern_optimizer(&mut self, optimizer: &Optimizer) -> Result<(), WasmError> {
-        //Our interning strategy currently just translates all "Alge" nodes into "WASM" nodes with best effort fitting.
+        //Our lowering strategy currently just translates all "Alge" nodes into "WASM" nodes with best effort fitting.
         //For instance a Vector-Vector multiplication is translated into a MulF32.
         //
         //The following scalarize and legalization passes will take care of unfolding etc.
 
-        let mut transformer = InterningTransformer {
+        let mut transformer = LoweringTransformer {
             opt: optimizer,
             has_failed_transform: false,
         };
         let (new_graph, remapping) = optimizer.graph.transform_new(&mut transformer)?;
 
         if transformer.has_failed_transform {
-            return Err(WasmError::InterningFailed);
+            return Err(WasmError::LoweringFailed);
         }
 
         self.graph = new_graph;

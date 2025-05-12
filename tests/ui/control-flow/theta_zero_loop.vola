@@ -5,7 +5,7 @@
 //EXEC-RES:0.0
 //END-CONFIG
 
-module std;
+module super::std;
 
 entity Loopy();
 

@@ -1,0 +1,10 @@
+//BEGIN-CONFIG
+//ERROR:Expected a CSG node to be bound to a CSG variable, but "UniformConstruct" is not a CSG operation
+//END-CONFIG
+
+//NOTE: this should error some way or another.
+module super::std;
+export fn myfield(at: vec3) -> real{
+    csg t = [Sphere(1.0); 3];
+    eval t.SDF(at)
+}

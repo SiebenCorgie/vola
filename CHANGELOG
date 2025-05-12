@@ -2,6 +2,23 @@
 
 For all Vola and RVSDG related crates.
 
+## [0.3] (Pre-Release)
+
+### Added
+
+- An element called `super` in a module import path is now consider the `parent` folder, which allows including modules from a parent directory.
+- Volac's library interface now returns all errors, not just the first
+
+### Changed
+
+- `eval` is now permitted in impl-blocks
+- `eval` is now permitted in control-flow
+- `csg` variables can now be mutated in any context just as any other value.
+
+### Fixed
+
+- Fixed spirv-backend id creation error if multiple nested loops are not interleaved with gamma nodes.
+- Early report errors in ast->opt lowering. Before the lowering would not abort a region after encountering the first error, which produced hard to understand errors.
 
 ## [0.2]
 
