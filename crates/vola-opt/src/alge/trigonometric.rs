@@ -12,6 +12,7 @@ use ahash::AHashMap;
 use rvsdg::{
     region::{Input, Output},
     rvsdg_derive_lang::LangNode,
+    smallvec::{smallvec, SmallVec},
     SmallColl,
 };
 use rvsdg_viewer::{Color, View};
@@ -29,25 +30,44 @@ pub enum TrigOp {
     Sin,
     Cos,
     Tan,
+
     ASin,
     ACos,
+    //Atan(y_over_x)
     ATan,
+
+    Sinh,
+    Cosh,
+    Tanh,
+
+    ASinh,
+    ACosh,
+    ATanh,
+
+    //Atan2(y, x) see Atan2 https://registry.khronos.org/SPIR-V/specs/unified1/GLSL.std.450.pdf
+    ATan2,
 }
 
 #[derive(LangNode)]
 pub struct Trig {
     pub op: TrigOp,
-    #[input]
-    pub inputs: Input,
+    #[inputs]
+    pub inputs: SmallVec<[Input; 2]>,
     #[output]
     pub output: Output,
 }
 
 impl Trig {
     pub fn new(op: TrigOp) -> Self {
+        let inputs = if let TrigOp::ATan2 = op {
+            smallvec![Input::default(); 2]
+        } else {
+            smallvec![Input::default(); 1]
+        };
+
         Trig {
             op,
-            inputs: Input::default(),
+            inputs,
             output: Output::default(),
         }
     }
@@ -76,7 +96,17 @@ impl DialectNode for Trig {
         _concepts: &AHashMap<String, CSGConcept>,
         _csg_defs: &ahash::AHashMap<String, CsgDef>,
     ) -> Result<Ty, OptError> {
-        assert_eq!(input_types.len(), 1);
+        //check input count
+        match self.op {
+            TrigOp::ATan2 => {
+                assert!(input_types.len() == 2);
+                assert!(input_types[0] == input_types[1]);
+            }
+            _ => {
+                assert!(input_types.len() == 1);
+            }
+        }
+
         let input_ty = input_types[0].clone();
 
         match input_ty {
@@ -103,7 +133,7 @@ impl DialectNode for Trig {
         OptNode {
             span,
             node: Box::new(Trig {
-                inputs: Input::default(),
+                inputs: smallvec![Input::default(); self.inputs.len()],
                 output: Output::default(),
                 op: self.op.clone(),
             }),
@@ -120,7 +150,7 @@ impl DialectNode for Trig {
 
     fn try_constant_fold(
         &self,
-        #[allow(unused_variables)] src_nodes: &[Option<&rvsdg::nodes::Node<OptNode>>],
+        src_nodes: &[Option<&rvsdg::nodes::Node<OptNode>>],
     ) -> Option<OptNode> {
         //defined on singular scalar or vector
         if src_nodes.len() == 0 {
@@ -142,6 +172,16 @@ impl DialectNode for Trig {
             TrigOp::ASin => f64::asin,
             TrigOp::ACos => f64::acos,
             TrigOp::ATan => f64::atan,
+            TrigOp::Sinh => f64::sinh,
+            TrigOp::Cosh => f64::cosh,
+            TrigOp::Tanh => f64::tanh,
+            TrigOp::ASinh => f64::asinh,
+            TrigOp::ACosh => f64::acosh,
+            TrigOp::ATanh => f64::atanh,
+            TrigOp::ATan2 => {
+                //TODO: allow folding atan2
+                return None;
+            }
         };
 
         if let Some(vec) = src_nodes[0]

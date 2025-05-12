@@ -119,9 +119,19 @@ impl OptNode {
             "sin" => Some(OptNode::new(Trig::new(TrigOp::Sin), Span::empty())),
             "cos" => Some(OptNode::new(Trig::new(TrigOp::Cos), Span::empty())),
             "tan" => Some(OptNode::new(Trig::new(TrigOp::Tan), Span::empty())),
+
             "asin" => Some(OptNode::new(Trig::new(TrigOp::ASin), Span::empty())),
             "acos" => Some(OptNode::new(Trig::new(TrigOp::ACos), Span::empty())),
             "atan" => Some(OptNode::new(Trig::new(TrigOp::ATan), Span::empty())),
+
+            "sinh" => Some(OptNode::new(Trig::new(TrigOp::Sinh), Span::empty())),
+            "cosh" => Some(OptNode::new(Trig::new(TrigOp::Cosh), Span::empty())),
+            "tanh" => Some(OptNode::new(Trig::new(TrigOp::Tanh), Span::empty())),
+
+            "asinh" => Some(OptNode::new(Trig::new(TrigOp::ASinh), Span::empty())),
+            "acosh" => Some(OptNode::new(Trig::new(TrigOp::ACosh), Span::empty())),
+            "atanh" => Some(OptNode::new(Trig::new(TrigOp::ATanh), Span::empty())),
+            "atan2" => Some(OptNode::new(Trig::new(TrigOp::ATan2), Span::empty())),
             "inverse" | "invert" => Some(OptNode::new(
                 UnaryMatrix::new(UnaryMatrixOp::Invert),
                 Span::empty(),

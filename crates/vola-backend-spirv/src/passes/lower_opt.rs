@@ -379,6 +379,16 @@ impl BackendOp {
             TrigOp::ASin => BackendOp::SpirvOp(SpvOp::GlslOp(GlOp::Asin)),
             TrigOp::ACos => BackendOp::SpirvOp(SpvOp::GlslOp(GlOp::Acos)),
             TrigOp::ATan => BackendOp::SpirvOp(SpvOp::GlslOp(GlOp::Atan)),
+
+            TrigOp::Sinh => BackendOp::SpirvOp(SpvOp::GlslOp(GlOp::Sinh)),
+            TrigOp::Cosh => BackendOp::SpirvOp(SpvOp::GlslOp(GlOp::Cosh)),
+            TrigOp::Tanh => BackendOp::SpirvOp(SpvOp::GlslOp(GlOp::Tanh)),
+
+            TrigOp::ASinh => BackendOp::SpirvOp(SpvOp::GlslOp(GlOp::Asinh)),
+            TrigOp::ACosh => BackendOp::SpirvOp(SpvOp::GlslOp(GlOp::Acosh)),
+            TrigOp::ATanh => BackendOp::SpirvOp(SpvOp::GlslOp(GlOp::Atanh)),
+
+            TrigOp::ATan2 => BackendOp::SpirvOp(SpvOp::GlslOp(GlOp::Atan2)),
         }
     }
 

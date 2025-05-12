@@ -86,7 +86,10 @@ impl Optimizer {
                 //If not, we build a unresolved call
                 enum CallResult {
                     Node(OptNode),
-                    Call(OutportLocation),
+                    Call {
+                        import: OutportLocation,
+                        lambda: OutportLocation,
+                    },
                 }
                 let args: SmallColl<_> = c
                     .args
@@ -110,10 +113,22 @@ impl Optimizer {
                             .find_variable(&mut self.graph, &c.ident.0)
                             .map_err(|e| e.with_label(expr_span.clone(), "here"))?;
                         //make sure this is actually a callable
-                        if let Some(_callable) = self.graph.find_callabel_def(call_output) {
-                            CallResult::Call(call_output)
+                        if let Some(callable) = self.graph.find_callabel_def(call_output) {
+                            CallResult::Call {
+                                import: call_output,
+                                lambda: callable,
+                            }
                         } else {
-                            let err = VolaError::error_here(OptError::Any { text: format!("Could not find a function '{}', because it was already defined as a value", &c.ident.0) }, expr_span, "trying to call this");
+                            let err = VolaError::error_here(
+                                OptError::Any {
+                                    text: format!(
+                                        "Could not find a function '{}' in scope",
+                                        &c.ident.0
+                                    ),
+                                },
+                                expr_span,
+                                "trying to call this",
+                            );
                             if let Some(outspan) = self.find_span(call_output.into()) {
                                 return Err(err.with_label(outspan, "found this"));
                             } else {
@@ -125,25 +140,71 @@ impl Optimizer {
 
                 let call_result = match res {
                     //Serialize as simple node
-                    CallResult::Node(n) => self
-                        .graph
-                        .on_region(&region, |reg| {
-                            let (result, _) = reg.connect_node(n, args).unwrap();
-                            result.output(0)
-                        })
-                        .unwrap(),
-                    //As apply node
-                    CallResult::Call(imported_at) => self
-                        .graph
-                        .on_region(&region, |reg| {
-                            let (call, _edges) = reg.call(imported_at, &args).unwrap();
-                            assert!(
-                                reg.ctx()[call].outputs().len() == 1,
-                                "No multi, or none-result functions supported atm."
+                    CallResult::Node(n) => {
+                        //check that the arg-count matches
+                        if n.node.inputs().len() != args.len() {
+                            let err = VolaError::error_here(
+                                OptError::Any {
+                                    text: format!(
+                                        "{} expects {} arguments, got {}",
+                                        n.node.name(),
+                                        n.node.inputs().len(),
+                                        args.len()
+                                    ),
+                                },
+                                expr_span,
+                                "here",
                             );
-                            call.output(0)
-                        })
-                        .unwrap(),
+                            return Err(err);
+                        }
+
+                        self.graph
+                            .on_region(&region, |reg| {
+                                let (result, _) = reg.connect_node(n, args).unwrap();
+                                result.output(0)
+                            })
+                            .unwrap()
+                    }
+                    //As apply node
+                    CallResult::Call { import, lambda } => {
+                        //check that the arg-count matches
+                        let argcount = self.graph[lambda.node]
+                            .node_type
+                            .unwrap_lambda_ref()
+                            .argument_count();
+                        if argcount != args.len() {
+                            let lmd_name = self.node_name(lambda.node);
+                            let lmd_span = self.find_span(lambda.node.into());
+                            let err = VolaError::error_here(
+                                OptError::Any {
+                                    text: format!(
+                                        "{} expects {} arguments, got {}",
+                                        lmd_name,
+                                        argcount,
+                                        args.len()
+                                    ),
+                                },
+                                expr_span,
+                                "here",
+                            );
+                            if let Some(lmdspan) = lmd_span {
+                                return Err(err.with_label(lmdspan, "function defined here"));
+                            } else {
+                                return Err(err);
+                            }
+                        }
+
+                        self.graph
+                            .on_region(&region, |reg| {
+                                let (call, _edges) = reg.call(import, &args).unwrap();
+                                assert!(
+                                    reg.ctx()[call].outputs().len() == 1,
+                                    "No multi, or none-result functions supported atm."
+                                );
+                                call.output(0)
+                            })
+                            .unwrap()
+                    }
                 };
 
                 Ok(call_result)
