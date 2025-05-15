@@ -131,9 +131,11 @@ impl OSLinearExtrude<sub> for OSSdf(at){
     let t = twist;
     let c = cos(degree_to_radiant(t * (at.y / height) - twist / 2.0));
     let s = sin(degree_to_radiant(t * (at.y / height) - twist / 2.0));
-    let m = [[c, -s], [s, c]];
-    let tw = m * [at.x, at.z];
-    let q = [tw.x, tw.y, at.y];
+    let q = [
+	    at.x * c - at.z * s,
+		at.y,
+		at.x * s + at.z * c
+	];
 
     let relative_scaling = mix(1.0, scale, q.z / -height);
     //depending on the _height_, scale the 2d location
@@ -155,9 +157,12 @@ impl OSLinearExtrude<sub> for OSColor(at){
     let t = twist / (360.0 * (2.0 * 3.141));
     let c = cos(t * at.y);
     let s = sin(t * at.y);
-    let m = [[c, -s], [s, c]];
-    let tw = m * [at.x, at.z];
-    let q = [tw.x, tw.y, at.y];
+	let q = [
+	    at.x * c - at.z * s,
+		at.y,
+		at.x * s + at.z * c
+	];
+	eval sub.Sdf3d(q)
 
     //NOTE: we have no notion of Sdf2D, so just clamping to 2D.
     //Extrude based on twisted space
