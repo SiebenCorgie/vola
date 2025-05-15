@@ -65,7 +65,7 @@ pub struct CsgDef {
 /// a color-concept that just returns a color.
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Clone, Debug)]
-pub struct CSGConcept {
+pub struct CsgConcept {
     pub span: Span,
     pub name: Ident,
     pub src_ty: Ty,

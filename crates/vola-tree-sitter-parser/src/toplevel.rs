@@ -11,7 +11,7 @@ use vola_common::{Span, VolaError};
 use vola_ast::{
     alge::Func,
     common::{Block, CTArg, Call, Ident, Ty, TypedIdent},
-    csg::{CSGConcept, CsgDef, ImplBlock},
+    csg::{CsgConcept, CsgDef, ImplBlock},
     AstEntry, Module,
 };
 
@@ -36,7 +36,7 @@ impl FromTreeSitter for AstEntry {
                 Ok(AstEntry::CsgDef(def))
             }
             "def_concept" => {
-                let def = CSGConcept::parse(ctx, dta, node)?;
+                let def = CsgConcept::parse(ctx, dta, node)?;
                 Ok(AstEntry::Concept(def))
             }
             "impl_block" => Ok(AstEntry::ImplBlock(ImplBlock::parse(ctx, dta, node)?)),

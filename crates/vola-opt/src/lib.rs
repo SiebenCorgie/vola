@@ -49,7 +49,7 @@ use common::Ty;
 use config::Config;
 use graph::{
     auxiliary::{Function, Impl, ImplKey},
-    CSGConcept, CsgDef,
+    CsgConcept, CsgDef,
 };
 use rvsdg::{attrib::FlagStore, Rvsdg};
 
@@ -81,7 +81,7 @@ pub struct Optimizer {
 
     ///All known concept definitions keyed by their name
     //NOTE: using the name, since thats how we reference them all the time.
-    pub concepts: AHashMap<String, CSGConcept>,
+    pub concepts: AHashMap<String, CsgConcept>,
 
     ///All known entity and operation definitions.
     pub csg_node_defs: AHashMap<String, CsgDef>,

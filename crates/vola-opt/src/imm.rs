@@ -10,7 +10,7 @@
 
 use ahash::AHashMap;
 use rvsdg::{region::Output, rvsdg_derive_lang::LangNode, smallvec::SmallVec, SmallColl};
-use vola_ast::csg::{CSGConcept, CsgDef};
+use vola_ast::csg::{CsgConcept, CsgDef};
 
 use crate::{
     common::{DataType, Shape, Ty},
@@ -80,7 +80,7 @@ impl DialectNode for ImmScalar {
     fn try_derive_type(
         &self,
         _inputs: &[Ty],
-        _concepts: &AHashMap<String, CSGConcept>,
+        _concepts: &AHashMap<String, CsgConcept>,
         _csg_defs: &ahash::AHashMap<String, CsgDef>,
     ) -> Result<Ty, OptError> {
         //NOTE: all literals are translated to a _scalar_
@@ -134,7 +134,7 @@ impl DialectNode for ImmVector {
     fn try_derive_type(
         &self,
         _inputs: &[Ty],
-        _concepts: &AHashMap<String, CSGConcept>,
+        _concepts: &AHashMap<String, CsgConcept>,
         _csg_defs: &ahash::AHashMap<String, CsgDef>,
     ) -> Result<Ty, OptError> {
         //NOTE: all literals are translated to a _scalar_
@@ -207,7 +207,7 @@ impl DialectNode for ImmMatrix {
     fn try_derive_type(
         &self,
         _inputs: &[Ty],
-        _concepts: &AHashMap<String, CSGConcept>,
+        _concepts: &AHashMap<String, CsgConcept>,
         _csg_defs: &ahash::AHashMap<String, CsgDef>,
     ) -> Result<Ty, OptError> {
         //NOTE: all literals are translated to a _scalar_
@@ -268,7 +268,7 @@ impl DialectNode for ImmNat {
     fn try_derive_type(
         &self,
         _inputs: &[Ty],
-        _concepts: &AHashMap<String, CSGConcept>,
+        _concepts: &AHashMap<String, CsgConcept>,
         _csg_defs: &ahash::AHashMap<String, CsgDef>,
     ) -> Result<Ty, OptError> {
         //NOTE: all literals are translated to a _scalar_
@@ -321,7 +321,7 @@ impl DialectNode for ImmBool {
     fn try_derive_type(
         &self,
         _inputs: &[Ty],
-        _concepts: &AHashMap<String, CSGConcept>,
+        _concepts: &AHashMap<String, CsgConcept>,
         _csg_defs: &ahash::AHashMap<String, CsgDef>,
     ) -> Result<Ty, OptError> {
         //NOTE: all literals are translated to a _scalar_

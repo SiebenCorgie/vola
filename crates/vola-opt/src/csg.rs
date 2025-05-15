@@ -21,7 +21,7 @@ use rvsdg::{
 use rvsdg_viewer::Color;
 use vola_ast::{
     common::Ident,
-    csg::{CSGConcept, CsgDef},
+    csg::{CsgConcept, CsgDef},
 };
 
 //Macro that implements the "View" trait for an AlgeDialect op
@@ -113,7 +113,7 @@ impl DialectNode for CsgOp {
     fn try_derive_type(
         &self,
         inputs: &[Ty],
-        _concepts: &AHashMap<String, CSGConcept>,
+        _concepts: &AHashMap<String, CsgConcept>,
         csg_defs: &AHashMap<String, CsgDef>,
     ) -> Result<Ty, OptError> {
         //We resole the CSG op by checking, that all inputs adher to the op's specification.

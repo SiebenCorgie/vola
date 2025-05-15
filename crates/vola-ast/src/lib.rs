@@ -21,7 +21,7 @@
 use ahash::AHashSet;
 use alge::Func;
 use common::{CTArg, Comment};
-use csg::{CSGConcept, CsgDef, ImplBlock};
+use csg::{CsgConcept, CsgDef, ImplBlock};
 
 pub use error::AstError;
 use smallvec::smallvec;
@@ -40,11 +40,13 @@ mod error;
 pub mod module;
 mod passes;
 
+pub mod util;
+
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Clone, Debug)]
 pub enum AstEntry {
     Comment(Comment),
-    Concept(CSGConcept),
+    Concept(CsgConcept),
     CsgDef(CsgDef),
     ImplBlock(ImplBlock),
     Func(Func),

@@ -22,7 +22,7 @@ use rvsdg::{
 };
 use rvsdg_viewer::Color;
 use trigonometric::{Trig, TrigOp};
-use vola_ast::csg::{CSGConcept, CsgDef};
+use vola_ast::csg::{CsgConcept, CsgDef};
 use vola_common::Span;
 
 use crate::{autodiff::AutoDiff, common::Ty, error::OptError, DialectNode, OptNode};
@@ -261,7 +261,7 @@ impl DialectNode for EvalNode {
     fn try_derive_type(
         &self,
         input_types: &[Ty],
-        concepts: &AHashMap<String, CSGConcept>,
+        concepts: &AHashMap<String, CsgConcept>,
         _csg_defs: &AHashMap<String, CsgDef>,
     ) -> Result<Ty, OptError> {
         //For eval nodes, the first type must be a callable, and all following must addher to the called concept's definition

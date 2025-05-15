@@ -176,7 +176,7 @@ impl DialectNode for AutoDiff {
     fn try_derive_type(
         &self,
         input_types: &[Ty],
-        _concepts: &ahash::AHashMap<String, vola_ast::csg::CSGConcept>,
+        _concepts: &ahash::AHashMap<String, vola_ast::csg::CsgConcept>,
         _csg_defs: &ahash::AHashMap<String, vola_ast::csg::CsgDef>,
     ) -> Result<Ty, OptError> {
         //By definition we only allow expressions that

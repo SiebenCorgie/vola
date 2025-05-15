@@ -35,7 +35,7 @@ pub(crate) mod convention;
 pub(crate) mod impl_utils;
 pub(crate) mod splat_ty;
 pub use auxiliary::{Function, Impl, ImplKey};
-pub use vola_ast::csg::{CSGConcept, CsgDef};
+pub use vola_ast::csg::{CsgConcept, CsgDef};
 
 ///A node of some dialect
 pub trait DialectNode: LangNode + Any + View {
@@ -48,7 +48,7 @@ pub trait DialectNode: LangNode + Any + View {
     fn try_derive_type(
         &self,
         _input_types: &[Ty],
-        _concepts: &AHashMap<String, CSGConcept>,
+        _concepts: &AHashMap<String, CsgConcept>,
         _csg_defs: &ahash::AHashMap<String, CsgDef>,
     ) -> Result<Ty, OptError> {
         Err(OptError::Any {

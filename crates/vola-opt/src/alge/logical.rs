@@ -14,7 +14,7 @@ use rvsdg::{
     rvsdg_derive_lang::LangNode,
 };
 use rvsdg_viewer::View;
-use vola_ast::csg::{CSGConcept, CsgDef};
+use vola_ast::csg::{CsgConcept, CsgDef};
 use vola_common::Span;
 
 use crate::{common::Ty, imm::ImmBool, DialectNode, OptError, OptNode};
@@ -64,7 +64,7 @@ impl DialectNode for UnaryBool {
     fn try_derive_type(
         &self,
         input_types: &[Ty],
-        _concepts: &AHashMap<String, CSGConcept>,
+        _concepts: &AHashMap<String, CsgConcept>,
         _csg_defs: &AHashMap<String, CsgDef>,
     ) -> Result<Ty, OptError> {
         assert_eq!(input_types.len(), 1);
@@ -174,7 +174,7 @@ impl DialectNode for BinaryBool {
     fn try_derive_type(
         &self,
         input_types: &[Ty],
-        _concepts: &AHashMap<String, CSGConcept>,
+        _concepts: &AHashMap<String, CsgConcept>,
         _csg_defs: &AHashMap<String, CsgDef>,
     ) -> Result<Ty, OptError> {
         assert_eq!(input_types.len(), 2);

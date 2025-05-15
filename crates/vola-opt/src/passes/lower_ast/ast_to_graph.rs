@@ -13,7 +13,7 @@ use rvsdg::{
 use vola_ast::{
     alge::Func,
     common::CTArg,
-    csg::{CSGConcept, CsgDef, ImplBlock},
+    csg::{CsgConcept, CsgDef, ImplBlock},
 };
 use vola_common::{Span, VolaError};
 
@@ -48,7 +48,7 @@ impl Optimizer {
         &mut self,
         _span: Span,
         _ct_args: Vec<CTArg>,
-        concept: CSGConcept,
+        concept: CsgConcept,
     ) -> Result<(), VolaError<OptError>> {
         if let Some(existing_concept) = self.concepts.get(&concept.name.0) {
             let err = OptError::Any {

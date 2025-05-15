@@ -1,4 +1,4 @@
-use vola_ast::csg::{CSGConcept, CsgDef, CsgStmt, ScopedCall};
+use vola_ast::csg::{CsgConcept, CsgDef, CsgStmt, ScopedCall};
 
 use crate::{FormatTree, Keyword};
 
@@ -48,8 +48,8 @@ impl From<&CsgDef> for FormatTree {
     }
 }
 
-impl From<&CSGConcept> for FormatTree {
-    fn from(value: &CSGConcept) -> Self {
+impl From<&CsgConcept> for FormatTree {
+    fn from(value: &CsgConcept) -> Self {
         FormatTree::Seq(vec![
             FormatTree::Keyword(Keyword::Concept),
             FormatTree::from(&value.name),

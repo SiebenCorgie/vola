@@ -23,7 +23,7 @@ use rvsdg::{
     SmallColl,
 };
 use rvsdg_viewer::{Color, View};
-use vola_ast::csg::{CSGConcept, CsgDef};
+use vola_ast::csg::{CsgConcept, CsgDef};
 use vola_common::Span;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -227,7 +227,7 @@ impl DialectNode for BinaryArith {
     fn try_derive_type(
         &self,
         input_types: &[Ty],
-        _concepts: &AHashMap<String, CSGConcept>,
+        _concepts: &AHashMap<String, CsgConcept>,
         _csg_defs: &AHashMap<String, CsgDef>,
     ) -> Result<Ty, OptError> {
         //For all WKOps we first collect all inputs, then let the op check itself.
@@ -357,7 +357,7 @@ impl DialectNode for UnaryArith {
     fn try_derive_type(
         &self,
         input_types: &[Ty],
-        _concepts: &AHashMap<String, CSGConcept>,
+        _concepts: &AHashMap<String, CsgConcept>,
         _csg_defs: &AHashMap<String, CsgDef>,
     ) -> Result<Ty, OptError> {
         assert_eq!(input_types.len(), 1);

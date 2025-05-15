@@ -11,7 +11,7 @@ use vola_common::{Span, VolaError};
 use vola_ast::{
     alge::Expr,
     common::{Block, Call, Ident, Ty, TypedIdent},
-    csg::{CSGConcept, CsgDef, CsgStmt, CsgTy, ScopedCall},
+    csg::{CsgConcept, CsgDef, CsgStmt, CsgTy, ScopedCall},
 };
 
 use super::{FromTreeSitter, ParserCtx};
@@ -191,7 +191,7 @@ impl FromTreeSitter for CsgDef {
     }
 }
 
-impl FromTreeSitter for CSGConcept {
+impl FromTreeSitter for CsgConcept {
     fn parse(
         ctx: &mut ParserCtx,
         dta: &[u8],
@@ -220,7 +220,7 @@ impl FromTreeSitter for CSGConcept {
         ParserError::assert_ast_level_empty(ctx, children.next())?;
         ParserError::assert_node_no_error(ctx, node)?;
 
-        Ok(CSGConcept {
+        Ok(CsgConcept {
             span: Span::from(node).with_file_maybe(ctx.get_file()),
             name,
             src_ty,

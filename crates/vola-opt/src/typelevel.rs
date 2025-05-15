@@ -15,7 +15,7 @@ use rvsdg::{
     SmallColl,
 };
 use rvsdg_viewer::Color;
-use vola_ast::csg::{CSGConcept, CsgDef};
+use vola_ast::csg::{CsgConcept, CsgDef};
 use vola_common::Span;
 
 use crate::{
@@ -109,7 +109,7 @@ impl DialectNode for UniformConstruct {
     fn try_derive_type(
         &self,
         input_types: &[Ty],
-        _concepts: &AHashMap<String, CSGConcept>,
+        _concepts: &AHashMap<String, CsgConcept>,
         _csg_defs: &AHashMap<String, CsgDef>,
     ) -> Result<Ty, OptError> {
         //For the list constructor, we check that all inputs are of the same (algebraic) type, and then derive the
@@ -288,7 +288,7 @@ impl DialectNode for NonUniformConstruct {
     fn try_derive_type(
         &self,
         input_types: &[Ty],
-        _concepts: &AHashMap<String, CSGConcept>,
+        _concepts: &AHashMap<String, CsgConcept>,
         _csg_defs: &ahash::AHashMap<String, CsgDef>,
     ) -> Result<Ty, OptError> {
         //Tuple construct does not reall care _at-all_ what is _inside_.
@@ -357,7 +357,7 @@ impl DialectNode for ConstantIndex {
     fn try_derive_type(
         &self,
         input_types: &[Ty],
-        _concepts: &AHashMap<String, CSGConcept>,
+        _concepts: &AHashMap<String, CsgConcept>,
         _csg_defs: &AHashMap<String, CsgDef>,
     ) -> Result<Ty, OptError> {
         assert_eq!(input_types.len(), 1);
