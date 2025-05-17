@@ -52,6 +52,11 @@ impl From<&Expr> for FormatTree {
                     FormatTree::Token(format!("{count}")),
                 ])),
             },
+            ExprTy::Cast { span: _, expr, ty } => FormatTree::Seq(vec![
+                FormatTree::from(expr.as_ref()),
+                FormatTree::Keyword(crate::Keyword::Cast),
+                FormatTree::from(ty),
+            ]),
         }
     }
 }

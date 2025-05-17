@@ -12,8 +12,11 @@ use rvsdg::{
 };
 
 use crate::{
-    csg::CsgOp, imm::ImmBool, passes::lower_ast::block_build::VarDef,
-    typelevel::NonUniformConstruct, OptEdge, Optimizer,
+    csg::CsgOp,
+    imm::ImmBool,
+    passes::lower_ast::block_build::VarDef,
+    typelevel::{NonUniformConstruct, TypeCast},
+    OptEdge, Optimizer,
 };
 
 use super::block_build::BlockCtx;
@@ -467,6 +470,20 @@ impl Optimizer {
                     .on_region(&region, |regbuilder| {
                         let (opnode, _) = regbuilder
                             .connect_node(OptNode::new(node, expr_span), items)
+                            .unwrap();
+                        opnode.output(0)
+                    })
+                    .unwrap();
+                Ok(opnode)
+            }
+            ExprTy::Cast { span: _, expr, ty } => {
+                let src = self.build_expr(*expr, region, ctx)?;
+                let node = TypeCast::new(ty.into());
+                let opnode = self
+                    .graph
+                    .on_region(&region, |reg| {
+                        let (opnode, _) = reg
+                            .connect_node(OptNode::new(node, expr_span), [src])
                             .unwrap();
                         opnode.output(0)
                     })

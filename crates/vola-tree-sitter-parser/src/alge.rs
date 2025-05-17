@@ -12,7 +12,7 @@ use vola_common::{Span, VolaError};
 
 use vola_ast::{
     alge::{AssignStmt, BinaryOp, EvalExpr, Expr, ExprTy, FieldAccessor, LetStmt, UnaryOp},
-    common::{Block, Branch, Call, Digit, Ident, Literal, Loop, Stmt},
+    common::{Block, Branch, Call, Digit, Ident, Literal, Loop, Stmt, Ty},
     csg::{CsgStmt, ImplBlock, ScopedCall},
 };
 
@@ -257,6 +257,33 @@ impl FromTreeSitter for Expr {
                 ExprTy::Splat {
                     expr: Box::new(subexpr),
                     count,
+                }
+            }
+            "cast_expr" => {
+                let expr = if let Some(expr) = child_node.child_by_field_name("ex") {
+                    Expr::parse(ctx, dta, &expr)?
+                } else {
+                    return Err(VolaError::error_here(
+                        ParserError::Other("Expected expression".to_owned()),
+                        ctx.span(node),
+                        "there should be an expression",
+                    ));
+                };
+
+                let ty = if let Some(ty) = child_node.child_by_field_name("ty") {
+                    Ty::parse(ctx, dta, &ty)?
+                } else {
+                    return Err(VolaError::error_here(
+                        ParserError::Other("Expected Type".to_owned()),
+                        ctx.span(&node),
+                        "'as' should be followed by a type",
+                    ));
+                };
+
+                ExprTy::Cast {
+                    span: ctx.span(&child_node),
+                    expr: Box::new(expr),
+                    ty,
                 }
             }
             _ => {

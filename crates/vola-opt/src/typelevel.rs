@@ -21,7 +21,7 @@ use vola_common::Span;
 use crate::{
     common::{DataType, Shape, Ty},
     error::OptError,
-    imm::{ImmMatrix, ImmScalar, ImmVector},
+    imm::{ImmBool, ImmMatrix, ImmNat, ImmScalar, ImmVector},
     DialectNode, OptNode,
 };
 
@@ -415,6 +415,204 @@ impl DialectNode for ConstantIndex {
                     ImmVector::new(mat.lit[self.access].as_slice()),
                     Span::empty(),
                 ));
+            }
+        }
+
+        None
+    }
+}
+
+///Type cast: Allows casting the base-type of any value.
+/// The casting rules follow SPIR-V, see for instance [ConvertFToS](https://registry.khronos.org/SPIR-V/specs/unified1/SPIRV.html#OpConvertFToS)
+/// for an example.
+#[derive(LangNode, Debug)]
+pub struct TypeCast {
+    ///The _value_ that is being indexed
+    #[input]
+    pub input: Input,
+    #[output]
+    pub output: Output,
+    ///the type this node casts to
+    dst_ty: Ty,
+}
+
+impl TypeCast {
+    pub fn new(dst_ty: Ty) -> Self {
+        TypeCast {
+            input: Input::default(),
+            output: Output::default(),
+            dst_ty,
+        }
+    }
+}
+
+implViewTyOp!(TypeCast, "TypeCast: {}", dst_ty);
+impl DialectNode for TypeCast {
+    fn dialect(&self) -> &'static str {
+        "typelevel"
+    }
+
+    fn try_derive_type(
+        &self,
+        input_types: &[Ty],
+        _concepts: &AHashMap<String, CsgConcept>,
+        _csg_defs: &AHashMap<String, CsgDef>,
+    ) -> Result<Ty, OptError> {
+        assert_eq!(input_types.len(), 1);
+        match (input_types[0].clone(), self.dst_ty.clone()) {
+            (Ty::Tuple(_), _) => {
+                return Err(OptError::TypeDeriveError {
+                    text: "Can not cast tuple type".to_owned(),
+                })
+            }
+            (Ty::Callable, _) => {
+                return Err(OptError::TypeDeriveError {
+                    text: "can not cast callables".to_owned(),
+                })
+            }
+            (
+                Ty::Shaped {
+                    ty: tyl,
+                    shape: shapel,
+                },
+                Ty::Shaped {
+                    ty: tyr,
+                    shape: shaper,
+                },
+            ) => {
+                //Make sure the data types are compatible
+                match (tyl, tyr) {
+                    (DataType::Bool, DataType::Integer)
+                    | (DataType::Bool, DataType::Real)
+                    | (DataType::Integer, DataType::Real)
+                    | (DataType::Real, DataType::Integer)
+                    | (DataType::Integer, DataType::Bool) => {}
+                    (l, r) => {
+                        return Err(OptError::TypeDeriveError {
+                            text: format!("can not convert data-type {l} to {r}",),
+                        })
+                    }
+                };
+                //now check that the types are compatible
+                match (shapel, shaper) {
+                    //For vectors make sure they are of the same element count
+                    (Shape::Vec { width: wr }, Shape::Vec { width: wl }) => {
+                        if wr != wl {
+                            return Err(OptError::TypeDeriveError {
+                                text: format!(
+                                    "Can not convert vector with {wr}-elements to {wl}-elements"
+                                ),
+                            });
+                        }
+                    }
+                    //Scalar types of compatible data-type always work
+                    (Shape::Scalar, Shape::Scalar) => {}
+                    //Otherwise, if the types are not the same, we can't cast.
+                    (l, r) => {
+                        if l != r {
+                            return Err(OptError::TypeDeriveError {
+                                text: format!("Can not cast {l} into {r}"),
+                            });
+                        }
+                    }
+                }
+            }
+            (l, r) => {
+                return Err(OptError::TypeDeriveError {
+                    text: format!("Can not cast {} to {}", l, r),
+                })
+            }
+        }
+        //Passed all checks, so matches
+        Ok(self.dst_ty.clone())
+    }
+
+    fn is_operation_equal(&self, other: &OptNode) -> bool {
+        //NOTE: Two construct nodes are always equal
+        if let Some(other_cop) = other.try_downcast_ref::<TypeCast>() {
+            other_cop.dst_ty == self.dst_ty
+        } else {
+            false
+        }
+    }
+
+    fn structural_copy(&self, span: vola_common::Span) -> OptNode {
+        OptNode {
+            span,
+            node: Box::new(TypeCast {
+                dst_ty: self.dst_ty.clone(),
+                input: Input::default(),
+                output: Output::default(),
+            }),
+        }
+    }
+
+    fn try_constant_fold(
+        &self,
+        src_nodes: &[Option<&rvsdg::nodes::Node<OptNode>>],
+    ) -> Option<OptNode> {
+        //We can fold immediate value with matching types.
+
+        if src_nodes.len() > 1 {
+            #[cfg(feature = "log")]
+            log::error!("TypeCast had {} inputs, expected 1", src_nodes.len());
+        }
+
+        if src_nodes.len() != 1 {
+            return None;
+        }
+
+        if let Some(NodeType::Simple(s)) = src_nodes[0].map(|n| &n.node_type) {
+            if let Some(immscalar) = s.try_downcast_ref::<ImmScalar>() {
+                match self.dst_ty {
+                    Ty::Shaped {
+                        ty: DataType::Bool,
+                        shape: Shape::Scalar,
+                    } => {
+                        return Some(OptNode::new(
+                            //Emulates rounddown + unsigned cast SPIR-V does
+                            ImmBool::new(immscalar.lit >= 1.0),
+                            Span::empty(),
+                        ));
+                    }
+                    Ty::Shaped {
+                        ty: DataType::Integer,
+                        shape: Shape::Scalar,
+                    } => {
+                        return Some(OptNode::new(
+                            //Emulates rounddown + unsigned cast SPIR-V does
+                            ImmNat::new(immscalar.lit as usize),
+                            Span::empty(),
+                        ));
+                    }
+                    //All others can't be folded for now
+                    _ => return None,
+                }
+            }
+            if let Some(immnat) = s.try_downcast_ref::<ImmNat>() {
+                match self.dst_ty {
+                    Ty::Shaped {
+                        ty: DataType::Bool,
+                        shape: Shape::Scalar,
+                    } => {
+                        return Some(OptNode::new(
+                            //Emulates rounddown + unsigned cast SPIR-V does
+                            ImmBool::new(immnat.lit >= 1),
+                            Span::empty(),
+                        ));
+                    }
+                    Ty::Shaped {
+                        ty: DataType::Real,
+                        shape: Shape::Scalar,
+                    } => {
+                        return Some(OptNode::new(
+                            ImmScalar::new(immnat.lit as f64),
+                            Span::empty(),
+                        ));
+                    }
+                    //All others can't be folded for now
+                    _ => return None,
+                }
             }
         }
 

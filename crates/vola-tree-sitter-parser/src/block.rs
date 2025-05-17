@@ -33,6 +33,13 @@ impl FromTreeSitter for Loop {
         ParserError::consume_expected_node_string(ctx, dta, children.next(), "in")?;
         let bound_lower = Expr::parse(ctx, dta, &children.next().unwrap())?;
         ParserError::consume_expected_node_string(ctx, dta, children.next(), "..")?;
+
+        let step = if let Some(stepexp) = node.child_by_field_name("stepexpr") {
+            Some(Expr::parse(ctx, dta, &stepexp)?)
+        } else {
+            None
+        };
+
         let bound_upper = Expr::parse(ctx, dta, &children.next().unwrap())?;
         let body = Box::new(Block::parse(ctx, dta, &children.next().unwrap())?);
 
@@ -43,6 +50,7 @@ impl FromTreeSitter for Loop {
             iteration_variable_ident: lv_identifier,
             bound_lower,
             bound_upper,
+            step,
             body,
         })
     }

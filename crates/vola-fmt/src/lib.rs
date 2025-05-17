@@ -74,6 +74,7 @@ pub enum Keyword {
     Eval,
     AccessDot,
     ResultArrow,
+    Cast,
 }
 
 impl Display for Keyword {
@@ -97,6 +98,7 @@ impl Display for Keyword {
             Keyword::Eval => write!(f, "eval"),
             Keyword::AccessDot => write!(f, "."),
             Keyword::ResultArrow => write!(f, "->"),
+            Keyword::Cast => write!(f, "as"),
         }
     }
 }

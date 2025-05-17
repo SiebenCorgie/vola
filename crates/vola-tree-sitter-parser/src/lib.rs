@@ -13,7 +13,8 @@ use std::path::Path;
 use tree_sitter::{Node, Parser};
 pub use tree_sitter_vola;
 use vola_ast::{
-    common::{CTArg, Comment},
+    alge::Expr,
+    common::{CTArg, Comment, Stmt},
     AstEntry, TopLevelNode, VolaAst,
 };
 use vola_common::{FileString, Span, VolaError};
@@ -97,6 +98,42 @@ pub fn parse_string(string: String) -> Result<VolaAst, (VolaAst, Vec<VolaError<P
 
 pub fn parse_from_bytes(bytes: &[u8]) -> Result<VolaAst, (VolaAst, Vec<VolaError<ParserError>>)> {
     parse_data(bytes, None)
+}
+
+///Tries to parse an element `E` via the tree-sitter-grammar from the given string. Note that `E` must be part of the _source_file_
+///level of the grammar. If you are unsure, use a helper like [parse_expr] or [parse_stmt] instead.
+pub fn parse_element<E: FromTreeSitter>(content: &str) -> Result<E, VolaError<ParserError>> {
+    let mut parser = parser();
+    let syn_tree = match parser.parse(content.as_bytes(), None) {
+        None => {
+            return Err(VolaError::new(ParserError::TreeSitterFailed));
+        }
+        Some(syntree) => syntree,
+    };
+    let mut ctx = ParserCtx::new_fileless();
+
+    if syn_tree.root_node().child_count() != 1 {
+        return Err(VolaError::new(ParserError::Other(format!(
+            "Expected one child of root-node, had {}\n{}",
+            syn_tree.root_node().child_count(),
+            syn_tree.root_node().to_sexp()
+        ))));
+    }
+
+    E::parse(
+        &mut ctx,
+        content.as_bytes(),
+        &syn_tree.root_node().child(0).unwrap(),
+    )
+}
+
+///Tries to parse `content` into a valid expression.
+pub fn parse_expr(content: &str) -> Result<Expr, VolaError<ParserError>> {
+    parse_element::<Expr>(content)
+}
+
+pub fn parse_stmt(content: &str) -> Result<Stmt, VolaError<ParserError>> {
+    parse_element::<Stmt>(content)
 }
 
 //load the vola-lang tree-sitter grammar / parser
@@ -194,5 +231,35 @@ fn parse_data(
         Err((ast, ctx.deep_errors))
     } else {
         Ok(ast)
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use vola_ast::{alge::Expr, common::Stmt};
+
+    use crate::parse_element;
+
+    #[test]
+    fn parse_literal_int() {
+        let s = "1";
+        let e = parse_element::<Expr>(&s).unwrap();
+    }
+    #[test]
+    fn parse_literal_real() {
+        let s = "1.0";
+        let e = parse_element::<Expr>(&s).unwrap();
+    }
+
+    #[test]
+    fn parse_binary_expr() {
+        let s = "1 + 1";
+        let e = parse_element::<Expr>(&s).unwrap();
+    }
+
+    #[test]
+    fn parse_stmt_expr() {
+        let s = "let a = 1 + 1;";
+        let e = parse_element::<Stmt>(&s).unwrap();
     }
 }
