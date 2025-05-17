@@ -23,7 +23,7 @@ use crate::{
     WasmError,
 };
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ExternOp {
     Dot,
     Cross,
@@ -67,6 +67,8 @@ pub enum ExternOp {
     DivVec,
 
     MulMat,
+
+    Cast(WasmTy),
 }
 
 impl ExternOp {
@@ -103,6 +105,7 @@ impl ExternOp {
             Self::SubVec => "sub",
             Self::MulVec => "mul",
             Self::DivVec => "div",
+            Self::Cast(_dst) => "cast",
             other => {
                 println!("{:?} not known", other);
                 "unknown"
@@ -308,40 +311,17 @@ impl ExternOp {
             }
         }
 
-        let ty_suffix = {
-            if let WasmTy::Defined { shape, ty: _ } = &input_types[0] {
-                match shape {
-                    TyShape::Scalar => "scalar",
-                    TyShape::Vector { width } => &format!("vec{}", width),
-                    TyShape::Matrix { width, height } => match (width, height) {
-                        (2, 2) => "mat2",
-                        (3, 3) => "mat3",
-                        (4, 4) => "mat4",
-                        _ => {
-                            return Err(WasmError::RuntimeIncompatibleSig(
-                                self.clone(),
-                                input_types.len(),
-                            ))
-                        }
-                    },
-                    //NOTE: we currently have no vector typed extern functions
-                    _ => {
-                        return Err(WasmError::RuntimeIncompatibleSig(
-                            self.clone(),
-                            input_types.len(),
-                        ))
-                    }
-                }
-            } else {
-                return Err(WasmError::RuntimeIncompatibleSig(
-                    self.clone(),
-                    input_types.len(),
-                ));
-            }
-        };
+        let ty_suffix = &input_types[0].as_runtime_type_string()?;
+
+        //Special version for casts
+        if let Self::Cast(dst_ty) = self {
+            return Ok(format!(
+                "cast_{ty_suffix}_{}",
+                dst_ty.as_runtime_type_string()?
+            ));
+        }
 
         let symbol_name = self.base_symbol_name();
-
         Ok(format!("{}_{}", symbol_name, ty_suffix))
     }
 }

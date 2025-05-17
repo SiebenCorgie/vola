@@ -38,7 +38,7 @@ use walrus::{
 use crate::{
     error::WasmError,
     wasm::{
-        self, Index, NonUniformConstruct, UniformConstruct, WasmBinaryOp, WasmRuntimeOp,
+        self, ExternOp, Index, NonUniformConstruct, UniformConstruct, WasmBinaryOp, WasmRuntimeOp,
         WasmUnaryOp, WasmValue,
     },
 };
@@ -115,6 +115,20 @@ impl WasmNode {
             return Ok(WasmNode::NonUniformConstruct(
                 wasm::NonUniformConstruct::from(construct_node),
             ));
+        }
+
+        if let Some(_tc) = value.try_downcast_ref::<vola_opt::typelevel::TypeCast>() {
+            assert!(input_sig.len() == 1);
+            assert!(input_sig[0].is_some());
+            assert!(output_sig.len() == 1);
+            assert!(output_sig[0].is_some());
+
+            let dst_ty = WasmTy::try_from(output_sig[0].clone().unwrap())?;
+
+            return Ok(WasmNode::Runtime(WasmRuntimeOp::new_with_signature(
+                1,
+                ExternOp::Cast(dst_ty),
+            )));
         }
 
         if let Some(binop) = value.try_downcast_ref::<BinaryArith>() {
@@ -222,7 +236,7 @@ impl LangNode for WasmNode {
             Self::Index(i) => i.inputs(),
             Self::UniformConstruct(c) => c.inputs(),
             Self::NonUniformConstruct(c) => c.inputs(),
-            Self::Error { inputs, outputs: _ } => inputs,
+            Self::Error { inputs, .. } => inputs,
         }
     }
 
@@ -235,7 +249,7 @@ impl LangNode for WasmNode {
             Self::Index(i) => i.inputs_mut(),
             Self::UniformConstruct(c) => c.inputs_mut(),
             Self::NonUniformConstruct(c) => c.inputs_mut(),
-            Self::Error { inputs, outputs: _ } => inputs,
+            Self::Error { inputs, .. } => inputs,
         }
     }
 
@@ -248,7 +262,7 @@ impl LangNode for WasmNode {
             Self::Index(i) => i.outputs(),
             Self::UniformConstruct(c) => c.outputs(),
             Self::NonUniformConstruct(c) => c.outputs(),
-            Self::Error { inputs: _, outputs } => outputs,
+            Self::Error { outputs, .. } => outputs,
         }
     }
 
@@ -261,7 +275,7 @@ impl LangNode for WasmNode {
             Self::Index(i) => i.outputs_mut(),
             Self::UniformConstruct(c) => c.outputs_mut(),
             Self::NonUniformConstruct(c) => c.outputs_mut(),
-            Self::Error { inputs: _, outputs } => outputs,
+            Self::Error { outputs, .. } => outputs,
         }
     }
 }
@@ -309,6 +323,10 @@ impl TryFrom<vola_opt::common::Ty> for WasmTy {
             vola_opt::common::Ty::SCALAR_BOOL => (TyShape::Scalar, walrus::ValType::I32),
             vola_opt::common::Ty::SCALAR_INT => (TyShape::Scalar, walrus::ValType::I32),
             vola_opt::common::Ty::SCALAR_REAL => (TyShape::Scalar, walrus::ValType::F32),
+            vola_opt::common::Ty::Shaped {
+                ty: DataType::Integer,
+                shape: Shape::Vec { width },
+            } => (TyShape::Vector { width }, walrus::ValType::I32),
             vola_opt::common::Ty::Shaped {
                 ty: DataType::Real,
                 shape: Shape::Vec { width },
@@ -558,6 +576,54 @@ impl WasmTy {
                     signature.push(ty.clone());
                 }
             }
+        }
+    }
+
+    pub fn as_runtime_type_string(&self) -> Result<&str, WasmError> {
+        if let WasmTy::Defined { shape, ty } = self {
+            match ty {
+                ValType::F32 => {
+                    match shape {
+                        TyShape::Scalar => Ok("scalar"),
+                        TyShape::Vector { width } => match width {
+                            2 => Ok("vec2"),
+                            3 => Ok("vec3"),
+                            4 => Ok("vec4"),
+                            _ => Err(WasmError::RuntimeUndefinedType(self.clone())),
+                        },
+                        TyShape::Matrix { width, height } => match (width, height) {
+                            (2, 2) => Ok("mat2"),
+                            (3, 3) => Ok("mat3"),
+                            (4, 4) => Ok("mat4"),
+                            _ => Err(WasmError::RuntimeUndefinedType(self.clone())),
+                        },
+                        //NOTE: we currently have no vector typed extern functions
+                        _ => Err(WasmError::RuntimeUndefinedType(self.clone())),
+                    }
+                }
+                ValType::I32 => {
+                    match shape {
+                        TyShape::Scalar => Ok("int"),
+                        TyShape::Vector { width } => match width {
+                            2 => Ok("ivec2"),
+                            3 => Ok("ivec3"),
+                            4 => Ok("ivec4"),
+                            _ => Err(WasmError::RuntimeUndefinedType(self.clone())),
+                        },
+                        TyShape::Matrix { width, height } => match (width, height) {
+                            (2, 2) => Ok("imat2"),
+                            (3, 3) => Ok("imat3"),
+                            (4, 4) => Ok("imat4"),
+                            _ => Err(WasmError::RuntimeUndefinedType(self.clone())),
+                        },
+                        //NOTE: we currently have no vector typed extern functions
+                        _ => Err(WasmError::RuntimeUndefinedType(self.clone())),
+                    }
+                }
+                _ => Err(WasmError::RuntimeUndefinedType(self.clone())),
+            }
+        } else {
+            Err(WasmError::RuntimeUndefinedType(self.clone()))
         }
     }
 }

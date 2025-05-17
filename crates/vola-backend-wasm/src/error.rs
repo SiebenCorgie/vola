@@ -34,6 +34,8 @@ pub enum WasmError {
     UnexpectedComposite,
     #[error("Unexpected type {0}")]
     UnexpectedType(Ty),
+    #[error("Can not convert {from} to {to} in WASM")]
+    ConvertionError { from: Ty, to: Ty },
     #[error("Node {node} had unexpected signature:\nInput: {input:?}\noutput: {output:?}")]
     UnexpectedSignature {
         node: String,
@@ -48,6 +50,8 @@ pub enum WasmError {
     UndefinedType,
     #[error("Failed to generate CFG for graph: {0}")]
     CfgError(#[from] ScfrError),
+    #[error("Type {0:?} is not usable in the runtime")]
+    RuntimeUndefinedType(WasmTy),
     #[error("Extern Runtime Op {0:?} encountered incompatible input count {1}")]
     RuntimeIncompatibleSig(ExternOp, usize),
     #[error("Extern Runtime Op {0:?} encountered incompatible type for argument {1} : {2:?}")]

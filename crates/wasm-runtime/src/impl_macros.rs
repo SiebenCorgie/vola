@@ -34,7 +34,6 @@ pub(crate) use impl_op_flatten;
 
 //implements an operation of form
 // a.op(b)
-
 macro_rules! impl_op2 {
     (f32, $op:ident, 1, $name:ident) => {
         #[no_mangle]
@@ -51,7 +50,6 @@ macro_rules! impl_op2 {
         }
     };
 }
-
 pub(crate) use impl_op2;
 
 //implements a vector flattening op of form
