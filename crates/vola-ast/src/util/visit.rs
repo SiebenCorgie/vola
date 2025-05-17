@@ -203,6 +203,7 @@ impl Expr {
                 }
             }
             ExprTy::FieldAccess { .. } | ExprTy::Ident(_) | ExprTy::Literal(_) => {}
+            ExprTy::Cast { expr, .. } => expr.traverse_visit(visitor),
         }
     }
 }

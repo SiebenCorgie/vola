@@ -164,6 +164,8 @@ pub struct Loop {
     pub iteration_variable_ident: Ident,
     pub bound_lower: Expr,
     pub bound_upper: Expr,
+    ///If defined, signals the expression used to mutate the iteration variable.
+    pub step: Option<Expr>,
     pub body: Box<Block>,
 }
 

@@ -126,6 +126,7 @@ impl Expr {
             ExprTy::ScopedCall(c) => c.head_span(),
             ExprTy::Branch(e) => e.span.clone(),
             ExprTy::Splat { expr, count: _ } => expr.span.clone(),
+            ExprTy::Cast { span, .. } => span.clone(),
         }
     }
 }
@@ -188,6 +189,12 @@ pub enum ExprTy {
     Splat {
         expr: Box<Expr>,
         count: usize,
+    },
+    Cast {
+        ///Span of the cast keyword
+        span: Span,
+        expr: Box<Expr>,
+        ty: Ty,
     },
 }
 
