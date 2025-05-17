@@ -2,13 +2,13 @@
 //EXEC-FN:myField
 //EXEC-ARGS:3.4,1.3,1.8
 //EXEC-EPS:0.1
-//EXEC-RES:3.0,1.0,1.0,1.0
+//EXEC-RES:3.0,1.0,1.0
 //END-CONFIG
 
 module super::std;
 
 export fn myField(at: vec3) -> vec3{
-    let intermediate = at as vec3<int>;
-    let result = intermediate as vec3;
+    let intermediate = at::<vec3<int>>;
+    let result = intermediate::<vec3>;
     result
 }
