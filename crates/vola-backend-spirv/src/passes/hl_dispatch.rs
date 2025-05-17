@@ -12,7 +12,7 @@ use vola_common::{error_reporter, report, Span};
 use crate::{
     graph::BackendOp,
     hl::HlOp,
-    spv::{ArithBaseTy, CoreOp, GlOp, SpvOp, SpvType},
+    spv::{ArithBaseTy, ArithTy, CoreOp, GlOp, SpvOp, SpvType},
     BackendSpirvError, SpirvBackend,
 };
 
@@ -64,7 +64,7 @@ impl BackendOp {
     pub fn dispatch(
         &mut self,
         input_types: SmallColl<Option<SpvType>>,
-        #[allow(unused_variables)] return_type: SpvType,
+        return_type: SpvType,
     ) -> Result<(), BackendSpirvError> {
         let hlop = if let Self::HlOp(hl) = self {
             hl.clone()
@@ -75,7 +75,7 @@ impl BackendOp {
         };
 
         let mut basetype_signature: SmallColl<ArithBaseTy> = SmallColl::new();
-        for t in input_types {
+        for t in input_types.clone() {
             if let Some(t) = t {
                 match t {
                     SpvType::Arith(a) => basetype_signature.push(a.base),
@@ -87,7 +87,7 @@ impl BackendOp {
                 }
             } else {
                 return Err(BackendSpirvError::Any {
-                    text: format!("HL-Op {hlop:?} had un-type import"),
+                    text: format!("HL-Op {hlop:?} had un-type input"),
                 });
             }
         }
@@ -240,6 +240,116 @@ impl BackendOp {
 
             (HlOp::Abs, [ArithBaseTy::Float]) => SpvOp::GlslOp(GlOp::FAbs),
             (HlOp::Abs, [ArithBaseTy::Integer { signed: true }]) => SpvOp::GlslOp(GlOp::SAbs),
+            (HlOp::TypeCast, [_source_type]) => {
+                //For casts, make sure we are on a scalar or vector
+
+                match (input_types[0].as_ref().cloned().unwrap(), return_type) {
+                    (
+                        SpvType::Arith(ArithTy {
+                            base: src_base,
+                            shape: src_shape,
+                            resolution: src_resolution,
+                        }),
+                        SpvType::Arith(ArithTy {
+                            base: dst_base,
+                            shape: dst_shape,
+                            resolution: dst_resolution,
+                        }),
+                    ) => {
+                        if src_resolution != dst_resolution {
+                            let err = BackendSpirvError::Any {
+                                text: format!("Can not cast types with different resolutions: {src_resolution} != {dst_resolution}"),
+                            };
+
+                            report(
+                                error_reporter(err.clone(), Span::empty())
+                                    .with_note("This is probably a compiler bug!")
+                                    .finish(),
+                            );
+                            return Err(err);
+                        }
+
+                        if src_shape != dst_shape {
+                            let err = BackendSpirvError::Any {
+                                text: format!("Can not cast types with different shapes: {src_shape} != {dst_shape}"),
+                            };
+
+                            report(
+                                error_reporter(err.clone(), Span::empty())
+                                    .with_note("This is probably a compiler bug!")
+                                    .finish(),
+                            );
+                            return Err(err);
+                        }
+
+                        if !src_shape.is_vector() && !src_shape.is_scalar() {
+                            let err = BackendSpirvError::Any {
+                                text: format!(
+                                    "Can only cast vectors and scalars in SPIR-V, is: {src_shape}"
+                                ),
+                            };
+
+                            report(
+                                error_reporter(err.clone(), Span::empty())
+                                    .with_note("This is probably a compiler bug!")
+                                    .finish(),
+                            );
+                            return Err(err);
+                        }
+
+                        //shapes and resolution match, emit the convert op based on base types
+                        match (src_base, dst_base) {
+                            //Float <- -> Int
+                            (ArithBaseTy::Float, ArithBaseTy::Integer { signed: true }) => {
+                                SpvOp::CoreOp(CoreOp::ConvertFToS)
+                            }
+                            (ArithBaseTy::Float, ArithBaseTy::Integer { signed: false }) => {
+                                SpvOp::CoreOp(CoreOp::ConvertFToU)
+                            }
+                            (ArithBaseTy::Integer { signed: true }, ArithBaseTy::Float) => {
+                                SpvOp::CoreOp(CoreOp::ConvertSToF)
+                            }
+                            (ArithBaseTy::Integer { signed: false }, ArithBaseTy::Float) => {
+                                SpvOp::CoreOp(CoreOp::ConvertUToF)
+                            }
+
+                            //Int <- -> Uint
+                            (
+                                ArithBaseTy::Integer { signed: true },
+                                ArithBaseTy::Integer { signed: false },
+                            ) => SpvOp::CoreOp(CoreOp::SatConvertSToU),
+                            (
+                                ArithBaseTy::Integer { signed: false },
+                                ArithBaseTy::Integer { signed: true },
+                            ) => SpvOp::CoreOp(CoreOp::SatConvertUToS),
+                            (l, r) => {
+                                let err = BackendSpirvError::Any {
+                                    text: format!("Can not convert base-type {l} to {r} in SPIR-V"),
+                                };
+
+                                report(
+                                    error_reporter(err.clone(), Span::empty())
+                                        .with_note("This is probably a compiler bug!")
+                                        .finish(),
+                                );
+                                return Err(err);
+                            }
+                        }
+                    }
+                    (errin, errreturn) => {
+                        let err = BackendSpirvError::Any {
+                            text: format!("Can not convert {errin} to {errreturn} in SPRIV "),
+                        };
+
+                        report(
+                            error_reporter(err.clone(), Span::empty())
+                                .with_note("This is probably a compiler bug!")
+                                .finish(),
+                        );
+                        return Err(err);
+                    }
+                }
+            }
             _ => {
                 let err = BackendSpirvError::Any {
                     text: format!(

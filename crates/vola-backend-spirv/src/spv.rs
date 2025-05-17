@@ -478,6 +478,22 @@ impl TyShape {
         }
     }
 
+    pub fn is_scalar(&self) -> bool {
+        if let Self::Scalar = self {
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn is_vector(&self) -> bool {
+        if let Self::Vector { .. } = self {
+            true
+        } else {
+            false
+        }
+    }
+
     pub fn is_matrix(&self) -> bool {
         if let Self::Matrix { .. } = self {
             true
@@ -583,56 +599,44 @@ impl TryFrom<vola_opt::common::Ty> for SpvType {
     type Error = BackendSpirvError;
     fn try_from(value: vola_opt::common::Ty) -> Result<Self, Self::Error> {
         //FIXME: Currently those are all hard coded, since the optimizer currently does not track resolution.
-        let res = match value {
+        let res = match value.clone() {
             vola_opt::common::Ty::VOID => Self::Void,
-            vola_opt::common::Ty::SCALAR_INT => Self::Arith(ArithTy {
-                base: ArithBaseTy::Integer { signed: true },
-                shape: TyShape::Scalar,
-                resolution: 32,
-            }),
+            vola_opt::common::Ty::Shaped { ty, shape } => {
+                //NOTE: we only support shaped integer and float types
+                //      while in _theory_ SPIR-V allows any type to be shaped, in practice,
+                //      as specially in vulkan-dialect, this is more or less unsupported for anything
+                //      except int and float
+                let (base, resolution) = match ty {
+                    DataType::Real => (ArithBaseTy::Float, 32),
+                    DataType::Integer => (ArithBaseTy::Integer { signed: true }, 32),
+                    DataType::Bool => (ArithBaseTy::Bool, 1),
+                    _other => {
+                        return Err(BackendSpirvError::TypeConversionError(value));
+                    }
+                };
 
-            vola_opt::common::Ty::SCALAR_REAL => Self::Arith(ArithTy {
-                base: ArithBaseTy::Float,
-                shape: TyShape::Scalar,
-                resolution: 32,
-            }),
-            vola_opt::common::Ty::Shaped {
-                ty: DataType::Real,
-                shape: Shape::Vec { width },
-            } => Self::Arith(ArithTy {
-                base: ArithBaseTy::Float,
-                shape: TyShape::Vector {
-                    width: width as u32,
-                },
-                resolution: 32,
-            }),
-            vola_opt::common::Ty::Shaped {
-                ty: DataType::Real,
-                shape: Shape::Matrix { width, height },
-            } => Self::Arith(ArithTy {
-                base: ArithBaseTy::Float,
-                shape: TyShape::Matrix {
-                    width: width as u32,
-                    height: height as u32,
-                },
-                resolution: 32,
-            }),
+                let shape = match shape {
+                    Shape::Scalar => TyShape::Scalar,
+                    Shape::Vec { width } => TyShape::Vector {
+                        width: width.try_into().unwrap(),
+                    },
+                    Shape::Matrix { width, height } => TyShape::Matrix {
+                        width: width.try_into().unwrap(),
+                        height: height.try_into().unwrap(),
+                    },
+                    Shape::Tensor { sizes } => TyShape::Tensor {
+                        dim: sizes.into_iter().map(|d| d.try_into().unwrap()).collect(),
+                    },
+                    _other => return Err(BackendSpirvError::TypeConversionError(value)),
+                };
 
-            vola_opt::common::Ty::Shaped {
-                ty: DataType::Real,
-                shape: Shape::Tensor { sizes },
-            } => Self::Arith(ArithTy {
-                base: ArithBaseTy::Float,
-                shape: TyShape::Tensor {
-                    dim: sizes.into_iter().map(|d| d as u32).collect(),
-                },
-                resolution: 32,
-            }),
-            vola_opt::common::Ty::SCALAR_BOOL => Self::Arith(ArithTy {
-                base: ArithBaseTy::Bool,
-                shape: TyShape::Scalar,
-                resolution: 1,
-            }),
+                Self::Arith(ArithTy {
+                    base,
+                    shape,
+                    resolution,
+                })
+            }
+
             vola_opt::common::Ty::Tuple(t) => {
                 //collect all subtypes
                 let subtypes: Result<Vec<_>, _> =
@@ -640,7 +644,6 @@ impl TryFrom<vola_opt::common::Ty> for SpvType {
                 Self::Tuple(subtypes?)
             }
             vola_opt::common::Ty::Callable => Self::Callable,
-            any => return Err(BackendSpirvError::TypeConversionError(any)),
         };
 
         Ok(res)

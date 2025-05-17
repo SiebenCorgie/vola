@@ -26,7 +26,7 @@ use vola_opt::{
         trigonometric::{Trig, TrigOp},
     },
     imm::{ImmBool, ImmNat, ImmScalar},
-    typelevel::{ConstantIndex, NonUniformConstruct, UniformConstruct},
+    typelevel::{ConstantIndex, NonUniformConstruct, TypeCast, UniformConstruct},
     OptEdge, OptNode, Optimizer,
 };
 
@@ -301,6 +301,10 @@ impl BackendOp {
             return Some(Self::from_non_uniform_construct(lconst));
         }
 
+        if let Some(castop) = optnode.try_downcast_ref::<TypeCast>() {
+            return Some(Self::from_typecast(castop));
+        }
+
         if let Some(binray_rel) = optnode.try_downcast_ref::<BinaryRel>() {
             return Some(Self::from_binary_rel(binray_rel.op));
         }
@@ -417,5 +421,10 @@ impl BackendOp {
 
     fn from_non_uniform_construct(_lc: &NonUniformConstruct) -> Self {
         Self::SpirvOp(SpvOp::NonUniformConstruct)
+    }
+
+    fn from_typecast(_tc: &TypeCast) -> Self {
+        //NOTE: Gets specialized later to the correct casting op
+        Self::HlOp(HlOp::TypeCast)
     }
 }

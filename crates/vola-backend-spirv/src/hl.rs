@@ -35,6 +35,8 @@ pub enum HlOp {
     Mix,
     Clamp,
     Abs,
+
+    TypeCast,
 }
 
 impl From<BinaryArithOp> for HlOp {
