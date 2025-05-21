@@ -1,0 +1,9 @@
+//BEGIN-CONFIG
+//EXEC-FN:getpi
+//EXEC-ARGS:
+//EXEC-EPS:0.00001
+//EXEC-RES:3.14159265358979
+//END-CONFIG
+export fn getpi() -> real{
+    PI
+}

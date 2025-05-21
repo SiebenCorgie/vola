@@ -1,0 +1,9 @@
+//BEGIN-CONFIG
+//EXEC-FN:getinf
+//EXEC-ARGS:
+//EXEC-EPS:0.000
+//EXEC-RES:INF
+//END-CONFIG
+export fn getinf() -> real{
+    INF
+}

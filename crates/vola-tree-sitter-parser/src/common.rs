@@ -1,3 +1,5 @@
+use std::f64;
+
 /*
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
@@ -398,6 +400,19 @@ impl FromTreeSitter for Literal {
                         err,
                         ctx.span(node),
                         "should be 'true' or 'false'",
+                    ));
+                }
+            },
+            "const_literal" => match node.child(0).unwrap().kind() {
+                "INF" => Ok(Literal::FloatLiteral(f64::INFINITY)),
+                "EULER" => Ok(Literal::FloatLiteral(std::f64::consts::E)),
+                "PI" => Ok(Literal::FloatLiteral(std::f64::consts::PI)),
+                other => {
+                    let err = ParserError::Other(format!("Unknown constant '{other}'"));
+                    return Err(VolaError::error_here(
+                        err,
+                        ctx.span(node),
+                        "this is unrecognized",
                     ));
                 }
             },
