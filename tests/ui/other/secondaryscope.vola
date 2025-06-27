@@ -1,0 +1,44 @@
+//BEGIN-CONFIG
+//ERROR:Could not find "sideos" in any parent scope!
+//END-CONFIG
+
+//NOTE: triggers a strange bug in the scoping mechanism of the interner. TODO: create better Error
+module super::std;
+fn t() -> csg{
+    let extent = [1.0; 3];
+    let ww = 1.0;
+    Union(){
+        let sideos = 3.0 / 2.0;
+        let tedber = 1.0;
+        Union(){
+            Union(){
+                Translate([extent.x / 2.0, -extent.y / 2.0 - sideos, 0.0]){
+                    Box([ww, extent.y / 2.0 + sideos, extent.z / 2.0 + ww])
+                }
+            }{
+                Translate([-extent.x / 2.0, -extent.y / 2.0 - sideos, 0.0]){
+                    Box([ww, extent.y / 2.0 + sideos, extent.z / 2.0 + ww])
+                }
+            }}
+        }{
+            Translate([0.0, -extent.y + sideos], (2.0 / 3.0) * extent.z){
+                Box([extent.x, sideos * 2.0, extent.z])
+            }
+        }
+    {
+        Union(){
+            Translate([0.0, -extent.y / 2.0, -extent.z / 2.0]){
+                Box([extent.x / 2.0, extent.y / 2.0, ww])
+            }
+        }{
+            Translate([0.0, -extent.y / 2.0, (extent.z * (1.0 / 6.0))]){
+                Box([extent.x / 2.0, extent.y / 2.0, ww])
+            }
+        }
+    }
+}
+
+export fn test(at: vec3) -> real{
+    csg c = t();
+    eval c.SDF3D(at)
+}
