@@ -514,9 +514,6 @@ impl Display for TyShape {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum PointerType {}
-
 ///At this point we _need_ to move into the strange SPIR-V type system.
 /// AlgebraicTypes are the same as the ones in the optimizer.
 ///

@@ -243,23 +243,23 @@ mod test {
     #[test]
     fn parse_literal_int() {
         let s = "1";
-        let e = parse_element::<Expr>(&s).unwrap();
+        let _e = parse_element::<Expr>(&s).unwrap();
     }
     #[test]
     fn parse_literal_real() {
         let s = "1.0";
-        let e = parse_element::<Expr>(&s).unwrap();
+        let _e = parse_element::<Expr>(&s).unwrap();
     }
 
     #[test]
     fn parse_binary_expr() {
         let s = "1 + 1";
-        let e = parse_element::<Expr>(&s).unwrap();
+        let _e = parse_element::<Expr>(&s).unwrap();
     }
 
     #[test]
     fn parse_stmt_expr() {
         let s = "let a = 1 + 1;";
-        let e = parse_element::<Stmt>(&s).unwrap();
+        let _e = parse_element::<Stmt>(&s).unwrap();
     }
 }

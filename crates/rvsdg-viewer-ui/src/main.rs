@@ -100,7 +100,7 @@ impl Ui {
         Task::none()
     }
 
-    fn view(&self) -> Element<Message> {
+    fn view(&self) -> Element<'_, Message> {
         //Our ui works by positioning
 
         let timeline_slider = slider(
