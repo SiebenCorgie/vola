@@ -344,14 +344,10 @@ impl TryFrom<vola_opt::common::Ty> for WasmTy {
                 },
                 walrus::ValType::F32,
             ),
-            vola_opt::common::Ty::Tuple(_t) => {
-                return Err(WasmError::Any(
-                    format!("Tuple are not supported in WASM (yet).").into(),
-                ));
-
-                //let subtypes: Result<Vec<Self>, _> =
-                //    t.into_iter().map(|t| Self::try_from(t)).collect();
-                //return Ok(Self::Tuple(subtypes?));
+            vola_opt::common::Ty::Tuple(t) => {
+                let subtypes: Result<Vec<Self>, _> =
+                    t.into_iter().map(|t| Self::try_from(t)).collect();
+                return Ok(Self::Tuple(subtypes?));
             }
             vola_opt::common::Ty::Callable => return Ok(WasmTy::Callabale),
             other => return Err(WasmError::UnexpectedType(other)),
