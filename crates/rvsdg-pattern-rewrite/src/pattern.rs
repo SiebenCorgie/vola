@@ -9,6 +9,6 @@ pub trait PatternRewrite<N: LangNode, E: LangEdge, B: Benefit, Err> {
 
     fn benefit(&self) -> &B;
 
-    ///When applied, the
+    ///Can assume that `node` fulfills the [matches](Self::matches) criterion. `graph` is shared to this application of a rewrite _exclusively_.
     fn apply(&self, graph: &mut Rvsdg<N, E>, node: NodeRef) -> Result<(), Err>;
 }

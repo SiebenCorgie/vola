@@ -13,6 +13,39 @@ pub enum DriverRecursion {
     None,
 }
 
+///Signals how often a driver can restart execution, if a region was changed.
+#[derive(Debug, Clone)]
+pub enum DriverRestart {
+    ///Can restart as often as needed until nothing changes anymore.
+    ///
+    /// *Keep in mind that this can possibly lead to unlimited runtime*.
+    ///
+    /// However, on paper this produces the best results.
+    Unbound,
+    ///Can restart up to the given amount of times.
+    Bound(usize),
+    ///Runs once in every region.
+    SingeShot,
+}
+
+impl DriverRestart {
+    pub fn should_restart(&mut self) -> bool {
+        match self {
+            Self::Unbound => true,
+            Self::Bound(bound) => {
+                if let Some(new_count) = bound.checked_sub(1) {
+                    //Update the bound to one-less
+                    *bound = new_count;
+                    true
+                } else {
+                    false
+                }
+            }
+            Self::SingeShot => false,
+        }
+    }
+}
+
 ///Traverses a graph in topological order, always applying the best (according to the benefits) rewrite-pattern to a node.
 ///A typical initialization would be:
 /// ```rust, ignore
@@ -30,6 +63,7 @@ pub struct TopoGreedyRewriter<Node: LangNode, Edge: LangEdge, B: Benefit, Err> {
     rewriter: Vec<Box<dyn PatternRewrite<Node, Edge, B, Err>>>,
     rules_changed: bool,
     pub recursion: DriverRecursion,
+    pub restart: DriverRestart,
 }
 
 impl<Node, Edge, B, Err> Default for TopoGreedyRewriter<Node, Edge, B, Err>
@@ -43,6 +77,7 @@ where
             rewriter: Vec::with_capacity(0),
             rules_changed: true,
             recursion: DriverRecursion::None,
+            restart: DriverRestart::SingeShot,
         }
     }
 }
@@ -66,6 +101,7 @@ where
 
     ///Runs the on `entry` in `graph`. If `recursive` is true, it'll consider sub-region (i.e. loop-bodies, etc.).
     pub fn run(&mut self, graph: &mut Rvsdg<Node, Edge>, entry: RegionLocation) -> Result<(), Err> {
+        log::info!("Initializing patter-rewrite on {entry}");
         //NOTE: mini wrapper that catches if rules changed. Afterwards we can consider the driver immutable.
         if self.rules_changed {
             self.prepare_rules();
@@ -73,6 +109,7 @@ where
 
         self.run_on(graph, entry)
     }
+    ///Runst the driver on `entry`. Returns the amount of rewrites that was applied, if successful.
     fn run_on(&self, graph: &mut Rvsdg<Node, Edge>, entry: RegionLocation) -> Result<(), Err> {
         let mut order = graph.topological_order_region(entry);
         //First recurse
@@ -98,18 +135,44 @@ where
             order = graph.topological_order_region(entry)
         }
 
-        //now, run on each node, applying the first fitting pattern.
-        'note_iter: for node in &order {
-            for pattern in &self.rewriter {
-                //Apply..
-                if pattern.matches(*node) {
-                    pattern.apply(graph, *node)?;
-                    //..and continue with next node
-                    continue 'note_iter;
+        //Tracks restart state
+        let mut restart = self.restart.clone();
+
+        //Outer loop takes care of restarting, if possible
+        'restart: loop {
+            let mut changed_any = false;
+
+            //now, run on each node, applying the first fitting pattern.
+            'note_iter: for node in &order {
+                for pattern in &self.rewriter {
+                    //Apply..
+                    if pattern.matches(*node) {
+                        changed_any = true;
+                        pattern.apply(graph, *node)?;
+                        //..and continue with next node
+                        continue 'note_iter;
+                    }
+                }
+            }
+
+            //Always break if fixpoint was reached
+            if !changed_any {
+                log::info!("Reached fixpoint in {entry}");
+                break;
+            } else {
+                //check if there are any rerstarts left
+                if restart.should_restart() {
+                    //if so, update the order before restarting
+                    order = graph.topological_order_region(entry);
+                    continue 'restart;
+                } else {
+                    log::info!("Reached restart bound in {entry}");
+                    break;
                 }
             }
         }
 
+        //Take care of top-down recursion.
         if self.recursion == DriverRecursion::TopDown {
             //NOTE: we make no gurantee in which order recursion happens, so we just recurse any existing node here.
             for node in &order {
@@ -134,7 +197,6 @@ where
                 }
             }
         }
-
         Ok(())
     }
 }
