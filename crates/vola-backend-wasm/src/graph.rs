@@ -344,14 +344,10 @@ impl TryFrom<vola_opt::common::Ty> for WasmTy {
                 },
                 walrus::ValType::F32,
             ),
-            vola_opt::common::Ty::Tuple(_t) => {
-                return Err(WasmError::Any(
-                    format!("Tuple are not supported in WASM (yet).").into(),
-                ));
-
-                //let subtypes: Result<Vec<Self>, _> =
-                //    t.into_iter().map(|t| Self::try_from(t)).collect();
-                //return Ok(Self::Tuple(subtypes?));
+            vola_opt::common::Ty::Tuple(t) => {
+                let subtypes: Result<Vec<Self>, _> =
+                    t.into_iter().map(|t| Self::try_from(t)).collect();
+                return Ok(Self::Tuple(subtypes?));
             }
             vola_opt::common::Ty::Callable => return Ok(WasmTy::Callabale),
             other => return Err(WasmError::UnexpectedType(other)),
@@ -368,7 +364,9 @@ impl WasmTy {
     ///of the second float.
     ///
     ///Doing the same for a mat3 returns three offsets for the
-    ///4-th, 5-th & 6-th float, which is the second column of the vector
+    ///4-th, 5-th & 6-th float, which is the second column of the vector.
+    ///
+    /// Similarly indexing a tuple (vec3, i32) with 1 returns 16, which is the 4-th 32bit element i.e. the integer element.
     pub fn index_to_offset_elements(&self, index: usize) -> SmallColl<u32> {
         match self {
             WasmTy::Defined { shape, .. } => {
@@ -396,7 +394,19 @@ impl WasmTy {
                     TyShape::Tensor { .. } => panic!("Tensor not yet supported"),
                 }
             }
-            WasmTy::Tuple(ts) => ts[index].element_offsets(),
+            WasmTy::Tuple(ts) => {
+                //collect local offsets in the tuple till the index we are refering to
+                let pre_offset = ts[0..index].iter().fold(0u32, |off, tuple_element_type| {
+                    off + u32::try_from(tuple_element_type.wasm_size()).unwrap()
+                });
+                //now put the element offset onto each element in the indexed type;
+                let mut offsets = ts[index].element_offsets();
+                for offset in &mut offsets {
+                    *offset += pre_offset;
+                }
+
+                offsets
+            }
             WasmTy::Callabale => SmallColl::new(),
             WasmTy::Undefined => SmallColl::new(),
         }

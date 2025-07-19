@@ -515,6 +515,22 @@ impl WasmLambdaBuilder {
                                         continue;
                                     }
 
+                                    //There is an edge-case for nested loops:
+                                    // A in-loop loop might be trying to write to write to a
+                                    // result of a outer-loop. However, the value might be in-fact not be used
+                                    // by a the consumer. In that case, the argument port has in fact no
+                                    // id associated, but also doesn't need to be written to. We check that fact and
+                                    // bail below.
+                                    if !self.mem.mem_map.contains_key(&argument_port) {
+                                        //make sure the result is not in use anyways
+                                        let output = result_port.input.map_out_of_region().unwrap().to_location(result_port.node);
+                                        if backend.graph[argument_port].edges.is_empty() && backend.graph[output].edges.is_empty(){
+                                            continue;
+                                        }else{
+                                            panic!("Loop Argument port has no memory-location associated, but loop's result is in use");
+                                        }
+                                    }
+
                                     self.load_port_elements(result_src, if_seq);
                                     self.store_values_to_port(argument_port, if_seq)
                                 }

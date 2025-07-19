@@ -7,5 +7,5 @@
  */
 #[cfg(feature = "dot")]
 mod cfg_dot;
-mod intern_opt;
+mod lower_opt;
 mod wasm_module;

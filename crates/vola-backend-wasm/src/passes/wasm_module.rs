@@ -14,6 +14,7 @@ use rvsdg::{
     attrib::FlagStore,
     edge::{InportLocation, InputType, OutportLocation, OutputType},
     region::RegionLocation,
+    util::abstract_node_type::AbstractNodeType,
     NodeRef, SmallColl,
 };
 use vola_common::{error_reporter, report, Span};
@@ -132,11 +133,16 @@ impl WasmBackend {
         for resixd in 0..self.graph[tlreg].results.len() {
             let result_port = tlreg.node.as_inport_location(InputType::Result(resixd));
             if let Some(res_source) = self.graph.inport_src(result_port) {
+                //Deny none λ exports for now
+                if self.graph[res_source.node].into_abstract() != AbstractNodeType::Lambda {
+                    report(error_reporter(WasmError::NonLambdaExport, Span::empty()).finish());
+                    last_fail = Some(WasmError::NonLambdaExport);
+                }
+
                 let export_symbol = if let Some(symbol) = self.names.get(&res_source.node.into()) {
                     symbol.clone()
                 } else {
                     last_fail = Some(WasmError::UnnamedExport(res_source.node));
-
                     report(
                         error_reporter(WasmError::UnnamedExport(res_source.node), Span::empty())
                             .finish(),

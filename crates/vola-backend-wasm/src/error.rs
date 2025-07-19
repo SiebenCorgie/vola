@@ -58,4 +58,6 @@ pub enum WasmError {
     RuntimeIncompatibleType(ExternOp, usize, WasmTy),
     #[error("ExternOp not (yet) implemented: {0:?}")]
     ExternOpUnimplemented(ExternOp),
+    #[error("Exported value was a non-function symbol")]
+    NonLambdaExport,
 }

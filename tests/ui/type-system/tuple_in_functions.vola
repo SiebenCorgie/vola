@@ -13,11 +13,13 @@ impl TheEntity for TupleConcept(at){
 }
 
 fn consume_and_stuff(got: (vec3, real)) -> real{
+    //returns 3.0 + 1.0 == 4
     got.0.x + got.1
 }
 
 export fn test(at: vec3) -> real{
     csg c = TheEntity();
+    //([3.0, 0.0, 1.0], 1.0)
     let t = eval c.TupleConcept(at);
     consume_and_stuff(t)
 }
