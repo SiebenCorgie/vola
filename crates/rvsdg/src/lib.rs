@@ -215,6 +215,16 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
         self.nodes.get_mut(nref).unwrap()
     }
 
+    ///Verifies that a node existis (instead of panicing).
+    pub fn try_node(&self, nref: NodeRef) -> Option<&Node<N>> {
+        self.nodes.get(nref)
+    }
+
+    ///Verifies that a node existis (instead of panicing).
+    pub fn try_node_mut(&mut self, nref: NodeRef) -> Option<&mut Node<N>> {
+        self.nodes.get_mut(nref)
+    }
+
     pub fn on_node<T: 'static>(&self, n: NodeRef, f: impl FnOnce(&Node<N>) -> T) -> T {
         f(self.node(n))
     }
@@ -240,6 +250,16 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
         self.edges
             .get_mut(eref)
             .expect("Edge does not exist in graph")
+    }
+
+    ///Returns reference to the edge, if it exists
+    pub fn try_edge(&self, eref: EdgeRef) -> Option<&Edge<E>> {
+        self.edges.get(eref)
+    }
+
+    ///Returns reference to the edge, if it exists.
+    pub fn try_edge_mut(&mut self, eref: EdgeRef) -> Option<&mut Edge<E>> {
+        self.edges.get_mut(eref)
     }
 
     ///Returns the region at the given location, if it exists.
