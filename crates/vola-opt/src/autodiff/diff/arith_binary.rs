@@ -125,7 +125,6 @@ impl Optimizer {
                     }
                     */
                     (a, b) => {
-                        println!("That Aint it");
                         return Err(AutoDiffError::NoAdImpl(format!(
                             "Multiplication derivative not implemented for {a} * {b}"
                         )));

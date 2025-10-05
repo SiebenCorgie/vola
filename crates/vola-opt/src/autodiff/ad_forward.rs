@@ -190,9 +190,7 @@ impl Optimizer {
             expr_cache: DiffExprCache::new(),
             activity,
         };
-
         let derivative_src = self.forward_diff_in_region(region, &mut ctx, expr_src)?;
-
         //replace the differential_value and the autodiff node
         self.graph
             .replace_outport_uses(diffnode.output(0), derivative_src)?;
@@ -216,7 +214,17 @@ impl Optimizer {
         //
         // Therfore we only need to build this node's derivative, and possibly hook-up chain rule sub expressions
         for node in ordered_dependencies {
-            self.build_derivative(region, node, ctx)?;
+            self.build_derivative(region, node, ctx).map_err(|e| {
+                if let Some(span) = self.find_span(node.into()) {
+                    VolaError::error_here(
+                        e.clone(),
+                        span,
+                        "Could not build derivative for this operation",
+                    )
+                    .report();
+                }
+                e
+            })?;
         }
 
         //There is an edge case, where the initial expression is not active. In that case _nothing_
@@ -276,6 +284,10 @@ impl Optimizer {
                 .fwad_handle_port(parent_region, post_diff_src, ctx)
                 .unwrap();
             for t in targets {
+                //NOTE: If this panics, make sure the AD-Rule (you probably just added)
+                // does not connect values to ports, that are later
+                // part of a chain rule. I.e. if you add an input
+                // to an AdResponse, it should not be connected yet.
                 self.graph
                     .connect(diff_expr_src, t, OptEdge::value_edge_unset())?;
             }

@@ -13,6 +13,7 @@ mod buildin;
 mod other;
 
 use rvsdg::{
+    builder::RegionBuilder,
     edge::OutportLocation,
     region::RegionLocation,
     smallvec::{smallvec, SmallVec},
@@ -32,7 +33,7 @@ use crate::{
     },
     imm::ImmScalar,
     typelevel::{ConstantIndex, UniformConstruct},
-    OptNode, Optimizer,
+    OptEdge, OptNode, Optimizer,
 };
 
 use super::{activity::Activity, AdResponse, AutoDiffError};
@@ -87,7 +88,7 @@ impl Optimizer {
         }
 
         if self.is_node_type::<Trig>(node) {
-            return self.build_diff_trig(region, node);
+            return self.build_diff_trig(region, node, activity);
         }
         if self.is_node_type::<Buildin>(node) {
             return self.build_diff_buildin(region, node, activity);
@@ -326,6 +327,7 @@ impl Optimizer {
         &mut self,
         region: RegionLocation,
         node: NodeRef,
+        activity: &mut Activity,
     ) -> Result<AdResponse, AutoDiffError> {
         let span = self.find_span(node.into()).unwrap_or(Span::empty());
         let src = self.graph.inport_src(node.input(0)).unwrap();
@@ -486,10 +488,146 @@ impl Optimizer {
 
                 Ok(self.build_chain_rule_for(&region, node.output(0), diffout, src))
             }
-            //TrigOp::ATan2 => {
-            //See https://de.wikipedia.org/wiki/Arctan2#Ableitungen (german)
-            //    we use the general form
-            //}
+            TrigOp::ATan2 => {
+                //See https://de.wikipedia.org/wiki/Arctan2#Ableitungen (german)
+                //
+                // Depending on the activeness, user either dx, dy version, or the total differential.
+
+                //Left (x)
+                let left_src = self.graph.inport_src(node.input(0)).unwrap();
+                let right_src = self.graph.inport_src(node.input(1)).unwrap();
+                //Right (y)
+                let left_active = activity.is_active_port(self, left_src);
+                let right_active = activity.is_active_port(self, right_src);
+
+                let original_span = self.find_span(node.into()).unwrap_or(Span::empty());
+                //Builds d-left i.e. dx into the region, returns the result port
+                // (-y) / (x*x + y*y)
+                let build_d_left = |region_builder: &mut RegionBuilder<OptNode, OptEdge>| {
+                    //add y to subdiff list
+
+                    let (negy, _) = region_builder
+                        .connect_node(
+                            OptNode::new(UnaryArith::new(UnaryArithOp::Neg), original_span.clone()),
+                            [right_src],
+                        )
+                        .unwrap();
+
+                    //NOTE: inputs will be connected by the post-derivative routine.
+                    let (xsquare, _) = region_builder
+                        .connect_node(
+                            OptNode::new(
+                                BinaryArith::new(BinaryArithOp::Mul),
+                                original_span.clone(),
+                            ),
+                            [left_src, left_src],
+                        )
+                        .unwrap();
+
+                    //Notify that both x-es need to be subderived
+                    //subdiff.push((left_src, smallvec![xsquare.input(0), xsquare.input(1)]));
+
+                    let (ysquare, _) = region_builder
+                        .connect_node(
+                            OptNode::new(
+                                BinaryArith::new(BinaryArithOp::Mul),
+                                original_span.clone(),
+                            ),
+                            [right_src, right_src],
+                        )
+                        .unwrap();
+                    //(x*x + y*y)
+                    let (sub, _) = region_builder
+                        .connect_node(
+                            OptNode::new(
+                                BinaryArith::new(BinaryArithOp::Add),
+                                original_span.clone(),
+                            ),
+                            [xsquare.output(0), ysquare.output(0)],
+                        )
+                        .unwrap();
+                    let (result, _) = region_builder
+                        .connect_node(
+                            OptNode::new(
+                                BinaryArith::new(BinaryArithOp::Div),
+                                original_span.clone(),
+                            ),
+                            [negy.output(0), sub.output(0)],
+                        )
+                        .unwrap();
+
+                    result.output(0)
+                };
+
+                //Builds d-right i.e. dy into the region, returns the result port
+                // x / (x*x + y*y)
+                let build_d_right = |region_builder: &mut RegionBuilder<OptNode, OptEdge>| {
+                    let (xsquare, _) = region_builder
+                        .connect_node(
+                            OptNode::new(
+                                BinaryArith::new(BinaryArithOp::Mul),
+                                original_span.clone(),
+                            ),
+                            [left_src, left_src],
+                        )
+                        .unwrap();
+
+                    //NOTE inputs will be connected by the post-derivative routine.
+                    let (ysquare, _) = region_builder
+                        .connect_node(
+                            OptNode::new(
+                                BinaryArith::new(BinaryArithOp::Mul),
+                                original_span.clone(),
+                            ),
+                            [right_src, right_src],
+                        )
+                        .unwrap();
+
+                    //add y to subdiff list, i.e. build derivative for both y-values
+                    //subdiff.push((right_src, smallvec![ysquare.input(0), ysquare.input(1)]));
+
+                    //(x*x + y*y)
+                    let (sub, _) = region_builder
+                        .connect_node(
+                            OptNode::new(
+                                BinaryArith::new(BinaryArithOp::Add),
+                                original_span.clone(),
+                            ),
+                            [xsquare.output(0), ysquare.output(0)],
+                        )
+                        .unwrap();
+                    let (result, _) = region_builder
+                        .connect_node(
+                            OptNode::new(
+                                BinaryArith::new(BinaryArithOp::Div),
+                                original_span.clone(),
+                            ),
+                            [left_src, sub.output(0)],
+                        )
+                        .unwrap();
+
+                    result.output(0)
+                };
+
+                match (left_active, right_active) {
+                    (false, false) => unreachable!(),
+                    (true, false) => {
+                        println!("dx");
+                        let dx = self.graph.on_region(&region, build_d_left).unwrap();
+
+                        Ok(self.build_chain_rule_for(&region, node.output(0), dx, left_src))
+                    }
+                    (false, true) => {
+                        println!("dy");
+                        let dy = self.graph.on_region(&region, build_d_right).unwrap();
+
+                        Ok(self.build_chain_rule_for(&region, node.output(0), dy, right_src))
+                    }
+                    (true, true) => {
+                        unimplemented!("Total Atan2 derivative not implemented ")
+                    }
+                }
+            }
             _ => todo!("differentiation of {trigop:?} not implemented"),
         }
     }

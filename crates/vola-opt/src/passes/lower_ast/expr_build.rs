@@ -109,7 +109,7 @@ impl Optimizer {
                     //Either a building _special_ call, or an actual call to a λ.
                     //The latter is resolved as a simple _call_
                     if let Some(intr) = OptNode::try_parse(&c.ident.0) {
-                        CallResult::Node(intr)
+                        CallResult::Node(intr.with_span(expr_span.clone()))
                     } else {
                         //must be some kind of function, try to import it, and place a call
                         let call_output = ctx
