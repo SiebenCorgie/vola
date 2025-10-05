@@ -100,7 +100,16 @@ impl DialectNode for Trig {
         match self.op {
             TrigOp::ATan2 => {
                 assert!(input_types.len() == 2);
-                assert!(input_types[0] == input_types[1]);
+                if input_types[0] != input_types[1] {
+                    return Err(OptError::TypeDeriveError {
+                        text: "Inputs need to be of same type".to_owned(),
+                    });
+                }
+                if !(input_types[0] == Ty::SCALAR_INT || input_types[0] == Ty::SCALAR_REAL) {
+                    return Err(OptError::TypeDeriveError {
+                        text: "Inputs need to be either real, or integer".to_owned(),
+                    });
+                }
             }
             _ => {
                 assert!(input_types.len() == 1);
