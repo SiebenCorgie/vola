@@ -31,6 +31,7 @@ use crate::{
         relational::BinaryRel,
         trigonometric::{Trig, TrigOp},
     },
+    hook_barith, hook_buildin, hook_uarith,
     imm::ImmScalar,
     typelevel::{ConstantIndex, UniformConstruct},
     OptEdge, OptNode, Optimizer,
@@ -206,26 +207,12 @@ impl Optimizer {
                 let (subdiff_dst, output) = self
                     .graph
                     .on_region(&region, |g| {
-                        let (abs_f, _) = g
-                            .connect_node(
-                                OptNode::new(UnaryArith::new(UnaryArithOp::Abs), span.clone()),
-                                [src],
-                            )
-                            .unwrap();
+                        let abs_f = hook_uarith!(g, Abs, span.clone(), src);
 
-                        let (f_div_abs_div, _) = g
-                            .connect_node(
-                                OptNode::new(BinaryArith::new(BinaryArithOp::Div), span.clone()),
-                                [src, abs_f.output(0)],
-                            )
-                            .unwrap();
+                        let f_div_abs_div =
+                            hook_barith!(g, Div, span.clone(), [src, abs_f.output(0)]);
 
-                        let (mul, _) = g
-                            .connect_node(
-                                OptNode::new(BinaryArith::new(BinaryArithOp::Mul), span.clone()),
-                                [f_div_abs_div.output(0)],
-                            )
-                            .unwrap();
+                        let mul = hook_barith!(g, Mul, span.clone(), [f_div_abs_div.output(0)]);
 
                         let subdiff_dst = mul.input(1);
 
@@ -245,12 +232,7 @@ impl Optimizer {
                 let (diff_dst, result) = self
                     .graph
                     .on_region(&region, |g| {
-                        let (mul, _) = g
-                            .connect_node(
-                                OptNode::new(BinaryArith::new(BinaryArithOp::Mul), span.clone()),
-                                [negone],
-                            )
-                            .unwrap();
+                        let mul = hook_barith!(g, Mul, span.clone(), [negone]);
                         let diff_dst = mul.input(1);
 
                         (diff_dst, mul)
@@ -383,30 +365,13 @@ impl Optimizer {
                     .on_region(&region, |g| {
                         let one = g.insert_node(OptNode::new(ImmScalar::new(1.0), span.clone()));
                         let two = g.insert_node(OptNode::new(ImmScalar::new(2.0), span.clone()));
-                        let (powout, _) = g
-                            .connect_node(
-                                OptNode::new(Buildin::new(BuildinOp::Pow), span.clone()),
-                                [src, two.output(0)],
-                            )
-                            .unwrap();
-                        let (subout, _) = g
-                            .connect_node(
-                                OptNode::new(BinaryArith::new(BinaryArithOp::Add), span.clone()),
-                                [one.output(0), powout.output(0)],
-                            )
-                            .unwrap();
-                        let (sqrtout, _) = g
-                            .connect_node(
-                                OptNode::new(Buildin::new(BuildinOp::SquareRoot), span.clone()),
-                                [subout.output(0)],
-                            )
-                            .unwrap();
-                        let (div, _) = g
-                            .connect_node(
-                                OptNode::new(BinaryArith::new(BinaryArithOp::Div), span.clone()),
-                                [one.output(0), sqrtout.output(0)],
-                            )
-                            .unwrap();
+                        let powout = hook_buildin!(g, Pow, span.clone(), [src, two.output(0)]);
+                        let subout =
+                            hook_barith!(g, Add, span.clone(), [one.output(0), powout.output(0)]);
+                        let sqrtout =
+                            hook_buildin!(g, SquareRoot, span.clone(), [subout.output(0)]);
+                        let div =
+                            hook_barith!(g, Div, span.clone(), [one.output(0), sqrtout.output(0)]);
 
                         div.output(0)
                     })
@@ -421,36 +386,14 @@ impl Optimizer {
                     .on_region(&region, |g| {
                         let one = g.insert_node(OptNode::new(ImmScalar::new(1.0), span.clone()));
                         let two = g.insert_node(OptNode::new(ImmScalar::new(2.0), span.clone()));
-                        let (powout, _) = g
-                            .connect_node(
-                                OptNode::new(Buildin::new(BuildinOp::Pow), span.clone()),
-                                [src, two.output(0)],
-                            )
-                            .unwrap();
-                        let (subout, _) = g
-                            .connect_node(
-                                OptNode::new(BinaryArith::new(BinaryArithOp::Add), span.clone()),
-                                [one.output(0), powout.output(0)],
-                            )
-                            .unwrap();
-                        let (sqrtout, _) = g
-                            .connect_node(
-                                OptNode::new(Buildin::new(BuildinOp::SquareRoot), span.clone()),
-                                [subout.output(0)],
-                            )
-                            .unwrap();
-                        let (div, _) = g
-                            .connect_node(
-                                OptNode::new(BinaryArith::new(BinaryArithOp::Div), span.clone()),
-                                [one.output(0), sqrtout.output(0)],
-                            )
-                            .unwrap();
-                        let (neg, _) = g
-                            .connect_node(
-                                OptNode::new(UnaryArith::new(UnaryArithOp::Neg), span.clone()),
-                                [div.output(0)],
-                            )
-                            .unwrap();
+                        let powout = hook_buildin!(g, Pow, span.clone(), [src, two.output(0)]);
+                        let subout =
+                            hook_barith!(g, Add, span.clone(), [one.output(0), powout.output(0)]);
+                        let sqrtout =
+                            hook_buildin!(g, SquareRoot, span.clone(), [subout.output(0)]);
+                        let div =
+                            hook_barith!(g, Div, span.clone(), [one.output(0), sqrtout.output(0)]);
+                        let neg = hook_uarith!(g, Neg, span.clone(), div.output(0));
                         neg.output(0)
                     })
                     .unwrap();
@@ -464,24 +407,12 @@ impl Optimizer {
                     .on_region(&region, |g| {
                         let one = g.insert_node(OptNode::new(ImmScalar::new(1.0), span.clone()));
                         let two = g.insert_node(OptNode::new(ImmScalar::new(2.0), span.clone()));
-                        let (powout, _) = g
-                            .connect_node(
-                                OptNode::new(Buildin::new(BuildinOp::Pow), span.clone()),
-                                [src, two.output(0)],
-                            )
-                            .unwrap();
-                        let (addout, _) = g
-                            .connect_node(
-                                OptNode::new(BinaryArith::new(BinaryArithOp::Add), span.clone()),
-                                [powout.output(0), two.output(0)],
-                            )
-                            .unwrap();
-                        let (div, _) = g
-                            .connect_node(
-                                OptNode::new(BinaryArith::new(BinaryArithOp::Div), span.clone()),
-                                [one.output(0), addout.output(0)],
-                            )
-                            .unwrap();
+                        let powout = hook_buildin!(g, Pow, span.clone(), [src, two.output(0)]);
+                        let addout =
+                            hook_barith!(g, Add, span.clone(), [powout.output(0), two.output(0)]);
+
+                        let div =
+                            hook_barith!(g, Div, span.clone(), [one.output(0), addout.output(0)]);
                         div.output(0)
                     })
                     .unwrap();
@@ -506,55 +437,38 @@ impl Optimizer {
                 let build_d_left = |region_builder: &mut RegionBuilder<OptNode, OptEdge>| {
                     //add y to subdiff list
 
-                    let (negy, _) = region_builder
-                        .connect_node(
-                            OptNode::new(UnaryArith::new(UnaryArithOp::Neg), original_span.clone()),
-                            [right_src],
-                        )
-                        .unwrap();
+                    let negy = hook_uarith!(region_builder, Neg, original_span.clone(), right_src);
 
                     //NOTE: inputs will be connected by the post-derivative routine.
-                    let (xsquare, _) = region_builder
-                        .connect_node(
-                            OptNode::new(
-                                BinaryArith::new(BinaryArithOp::Mul),
-                                original_span.clone(),
-                            ),
-                            [left_src, left_src],
-                        )
-                        .unwrap();
+                    let xsquare = hook_barith!(
+                        region_builder,
+                        Mul,
+                        original_span.clone(),
+                        [left_src, left_src]
+                    );
 
                     //Notify that both x-es need to be subderived
                     //subdiff.push((left_src, smallvec![xsquare.input(0), xsquare.input(1)]));
 
-                    let (ysquare, _) = region_builder
-                        .connect_node(
-                            OptNode::new(
-                                BinaryArith::new(BinaryArithOp::Mul),
-                                original_span.clone(),
-                            ),
-                            [right_src, right_src],
-                        )
-                        .unwrap();
+                    let ysquare = hook_barith!(
+                        region_builder,
+                        Mul,
+                        original_span.clone(),
+                        [right_src, right_src]
+                    );
                     //(x*x + y*y)
-                    let (sub, _) = region_builder
-                        .connect_node(
-                            OptNode::new(
-                                BinaryArith::new(BinaryArithOp::Add),
-                                original_span.clone(),
-                            ),
-                            [xsquare.output(0), ysquare.output(0)],
-                        )
-                        .unwrap();
-                    let (result, _) = region_builder
-                        .connect_node(
-                            OptNode::new(
-                                BinaryArith::new(BinaryArithOp::Div),
-                                original_span.clone(),
-                            ),
-                            [negy.output(0), sub.output(0)],
-                        )
-                        .unwrap();
+                    let add = hook_barith!(
+                        region_builder,
+                        Add,
+                        original_span.clone(),
+                        [xsquare.output(0), ysquare.output(0)]
+                    );
+                    let result = hook_barith!(
+                        region_builder,
+                        Div,
+                        original_span.clone(),
+                        [negy.output(0), add.output(0)]
+                    );
 
                     result.output(0)
                 };
@@ -562,63 +476,47 @@ impl Optimizer {
                 //Builds d-right i.e. dy into the region, returns the result port
                 // x / (x*x + y*y)
                 let build_d_right = |region_builder: &mut RegionBuilder<OptNode, OptEdge>| {
-                    let (xsquare, _) = region_builder
-                        .connect_node(
-                            OptNode::new(
-                                BinaryArith::new(BinaryArithOp::Mul),
-                                original_span.clone(),
-                            ),
-                            [left_src, left_src],
-                        )
-                        .unwrap();
-
+                    let xsquare = hook_barith!(
+                        region_builder,
+                        Mul,
+                        original_span.clone(),
+                        [left_src, left_src]
+                    );
                     //NOTE inputs will be connected by the post-derivative routine.
-                    let (ysquare, _) = region_builder
-                        .connect_node(
-                            OptNode::new(
-                                BinaryArith::new(BinaryArithOp::Mul),
-                                original_span.clone(),
-                            ),
-                            [right_src, right_src],
-                        )
-                        .unwrap();
 
+                    let ysquare = hook_barith!(
+                        region_builder,
+                        Mul,
+                        original_span.clone(),
+                        [right_src, right_src]
+                    );
                     //add y to subdiff list, i.e. build derivative for both y-values
                     //subdiff.push((right_src, smallvec![ysquare.input(0), ysquare.input(1)]));
 
                     //(x*x + y*y)
-                    let (sub, _) = region_builder
-                        .connect_node(
-                            OptNode::new(
-                                BinaryArith::new(BinaryArithOp::Add),
-                                original_span.clone(),
-                            ),
-                            [xsquare.output(0), ysquare.output(0)],
-                        )
-                        .unwrap();
-                    let (result, _) = region_builder
-                        .connect_node(
-                            OptNode::new(
-                                BinaryArith::new(BinaryArithOp::Div),
-                                original_span.clone(),
-                            ),
-                            [left_src, sub.output(0)],
-                        )
-                        .unwrap();
-
+                    let add = hook_barith!(
+                        region_builder,
+                        Add,
+                        original_span.clone(),
+                        [xsquare.output(0), ysquare.output(0)]
+                    );
+                    let result = hook_barith!(
+                        region_builder,
+                        Div,
+                        original_span.clone(),
+                        [left_src, add.output(0)]
+                    );
                     result.output(0)
                 };
 
                 match (left_active, right_active) {
                     (false, false) => unreachable!(),
                     (true, false) => {
-                        println!("dx");
                         let dx = self.graph.on_region(&region, build_d_left).unwrap();
 
                         Ok(self.build_chain_rule_for(&region, node.output(0), dx, left_src))
                     }
                     (false, true) => {
-                        println!("dy");
                         let dy = self.graph.on_region(&region, build_d_right).unwrap();
 
                         Ok(self.build_chain_rule_for(&region, node.output(0), dy, right_src))

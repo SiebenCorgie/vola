@@ -22,6 +22,7 @@ use crate::{
         relational::{BinaryRel, BinaryRelOp},
     },
     autodiff::{activity::Activity, AdResponse},
+    hook_barith, hook_buildin,
     imm::ImmScalar,
     OptEdge, OptNode, Optimizer,
 };
@@ -70,12 +71,12 @@ impl Optimizer {
                         let v_diff_dst = u_op_diffv.input(1);
 
                         //add both
-                        let (add, _) = g
-                            .connect_node(
-                                OptNode::new(BinaryArith::new(BinaryArithOp::Add), span.clone()),
-                                [udiff_op_v.output(0), u_op_diffv.output(0)],
-                            )
-                            .unwrap();
+                        let add = hook_barith!(
+                            g,
+                            Add,
+                            span.clone(),
+                            [udiff_op_v.output(0), u_op_diffv.output(0)]
+                        );
 
                         (u_diff_dst, v_diff_dst, add.output(0))
                     })
@@ -113,12 +114,8 @@ impl Optimizer {
                             .unwrap();
 
                         //div one
-                        let (div_one, _) = g
-                            .connect_node(
-                                OptNode::new(BinaryArith::new(BinaryArithOp::Div), span.clone()),
-                                [imm_one, mul_inner.output(0)],
-                            )
-                            .unwrap();
+                        let div_one =
+                            hook_barith!(g, Div, span.clone(), [imm_one, mul_inner.output(0)]);
 
                         div_one.output(0)
                     })
@@ -307,32 +304,13 @@ impl Optimizer {
                         .graph
                         .on_region(&region, |g| {
                             //n-1
-                            let (n_minus_one, _) = g
-                                .connect_node(
-                                    OptNode::new(
-                                        BinaryArith::new(BinaryArithOp::Sub),
-                                        span.clone(),
-                                    ),
-                                    [n_src, one],
-                                )
-                                .unwrap();
+                            let n_minus_one = hook_barith!(g, Sub, span.clone(), [n_src, one]);
                             //into exponent
-                            let (x_times, _) = g
-                                .connect_node(
-                                    OptNode::new(Buildin::new(BuildinOp::Pow), span.clone()),
-                                    [x_src, n_minus_one.output(0)],
-                                )
-                                .unwrap();
+                            let x_times =
+                                hook_buildin!(g, Pow, span.clone(), [x_src, n_minus_one.output(0)]);
                             //mul n
-                            let (result, _) = g
-                                .connect_node(
-                                    OptNode::new(
-                                        BinaryArith::new(BinaryArithOp::Mul),
-                                        span.clone(),
-                                    ),
-                                    [n_src, x_times.output(0)],
-                                )
-                                .unwrap();
+                            let result =
+                                hook_barith!(g, Mul, span.clone(), [n_src, x_times.output(0)]);
 
                             result.output(0)
                         })
