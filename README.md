@@ -100,7 +100,10 @@ The wasm backend currently needs the `bindeps` nightly cargo feature. Either app
 
 ### Testing
 
-There is a test runner in `tests`. It uses all integration tests in `tests/ui` on each backend and reports the results. Run it via
+There is a test runner in `tests`. It uses all integration tests in `tests/ui` on each backend and reports the results.
+Make sure you have [wasm-tools](https://crates.io/crates/wasm-tools) installed, which is used to verify the generated WASM-modules.
+
+Run it via
 ``` shell
 cargo run --bin test-runner --release
 ```
