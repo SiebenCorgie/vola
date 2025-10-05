@@ -1,0 +1,20 @@
+//BEGIN-CONFIG
+//EXEC-FN:call
+//EXEC-ARGS:0.0,1.0,-1.0
+//EXEC-EPS:0.0
+//EXEC-RES:-1.0,-0.0,0.5
+//END-CONFIG
+
+//Check that atan2diff actually does what it should
+export fn call(p: vec3) -> vec3{
+    //diff(atan2(t, 1)) should be
+    // -1 for t=1
+    let p0 = atan2(p.x, 1.0);
+    let d0 = diff(p0, p.x);
+    let p1 = atan2(p.y, 0.0);
+    let d1 = diff(p1, p.y);
+    let p2 = atan2(p.z, -1.0);
+    let d2 = diff(p2, p.z);
+
+    [d0, d1, d2]
+}
