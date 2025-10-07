@@ -13,6 +13,10 @@
 - `impl`
 - `for`
 - `fn`
+- `export`
+- `module`
+- `super`
+
 
 ## Types
 

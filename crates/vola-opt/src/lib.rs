@@ -25,6 +25,11 @@
 //! Represents differentiation in the graph. Lowering performs auto-differentiation of the input expression with respect to any other expression(s).
 //! Is only defined on algebraic expressions.
 //!
+//! ### [Interval](interval)
+//!
+//! Represents the entrypoint for interval-analysis in the graph.
+//! Lowering performs the analysis on the arithmetic layer and replaces the result value with the given interval.
+//!
 //! ### [Alge](alge)
 //!
 //! Used to represent algebraic, logic and boolean expressions.
@@ -65,6 +70,7 @@ pub mod autodiff;
 pub mod config;
 pub mod graph;
 pub mod imm;
+pub mod interval;
 pub mod passes;
 pub mod typelevel;
 pub mod util;

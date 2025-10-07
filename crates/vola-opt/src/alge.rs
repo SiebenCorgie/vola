@@ -25,7 +25,9 @@ use trigonometric::{Trig, TrigOp};
 use vola_ast::csg::{CsgConcept, CsgDef};
 use vola_common::Span;
 
-use crate::{autodiff::AutoDiff, common::Ty, error::OptError, DialectNode, OptNode};
+use crate::{
+    autodiff::AutoDiff, common::Ty, error::OptError, interval::Interval, DialectNode, OptNode,
+};
 
 pub mod arithmetic;
 pub mod buildin;
@@ -137,6 +139,7 @@ impl OptNode {
                 Span::empty(),
             )),
             "diff" => Some(OptNode::new(AutoDiff::default(), Span::empty())),
+            "bound" => Some(OptNode::new(Interval::default(), Span::empty())),
             _ => None,
         }
     }
