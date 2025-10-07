@@ -1,0 +1,14 @@
+//BEGIN-CONFIG
+//EXEC-FN:call
+//EXEC-ARGS:0.0
+//EXEC-EPS:0.0
+//EXEC-RES:-1.0,1.0
+//END-CONFIG
+
+//Check that atan2diff actually does what it should
+export fn call(p: real) -> vec2{
+    let a = sin(p);
+
+    let ai = bound(a, p, -INF, INF);
+    (ai.start, ai.end)
+}
