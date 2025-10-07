@@ -1,0 +1,17 @@
+//BEGIN-CONFIG
+//EXEC-FN:call
+//EXEC-ARGS:0.0
+//EXEC-EPS:0.0
+//EXEC-RES:-1.0,1.0
+//END-CONFIG
+
+fn sub_function(i: interval<vec3<real>>) -> real{
+    i.x.start
+}
+
+export fn call(p: real) -> real{
+    let a = [sin(p); 3];
+
+    let ai = bound(a, p, -INF, INF);
+    sub_function(ai)
+}

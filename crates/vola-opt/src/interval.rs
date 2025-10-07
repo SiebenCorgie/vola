@@ -95,11 +95,31 @@ impl DialectNode for Interval {
 
     fn try_derive_type(
         &self,
-        _input_types: &[Ty],
+        input_types: &[Ty],
         _concepts: &ahash::AHashMap<String, vola_ast::csg::CsgConcept>,
         _csg_defs: &ahash::AHashMap<String, vola_ast::csg::CsgDef>,
     ) -> Result<Ty, OptError> {
-        todo!()
+        assert_eq!(input_types.len(), 4, "should have 4 inputs");
+
+        // Now we have to verify, that the input matches the expectations. I.e.
+        // the dynamic value has an arithmetic type, and the dynamic parameter has the same
+        // shape as the bounds. If so, return the Interval of the input param.
+
+        if !input_types[0].is_shaped() || input_types[0] == Ty::CSG {
+            return Err(OptError::TypeDeriveError {
+                text: "Can only create intervals for (shaped) arithmetic types".to_owned(),
+            });
+        }
+
+        if input_types[1] != input_types[2] || input_types[1] != input_types[3] {
+            return Err(OptError::TypeDeriveError {
+                text: format!("Bounds do not match dynamic parameter's type: dynamic: {}, lower: {}, upper: {}", input_types[1], input_types[2], input_types[3]),
+            });
+        }
+
+        //Its alright, therefore create the interval version
+        // of the value's type
+        Ok(Ty::Interval(Box::new(input_types[0].clone())))
     }
 
     fn is_operation_equal(&self, other: &crate::OptNode) -> bool {

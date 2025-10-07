@@ -122,7 +122,7 @@ impl DialectNode for UniformConstruct {
             });
         }
 
-        if !input_types[0].is_algebraic() {
+        if !input_types[0].is_scalar_arithmetic() {
             return Err(OptError::Any { text: format!("List can only be created from algebraic types (scalar, vector, matrix, tensor), but first element was of type {:?}", input_types[0]) });
         }
 
@@ -168,9 +168,6 @@ impl DialectNode for UniformConstruct {
                     dim.push(listlen);
                     Ok(Ty::shaped(DataType::Real, Shape::Tensor { sizes: dim }))
                 }
-                _ => Err(OptError::TypeDeriveError {
-                    text: format!("Cannot construct list from {} elements", input_types[0]),
-                }),
             },
             _ => Err(OptError::TypeDeriveError {
                 text: format!("Cannot construct \"List\" from \"{}\"", input_types[0]),

@@ -624,7 +624,6 @@ impl TryFrom<vola_opt::common::Ty> for SpvType {
                     Shape::Tensor { sizes } => TyShape::Tensor {
                         dim: sizes.into_iter().map(|d| d.try_into().unwrap()).collect(),
                     },
-                    _other => return Err(BackendSpirvError::TypeConversionError(value)),
                 };
 
                 Self::Arith(ArithTy {
@@ -641,6 +640,9 @@ impl TryFrom<vola_opt::common::Ty> for SpvType {
                 Self::Tuple(subtypes?)
             }
             vola_opt::common::Ty::Callable => Self::Callable,
+            vola_opt::common::Ty::Interval(_sub_type) => {
+                todo!("implement intervals as two-element tuple")
+            }
         };
 
         Ok(res)

@@ -51,7 +51,6 @@ pub enum Shape {
     Vec { width: usize },
     Matrix { width: usize, height: usize },
     Tensor { sizes: SmallVec<[usize; 8]> },
-    Interval,
 }
 
 ///Describes the shape and data-type of a value.
@@ -63,6 +62,8 @@ pub enum Ty {
         ty: DataTy,
         shape: Shape,
     },
+    ///Interval of some type
+    Interval(Box<Self>),
     ///Aggregate type in the form of a tuple
     Tuple(Vec<Self>),
 }

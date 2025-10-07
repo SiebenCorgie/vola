@@ -72,7 +72,7 @@ impl DialectNode for UnaryBool {
 
         match &self.op {
             UnaryBoolOp::Not => {
-                if !input_ty.is_algebraic() {
+                if !input_ty.is_scalar_arithmetic() {
                     return Err(OptError::Any {
                         text: format!(
                             "{:?} expects algebraic operand (scalar, vector, matrix, tensor) got {:?}",

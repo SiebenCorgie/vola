@@ -253,7 +253,7 @@ impl BuildinOp {
                     });
                 }
 
-                if !sig[0].is_algebraic() || sig[0].is_matrix() || sig[1].is_tensor() {
+                if !sig[0].is_scalar_arithmetic() || sig[0].is_matrix() || sig[1].is_tensor() {
                     return Err(OptError::Any {
                         text: format!(
                             "{:?} expects algebraic operands (scalar, vector, matrix, tensor) got {:?}",

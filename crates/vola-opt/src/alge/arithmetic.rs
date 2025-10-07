@@ -90,7 +90,7 @@ impl BinaryArith {
                     });
                 }
 
-                if !sig[0].is_algebraic() {
+                if !sig[0].is_scalar_arithmetic() {
                     return Err(OptError::Any {
                         text: format!(
                             "{:?} expects algebraic operands (scalar, vector, matrix, tensor) got {}",
@@ -118,7 +118,7 @@ impl BinaryArith {
                     });
                 }
 
-                if !sig[0].is_algebraic() {
+                if !sig[0].is_scalar_arithmetic() {
                     return Err(OptError::Any {
                         text: format!(
                             "{:?} expects algebraic operands (scalar, vector, matrix, tensor) got {}",
@@ -127,7 +127,7 @@ impl BinaryArith {
                     });
                 }
 
-                if !sig[1].is_algebraic() {
+                if !sig[1].is_scalar_arithmetic() {
                     return Err(OptError::Any {
                         text: format!(
                             "{:?} expects algebraic operands (scalar, vector, matrix, tensor) got {}",
@@ -365,7 +365,7 @@ impl DialectNode for UnaryArith {
 
         match &self.op {
             UnaryArithOp::Neg => {
-                if !input_ty.is_algebraic() {
+                if !input_ty.is_scalar_arithmetic() {
                     return Err(OptError::Any {
                         text: format!(
                             "{:?} expects algebraic operand (scalar, vector, matrix, tensor) got {:?}",
