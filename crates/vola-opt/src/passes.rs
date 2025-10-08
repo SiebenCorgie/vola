@@ -12,6 +12,7 @@
 //!
 //! Later on we'll probably start introducing optimizations and compiler-based inference of properties.
 
+mod autodiff_dispatch;
 mod cleanup_backend;
 mod constant_folding;
 mod field_inliner;

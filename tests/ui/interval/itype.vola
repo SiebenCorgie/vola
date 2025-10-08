@@ -12,6 +12,6 @@ fn sub_function(i: interval<vec3<real>>) -> real{
 export fn call(p: real) -> real{
     let a = [sin(p); 3];
 
-    let ai = bound(a, p, -INF, INF);
+    let ai = bound(a, p, -INF, 5);
     sub_function(ai)
 }
