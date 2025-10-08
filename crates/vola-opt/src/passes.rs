@@ -12,12 +12,14 @@
 //!
 //! Later on we'll probably start introducing optimizations and compiler-based inference of properties.
 
+pub mod activity;
 mod autodiff_dispatch;
 mod cleanup_backend;
 mod constant_folding;
 mod field_inliner;
 mod imm_scalarizer;
 mod inline_all;
+mod interval_dispatch;
 mod lower_ast;
 mod recursion_detection;
 mod specializer;

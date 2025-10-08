@@ -29,7 +29,7 @@ use crate::{
 use super::AutoDiff;
 
 type WrtProdMap = AHashMap<OutportLocation, SmallColl<usize>>;
-pub(crate) struct Activity {
+pub struct Activity {
     ///All nodes or ports from which we _know_ the activity state.
     pub active: FlagStore<bool>,
     ///All ports that are equivalent to the wrt-input of the
@@ -107,7 +107,7 @@ impl Activity {
         self.wrt_producer.contains_key(port)
     }
 
-    //Tries to recover the activity state of this port, and if it can't, traces it
+    ///Tries to recover the activity state of this port, and if it can't, traces it through the graph.
     pub fn is_active_port(&mut self, opt: &Optimizer, port: OutportLocation) -> bool {
         if let Some(state) = self.active.get(&port.into()) {
             *state
@@ -138,7 +138,7 @@ impl Activity {
 
     //traces all predecessors of this node. Each trace ends at
     // 1. Finding cached value for node.
-    // 2. at wrt-producer (and recursively taggs predecessors all as _active_)
+    // 2. at wrt-producer (and recursively tags predecessors all as _active_)
     // 3. at region argument
     pub(crate) fn trace_node_activity(&mut self, opt: &Optimizer, node: NodeRef) -> bool {
         //TODO: Handle nodes with sub regions, Gamma&Theta nodes mostly...
@@ -411,7 +411,10 @@ impl Optimizer {
         Ok(activity)
     }
 
-    fn trace_activity_seed(&self, wrt: OutportLocation) -> (FlagStore<bool>, WrtProdMap) {
+    pub(crate) fn trace_activity_seed(
+        &self,
+        wrt: OutportLocation,
+    ) -> (FlagStore<bool>, WrtProdMap) {
         //First build a path of indexes, that let us access the wrt-port's scalar value.
 
         let mut path = SmallColl::new();

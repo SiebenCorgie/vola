@@ -12,7 +12,7 @@
 //!
 //! The submoduls implement the actual autodiff pass as well a specific optimizations.
 
-mod activity;
+pub(crate) mod activity;
 mod ad_forward;
 mod ad_utils;
 mod canonicalize;
