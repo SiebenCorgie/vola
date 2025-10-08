@@ -250,9 +250,13 @@ impl<
                             remap_port.output
                         )
                     }
+
+                    //NOTE: only show in trace, since this fires
+                    // way too often if the eq-relation in an edge-type-system
+                    // is slightly off.
                     #[cfg(feature = "log")]
                     if remap_ty != &ty {
-                        log::warn!(
+                        log::trace!(
                             "Edge type missmatch on port {:?} while inlining!",
                             remap_port
                         );
