@@ -6,9 +6,6 @@
  * 2025 Tendsin Mende
  */
 
-use std::collections::VecDeque;
-
-use ahash::AHashSet;
 use rvsdg::NodeRef;
 use vola_common::VolaError;
 

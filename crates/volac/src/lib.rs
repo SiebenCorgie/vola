@@ -252,8 +252,15 @@ impl Pipeline {
                 .map_err(|e| vec![VolaError::new(PipelineError::CneError(e))])?;
         }
 
-        //dispatch autodiff nodes
-        opt.dispatch_autodiff().map_err(|e| vec![e.to_error()])?;
+        //dispatch autodiff nodes if any where seen
+        if opt.config.seen_pass_nodes.autodiff {
+            opt.dispatch_autodiff().map_err(|e| vec![e.to_error()])?;
+        }
+
+        //dispatch interval-extension if any where seen
+        if opt.config.seen_pass_nodes.interval {
+            opt.interval_extension().map_err(|e| vec![e.to_error()])?;
+        }
 
         //Call _before-finalize-hook_.
         self.backend.opt_pre_finalize(&mut opt)?;

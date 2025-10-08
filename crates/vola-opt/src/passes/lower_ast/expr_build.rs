@@ -12,8 +12,10 @@ use rvsdg::{
 };
 
 use crate::{
+    autodiff::AutoDiff,
     csg::CsgOp,
     imm::ImmBool,
+    interval::Interval,
     passes::lower_ast::block_build::VarDef,
     typelevel::{NonUniformConstruct, TypeCast},
     OptEdge, Optimizer,
@@ -109,6 +111,23 @@ impl Optimizer {
                     //Either a building _special_ call, or an actual call to a λ.
                     //The latter is resolved as a simple _call_
                     if let Some(intr) = OptNode::try_parse(&c.ident.0) {
+                        //Notify the compiler if this is one of the pass nodes.
+                        if intr.try_downcast_ref::<AutoDiff>().is_some() {
+                            #[cfg(feature = "log")]
+                            if !self.config.seen_pass_nodes.autodiff {
+                                log::info!("Registering first AutoDiff");
+                            }
+
+                            self.config.seen_pass_nodes.autodiff = true;
+                        }
+                        if intr.try_downcast_ref::<Interval>().is_some() {
+                            #[cfg(feature = "log")]
+                            if !self.config.seen_pass_nodes.interval {
+                                log::info!("Registering first AutoDiff");
+                            }
+                            self.config.seen_pass_nodes.interval = true;
+                        }
+
                         CallResult::Node(intr.with_span(expr_span.clone()))
                     } else {
                         //must be some kind of function, try to import it, and place a call
