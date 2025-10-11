@@ -9,17 +9,17 @@
 use rvsdg::NodeRef;
 use vola_common::{Span, VolaError};
 
-use crate::{interval::Interval, OptError, Optimizer};
+use crate::{interval::IntervalExtension, OptError, Optimizer};
 
 /// Pass that handles the [interval-extension](https://en.wikipedia.org/wiki/Interval_arithmetic#Interval_extensions_of_general_functions) for any call to
 /// `bound()` in the source program.
-pub struct IntervalExtension<'opt> {
+pub struct IntervalExtensionPass<'opt> {
     optimizer: &'opt Optimizer,
 }
 
-impl<'opt> IntervalExtension<'opt> {
+impl<'opt> IntervalExtensionPass<'opt> {
     pub fn setup(optimizer: &'opt Optimizer) -> Self {
-        IntervalExtension { optimizer }
+        IntervalExtensionPass { optimizer }
     }
 
     pub fn extend_all(mut self) -> Result<(), VolaError<OptError>> {
@@ -41,7 +41,7 @@ impl<'opt> IntervalExtension<'opt> {
         let mut all_nodes = Vec::with_capacity(0);
 
         for live_node in self.optimizer.graph.walk_reachable() {
-            if self.optimizer.is_node_type::<Interval>(live_node) {
+            if self.optimizer.is_node_type::<IntervalExtension>(live_node) {
                 all_nodes.push(live_node);
             }
         }
@@ -52,7 +52,7 @@ impl<'opt> IntervalExtension<'opt> {
         Ok(all_nodes)
     }
 
-    fn expand_entry(&mut self, entry_point: NodeRef) -> Result<(), VolaError<OptError>> {
+    fn expand_entry(&mut self, _entry_point: NodeRef) -> Result<(), VolaError<OptError>> {
         Err(VolaError::new(OptError::Any {
             text: "Interval arithmetic not yet implemented".to_owned(),
         }))
@@ -61,6 +61,6 @@ impl<'opt> IntervalExtension<'opt> {
 
 impl Optimizer {
     pub fn interval_extension(&mut self) -> Result<(), VolaError<OptError>> {
-        IntervalExtension::setup(self).extend_all()
+        IntervalExtensionPass::setup(self).extend_all()
     }
 }

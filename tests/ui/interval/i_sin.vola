@@ -9,6 +9,6 @@
 export fn call(p: real) -> vec2{
     let a = sin(p);
 
-    let ai = bound(a, p, -INF, INF);
+    let ai = bound(a, p, [-INF..INF]);
     (ai.start, ai.end)
 }

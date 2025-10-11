@@ -26,7 +26,8 @@ use vola_ast::csg::{CsgConcept, CsgDef};
 use vola_common::Span;
 
 use crate::{
-    autodiff::AutoDiff, common::Ty, error::OptError, interval::Interval, DialectNode, OptNode,
+    autodiff::AutoDiff, common::Ty, error::OptError, interval::IntervalExtension, DialectNode,
+    OptNode,
 };
 
 pub mod arithmetic;
@@ -139,7 +140,7 @@ impl OptNode {
                 Span::empty(),
             )),
             "diff" => Some(OptNode::new(AutoDiff::default(), Span::empty())),
-            "bound" => Some(OptNode::new(Interval::default(), Span::empty())),
+            "bound" => Some(OptNode::new(IntervalExtension::default(), Span::empty())),
             _ => None,
         }
     }

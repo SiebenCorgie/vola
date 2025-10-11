@@ -48,9 +48,9 @@ macro_rules! implViewInterval {
     }
 }
 
-///The `diff` entry-point node
+///The `interval` entry-point node
 #[derive(LangNode, Debug)]
-pub struct Interval {
+pub struct IntervalExtension {
     ///By Definition the first is the `expr` that is being analysed, the second input is the dynamic value, and the last two are the interval, in which the expression is analysed.
     #[inputs]
     pub inputs: [Input; 4],
@@ -59,7 +59,7 @@ pub struct Interval {
     pub output: Output,
 }
 
-impl Interval {
+impl IntervalExtension {
     pub fn expr_input() -> InputType {
         InputType::Input(0)
     }
@@ -72,9 +72,9 @@ impl Interval {
     }
 }
 
-impl Default for Interval {
+impl Default for IntervalExtension {
     fn default() -> Self {
-        Interval {
+        IntervalExtension {
             inputs: [
                 Input::default(),
                 Input::default(),
@@ -86,9 +86,9 @@ impl Default for Interval {
     }
 }
 
-implViewInterval!(Interval, "Interval");
+implViewInterval!(IntervalExtension, "IntervalExtension");
 
-impl DialectNode for Interval {
+impl DialectNode for IntervalExtension {
     fn dialect(&self) -> &'static str {
         "Interval"
     }
@@ -123,7 +123,7 @@ impl DialectNode for Interval {
     }
 
     fn is_operation_equal(&self, other: &crate::OptNode) -> bool {
-        if let Some(_other_op) = other.try_downcast_ref::<Interval>() {
+        if let Some(_other_op) = other.try_downcast_ref::<IntervalExtension>() {
             true
         } else {
             false
@@ -131,7 +131,7 @@ impl DialectNode for Interval {
     }
 
     fn structural_copy(&self, span: vola_common::Span) -> crate::OptNode {
-        OptNode::new(Interval::default(), span)
+        OptNode::new(IntervalExtension::default(), span)
     }
 
     fn try_constant_fold(

@@ -15,7 +15,7 @@ use crate::{
     autodiff::AutoDiff,
     csg::CsgOp,
     imm::ImmBool,
-    interval::Interval,
+    interval::IntervalExtension,
     passes::lower_ast::block_build::VarDef,
     typelevel::{NonUniformConstruct, TypeCast},
     OptEdge, Optimizer,
@@ -120,7 +120,7 @@ impl Optimizer {
 
                             self.config.seen_pass_nodes.autodiff = true;
                         }
-                        if intr.try_downcast_ref::<Interval>().is_some() {
+                        if intr.try_downcast_ref::<IntervalExtension>().is_some() {
                             #[cfg(feature = "log")]
                             if !self.config.seen_pass_nodes.interval {
                                 log::info!("Registering first AutoDiff");
