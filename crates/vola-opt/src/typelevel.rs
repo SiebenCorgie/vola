@@ -616,3 +616,65 @@ impl DialectNode for TypeCast {
         None
     }
 }
+
+/// Constructs a Interval from the given lower and upper bound
+#[derive(LangNode, Debug, Default)]
+pub struct IntervalConstruct {
+    #[inputs]
+    pub inputs: [Input; 2],
+    #[output]
+    pub output: Output,
+}
+
+implViewTyOp!(IntervalConstruct, "IntervalConstruct");
+impl DialectNode for IntervalConstruct {
+    fn dialect(&self) -> &'static str {
+        "typelevel"
+    }
+
+    fn structural_copy(&self, span: Span) -> OptNode {
+        OptNode::new(Self::default(), span)
+    }
+    fn try_derive_type(
+        &self,
+        input_types: &[Ty],
+        _concepts: &AHashMap<String, CsgConcept>,
+        _csg_defs: &ahash::AHashMap<String, CsgDef>,
+    ) -> Result<Ty, OptError> {
+        //Make sure both inputs are of the same type, and shaped
+        assert_eq!(input_types.len(), 2);
+        if input_types[0] != input_types[1] {
+            return Err(OptError::TypeDeriveError {
+                text: format!(
+                    "Interval bounds types don't match: {} != {}",
+                    input_types[0], input_types[1]
+                ),
+            });
+        }
+
+        if !input_types[0].is_shaped() {
+            Err(OptError::TypeDeriveError {
+                text: format!(
+                    "Interval type must be a shaped type, was {}",
+                    input_types[0]
+                ),
+            })
+        } else {
+            Ok(Ty::Interval(Box::new(input_types[0].clone())))
+        }
+    }
+    fn try_constant_fold(
+        &self,
+        #[allow(unused_variables)] src_nodes: &[Option<&rvsdg::nodes::Node<OptNode>>],
+    ) -> Option<OptNode> {
+        //Interval constructors cannot meaningfully be folded.
+        None
+    }
+    fn is_operation_equal(&self, other: &OptNode) -> bool {
+        if other.try_downcast_ref::<Self>().is_some() {
+            true
+        } else {
+            false
+        }
+    }
+}

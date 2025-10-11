@@ -37,6 +37,9 @@ impl Optimizer {
             .map(|n| self.graph[*n].parent.unwrap())
             .collect::<AHashSet<_>>();
 
+        #[cfg(feature = "log")]
+        log::info!("Dispatch AutoDiff for {}", dispatch_nodes.len());
+
         for node in dispatch_nodes {
             //TODO: Do heuristics to decide if we want forward / backward or hybrid
             //      AD.

@@ -4,6 +4,9 @@ use crate::{OptError, Optimizer};
 
 impl Optimizer {
     fn remove_unused_toplevel_cvs(&mut self) {
+        #[cfg(feature = "log")]
+        log::info!("Remove unused toplevel CVs");
+
         //then remove all unused cvs from the export λs
         let tl = self.graph.toplevel_region();
         for residx in 0..self.graph.region(&tl).unwrap().results.len() {
@@ -24,6 +27,9 @@ impl Optimizer {
     ///Removes edges from the graph that are unused. This means all edges that
     ///go into a _region-containing_ node, but aren't used within that region
     pub fn remove_unused_edges(&mut self) -> Result<(), OptError> {
+        #[cfg(feature = "log")]
+        log::info!("Remove unused edge");
+
         let tl = self.graph.toplevel_region();
         let mut topo_ord = self.graph.topological_order_region(tl);
         topo_ord.reverse();
@@ -41,9 +47,9 @@ impl Optimizer {
     /// This should in fact also make the graph _purely_ in the alge dialect.
     pub fn cleanup_export_lmd(&mut self) {
         //first do deadnode elimination, then
-
         #[cfg(feature = "log")]
         log::info!("cleanup export λ-Nodes");
+
         self.remove_unused_toplevel_cvs();
 
         if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("DUMP_PRE_DNE").is_ok() {

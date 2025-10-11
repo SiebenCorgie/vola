@@ -57,6 +57,19 @@ impl From<&Expr> for FormatTree {
                 FormatTree::Keyword(crate::Keyword::Cast),
                 FormatTree::from(ty),
             ]),
+            ExprTy::Interval {
+                span: _,
+                lower,
+                upper,
+            } => FormatTree::Wrapped {
+                left: '[',
+                right: ']',
+                sub: Box::new(FormatTree::Seq(vec![
+                    FormatTree::from(lower.as_ref()),
+                    FormatTree::Token("..".to_owned()),
+                    FormatTree::from(upper.as_ref()),
+                ])),
+            },
         }
     }
 }

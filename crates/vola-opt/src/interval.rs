@@ -48,12 +48,12 @@ macro_rules! implViewInterval {
     }
 }
 
-///The `interval` entry-point node
+///The `interval-extension` entry-point node
 #[derive(LangNode, Debug)]
 pub struct IntervalExtension {
-    ///By Definition the first is the `expr` that is being analysed, the second input is the dynamic value, and the last two are the interval, in which the expression is analysed.
+    ///By Definition the first is the `expr` that is being analysed, the second input is the dynamic value, and the last is the interval, in which the expression is analysed.
     #[inputs]
-    pub inputs: [Input; 4],
+    pub inputs: [Input; 3],
     ///Single output that collects / represents the interval of the first input-argument with respect the second argument within the given bound.
     #[output]
     pub output: Output,
@@ -67,20 +67,15 @@ impl IntervalExtension {
         InputType::Input(1)
     }
 
-    pub fn interval() -> (InputType, InputType) {
-        (InputType::Input(2), InputType::Input(3))
+    pub fn interval() -> InputType {
+        InputType::Input(2)
     }
 }
 
 impl Default for IntervalExtension {
     fn default() -> Self {
         IntervalExtension {
-            inputs: [
-                Input::default(),
-                Input::default(),
-                Input::default(),
-                Input::default(),
-            ],
+            inputs: [Input::default(), Input::default(), Input::default()],
             output: Output::default(),
         }
     }
@@ -99,7 +94,7 @@ impl DialectNode for IntervalExtension {
         _concepts: &ahash::AHashMap<String, vola_ast::csg::CsgConcept>,
         _csg_defs: &ahash::AHashMap<String, vola_ast::csg::CsgDef>,
     ) -> Result<Ty, OptError> {
-        assert_eq!(input_types.len(), 4, "should have 4 inputs");
+        assert_eq!(input_types.len(), 3, "should have 3 inputs");
 
         // Now we have to verify, that the input matches the expectations. I.e.
         // the dynamic value has an arithmetic type, and the dynamic parameter has the same
@@ -111,15 +106,22 @@ impl DialectNode for IntervalExtension {
             });
         }
 
-        if input_types[1] != input_types[2] || input_types[1] != input_types[3] {
-            return Err(OptError::TypeDeriveError {
-                text: format!("Bounds do not match dynamic parameter's type: dynamic: {}, lower: {}, upper: {}", input_types[1], input_types[2], input_types[3]),
-            });
+        //Make sure the dynamic-value and the interval-type match
+        if let (dynty, Ty::Interval(ity)) = (&input_types[1], &input_types[2]) {
+            if dynty != ity.as_ref() {
+                Err(OptError::TypeDeriveError {
+                    text: format!("Dynamic value does not match interval-type: {dynty} != {ity}"),
+                })
+            } else {
+                //Its alright, therefore create the interval version
+                // of the value's type
+                Ok(Ty::Interval(Box::new(input_types[0].clone())))
+            }
+        } else {
+            Err(OptError::TypeDeriveError {
+                text: format!("Third parameter must be interval"),
+            })
         }
-
-        //Its alright, therefore create the interval version
-        // of the value's type
-        Ok(Ty::Interval(Box::new(input_types[0].clone())))
     }
 
     fn is_operation_equal(&self, other: &crate::OptNode) -> bool {
@@ -138,7 +140,7 @@ impl DialectNode for IntervalExtension {
         &self,
         #[allow(unused_variables)] src_nodes: &[Option<&rvsdg::nodes::Node<OptNode>>],
     ) -> Option<OptNode> {
-        //TODO: Can we do compile-time AD?
+        //TODO: Schedule constant interval-extension here?
         None
     }
 }

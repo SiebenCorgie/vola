@@ -17,7 +17,7 @@ use crate::{
     imm::ImmBool,
     interval::IntervalExtension,
     passes::lower_ast::block_build::VarDef,
-    typelevel::{NonUniformConstruct, TypeCast},
+    typelevel::{IntervalConstruct, NonUniformConstruct, TypeCast},
     OptEdge, Optimizer,
 };
 
@@ -123,7 +123,7 @@ impl Optimizer {
                         if intr.try_downcast_ref::<IntervalExtension>().is_some() {
                             #[cfg(feature = "log")]
                             if !self.config.seen_pass_nodes.interval {
-                                log::info!("Registering first AutoDiff");
+                                log::info!("Registering first IntervalExtension");
                             }
                             self.config.seen_pass_nodes.interval = true;
                         }
@@ -503,6 +503,23 @@ impl Optimizer {
                     .on_region(&region, |reg| {
                         let (opnode, _) = reg
                             .connect_node(OptNode::new(node, expr_span), [src])
+                            .unwrap();
+                        opnode.output(0)
+                    })
+                    .unwrap();
+                Ok(opnode)
+            }
+            ExprTy::Interval { span, lower, upper } => {
+                let lower = self.build_expr(*lower, region, ctx)?;
+                let upper = self.build_expr(*upper, region, ctx)?;
+                let opnode = self
+                    .graph
+                    .on_region(&region, |reg| {
+                        let (opnode, _) = reg
+                            .connect_node(
+                                OptNode::new(IntervalConstruct::default(), span),
+                                [lower, upper],
+                            )
                             .unwrap();
                         opnode.output(0)
                     })

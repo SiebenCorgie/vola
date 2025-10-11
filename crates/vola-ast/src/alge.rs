@@ -127,6 +127,7 @@ impl Expr {
             ExprTy::Branch(e) => e.span.clone(),
             ExprTy::Splat { expr, count: _ } => expr.span.clone(),
             ExprTy::Cast { span, .. } => span.clone(),
+            ExprTy::Interval { span, .. } => span.clone(),
         }
     }
 }
@@ -199,6 +200,11 @@ pub enum ExprTy {
         span: Span,
         expr: Box<Expr>,
         ty: Ty,
+    },
+    Interval {
+        span: Span,
+        lower: Box<Expr>,
+        upper: Box<Expr>,
     },
 }
 

@@ -46,7 +46,7 @@ impl Optimizer {
     ///Runs the type resolution pass on all nodes.
     pub fn type_derive(&mut self, ignore_dead_nodes: bool) -> Result<(), Vec<VolaError<OptError>>> {
         #[cfg(feature = "log")]
-        log::info!("type derive");
+        log::info!("Full Graph TypeDerive");
 
         if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("DUMP_PRE_TYPE_DERIVE").is_ok() {
             self.push_debug_state("pre type derive");
@@ -292,7 +292,7 @@ impl Optimizer {
         region_src_span: &Span,
     ) -> Result<(Ty, OutportLocation), VolaError<OptError>> {
         #[cfg(feature = "log")]
-        log::info!("Type derive Apply node");
+        log::trace!("Type derive Apply node");
 
         //for the apply node, we search for the src λ-Node, and call
         if let Some(calldecl_edge) = apply.get_callabel_decl().edge {

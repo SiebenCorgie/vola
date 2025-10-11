@@ -286,6 +286,32 @@ impl FromTreeSitter for Expr {
                     ty,
                 }
             }
+            "interval_expr" => {
+                let lower = if let Some(expr) = child_node.child_by_field_name("start") {
+                    Expr::parse(ctx, dta, &expr)?
+                } else {
+                    return Err(VolaError::error_here(
+                        ParserError::Other("Expected expression".to_owned()),
+                        ctx.span(node),
+                        "there should be an expression",
+                    ));
+                };
+                let upper = if let Some(expr) = child_node.child_by_field_name("end") {
+                    Expr::parse(ctx, dta, &expr)?
+                } else {
+                    return Err(VolaError::error_here(
+                        ParserError::Other("Expected expression".to_owned()),
+                        ctx.span(node),
+                        "there should be an expression",
+                    ));
+                };
+
+                ExprTy::Interval {
+                    span: ctx.span(&child_node),
+                    lower: Box::new(lower),
+                    upper: Box::new(upper),
+                }
+            }
             _ => {
                 let err = ParserError::UnexpectedAstNode {
                     kind: child_node.kind().to_owned(),

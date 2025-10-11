@@ -204,6 +204,10 @@ impl Expr {
             }
             ExprTy::FieldAccess { .. } | ExprTy::Ident(_) | ExprTy::Literal(_) => {}
             ExprTy::Cast { expr, .. } => expr.traverse_visit(visitor),
+            ExprTy::Interval { lower, upper, .. } => {
+                lower.traverse_visit(visitor);
+                upper.traverse_visit(visitor);
+            }
         }
     }
 }

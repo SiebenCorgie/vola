@@ -25,6 +25,9 @@ impl<'opt> IntervalExtensionPass<'opt> {
     pub fn extend_all(mut self) -> Result<(), VolaError<OptError>> {
         let all_entry_points = self.collect_entry_points()?;
 
+        #[cfg(feature = "log")]
+        log::info!("Interval extension for {}", all_entry_points.len());
+
         for ep in all_entry_points {
             let ep_span = self.optimizer.find_span(ep.into()).unwrap_or(Span::empty());
 
