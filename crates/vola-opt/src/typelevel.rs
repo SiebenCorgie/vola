@@ -306,13 +306,6 @@ impl DialectNode for NonUniformConstruct {
         let ty = Ty::Tuple(input_types.to_vec());
         Ok(ty)
     }
-    fn try_constant_fold(
-        &self,
-        #[allow(unused_variables)] src_nodes: &[Option<&rvsdg::nodes::Node<OptNode>>],
-    ) -> Option<OptNode> {
-        //Tuple constructors cannot meaningfully be folded.
-        None
-    }
     fn is_operation_equal(&self, other: &OptNode) -> bool {
         if other.try_downcast_ref::<Self>().is_some() {
             true
@@ -662,13 +655,6 @@ impl DialectNode for IntervalConstruct {
         } else {
             Ok(Ty::Interval(Box::new(input_types[0].clone())))
         }
-    }
-    fn try_constant_fold(
-        &self,
-        #[allow(unused_variables)] src_nodes: &[Option<&rvsdg::nodes::Node<OptNode>>],
-    ) -> Option<OptNode> {
-        //Interval constructors cannot meaningfully be folded.
-        None
     }
     fn is_operation_equal(&self, other: &OptNode) -> bool {
         if other.try_downcast_ref::<Self>().is_some() {

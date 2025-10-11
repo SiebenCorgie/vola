@@ -135,12 +135,4 @@ impl DialectNode for IntervalExtension {
     fn structural_copy(&self, span: vola_common::Span) -> crate::OptNode {
         OptNode::new(IntervalExtension::default(), span)
     }
-
-    fn try_constant_fold(
-        &self,
-        #[allow(unused_variables)] src_nodes: &[Option<&rvsdg::nodes::Node<OptNode>>],
-    ) -> Option<OptNode> {
-        //TODO: Schedule constant interval-extension here?
-        None
-    }
 }

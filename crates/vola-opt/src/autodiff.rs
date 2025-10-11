@@ -260,12 +260,4 @@ impl DialectNode for AutoDiff {
     fn structural_copy(&self, span: vola_common::Span) -> crate::OptNode {
         OptNode::new(AutoDiff::default(), span)
     }
-
-    fn try_constant_fold(
-        &self,
-        #[allow(unused_variables)] src_nodes: &[Option<&rvsdg::nodes::Node<OptNode>>],
-    ) -> Option<OptNode> {
-        //TODO: Can we do compile-time AD?
-        None
-    }
 }
