@@ -7,7 +7,7 @@
  */
 
 use rvsdg::NodeRef;
-use vola_common::VolaError;
+use vola_common::{Span, VolaError};
 
 use crate::{interval::Interval, OptError, Optimizer};
 
@@ -24,8 +24,16 @@ impl<'opt> IntervalExtension<'opt> {
 
     pub fn extend_all(mut self) -> Result<(), VolaError<OptError>> {
         let all_entry_points = self.collect_entry_points()?;
-        println!("Found {} eps", all_entry_points.len());
-        todo!()
+
+        for ep in all_entry_points {
+            let ep_span = self.optimizer.find_span(ep.into()).unwrap_or(Span::empty());
+
+            if let Err(e) = self.expand_entry(ep) {
+                return Err(e.with_label(ep_span, "While extending this interval"));
+            }
+        }
+
+        Ok(())
     }
 
     ///Collects all entry-points and verifies that they obey all rules. Returns the bottom-up list of entry-points to the extension.
@@ -42,6 +50,12 @@ impl<'opt> IntervalExtension<'opt> {
         // have to reverse the order and are finished.
         all_nodes.reverse();
         Ok(all_nodes)
+    }
+
+    fn expand_entry(&mut self, entry_point: NodeRef) -> Result<(), VolaError<OptError>> {
+        Err(VolaError::new(OptError::Any {
+            text: "Interval arithmetic not yet implemented".to_owned(),
+        }))
     }
 }
 
