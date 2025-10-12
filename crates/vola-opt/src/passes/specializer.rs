@@ -159,7 +159,7 @@ impl Optimizer {
 
         //NOTE inline takes care of bringing all CSG nodes into the same region
         //TODO: Don't inline all, use heuristic instead.
-        let region_span = self.find_span(region.into()).unwrap_or(Span::empty());
+        let region_span = self.find_span(region).unwrap_or(Span::empty());
         self.inline_all_region(region)
             .map_err(|e| VolaError::error_here(e, region_span.clone(), "in this region"))?;
 
@@ -180,7 +180,7 @@ impl Optimizer {
                 if self.is_node_type::<EvalNode>(node) {
                     //ignore dead eval nodes
                     if !liveness.get(&node.into()).cloned().unwrap_or(false) {
-                        if let Some(span) = self.find_span(node.into()) {
+                        if let Some(span) = self.find_span(node) {
                             report(
                                 warning_reporter("unused eval", span.clone())
                                     .with_label(
@@ -195,7 +195,7 @@ impl Optimizer {
                     }
 
                     //node seems good, start specializer
-                    let span = self.find_span(node.into()).unwrap_or(region_span.clone());
+                    let span = self.find_span(node).unwrap_or(region_span.clone());
                     self.specialize_eval_entry(node)
                         .map_err(|e| e.with_label(span, "while specializing this"))?;
                     continue 'restart;
@@ -395,7 +395,7 @@ impl Optimizer {
                 .clone()
                 .unwrap();
             let span = self
-                .find_span(spec_ctx.eval_node.into())
+                .find_span(spec_ctx.eval_node)
                 .unwrap_or(spec_ctx.tree_access_span.clone());
             //NOTE: this _shouldn't_ happen, but its better to report, instead of
             //      panicing
@@ -768,7 +768,7 @@ impl Optimizer {
         //Is a theta node. Try to find the loop-bound, and iff successful, unroll
         if self.graph[prod.node].node_type.is_theta() {
             //NOTE: loops should always be annotated.
-            let loop_span = self.find_span(prod.node.into());
+            let loop_span = self.find_span(prod.node);
             let count = self.loop_count(prod.node).map_err(|e| {
                 let err = VolaError::new(e.into());
                 if let Some(span) = loop_span.clone() {
@@ -819,7 +819,7 @@ impl Optimizer {
 
         //Was not a CsgNode nor a CF-Node, so is some kind of _wrong_ tree.
         let err = OptError::CsgStructureIssue("Non-CSG value used in CSG tree!".to_owned());
-        let error = if let Some(span) = self.find_span(prod.node.into()) {
+        let error = if let Some(span) = self.find_span(prod.node) {
             VolaError::error_here(err, span.clone(), "this should be a CSG value")
         } else {
             VolaError::new(err)
@@ -864,7 +864,7 @@ impl Optimizer {
 
                     if !self.is_node_type::<CsgOp>(prod.node) {
                         let e = OptError::CsgStructureIssue(format!("Could not specialize branch [{branch}]: The branch uses a CSG-value, that itself comes from a branch. Which is an edge-case we currently don't support. Please file an issue!"));
-                        let err = if let Some(span) = self.find_span(prod.node.into()) {
+                        let err = if let Some(span) = self.find_span(prod.node) {
                             VolaError::error_here(e, span, "The CSG-value comes from here. Consider moving that out of a branch for now!")
                         } else {
                             VolaError::new(e)
@@ -1134,9 +1134,7 @@ impl Optimizer {
         //now delete the old eval-node, so it won't be re-discovered
         let _ = self.graph.remove_node(eval).unwrap();
         //and re-type the parent region
-        let type_region_span = self
-            .find_span(most_outer_region.into())
-            .unwrap_or(Span::empty());
+        let type_region_span = self.find_span(most_outer_region).unwrap_or(Span::empty());
         self.derive_region(most_outer_region, type_region_span, true)?;
 
         Ok(collected)

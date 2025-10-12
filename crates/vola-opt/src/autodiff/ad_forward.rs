@@ -118,7 +118,7 @@ impl Optimizer {
         self.graph
             .dne_region(region)
             .map_err(|e| VolaError::new(e.into()))?;
-        let span = self.find_span(region.into()).unwrap_or(Span::empty());
+        let span = self.find_span(region).unwrap_or(Span::empty());
         self.derive_region(region, span.clone(), true)?;
 
         //All entrypoints are with respect to a single scalar at this point,
@@ -215,7 +215,7 @@ impl Optimizer {
         // Therfore we only need to build this node's derivative, and possibly hook-up chain rule sub expressions
         for node in ordered_dependencies {
             self.build_derivative(region, node, ctx).map_err(|e| {
-                if let Some(span) = self.find_span(node.into()) {
+                if let Some(span) = self.find_span(node) {
                     VolaError::error_here(
                         e.clone(),
                         span,
@@ -247,7 +247,7 @@ impl Optimizer {
             .expect("Expected derivative for output!");
 
         //Before ending, always do a final type derive though
-        let span = self.find_span(region.into()).unwrap_or(Span::empty());
+        let span = self.find_span(region).unwrap_or(Span::empty());
         self.derive_region(region, span, true).map_err(|e| {
             //report error immediatly, since we'll discard the context
             e.report();
@@ -565,7 +565,7 @@ impl Optimizer {
         let response = match self.build_diff_value(region, node, &mut ctx.activity) {
             Ok(t) => t,
             Err(e) => {
-                if let Some(span) = self.find_span(node.into()) {
+                if let Some(span) = self.find_span(node) {
                     //TODO: at some point, propagate this upwards
                     {
                         let verror = VolaError::error_here(e.clone(), span, "On this operation");

@@ -333,7 +333,8 @@ impl Optimizer {
     //Tries to find a span for this node or port.
     //This'll first check if a span tag is active, if not,
     //tries to use the simple-node's span, or tries one of the ports
-    pub fn find_span(&self, loc: AttribLocation) -> Option<Span> {
+    pub fn find_span(&self, loc: impl Into<AttribLocation>) -> Option<Span> {
+        let loc = loc.into();
         if let Some(s) = self.span_tags.get(&loc) {
             return Some(s.clone());
         }
@@ -345,13 +346,13 @@ impl Optimizer {
                 }
 
                 for output in self.graph.node(n).outport_types() {
-                    if let Some(s) = self.find_span(OutportLocation { node: n, output }.into()) {
+                    if let Some(s) = self.find_span(OutportLocation { node: n, output }) {
                         return Some(s);
                     }
                 }
 
                 for input in self.graph[n].inport_types() {
-                    if let Some(s) = self.find_span(input.to_location(n).into()) {
+                    if let Some(s) = self.find_span(input.to_location(n)) {
                         return Some(s);
                     }
                 }

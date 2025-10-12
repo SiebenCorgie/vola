@@ -56,7 +56,7 @@ impl Optimizer {
         let wrt_ty = self.find_type(&wrt_src.into()).unwrap();
         let region = self.graph[entrypoint].parent.unwrap().clone();
         let autodiff_src = self.graph[entrypoint].input_src(&self.graph, 0).unwrap();
-        let span = self.find_span(entrypoint.into()).unwrap_or(Span::empty());
+        let span = self.find_span(entrypoint).unwrap_or(Span::empty());
 
         match wrt_ty {
             //is already linear

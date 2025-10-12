@@ -101,7 +101,7 @@ impl Optimizer {
 
         assert!(matrix_ty.height().unwrap() == vector_ty.width().unwrap());
 
-        let span = self.find_span(mul_node.into()).unwrap_or(Span::empty());
+        let span = self.find_span(mul_node).unwrap_or(Span::empty());
 
         let new_result = self
             .graph
@@ -164,7 +164,7 @@ impl Optimizer {
     ) -> NodeRef {
         assert!(left_ty.width().unwrap() == right_ty.width().unwrap());
 
-        let span = self.find_span(mul_node.into()).unwrap_or(Span::empty());
+        let span = self.find_span(mul_node).unwrap_or(Span::empty());
 
         let new_result = self
             .graph
@@ -259,7 +259,7 @@ impl Optimizer {
     ) -> NodeRef {
         assert!(left_ty.width().unwrap() == right_ty.height().unwrap());
 
-        let span = self.find_span(mul_node.into()).unwrap_or(Span::empty());
+        let span = self.find_span(mul_node).unwrap_or(Span::empty());
 
         let new_result = self
             .graph

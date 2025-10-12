@@ -52,7 +52,7 @@ impl<'opt> IntervalExtensionPass<'opt> {
         log::info!("Interval extension for {}", all_entry_points.len());
 
         for ep in all_entry_points {
-            let ep_span = self.optimizer.find_span(ep.into()).unwrap_or(Span::empty());
+            let ep_span = self.optimizer.find_span(ep).unwrap_or(Span::empty());
 
             //Extend the expression to an interval expression
             match self.expand_entry(ep) {
@@ -186,10 +186,7 @@ impl<'opt> IntervalExtensionPass<'opt> {
             let region = self.optimizer.graph[next.node].parent.unwrap();
 
             if self.optimizer.graph[next.node].node_type.is_apply() {
-                let span = self
-                    .optimizer
-                    .find_span(next.node.into())
-                    .unwrap_or(Span::empty());
+                let span = self.optimizer.find_span(next.node).unwrap_or(Span::empty());
                 return Err(VolaError::new(OptError::Interval(
                     IntervalError::UnsupportedNodeType(AbstractNodeType::Apply),
                 ))
@@ -221,7 +218,21 @@ impl<'opt> IntervalExtensionPass<'opt> {
 
                         //TODO: handle the enquing of value producers _in_ this node.
                         if self.optimizer.graph[copy].regions().len() > 0 {
-                            unreachable!()
+                            //NOTE: Just copying the node is not really good here.
+                            //      The Activity thing doesn't really work that way atm.
+                            //
+                            //      We have two options:
+                            //      1. Better Activity utility that supports adding new nodes with inner regions. I.e
+                            //         that discovers activity in that case _correctly_
+                            //      2. Do not copy such nodes. Instead, for each active result, add another _interval_ result,
+                            //         and then let the normal recursion scheme handle that case. (I think that would be better).
+                            let span = self.optimizer.find_span(next.node).unwrap_or(Span::empty());
+                            return Err(VolaError::new(OptError::Interval(
+                                IntervalError::UnsupportedNodeType(
+                                    self.optimizer.graph[copy].into_abstract(),
+                                ),
+                            ))
+                            .with_error(span, "here"));
                         }
 
                         //register all inputs and outputs in mapping
@@ -254,10 +265,7 @@ impl<'opt> IntervalExtensionPass<'opt> {
                     }
                 } else {
                     //not active, just build the minimum interval
-                    let span = self
-                        .optimizer
-                        .find_span(next.into())
-                        .unwrap_or(Span::empty());
+                    let span = self.optimizer.find_span(next).unwrap_or(Span::empty());
                     let output = self
                         .optimizer
                         .graph

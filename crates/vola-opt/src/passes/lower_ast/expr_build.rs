@@ -151,7 +151,7 @@ impl Optimizer {
                                 expr_span,
                                 "trying to call this",
                             );
-                            if let Some(outspan) = self.find_span(call_output.into()) {
+                            if let Some(outspan) = self.find_span(call_output) {
                                 return Err(err.with_label(outspan, "found this"));
                             } else {
                                 return Err(err);
@@ -196,7 +196,7 @@ impl Optimizer {
                             .argument_count();
                         if argcount != args.len() {
                             let lmd_name = self.node_name(lambda.node);
-                            let lmd_span = self.find_span(lambda.node.into());
+                            let lmd_span = self.find_span(lambda.node);
                             let err = VolaError::error_here(
                                 OptError::Any {
                                     text: format!(

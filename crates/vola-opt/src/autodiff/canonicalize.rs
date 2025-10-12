@@ -48,7 +48,7 @@ impl Optimizer {
         region: &RegionLocation,
         node: NodeRef,
     ) -> Result<(), OptError> {
-        let span = self.find_span(node.into()).unwrap_or(Span::empty());
+        let span = self.find_span(node).unwrap_or(Span::empty());
         if let Some(unary_node) = self.try_unwrap_node::<UnaryArith>(node) {
             match &unary_node.op {
                 UnaryArithOp::Abs => {
@@ -113,7 +113,7 @@ impl Optimizer {
         region: &RegionLocation,
         node: NodeRef,
     ) -> Result<(), OptError> {
-        let span = self.find_span(node.into()).unwrap_or(Span::empty());
+        let span = self.find_span(node).unwrap_or(Span::empty());
         if let Some(buildin_node) = self.try_unwrap_node::<Buildin>(node) {
             match &buildin_node.op {
                 //Transform the buildin op to a square-root and multiplied parts

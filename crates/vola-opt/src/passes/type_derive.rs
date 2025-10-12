@@ -358,7 +358,7 @@ impl Optimizer {
                                     text: format!("argument {i} of this call has no type"),
                                 };
 
-                                let err = if let Some(span) = self.find_span(node.into()) {
+                                let err = if let Some(span) = self.find_span(node) {
                                     VolaError::error_here(err, span, "for this call")
                                 } else {
                                     VolaError::new(err)
@@ -391,7 +391,7 @@ impl Optimizer {
                                 expected_call_sig[i], apply_node_sig[i]
                             ),
                         };
-                        let call_span = self.find_span(node.into()).unwrap_or(Span::empty());
+                        let call_span = self.find_span(node).unwrap_or(Span::empty());
                         return Err(
                             VolaError::error_here(err, call_span.clone(), "For this call")
                                 .with_label(span.clone(), "on this function"),
@@ -433,14 +433,14 @@ impl Optimizer {
         //
         //After being done, map the result types out of the regions, and unify them.
         //this should catch type missmatches in gamma branches.
-        let gamma_span = self.find_span(gamma.into()).unwrap_or(Span::empty());
+        let gamma_span = self.find_span(gamma).unwrap_or(Span::empty());
 
         for input in self.graph[gamma].inport_types() {
             match input {
                 InputType::GammaPredicate => {
                     let predicate_port = gamma.as_inport_location(InputType::GammaPredicate);
                     let predicate_span = self
-                        .find_span(self.graph.inport_src(predicate_port).unwrap().into())
+                        .find_span(self.graph.inport_src(predicate_port).unwrap())
                         .unwrap_or(Span::empty());
                     if let Some(ty) = self.find_type(&predicate_port.into()) {
                         if !ty.is_bool() {
@@ -503,7 +503,7 @@ impl Optimizer {
                 region_index,
             };
             if let Err(e) = self.derive_region(reg, gamma_span.clone(), ignore_dead_nodes) {
-                let branch_span = self.find_span(reg.into()).unwrap_or(Span::empty());
+                let branch_span = self.find_span(reg).unwrap_or(Span::empty());
                 return Err(e.with_label(
                     branch_span,
                     format!("Could not derive type for branch {region_index}"),
@@ -531,9 +531,7 @@ impl Optimizer {
                             .graph
                             .inport_src(gamma.as_inport_location(InputType::GammaPredicate))
                             .unwrap();
-                        let head_span = self
-                            .find_span(predicate_src.into())
-                            .unwrap_or(gamma_span.clone());
+                        let head_span = self.find_span(predicate_src).unwrap_or(gamma_span.clone());
                         //could not unify types
                         let if_branch_ty = self.find_type(
                             &gamma
@@ -613,7 +611,7 @@ impl Optimizer {
         theta: NodeRef,
         ignore_dead_nodes: bool,
     ) -> Result<SmallColl<(Ty, OutportLocation)>, VolaError<OptError>> {
-        let theta_span = self.find_span(theta.into()).unwrap_or(Span::empty());
+        let theta_span = self.find_span(theta).unwrap_or(Span::empty());
         //at the start, check input types.
         //we must be sure that the loop bounds (input 0 & 1) are natural numbers.
         //
@@ -622,7 +620,7 @@ impl Optimizer {
         for inport in self.graph[theta].inport_types() {
             let inportloc = theta.as_inport_location(inport);
             let in_region_arg = theta.as_outport_location(inport.map_to_in_region(0).unwrap());
-            let arg_span = if let Some(span) = self.find_span(inportloc.into()) {
+            let arg_span = if let Some(span) = self.find_span(inportloc) {
                 span
             } else {
                 theta_span.clone()
@@ -780,7 +778,7 @@ impl Optimizer {
         //The only thing we need to do is check that all CVs are set (and map them into the region),
         //and that all arguments have a type.
         assert_eq!(self.graph[lambda].into_abstract(), AbstractNodeType::Lambda);
-        let span = self.find_span(lambda.into()).unwrap_or(Span::empty());
+        let span = self.find_span(lambda).unwrap_or(Span::empty());
 
         for argty in self.graph[lambda].argument_types(0) {
             match argty {
@@ -792,7 +790,7 @@ impl Optimizer {
                     }
                     //for arguments, just check that the type is already set
                     if self.find_type(&loc.into()).is_none() {
-                        let argspan = if let Some(argspan) = self.find_span(loc.into()) {
+                        let argspan = if let Some(argspan) = self.find_span(loc) {
                             argspan
                         } else {
                             span.clone()
@@ -821,7 +819,7 @@ impl Optimizer {
                     } else {
                         //failed to find inputs's type
 
-                        let argspan = if let Some(argspan) = self.find_span(loc.into()) {
+                        let argspan = if let Some(argspan) = self.find_span(loc) {
                             argspan
                         } else {
                             span.clone()
@@ -892,7 +890,7 @@ impl Optimizer {
                     let err = OptError::TypeDeriveError {
                         text: format!("Argument {input} for {node:?} is not type-set",),
                     };
-                    let span = self.find_span(node.into()).unwrap_or(Span::empty());
+                    let span = self.find_span(node).unwrap_or(Span::empty());
                     return Err(VolaError::error_here(err, span, "here"));
                 }
             };
@@ -909,7 +907,7 @@ impl Optimizer {
         //gather all inputs and let the node try to resolve itself
         let payload: SmallColl<(Ty, OutportLocation)> = match &self.graph.node(node).node_type {
             NodeType::Simple(s) => {
-                let span = self.find_span(node.into()).unwrap_or(Span::empty());
+                let span = self.find_span(node).unwrap_or(Span::empty());
                 let input_config = self.get_simple_input_config(node).map_err(|e| {
                     e.with_label(span.clone(), "could not get all input-types to this node")
                 })?;
@@ -921,7 +919,7 @@ impl Optimizer {
             }
             NodeType::Apply(a) => {
                 let region_span = self
-                    .find_span(self.graph[node].parent.unwrap().into())
+                    .find_span(self.graph[node].parent.unwrap())
                     .unwrap_or(Span::empty());
                 let res = self.try_apply_derive(node, a, &region_span)?;
                 smallvec![res]
@@ -1013,7 +1011,7 @@ impl Optimizer {
             let resolved_values = match self.try_node_type_derive(node, ignore_dead_nodes) {
                 Ok(values) => values,
                 Err(e) => {
-                    let err = if let Some(span) = self.find_span(node.into()) {
+                    let err = if let Some(span) = self.find_span(node) {
                         //TODO: maybe remove, if that pollutes too much
                         e.with_label(span, "while working here")
                     } else {
@@ -1034,7 +1032,7 @@ impl Optimizer {
                                 "Type collision, declared as {old:?}, but derived to {ty:?}"
                             ),
                         };
-                        let err = if let Some(span) = self.find_span(port.node.into()) {
+                        let err = if let Some(span) = self.find_span(port.node) {
                             VolaError::error_here(err, span, format!("Should be {old}"))
                         } else {
                             VolaError::new(err)
@@ -1046,7 +1044,7 @@ impl Optimizer {
                 //And propagate to all edges
                 for edg in self.graph[port].edges.clone().iter() {
                     if let Err(e) = self.graph[*edg].ty.set_derived_state(ty.clone()) {
-                        let e = if let Some(span) = self.find_span(port.node.into()) {
+                        let e = if let Some(span) = self.find_span(port.node) {
                             VolaError::error_here(e, span, "here")
                         } else {
                             VolaError::new(e)

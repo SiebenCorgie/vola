@@ -31,7 +31,7 @@ impl Optimizer {
         for node in self.functions.values().map(|v| v.lambda) {
             if self.graph[node].node_type.is_lambda() {
                 if let Err(e) = self.detect_self_call(node) {
-                    if let Some(span) = self.find_span(node.into()) {
+                    if let Some(span) = self.find_span(node) {
                         errors.push(VolaError::error_here(e, span, "in this function"))
                     } else {
                         errors.push(VolaError::new(e));
@@ -151,7 +151,7 @@ impl Optimizer {
         for node in self.graph[block.region()].nodes.iter() {
             if self.is_node_type::<EvalNode>(*node) {
                 //seed the recursive search with the connected csg node
-                let span = self.find_span(node.into()).unwrap();
+                let span = self.find_span(node).unwrap();
                 let initial_src = self
                     .graph
                     .inport_src(node.as_inport_location(InputType::Input(0)))
@@ -193,7 +193,7 @@ impl Optimizer {
         //Luckily we don't have to disptach CSG-operands, because Iff they are used in a CSG, then it is ensured that
         //the tree progresses, so we can safely ignore them. However, that should probably be proofed somewhere :eyes:.
 
-        let span = self.find_span(csg.node.into());
+        let span = self.find_span(csg.node);
         match self.graph[csg.node].into_abstract() {
             AbstractNodeType::Apply => {
                 //go to the λ-producer, and recurse for the producing node.

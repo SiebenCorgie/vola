@@ -68,9 +68,7 @@ impl Optimizer {
         }
         //simple node derive failed, try to do type derive in region
         let parent_region = self.graph[node].parent.unwrap();
-        let span = self
-            .find_span(parent_region.into())
-            .unwrap_or(Span::empty());
+        let span = self.find_span(parent_region).unwrap_or(Span::empty());
         let region_result = self.derive_region(parent_region, span, ignore_dead_nodes);
 
         if region_result.is_ok() {

@@ -36,7 +36,7 @@ impl Optimizer {
         node: NodeRef,
         activity: &mut Activity,
     ) -> Result<AdResponse, AutoDiffError> {
-        let span = self.find_span(node.into()).unwrap_or(Span::empty());
+        let span = self.find_span(node).unwrap_or(Span::empty());
         let op = self.graph[node]
             .node_type
             .unwrap_simple_ref()

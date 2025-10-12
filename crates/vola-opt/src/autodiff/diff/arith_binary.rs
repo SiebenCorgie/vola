@@ -36,7 +36,7 @@ impl Optimizer {
             .unwrap()
             .op
             .clone();
-        let span = self.find_span(node.into()).unwrap_or(Span::empty());
+        let span = self.find_span(node).unwrap_or(Span::empty());
         //NOTE: Safe, since this _must_ be a binary op
         let left_src = self.graph.inport_src(node.input(0)).unwrap();
         let right_src = self.graph.inport_src(node.input(1)).unwrap();

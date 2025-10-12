@@ -54,7 +54,7 @@ impl Optimizer {
                 self.push_debug_state(&format!("pre-autodiff-{node}"));
             }
 
-            let span = self.find_span(node.into()).unwrap_or(Span::empty());
+            let span = self.find_span(node).unwrap_or(Span::empty());
             if let Err(e) = self.forward_ad(node) {
                 return Err(e.with_label(span, "While forward differentiation of this"));
             }
@@ -71,7 +71,7 @@ impl Optimizer {
         // 2. We'd catch any type-erros in the ad's pass
 
         for region in touched_regions {
-            let span = self.find_span(region.into()).unwrap_or(Span::empty());
+            let span = self.find_span(region).unwrap_or(Span::empty());
             if let Err(e) = self.derive_region(region, span.clone(), true) {
                 return Err(e.with_label(
                     span,

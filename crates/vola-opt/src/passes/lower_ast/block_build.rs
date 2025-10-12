@@ -394,7 +394,7 @@ impl Optimizer {
                 let producer = self.graph.find_producer_simple(expr_src);
                 for prod in producer {
                     let node_name = self.graph[prod.node].name();
-                    let node_span = self.find_span(prod.node.into());
+                    let node_span = self.find_span(prod.node);
                     match self.graph[prod.node].into_abstract() {
                         AbstractNodeType::Simple => {
                             if self.graph[prod.node]
@@ -473,7 +473,7 @@ impl Optimizer {
                 for prod in producer {
                     //note we can only check nodes that are created _here_.
                     let node_name = self.graph[prod.node].name();
-                    let node_span = self.find_span(prod.node.into());
+                    let node_span = self.find_span(prod.node);
                     match self.graph[prod.node].into_abstract() {
                         AbstractNodeType::Simple => {
                             if self.graph[prod.node]
@@ -561,7 +561,7 @@ impl Optimizer {
                         OptError::Any {
                             text: "block has unexpected result".to_owned(),
                         },
-                        self.find_span(return_value.into()).unwrap_or(Span::empty()),
+                        self.find_span(return_value).unwrap_or(Span::empty()),
                         "Block statement should not have a return-value, consider binding the value to a result",
                     ));
                 }
