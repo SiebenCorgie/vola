@@ -369,8 +369,9 @@ impl Optimizer {
     }
 
     ///Utility that tries to find type information in the vicinity of `loc`
-    pub fn find_type(&self, loc: &AttribLocation) -> Option<Ty> {
-        if let Some(t) = self.typemap.get(loc) {
+    pub fn find_type(&self, loc: impl Into<AttribLocation>) -> Option<Ty> {
+        let loc = loc.into();
+        if let Some(t) = self.typemap.get(&loc) {
             return Some(t.clone());
         }
 
@@ -389,7 +390,7 @@ impl Optimizer {
                     if edge_type.is_some() {
                         return edge_type;
                     } else {
-                        if let Some(src) = self.graph.inport_src(*portloc) {
+                        if let Some(src) = self.graph.inport_src(portloc) {
                             //note we don't do recursion, otherwise this might end in infinite recursion
                             //with the same routine for output-ports
                             self.typemap.get(&src.into()).cloned()
@@ -431,10 +432,10 @@ impl Optimizer {
             AttribLocation::Region(_) => None,
             AttribLocation::Node(_) => None,
             AttribLocation::Edge(edg) => {
-                if let Some(t) = self.find_type(&self.graph.edge(*edg).src().into()) {
+                if let Some(t) = self.find_type(self.graph.edge(edg).src()) {
                     return Some(t);
                 }
-                self.find_type(&self.graph.edge(*edg).dst().into())
+                self.find_type(self.graph.edge(edg).dst())
             }
         }
     }
@@ -466,15 +467,15 @@ impl Optimizer {
     }
 
     pub fn find_path_type(&self, path: &Path) -> Result<Ty, OptError> {
-        if let Some(start_type) = self.find_type(&path.start.into()) {
+        if let Some(start_type) = self.find_type(path.start) {
             return Ok(start_type);
         }
-        if let Some(end_type) = self.find_type(&path.end.into()) {
+        if let Some(end_type) = self.find_type(path.end) {
             return Ok(end_type);
         }
 
         for edg in &path.edges {
-            if let Some(ty) = self.find_type(&edg.into()) {
+            if let Some(ty) = self.find_type(edg) {
                 return Ok(ty);
             }
         }
@@ -482,11 +483,11 @@ impl Optimizer {
         //if we didn't find anything yet, try all ports instead
         for edg in &path.edges {
             let src = self.graph.edge(*edg).src().clone();
-            if let Some(t) = self.find_type(&src.into()) {
+            if let Some(t) = self.find_type(src) {
                 return Ok(t);
             }
             let dst = self.graph.edge(*edg).dst().clone();
-            if let Some(t) = self.find_type(&dst.into()) {
+            if let Some(t) = self.find_type(dst) {
                 return Ok(t);
             }
         }

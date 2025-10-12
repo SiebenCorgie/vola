@@ -308,13 +308,10 @@ impl Optimizer {
                     .cloned()
                     .unwrap_or(Span::empty());
                 let result_type = {
-                    if let Some(ty) = self.find_type(
-                        &InportLocation {
-                            node: calldef.node,
-                            input: InputType::Result(0),
-                        }
-                        .into(),
-                    ) {
+                    if let Some(ty) = self.find_type(InportLocation {
+                        node: calldef.node,
+                        input: InputType::Result(0),
+                    }) {
                         ty
                     } else {
                         let err = OptError::Any {
@@ -442,7 +439,7 @@ impl Optimizer {
                     let predicate_span = self
                         .find_span(self.graph.inport_src(predicate_port).unwrap())
                         .unwrap_or(Span::empty());
-                    if let Some(ty) = self.find_type(&predicate_port.into()) {
+                    if let Some(ty) = self.find_type(predicate_port) {
                         if !ty.is_bool() {
                             let err = OptError::TypeDeriveError {
                                 text: format!(
@@ -471,7 +468,7 @@ impl Optimizer {
                 InputType::EntryVariableInput(ev) => {
                     //for each ev, try to get the type, if there is none, make sure that there are also no users
                     let evport = gamma.as_inport_location(input);
-                    if let Some(ty) = self.find_type(&evport.into()) {
+                    if let Some(ty) = self.find_type(evport) {
                         for region_idx in 0..self.graph[gamma].regions().len() {
                             let in_region_port = gamma
                                 .as_outport_location(input.map_to_in_region(region_idx).unwrap());
@@ -533,22 +530,18 @@ impl Optimizer {
                             .unwrap();
                         let head_span = self.find_span(predicate_src).unwrap_or(gamma_span.clone());
                         //could not unify types
-                        let if_branch_ty = self.find_type(
-                            &gamma
-                                .as_inport_location(InputType::ExitVariableResult {
-                                    branch: 0,
-                                    exit_variable: idx,
-                                })
-                                .into(),
-                        );
-                        let else_branch_ty = self.find_type(
-                            &gamma
-                                .as_inport_location(InputType::ExitVariableResult {
-                                    branch: 1,
-                                    exit_variable: idx,
-                                })
-                                .into(),
-                        );
+                        let if_branch_ty = self.find_type(gamma.as_inport_location(
+                            InputType::ExitVariableResult {
+                                branch: 0,
+                                exit_variable: idx,
+                            },
+                        ));
+                        let else_branch_ty = self.find_type(gamma.as_inport_location(
+                            InputType::ExitVariableResult {
+                                branch: 1,
+                                exit_variable: idx,
+                            },
+                        ));
 
                         let if_branch_span = self
                             .span_tags
@@ -628,7 +621,7 @@ impl Optimizer {
             let input_ty = match inport {
                 //Check for natural
                 InputType::Input(0) | InputType::Input(1) => {
-                    if let Some(ty) = self.find_type(&inportloc.into()) {
+                    if let Some(ty) = self.find_type(inportloc) {
                         if !ty.is_integer() {
                             let err = OptError::TypeDeriveError {
                                 text: format!(
@@ -661,7 +654,7 @@ impl Optimizer {
                     {
                         continue;
                     }
-                    if let Some(ty) = self.find_type(&inportloc.into()) {
+                    if let Some(ty) = self.find_type(inportloc) {
                         ty
                     } else {
                         //unexpected
@@ -691,9 +684,7 @@ impl Optimizer {
             ignore_dead_nodes,
         )?;
         //make sure the theta-predicate is a bool now
-        if let Some(ty) =
-            self.find_type(&theta.as_inport_location(InputType::ThetaPredicate).into())
-        {
+        if let Some(ty) = self.find_type(theta.as_inport_location(InputType::ThetaPredicate)) {
             if !ty.is_bool() {
                 let err = OptError::TypeDeriveError {
                     text: format!(
@@ -719,7 +710,7 @@ impl Optimizer {
         for output in self.graph[theta].outport_types() {
             let result_port = theta.as_outport_location(output);
             let in_region_port = theta.as_inport_location(output.map_to_in_region(0).unwrap());
-            let result_ty = if let Some(ty) = self.find_type(&in_region_port.into()) {
+            let result_ty = if let Some(ty) = self.find_type(in_region_port) {
                 ty
             } else {
                 //has no type. Make sure there is no producer, and user
@@ -744,7 +735,7 @@ impl Optimizer {
                 panic!("Theta node outupt-argument missmatch");
             };
             let argloc = theta.as_outport_location(argument_port);
-            let argument_ty = self.find_type(&argloc.into());
+            let argument_ty = self.find_type(argloc);
             let set_ty = match (result_ty, argument_ty) {
                 (ty, None) => {
                     //result is set, argument is not, thats all right
@@ -789,7 +780,7 @@ impl Optimizer {
                         continue;
                     }
                     //for arguments, just check that the type is already set
-                    if self.find_type(&loc.into()).is_none() {
+                    if self.find_type(loc).is_none() {
                         let argspan = if let Some(argspan) = self.find_span(loc) {
                             argspan
                         } else {
@@ -814,7 +805,7 @@ impl Optimizer {
 
                     //is connected, try to copy over type
                     let input_port = lambda.as_inport_location(argty.map_out_of_region().unwrap());
-                    if let Some(ty) = self.find_type(&input_port.into()) {
+                    if let Some(ty) = self.find_type(input_port) {
                         self.typemap.set(loc.into(), ty);
                     } else {
                         //failed to find inputs's type
@@ -878,7 +869,7 @@ impl Optimizer {
         //gather input types, those must be present, by definition
         let mut input_config = SmallColl::default();
         for input in self.graph.inports(node) {
-            let ty = if let Some(near_type) = self.find_type(&input.into()) {
+            let ty = if let Some(near_type) = self.find_type(input) {
                 near_type
             } else {
                 //NOTE: there is this special case, if we _use_ a λ that was not yet type derived.
@@ -973,7 +964,7 @@ impl Optimizer {
         //contains type info for any of the ports of an edge
         for edg in &self.graph[reg].edges.clone() {
             let src = self.graph[*edg].src().clone();
-            if let Some(ty) = self.find_type(&src.into()) {
+            if let Some(ty) = self.find_type(src) {
                 if let Some(preset) = self.graph.edge(*edg).ty.get_type() {
                     if preset != &ty {
                         let err = OptError::Any {

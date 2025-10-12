@@ -59,7 +59,7 @@ impl Optimizer {
                     //transform into a smooth abs function
                     // as |f(x)| => sqrt(f(x)^2 + 0.001 )
                     let f_src = self.graph.inport_src(node.input(0)).unwrap();
-                    let ty = self.find_type(&f_src.into()).unwrap();
+                    let ty = self.find_type(f_src).unwrap();
                     let c_splat = self.splat_scalar(
                         *region,
                         ImmScalar::new(self.config.autodiff.smooth_abs_c),
@@ -244,14 +244,14 @@ impl Optimizer {
                     };
 
                     let ty = self
-                        .find_type(&node.output(0).into())
+                        .find_type(node.output(0))
                         .expect("Expected type to be set!");
                     let imm_two = self.splat_scalar(*region, ImmScalar::new(2.0), ty.clone());
 
                     let x_src = self.graph.inport_src(node.input(0)).unwrap();
                     let y_src = self.graph.inport_src(node.input(1)).unwrap();
-                    let x_ty = self.find_type(&x_src.into()).unwrap();
-                    let y_ty = self.find_type(&y_src.into()).unwrap();
+                    let x_ty = self.find_type(x_src).unwrap();
+                    let y_ty = self.find_type(y_src).unwrap();
                     assert!(x_ty == y_ty);
 
                     let (abs_node, output) = self
@@ -328,7 +328,7 @@ impl Optimizer {
                     let y_src = self.graph.inport_src(node.input(1)).unwrap();
                     let a_src = self.graph.inport_src(node.input(2)).unwrap();
 
-                    let a_ty = self.find_type(&a_src.into()).unwrap();
+                    let a_ty = self.find_type(a_src).unwrap();
                     let one = self.splat_scalar(*region, ImmScalar::new(1.0), a_ty);
                     let new_result = self
                         .graph
@@ -387,7 +387,7 @@ impl Optimizer {
                         return Ok(());
                     }
                     let x_src = self.graph.inport_src(node.input(0)).unwrap();
-                    let expr_ty = self.find_type(&x_src.into()).unwrap();
+                    let expr_ty = self.find_type(x_src).unwrap();
                     let min_src = self.graph.inport_src(node.input(1)).unwrap();
                     let max_src = self.graph.inport_src(node.input(2)).unwrap();
 

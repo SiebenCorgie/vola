@@ -62,9 +62,7 @@ impl Activity {
             .wrt_producer
             .get(&port.into())
             .expect("Expected scalar chain");
-        let ty = opt
-            .find_type(&port.into())
-            .expect("expected type information");
+        let ty = opt.find_type(port).expect("expected type information");
 
         match ty {
             Ty::SCALAR_REAL => {

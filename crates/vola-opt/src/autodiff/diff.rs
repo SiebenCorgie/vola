@@ -227,7 +227,7 @@ impl Optimizer {
                 //special case of (cf)' => c f' for c=constant
                 //in this case c = -1.
                 let f_src = self.graph.inport_src(node.input(0)).unwrap();
-                let f_ty = self.find_type(&f_src.into()).unwrap();
+                let f_ty = self.find_type(f_src).unwrap();
                 let negone = self.splat_scalar(region, ImmScalar::new(-1.0), f_ty);
                 let (diff_dst, result) = self
                     .graph
@@ -259,7 +259,7 @@ impl Optimizer {
                 }
 
                 let x_src = self.graph.inport_src(node.input(0)).unwrap();
-                let x_ty = self.find_type(&x_src.into()).unwrap();
+                let x_ty = self.find_type(x_src).unwrap();
                 let zero = self.splat_scalar(region, ImmScalar::new(0.0), x_ty);
 
                 Ok(AdResponse::new(node.output(0), zero))

@@ -19,7 +19,7 @@ impl Optimizer {
         output: OutportLocation,
         ignore_dead_nodes: bool,
     ) -> Ty {
-        if let Some(t) = self.find_type(&output.into()) {
+        if let Some(t) = self.find_type(output) {
             return t;
         }
 
@@ -33,7 +33,7 @@ impl Optimizer {
                 panic!("Could not type-derive, this is probably a bug in the Pipeline: {e}");
             }
         }
-        match self.find_type(&output.into()) {
+        match self.find_type(output) {
             Some(t) => t,
             None => {
                 if self.config.dump_on_error {
