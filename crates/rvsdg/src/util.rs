@@ -422,4 +422,11 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
 
         None
     }
+
+    ///Iterates all sub-[RegionLocation]s of `node`. If `node` has no sub-regions, this
+    /// won't iterate at all.
+    pub fn iter_regions(&self, node: NodeRef) -> impl Iterator<Item = RegionLocation> {
+        (0..self[node].regions().len())
+            .map(move |region_index| RegionLocation { node, region_index })
+    }
 }
