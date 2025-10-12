@@ -9,6 +9,7 @@ use crate::{
     //autodiff::AutoDiffError,
     autodiff::AutoDiffError,
     common::Ty,
+    interval::IntervalError,
 };
 use rvsdg::{
     err::GraphError,
@@ -70,6 +71,8 @@ pub enum OptError {
 
     #[error(transparent)]
     AutoDiffError(#[from] AutoDiffError),
+    #[error(transparent)]
+    Interval(#[from] IntervalError),
     #[error(transparent)]
     UnrollError(#[from] UnrollError),
 }

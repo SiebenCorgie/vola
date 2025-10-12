@@ -252,14 +252,17 @@ impl Pipeline {
                 .map_err(|e| vec![VolaError::new(PipelineError::CneError(e))])?;
         }
 
-        //dispatch autodiff nodes if any where seen
-        if opt.config.seen_pass_nodes.autodiff {
-            opt.dispatch_autodiff().map_err(|e| vec![e.to_error()])?;
-        }
-
-        //dispatch interval-extension if any where seen
+        //dispatch interval-extension if any where seen.
         if opt.config.seen_pass_nodes.interval {
             opt.interval_extension().map_err(|e| vec![e.to_error()])?;
+        }
+        //now flatten intervals into tupel with "normal" operations
+        opt.interval_to_tupel().map_err(|e| vec![e.to_error()])?;
+
+        //dispatch autodiff nodes if any where seen. Note that this works only
+        // for scalar/vector/matrix ops, which is why we have to expand the interval-ops beforehand.
+        if opt.config.seen_pass_nodes.autodiff {
+            opt.dispatch_autodiff().map_err(|e| vec![e.to_error()])?;
         }
 
         //Call _before-finalize-hook_.

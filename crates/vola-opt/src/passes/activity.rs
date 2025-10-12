@@ -23,6 +23,7 @@
 
 pub use crate::autodiff::activity::Activity;
 use rvsdg::edge::{InportLocation, OutportLocation};
+use vola_common::VolaError;
 
 use crate::{OptError, Optimizer};
 
@@ -36,7 +37,7 @@ impl Optimizer {
         &mut self,
         value: InportLocation,
         wrt: InportLocation,
-    ) -> Result<Activity, OptError> {
+    ) -> Result<Activity, VolaError<OptError>> {
         let analysis = ActivityAnalysis::setup(self);
 
         analysis.execute(value, wrt)
@@ -44,13 +45,17 @@ impl Optimizer {
 }
 
 impl<'opt> ActivityAnalysis<'opt> {
-    pub fn setup(optimizer: &'opt mut Optimizer) -> Self {
+    pub fn setup(optimizer: &'opt Optimizer) -> Self {
         //TODO: Here we could setup all the intermediate data and stuff for performance reasons.
         Self { optimizer }
     }
 
     ///Returns the activity of all predecessors of `value` with respect to `wrt`. See the [activity module](super::activity) for more information.
-    pub fn execute(self, value: InportLocation, wrt: InportLocation) -> Result<Activity, OptError> {
+    pub fn execute(
+        self,
+        value: InportLocation,
+        wrt: InportLocation,
+    ) -> Result<Activity, VolaError<OptError>> {
         // This is a three-stage process.
         // 1. Find the actual value producer that is _active_. The dialects permit none-transforming nodes like _index_
 

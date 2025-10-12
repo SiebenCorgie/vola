@@ -271,6 +271,7 @@ impl Ty {
     pub fn is_bool(&self) -> bool {
         self.data_type() == Some(DataType::Bool)
     }
+
     ///Returns true for real, integer, quaternion and complex data-types
     pub fn is_scalar_arithmetic(&self) -> bool {
         if let Some(ty) = self.data_type() {
@@ -325,6 +326,14 @@ impl Ty {
     ///Returns true for any shaped type (including scalar types). Does not return true for `csg`, tuple, lists and callables
     pub fn is_shaped(&self) -> bool {
         if let Self::Shaped { .. } = self {
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn is_interval(&self) -> bool {
+        if let Self::Interval { .. } = self {
             true
         } else {
             false

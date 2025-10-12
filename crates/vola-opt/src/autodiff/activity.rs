@@ -141,8 +141,6 @@ impl Activity {
     // 2. at wrt-producer (and recursively tags predecessors all as _active_)
     // 3. at region argument
     pub(crate) fn trace_node_activity(&mut self, opt: &Optimizer, node: NodeRef) -> bool {
-        //TODO: Handle nodes with sub regions, Gamma&Theta nodes mostly...
-
         //handle the activity by node type.
         //
         //For simple nodes, we can just mark all outputs

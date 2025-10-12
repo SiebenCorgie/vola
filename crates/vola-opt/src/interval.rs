@@ -10,9 +10,20 @@ use rvsdg::{
     edge::InputType,
     region::{Input, Output},
     rvsdg_derive_lang::LangNode,
+    util::abstract_node_type::AbstractNodeType,
 };
+use vola_common::thiserror::Error;
 
 use crate::{common::Ty, DialectNode, OptError, OptNode};
+
+pub mod extension;
+pub mod interval_to_tupel;
+
+#[derive(Debug, Error, Clone)]
+pub enum IntervalError {
+    #[error("Can not build interval over {0:?}")]
+    UnsupportedNodeType(AbstractNodeType),
+}
 
 //Macro that implements the "View" trait for the Interval
 macro_rules! implViewInterval {
