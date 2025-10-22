@@ -36,7 +36,7 @@
 //!
 //! ### [Imm](imm)
 //!
-//! Immediate, so usually constant values in the graph. Also forms the basis for many static code optimizations.
+//! Immediate, so usually constant values in the graph. Also forms the basis for many constant code optimizations.
 //!
 //! ### [TypeLevel](typelevel)
 //!

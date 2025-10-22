@@ -18,9 +18,9 @@ impl Optimizer {
         IntervalExtensionPass::setup(self).extend_all()
     }
 
-    pub fn interval_to_tupel(&mut self) -> Result<(), VolaError<OptError>> {
+    pub fn interval_to_tuple(&mut self) -> Result<(), VolaError<OptError>> {
         #[cfg(feature = "log")]
-        log::info!("interval to tupel");
+        log::info!("interval to tuple");
 
         IntervalExtensionPass::setup(self).extend_all()
     }

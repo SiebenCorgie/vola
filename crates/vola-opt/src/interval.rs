@@ -17,7 +17,7 @@ use vola_common::thiserror::Error;
 use crate::{common::Ty, DialectNode, OptError, OptNode};
 
 pub mod extension;
-pub mod interval_to_tupel;
+pub mod interval_to_tuple;
 
 #[derive(Debug, Error, Clone)]
 pub enum IntervalError {

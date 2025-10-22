@@ -160,7 +160,7 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
     /// # Safety
     ///
     /// While all used CVs are kept, and compacted, this won't keep the CV-port indices stabel. So if you are
-    /// using any annotations that rely on the ports being stable, consider using [disconnect_unused_context_variables] instead.
+    /// using any annotations that rely on the ports being stable, consider using [disconnect_unused_context_variables](crate::Rvsdg::disconnect_unused_context_variables) instead.
     pub fn remove_unused_context_variables(&mut self, node: NodeRef) {
         let cvcount = match &self.node(node).node_type {
             NodeType::Lambda(l) => l.context_variable_count(),

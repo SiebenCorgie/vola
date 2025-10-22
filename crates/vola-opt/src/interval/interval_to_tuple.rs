@@ -11,17 +11,17 @@ use vola_common::VolaError;
 
 use crate::{OptError, Optimizer};
 
-/// Pass that replace any interval-operation with _normal_ operations over tupel elements.
-pub struct IntervalToTupel<'opt> {
+/// Pass that replace any interval-operation with _normal_ operations over tuple elements.
+pub struct IntervalToTuple<'opt> {
     optimizer: &'opt Optimizer,
 }
 
-impl<'opt> IntervalToTupel<'opt> {
+impl<'opt> IntervalToTuple<'opt> {
     pub fn setup(optimizer: &'opt Optimizer) -> Self {
-        IntervalToTupel { optimizer }
+        IntervalToTuple { optimizer }
     }
 
-    ///Converts all live intervals to tupel.
+    ///Converts all live intervals to tuple.
     pub fn convert_live(&self) -> Result<(), VolaError<OptError>> {
         let live_intervals = self.collect_live_intervals();
 

@@ -8,7 +8,7 @@
 
 //! General purpose parsers that can be combined to create parsers for data structures.
 //!
-//! Those are used to build parsers for structures that need a way back from [Display] into their original representation.
+//! Those are used to build parsers for structures that need a way back from [core::fmt::Display] into their original representation.
 
 use chumsky::{
     error::Simple,

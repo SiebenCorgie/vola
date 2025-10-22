@@ -256,8 +256,8 @@ impl Pipeline {
         if opt.config.seen_pass_nodes.interval {
             opt.interval_extension().map_err(|e| vec![e.to_error()])?;
         }
-        //now flatten intervals into tupel with "normal" operations
-        opt.interval_to_tupel().map_err(|e| vec![e.to_error()])?;
+        //now flatten intervals into tuple with "normal" operations
+        opt.interval_to_tuple().map_err(|e| vec![e.to_error()])?;
 
         //dispatch autodiff nodes if any where seen. Note that this works only
         // for scalar/vector/matrix ops, which is why we have to expand the interval-ops beforehand.

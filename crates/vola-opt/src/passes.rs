@@ -5,12 +5,21 @@
  *
  * 2024 Tendsin Mende
  */
-//! Optimizer passes module.
+
+//! Analyses and transformations implemented as functions on [crate::Optimizer] or full-fledged tools.
 //!
-//! Right now we focus on _construction_ passes. Which means passes, that make it possible
-//! to go from the RVSDG to a SPIR-V representation _at all_.
+//! We distinguish analysis and transformations. While the former are read only, and usually lightweight, the latter _transform_ the graph in a meaningful way.
 //!
-//! Later on we'll probably start introducing optimizations and compiler-based inference of properties.
+//! There are _lowering_ transformations, most of them required to arrive at a target specific graph-state, and _optimizations_, that do in-place transformations without lowering the abstraction of nodes.
+//!
+//! We consider a graph in the _target_ state, if all (live) _simple_ nodes are either of the `typelevel`, `imm` or `alge` dialect (i.e. trivially lowered to storage or arithmetic/boolean opertions).
+//! To arrive at this state there are three required lowering passes:
+//!
+//! 1. [Specialize](crate::Optimizer::specialize_all_exports)
+//! 2. [AutoDiff](crate::Optimizer::dispatch_autodiff)
+//! 3. [IntervalExtension](crate::Optimizer::interval_extension)/[IntervalLowering](crate::Optimizer::interval_to_tuple)
+//!
+//! Those take care of lowering any high-level operation to lowerlevel representations.
 
 pub mod activity;
 mod autodiff_dispatch;

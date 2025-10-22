@@ -1369,9 +1369,9 @@ fn register_or_get_type(builder: &mut Builder, ctx: &mut EmitCtx, ty: &SpvType) 
 }
 
 /*
-///Helper, that mapps a tupel of types to a composite in the same order.
-/// This is the way the rust-gpu codegen realises tupel, so we do it the same way.
-fn tupel_to_composite(builder: &mut Builder, ctx: &mut EmitCtx, tys: SmallColl<SpvType>) -> Word {
+///Helper, that mapps a tuple of types to a composite in the same order.
+/// This is the way the rust-gpu codegen realises tuple, so we do it the same way.
+fn tuple_to_composite(builder: &mut Builder, ctx: &mut EmitCtx, tys: SmallColl<SpvType>) -> Word {
     let local_mapped = tys
         .iter()
         .map(|t| register_or_get_type(builder, ctx, t))

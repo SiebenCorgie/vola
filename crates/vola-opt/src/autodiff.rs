@@ -10,7 +10,7 @@
 //!
 //! Takes care of defining all nodes needed for our autodiff framework.
 //!
-//! The submoduls implement the actual autodiff pass as well a specific optimizations.
+//! The submodules implement the actual autodiff pass as well a specific optimizations.
 
 pub(crate) mod activity;
 mod ad_forward;
