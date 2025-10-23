@@ -6,6 +6,8 @@
  * 2025 Tendsin Mende
  */
 
+//! Defines the interval-expand node as well as the interval-extension pass and the interval-to-tuple lowering pass
+
 use rvsdg::{
     edge::InputType,
     region::{Input, Output},
@@ -17,7 +19,8 @@ use vola_common::thiserror::Error;
 use crate::{common::Ty, DialectNode, OptError, OptNode};
 
 pub mod extension;
-pub mod interval_to_tuple;
+pub mod lower_intervals;
+pub mod monotonicity;
 
 #[derive(Debug, Error, Clone)]
 pub enum IntervalError {

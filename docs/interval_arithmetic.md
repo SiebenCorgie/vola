@@ -33,6 +33,14 @@ All[^1] supported operations on arithmetic expressions are also supperted in int
 
 [^1]: We support all arithmetic operators, however, boolean operations are still a little spotty.
 
+
+# On _why we can't have nice things_
+
+Using interval arithmetic introduces an interesting problem related to rounding. Depending on which part of an interval a floating-point operation is applied to, rounding _should_ be reconfigured.
+Now, there is a standard (IEE1788) for interval arithmetic on IEEE754 floats (the common floats). However, we are mostly targeting GPUs with Vola. The problem being that we can be lucky if a GPU implements the actual IEEE754 standard. SPIRV can set the [rounding mode](https://registry.khronos.org/SPIR-V/specs/unified1/SPIRV.html#_fp_rounding_mode), but IIRC only program-wide, so that's out of the question. There is a [LLVM discussion](https://github.com/llvm/llvm-project/issues/87050) for this kind of problem, it might be worth checking that out at some point.
+
+For now we just _don't_ do any rounding consideration. If this ever becomes an actual issue, though, we might just add a conservative _epsilon_ value.
+
 # Considered research
 
 - [IEE-1788 presentation](https://kam.mff.cuni.cz/conferences/swim2015/slides/revol.pdf): Discusses all the edge cases that should be taken care of in a _real_ implementation.

@@ -8,7 +8,10 @@
 
 use vola_common::VolaError;
 
-use crate::{interval::extension::IntervalExtensionPass, OptError, Optimizer};
+use crate::{
+    interval::{extension::IntervalExtensionPass, lower_intervals::LowerIntervals},
+    OptError, Optimizer,
+};
 
 impl Optimizer {
     pub fn interval_extension(&mut self) -> Result<(), VolaError<OptError>> {
@@ -20,8 +23,8 @@ impl Optimizer {
 
     pub fn interval_to_tuple(&mut self) -> Result<(), VolaError<OptError>> {
         #[cfg(feature = "log")]
-        log::info!("interval to tuple");
+        log::info!("lower interval");
 
-        IntervalExtensionPass::setup(self).extend_all()
+        LowerIntervals::setup(self).execute()
     }
 }
