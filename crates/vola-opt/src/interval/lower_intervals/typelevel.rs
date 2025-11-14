@@ -11,15 +11,15 @@ use vola_common::{Span, VolaError};
 
 use crate::{
     interval::{lower_intervals::LowerIntervals, IntervalError},
-    typelevel::{IntervalConstruct, UniformConstruct},
+    typelevel::UniformConstruct,
     OptError, OptNode,
 };
 
 impl<'opt> LowerIntervals<'opt> {
     pub(crate) fn lower_interval_contruct(
         &mut self,
-        region: RegionLocation,
-        span: Span,
+        _region: RegionLocation,
+        _span: Span,
         node: NodeRef,
     ) -> Result<(), VolaError<OptError>> {
         //For intervalontructors its pretty easy, we can just use the
@@ -99,9 +99,6 @@ impl<'opt> LowerIntervals<'opt> {
                 }
             })
             .collect::<(SmallColl<_>, SmallColl<_>)>();
-        let span = self.optimizer.find_span(node).unwrap_or(Span::empty());
-
-        println!("Lower:\n{lower_srcs:?}\nHigher:\n{upper_srcs:?}");
 
         let (lower, upper) = self
             .optimizer

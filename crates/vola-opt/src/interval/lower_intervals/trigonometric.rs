@@ -12,7 +12,8 @@ use vola_common::{Span, VolaError};
 use crate::{
     alge::trigonometric::TrigOp,
     common::DataType,
-    imm::{self, ImmScalar},
+    imm,
+    imm::ImmScalar,
     interval::{lower_intervals::LowerIntervals, IntervalError},
     OptError,
 };
@@ -49,13 +50,28 @@ impl<'opt> LowerIntervals<'opt> {
         match op {
             TrigOp::Sin | TrigOp::Cos => {
                 //TODO: Try to do a constant analysis of the inputs to yield tighter bounds
-
                 let lower =
                     self.optimizer
                         .splat_scalar(region, ImmScalar::new(-1.0), in_low_ty.clone());
                 let upper = self
                     .optimizer
                     .splat_scalar(region, ImmScalar::new(1.0), in_low_ty);
+                assert!(self
+                    .mapping
+                    .insert(node.output(0), (lower, upper))
+                    .is_none());
+                Ok(())
+            }
+            TrigOp::Tan => {
+                //TODO Check whether the argument is within +/- π/2 in that case we can do tight bounds.
+                let lower = self.optimizer.splat_scalar(
+                    region,
+                    ImmScalar::new(f64::NEG_INFINITY),
+                    in_low_ty.clone(),
+                );
+                let upper =
+                    self.optimizer
+                        .splat_scalar(region, ImmScalar::new(f64::INFINITY), in_low_ty);
                 assert!(self
                     .mapping
                     .insert(node.output(0), (lower, upper))

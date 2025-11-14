@@ -57,24 +57,46 @@ macro_rules! route_new {
 /// # Examples
 ///
 /// ```rust ignore
-/// let one = imm!(reg, Real 1.0);
-/// let vec = imm!(reg, Real [1.0, 2.0, 3.0]);
-/// let nat = imm!(reg, Nat 1)
+/// let one = imm!(reg, Real, 1.0);
+/// let vec = imm!(reg, Real, [1.0, 2.0, 3.0]);
+/// let nat = imm!(reg, Nat, 1)
 /// ```
+///
+/// You may dictate a span, otherwise an empty span is used:
+///
+/// ```rust ignore
+/// let one = imm!(reg, Real, 1.0, my_span);
+/// ```
+///
 #[macro_export]
 macro_rules! imm {
-    ($builder:expr, Real $scalar:literal) => {
+    ($builder:expr, Real, $scalar:expr, $span:expr) => {
+        imm!($builder, crate::imm::ImmScalar::new($scalar), $span)
+    };
+    ($builder:expr, Real, $scalar:expr) => {
         imm!($builder, crate::imm::ImmScalar::new($scalar))
     };
-    ($builder:expr, Real [$($scalar:literal),*]) => {
+
+    ($builder:expr, Real, [$($scalar:expr),*], $span:expr) => {
+        imm!($builder, crate::imm::ImmVector::new(&[$($scalar),*], $span))
+    };
+    ($builder:expr, Real, [$($scalar:expr),*]) => {
         imm!($builder, crate::imm::ImmVector::new(&[$($scalar),*]))
     };
 
-    ($builder:expr, Nat $nat:literal) => {
+    ($builder:expr, Nat, $nat:expr, $span:expr) => {
+        imm!($builder, crate::imm::ImmNat::new($nat), $span)
+    };
+    ($builder:expr, Nat, $nat:expr) => {
         imm!($builder, crate::imm::ImmNat::new($nat))
     };
 
-    ($builder:expr, $opt:expr) => {{
-        $builder.insert_node(OptNode::new($opt, Span::empty()))
-    }};
+    ($builder:expr, $opt:expr) => {
+        $builder.insert_node(crate::OptNode::new($opt, Span::empty()))
+    };
+
+    ($builder:expr, $opt:expr, $span:expr) => {
+        $builder.insert_node(crate::OptNode::new($opt, $span))
+    };
+
 }
