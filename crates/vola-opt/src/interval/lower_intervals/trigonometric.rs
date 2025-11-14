@@ -12,7 +12,6 @@ use vola_common::{Span, VolaError};
 use crate::{
     alge::trigonometric::TrigOp,
     common::DataType,
-    imm,
     imm::ImmScalar,
     interval::{lower_intervals::LowerIntervals, IntervalError},
     OptError,

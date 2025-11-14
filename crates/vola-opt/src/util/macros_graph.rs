@@ -41,7 +41,7 @@ macro_rules! route_new {
         {
             let (node, _) = $builder
                 .connect_node(
-                    OptNode::new($opt, $span),
+                    crate::OptNode::new($opt, $span),
                     [$($port),*],
                 )
                 .unwrap();
