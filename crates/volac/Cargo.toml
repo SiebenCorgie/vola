@@ -20,6 +20,7 @@ vola-backend-spirv = { workspace = true, optional = true }
 vola-backend-wasm = { workspace = true, optional = true }
 vola-common.workspace = true
 rvsdg.workspace = true
+thiserror.workspace = true
 bytemuck.workspace = true
 log.workspace = true
 wasmtime = { workspace = true, optional = true }

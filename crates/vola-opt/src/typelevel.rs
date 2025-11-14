@@ -122,7 +122,9 @@ impl DialectNode for UniformConstruct {
             });
         }
 
-        if !input_types[0].is_scalar_arithmetic() {
+        if !(input_types[0].is_scalar_arithmetic()
+            || input_types[0].is_interval_of(Ty::is_scalar_arithmetic))
+        {
             return Err(OptError::Any { text: format!("List can only be created from algebraic types (scalar, vector, matrix, tensor), but first element was of type {:?}", input_types[0]) });
         }
 
@@ -169,6 +171,12 @@ impl DialectNode for UniformConstruct {
                     Ok(Ty::shaped(DataType::Real, Shape::Tensor { sizes: dim }))
                 }
             },
+            Ty::Interval(_t) => Err(OptError::TypeDeriveError {
+                text: format!(
+                    "Cannot construct \"List\" from intervals ({}) try constructing an interval from lists",
+                    input_types[0]
+                ),
+            }),
             _ => Err(OptError::TypeDeriveError {
                 text: format!("Cannot construct \"List\" from \"{}\"", input_types[0]),
             }),

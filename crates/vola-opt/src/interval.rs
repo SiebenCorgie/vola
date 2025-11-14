@@ -14,18 +14,21 @@ use rvsdg::{
     rvsdg_derive_lang::LangNode,
     util::abstract_node_type::AbstractNodeType,
 };
-use vola_common::thiserror::Error;
+use thiserror::Error;
 
 use crate::{common::Ty, DialectNode, OptError, OptNode};
 
 pub mod extension;
 pub mod lower_intervals;
-pub mod monotonicity;
 
 #[derive(Debug, Error, Clone)]
 pub enum IntervalError {
     #[error("Can not build interval over {0:?}")]
     UnsupportedNodeType(AbstractNodeType),
+    #[error("Unsupported operation {0:?} in interval calculation.")]
+    UnsupportedOp(String),
+    #[error("Can not index interval with {0}. Must be either 0 (lower) or 1 (upper) bound")]
+    InvalidIntervalIndex(usize),
 }
 
 //Macro that implements the "View" trait for the Interval
@@ -99,7 +102,7 @@ implViewInterval!(IntervalExtension, "IntervalExtension");
 
 impl DialectNode for IntervalExtension {
     fn dialect(&self) -> &'static str {
-        "Interval"
+        "interval"
     }
 
     fn try_derive_type(

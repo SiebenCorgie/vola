@@ -124,8 +124,9 @@ impl Target {
 ///     3.7 (optional) optimize specialized eval-λs
 ///     3.8 (optional) inline eval-λs
 ///     3.9 (optional) iff 3.8 happened, do cross-λ-optimizations
-/// 4. Automatic differentiation
-/// 5. Emit some format based on a configured backend.
+/// 4. Interval extension and lowering
+/// 5. Automatic differentiation
+/// 6. Emit some format based on a configured backend.
 pub struct Pipeline {
     pub backend: BoxedBackend,
 

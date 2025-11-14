@@ -26,7 +26,7 @@ use rvsdg::{
     util::abstract_node_type::AbstractNodeType,
     SmallColl,
 };
-use vola_common::thiserror::Error;
+use thiserror::Error;
 
 use crate::{
     common::{DataType, Shape, Ty},

@@ -13,7 +13,7 @@ use rvsdg::{
     util::{cfg::scfr::ScfrError, graph_type_transform::GraphTypeTransformerError},
     NodeRef, SmallColl,
 };
-use vola_common::thiserror::Error;
+use thiserror::Error;
 use vola_opt::common::Ty;
 
 use crate::{graph::WasmTy, wasm::ExternOp};

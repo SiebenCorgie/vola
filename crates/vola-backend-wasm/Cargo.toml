@@ -10,14 +10,13 @@ viewer = ["rvsdg-viewer"]
 dot = ["graphviz-rust"]
 
 [dependencies]
-thiserror.workspace = true
-
 vola-opt.workspace = true
 vola-common.workspace = true
 rvsdg.workspace = true
 rvsdg-viewer = { workspace = true, optional = true }
 walrus.workspace = true
 ahash.workspace = true
+thiserror.workspace = true
 log = { workspace = true, optional = true }
 graphviz-rust = { workspace = true, optional = true }
 
