@@ -6,13 +6,26 @@
  * 2025 Tendsin Mende
  */
 
-use std::collections::VecDeque;
-
 use ahash::AHashMap;
-use rvsdg::{edge::OutportLocation, NodeRef};
-use vola_common::VolaError;
+use rvsdg::edge::OutportLocation;
+use rvsdg_viewer::View;
+use vola_common::{Span, VolaError};
 
-use crate::{typelevel::ConstantIndex, OptError, Optimizer};
+mod arith;
+mod buildin;
+mod trigonometric;
+mod typelevel;
+
+use crate::{
+    alge::{
+        arithmetic::{BinaryArith, UnaryArith},
+        buildin::Buildin,
+        trigonometric::Trig,
+    },
+    interval::IntervalError,
+    typelevel::{ConstantIndex, IntervalConstruct, UniformConstruct},
+    OptError, Optimizer,
+};
 
 /// Pass that replace any interval-operation with _normal_ operations over tuple elements.
 ///
@@ -22,10 +35,10 @@ use crate::{typelevel::ConstantIndex, OptError, Optimizer};
 /// we can, for monoton increasing or decreasing function, trivially apply the transformation (see the `a+b` example).
 /// For non monotonic functions however, we need to _know_ (or analyse) extrem points. We do that whenever possible, or fall back to conservative bounds. For instance if the input interval `x` in `sin(x)` is constant, we can produce an exact interval, otherwise we fall-back to `[-1..1]`
 pub struct LowerIntervals<'opt> {
-    optimizer: &'opt mut Optimizer,
+    pub(crate) optimizer: &'opt mut Optimizer,
 
     ///Maps a interval port to the already resolved lower and upper bound of some _primitive_ type
-    mapping: AHashMap<OutportLocation, (OutportLocation, OutportLocation)>,
+    pub(crate) mapping: AHashMap<OutportLocation, (OutportLocation, OutportLocation)>,
 }
 
 impl<'opt> LowerIntervals<'opt> {
@@ -37,6 +50,13 @@ impl<'opt> LowerIntervals<'opt> {
     }
 
     pub fn execute(mut self) -> Result<(), VolaError<OptError>> {
+        if std::env::var("VOLA_DUMP_ALL").is_ok()
+            || std::env::var("DUMP_PRE_INTERVAL_LOWER").is_ok()
+        {
+            self.optimizer
+                .push_debug_state(&format!("pre-interval-lower"));
+        }
+
         //Execution of this lowering simply iterates the live-code
         // in topological order, for any node that produces an interval, we call
         // the _handle_ routine.
@@ -57,20 +77,33 @@ impl<'opt> LowerIntervals<'opt> {
         for node in topoord {
             //if the node produces any interval edges, handle it
             for port in self.optimizer.graph.outports(node) {
-                if self
-                    .optimizer
-                    .find_type(port)
-                    .map_or(false, |t| t.is_interval())
-                {
+                if self.optimizer.get_or_derive_type(port, false).is_interval() {
                     self.handle_value(port)?
                 }
             }
 
-            //For constant-index we have to check, whether it needs to be reduced to just
-            // forwarding a flattened value
-            if self.optimizer.is_node_type::<ConstantIndex>(node) {
-                self.handle_index(node)?
+            //If this node is a interval-indexing operation, we have the special case, where
+            // we can now flatten that index into a specific value.
+            if let Some(iindex) = self.optimizer.try_unwrap_node::<ConstantIndex>(node) {
+                let index = iindex.access;
+                let is_indexing_interval = self
+                    .optimizer
+                    .get_or_derive_type_input(node.input(0), false)
+                    .is_interval();
+                //If this is actually indexing an interval, call the unwraping handler
+                if is_indexing_interval {
+                    self.lower_constant_index(node, index)?;
+                }
             }
+
+            //If this is uniform construct, where one or more of the participants are intervals,
+        }
+
+        if std::env::var("VOLA_DUMP_ALL").is_ok()
+            || std::env::var("DUMP_POST_INTERVAL_LOWER").is_ok()
+        {
+            self.optimizer
+                .push_debug_state(&format!("post-interval-lower"));
         }
 
         Ok(())
@@ -78,24 +111,78 @@ impl<'opt> LowerIntervals<'opt> {
 
     ///Replaces the interval of `value` with the tuple of `(start, end).
     ///
-    /// Note that this traces the whole expression till no interval operations are found.
+    /// Assumes that, iff any input to this value's node is a interval, that it has been associated with a lowered interval representation
+    /// already.
     fn handle_value(&mut self, value: OutportLocation) -> Result<(), VolaError<OptError>> {
         //If this port is already in the mapping, bail.
         if self.mapping.contains_key(&value) {
             return Ok(());
         }
 
-        //Load the interval mappings for the dependencies of this node
-        todo!();
-        //Get the monotonity property, depending on that, spawn new nodes and hook-up the primitive
-        // intervals
-        todo!();
-        //Now insert our outputs to the mapping and return.
-        todo!()
-    }
+        if !self.optimizer.graph[value.node].node_type.is_simple() {
+            //TODO: Implement pulling out such values from a region
+            // The idea is, for control-flow to _just create_ new ports, that represent
+            // the flattened values, put them into the map, and the recursively pre-fetch the interval-connected
+            // port. Once its done, special-handle the connection _out_ of the CF node.
+            //
+            // For lambda/apply nodes we can probably just copy the lambda, specialize it for the interval (use
+            // the mapping to reuse/signal that for the lambda-definition port), and replace the apply node,
+            // which should now produce two values.
+            panic!("non-simple node");
+        }
 
-    ///Checks whether this indexing was flattened before and can just forward the actual value to its consumer.
-    fn handle_index(&mut self, node: NodeRef) -> Result<(), VolaError<OptError>> {
-        todo!()
+        let span = self
+            .optimizer
+            .find_span(value.node)
+            .unwrap_or(Span::empty());
+        let region = self.optimizer.graph[value.node].parent.unwrap();
+
+        //Similar to the AutoDiff dispatch we can statically dispatch the type-tag of the dyn-dispatched
+        // node, so we have to traverse like this atm.
+        if let Some(binarith) = self.optimizer.try_unwrap_node::<BinaryArith>(value.node) {
+            let op = binarith.op;
+            return self.lower_binary_arith(region, span.clone(), value.node, op);
+        }
+        if let Some(unaryarith) = self.optimizer.try_unwrap_node::<UnaryArith>(value.node) {
+            let op = unaryarith.op;
+            return self.lower_unary_arith(region, span.clone(), value.node, op);
+        }
+        if let Some(trig) = self.optimizer.try_unwrap_node::<Trig>(value.node) {
+            let op = trig.op;
+            return self.lower_trig(region, span.clone(), value.node, op);
+        }
+
+        if let Some(buildin) = self.optimizer.try_unwrap_node::<Buildin>(value.node) {
+            let op = buildin.op.clone();
+            return self.lower_buildin(region, span.clone(), value.node, op);
+        }
+
+        //BreakOut to typelevel specific code. Those are a little different to the _actual_ operations
+        if let Some(_ic) = self
+            .optimizer
+            .try_unwrap_node::<IntervalConstruct>(value.node)
+        {
+            return self.lower_interval_contruct(region, span.clone(), value.node);
+        }
+        if let Some(_ic) = self
+            .optimizer
+            .try_unwrap_node::<IntervalConstruct>(value.node)
+        {
+            return self.lower_interval_contruct(region, span.clone(), value.node);
+        }
+
+        if let Some(_uc) = self
+            .optimizer
+            .try_unwrap_node::<UniformConstruct>(value.node)
+        {
+            return self.lower_uniform_construct(region, span.clone(), value.node);
+        }
+
+        Err(
+            VolaError::new(OptError::Interval(IntervalError::UnsupportedOp(
+                self.optimizer.graph[value.node].name(),
+            )))
+            .with_error(span, "here"),
+        )
     }
 }
