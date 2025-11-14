@@ -10,8 +10,9 @@ use rvsdg::{region::RegionLocation, NodeRef};
 use vola_common::{Span, VolaError};
 
 use crate::{
-    alge::arithmetic::{BinaryArith, BinaryArithOp, UnaryArithOp},
-    interval::lower_intervals::LowerIntervals,
+    alge::arithmetic::{BinaryArith, BinaryArithOp, UnaryArith, UnaryArithOp},
+    imm::ImmScalar,
+    interval::{lower_intervals::LowerIntervals, IntervalError},
     route_new, OptError, OptNode,
 };
 impl<'opt> LowerIntervals<'opt> {
@@ -99,7 +100,13 @@ impl<'opt> LowerIntervals<'opt> {
                     })
                     .unwrap()
             }
-            _ => todo!(),
+            other => {
+                return Err(VolaError::error_here(
+                    IntervalError::UnsupportedOp(format!("{other:?}")).into(),
+                    span,
+                    "here",
+                ))
+            }
         };
 
         //register with the mapping
@@ -115,19 +122,83 @@ impl<'opt> LowerIntervals<'opt> {
         op: UnaryArithOp,
     ) -> Result<(), VolaError<OptError>> {
         assert_eq!(self.optimizer.graph[node].inputs().len(), 1);
+        let original_src = self.optimizer.graph.inport_src(node.input(0)).unwrap();
+        let (in_start, in_end) = *self.mapping.get(&original_src).unwrap();
 
-        let (in_start, in_end) = *self
-            .mapping
-            .get(&self.optimizer.graph.inport_src(node.input(0)).unwrap())
-            .unwrap();
+        let inty = self.optimizer.get_or_derive_type(original_src, false);
+        if !inty.is_scalar_arithmetic() {
+            return Err(VolaError::error_here(
+                IntervalError::UnsupportedOp(format!(
+                    "{op:?}: Interval arithmetic only supported on real valued types!"
+                ))
+                .into(),
+                span,
+                "not real valued",
+            ));
+        }
 
         let (start, end) = match op {
-            _ => todo!(),
+            UnaryArithOp::Abs => {
+                //Currently defaulting to the conservative 0..max(abs(start), abs(end)).
+                // TODO: tighten if we can derive any knowledge about the input interval
+                let start = self
+                    .optimizer
+                    .splat_scalar(region, ImmScalar::new(0.0), inty);
+                let end = self
+                    .optimizer
+                    .graph
+                    .on_region(&region, |reg| {
+                        let abs_start = route_new!(reg, UnaryArithOp::Abs, span.clone(), in_start);
+                        let abs_end = route_new!(reg, UnaryArithOp::Abs, span.clone(), in_end);
+                        let max = route_new!(
+                            reg,
+                            BuildinOp::Max,
+                            span,
+                            [abs_start.output(0), abs_end.output(0)]
+                        );
+                        max.output(0)
+                    })
+                    .unwrap();
+                (start, end)
+            }
+            UnaryArithOp::Neg => {
+                //simply [-end, -start]
+                self.optimizer
+                    .graph
+                    .on_region(&region, |reg| {
+                        let neg_start = route_new!(reg, UnaryArithOp::Neg, span.clone(), in_start);
+                        let neg_end = route_new!(reg, UnaryArithOp::Neg, span.clone(), in_end);
+                        (neg_end.output(0), neg_start.output(0))
+                    })
+                    .unwrap()
+            }
+            UnaryArithOp::Ceil | UnaryArithOp::Floor | UnaryArithOp::Round => {
+                //Simply piece-wise application
+                self.optimizer
+                    .graph
+                    .on_region(&region, |reg| {
+                        let new_start =
+                            route_new!(reg, UnaryArith::new(op), span.clone(), [in_start]);
+                        let new_end = route_new!(reg, UnaryArith::new(op), span.clone(), [in_end]);
+                        (new_end.output(0), new_start.output(0))
+                    })
+                    .unwrap()
+            }
+            UnaryArithOp::Fract => {
+                //Falling back to the [0..1] interval for now.
+                let start = self
+                    .optimizer
+                    .splat_scalar(region, ImmScalar::new(0.0), inty.clone());
+                let end = self
+                    .optimizer
+                    .splat_scalar(region, ImmScalar::new(1.0), inty);
+                (start, end)
+            }
         };
 
         //register with the mapping
         assert!(self.mapping.insert(node.output(0), (start, end)).is_none());
 
-        return Ok(());
+        Ok(())
     }
 }
