@@ -13,6 +13,8 @@ use rvsdg::{
 
 use crate::{common::Ty, Optimizer};
 
+pub mod macros_graph;
+
 impl Optimizer {
     pub fn get_type_for_inport(&self, port: InportLocation) -> Option<Ty> {
         if let Some(port) = self.graph.node(port.node).inport(&port.input) {
