@@ -890,6 +890,8 @@ impl Optimizer {
         Ok(input_config)
     }
 
+    ///The recursive dispatch that applies the type-derive rules to any `node`. Might fail if, for instance,
+    /// if not all inputs have types associated.
     pub fn try_node_type_derive(
         &mut self,
         node: NodeRef,

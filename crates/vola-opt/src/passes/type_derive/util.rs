@@ -6,14 +6,34 @@
  * 2025 Tendsin Mende
  */
 
-use rvsdg::{edge::OutportLocation, NodeRef};
+use rvsdg::{
+    edge::{InportLocation, OutportLocation},
+    NodeRef,
+};
 use vola_common::Span;
 
 use crate::{common::Ty, OptError, Optimizer};
 
 impl Optimizer {
-    //Tries to get the type of the port, If that is not possible, tries to derive a type. Panics if that is not possible, since the graph
-    //should always be able to derive a type for any output.
+    ///Similar to [get_or_derive_type], but for inputs
+    pub(crate) fn get_or_derive_type_input(
+        &mut self,
+        input: InportLocation,
+        ignore_dead_nodes: bool,
+    ) -> Ty {
+        if let Some(ty) = self.find_type(input) {
+            return ty;
+        }
+
+        //Get _any_ outpur, fire the well tested code and then come back, assuming the inputs are set as well.
+        let any_output = *self.graph.outports(input.node).first().unwrap();
+        let _outtype = self.get_or_derive_type(any_output, ignore_dead_nodes);
+
+        self.find_type(input).expect("Should be set after derive")
+    }
+
+    ///Tries to get the type of the port, If that is not possible, tries to derive a type. Panics if that is not possible, since the graph
+    ///should always be able to derive a type for any output.
     pub(crate) fn get_or_derive_type(
         &mut self,
         output: OutportLocation,
@@ -79,7 +99,15 @@ impl Optimizer {
         //We ignore if that fails, because
         //this helper is possible working on an
         // unfinished graph
-        let _ = self.type_derive(false);
+        #[cfg(feature = "log")]
+        log::trace!("Falling back to full-graph type derive");
+
+        if let Err(e) = self.type_derive(false) {
+            #[cfg(feature = "log")]
+            for e in e {
+                e.report();
+            }
+        }
         Ok(())
     }
 }
