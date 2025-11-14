@@ -253,7 +253,11 @@ impl BuildinOp {
                     });
                 }
 
-                if !sig[0].is_scalar_arithmetic() || sig[0].is_matrix() || sig[1].is_tensor() {
+                if !(sig[0].is_scalar_arithmetic()
+                    || sig[0].is_interval_of(Ty::is_scalar_arithmetic))
+                    || sig[0].is_matrix()
+                    || sig[1].is_tensor()
+                {
                     return Err(OptError::Any {
                         text: format!(
                             "{:?} expects algebraic operands (scalar, vector, matrix, tensor) got {:?}",
@@ -278,7 +282,7 @@ impl BuildinOp {
                     });
                 }
 
-                if !sig[0].is_vector() {
+                if !(sig[0].is_vector() || sig[0].is_interval_of(Ty::is_vector)) {
                     return Err(OptError::Any {
                         text: format!(
                             "{:?} expects operands to be vectors, got {:?}",
@@ -302,7 +306,7 @@ impl BuildinOp {
                     });
                 }
 
-                if !sig[0].is_vector() {
+                if !(sig[0].is_vector() || sig[0].is_interval_of(Ty::is_vector)) {
                     return Err(OptError::Any {
                         text: format!(
                             "{:?} expects operands to be vectors, got {:?}",
@@ -320,66 +324,54 @@ impl BuildinOp {
                         text: format!("Length expects one operand, got {:?}", sig.len()),
                     });
                 }
-                match &sig[0] {
+                let base_test = |ty: &Ty| match ty {
                     Ty::Shaped {
                         ty: DataType::Real,
                         shape: Shape::Vec { width: _ },
-                    } => {}
-                    _ => {
-                        return Err(OptError::Any {
-                            text: format!(
-                                "Length expects operand of type vector, got {:?}",
-                                sig[0]
-                            ),
-                        })
+                    } => Ok(Ty::SCALAR_REAL),
+                    _ => Err(OptError::Any {
+                        text: format!("Length expects operand of type vector, got {:?}", sig[0]),
+                    }),
+                };
+
+                match &sig[0] {
+                    Ty::Interval(t) => {
+                        let interval_type = base_test(t)?;
+                        Ok(Ty::Interval(Box::new(interval_type)))
                     }
+                    other => base_test(other),
                 }
-
-                //seems to be alright, return scalar
-                Ok(Ty::SCALAR_REAL)
             }
-
-            Self::SquareRoot => {
+            //All the same for ops that can do things on a single real, or vecs-of-real
+            Self::SquareRoot | Self::Exp => {
                 if sig.len() != 1 {
                     return Err(OptError::Any {
-                        text: format!("SquareRoot expects one operand, got {:?}", sig.len()),
+                        text: format!("{self:?} expects one operand, got {:?}", sig.len()),
                     });
                 }
-                match &sig[0] {
+                let base_test = |ty: &Ty| match ty {
                     &Ty::SCALAR_REAL => Ok(Ty::SCALAR_REAL),
                     Ty::Shaped {
                         ty: DataType::Real,
                         shape: Shape::Vec { width },
                     } => Ok(Ty::vector_type(DataType::Real, *width)),
-                    _ => {
-                        return Err(OptError::Any {
-                            text: format!(
-                                "SquareRoot expects operand of type scalar, or vector got {:?}",
-                                sig[0]
-                            ),
-                        })
-                    }
-                }
-            }
-            Self::Exp => {
-                if sig.len() != 1 {
-                    return Err(OptError::Any {
-                        text: format!("Exp expects one operand, got {:?}", sig.len()),
-                    });
-                }
+                    _ => Err(OptError::Any {
+                        text: format!(
+                            "{self:?} expects operand of type scalar, or vector got {:?}",
+                            sig[0]
+                        ),
+                    }),
+                };
+
                 match &sig[0] {
-                    &Ty::SCALAR_REAL => Ok(Ty::SCALAR_REAL),
-                    Ty::Shaped {
-                        ty: DataType::Real,
-                        shape: Shape::Vec { width },
-                    } => Ok(Ty::vector_type(DataType::Real, *width)),
-                    _ => {
-                        return Err(OptError::Any {
-                            text: format!("Exp expects operands of type scalar, got {:?}", sig[0]),
-                        })
+                    Ty::Interval(t) => {
+                        let interval_type = base_test(t)?;
+                        Ok(Ty::Interval(Box::new(interval_type)))
                     }
+                    other => base_test(other),
                 }
             }
+
             Self::Pow => {
                 if sig.len() != 2 {
                     return Err(OptError::Any {
@@ -393,17 +385,26 @@ impl BuildinOp {
                     });
                 }
 
-                if !sig[0].is_scalar() && !sig[0].is_vector() {
-                    return Err(OptError::Any {
-                        text: format!(
-                            "{:?} expects operands to be vectors or scalars, got {:?}",
-                            self, sig[0]
-                        ),
-                    });
-                }
+                let base_test = |ty: &Ty| {
+                    if !ty.is_scalar() && !ty.is_vector() {
+                        Err(OptError::Any {
+                            text: format!(
+                                "{:?} expects operands to be vectors or scalars, got {:?}",
+                                self, ty
+                            ),
+                        })
+                    } else {
+                        Ok(ty.clone())
+                    }
+                };
 
-                //Cross returns the same vector type as supplied
-                Ok(sig[0].clone())
+                match &sig[0] {
+                    Ty::Interval(t) => {
+                        let rt = base_test(t)?;
+                        Ok(Ty::Interval(Box::new(rt)))
+                    }
+                    other => base_test(other),
+                }
             }
             Self::Mix | Self::Clamp => {
                 if sig.len() != 3 {
@@ -411,28 +412,43 @@ impl BuildinOp {
                         text: format!("{:?} expects three operand, got {:?}", self, sig.len()),
                     });
                 }
-                match (&sig[0], &sig[1], &sig[2]) {
-                    (&Ty::SCALAR_REAL, &Ty::SCALAR_REAL, &Ty::SCALAR_REAL) => {},
-                    (
-                        Ty::Shaped{ty: DataType::Real, shape: Shape::Vec{width: w0}},
-                        Ty::Shaped{ty: DataType::Real, shape: Shape::Vec{width: w1}},
-                        Ty::Shaped{ty: DataType::Real, shape: Shape::Vec{width: w2}}
-                    ) => {
-                        if w0 != w1 || w0 != w2{
-                            return Err(OptError::Any {
-                                text: format!("{:?} expects operands of type scalar or vector (of equal width), got {:?}", self, sig),
-                            });
+                let base_test = |a: &Ty, b: &Ty, alpha: &Ty| {
+                    match (a, b, alpha) {
+                        (&Ty::SCALAR_REAL, &Ty::SCALAR_REAL, &Ty::SCALAR_REAL) => {Ok(Ty::SCALAR_REAL)},
+                        (
+                            Ty::Shaped{ty: DataType::Real, shape: Shape::Vec{width: w0}},
+                            Ty::Shaped{ty: DataType::Real, shape: Shape::Vec{width: w1}},
+                            Ty::Shaped{ty: DataType::Real, shape: Shape::Vec{width: w2}}
+                        ) => {
+                            if w0 != w1 || w0 != w2{
+                                Err(OptError::Any {
+                                    text: format!("{:?} expects operands of type scalar or vector (of equal width), got {:?}, {:?}, {:?}", self, a, b , alpha),
+                                })
+                            }else{
+                                Ok(a.clone())
+                            }
+                        },
+                        other => {
+                            Err(OptError::Any {
+                                text: format!("{:?} expects operands of type scalar or vector (of equal width), got {:?}", self, other),
+                            })
                         }
-                    },
-                    _ => {
-                        return Err(OptError::Any {
-                            text: format!("{:?} expects operands of type scalar or vector (of equal width), got {:?}", self, sig),
-                        })
                     }
-                }
+                };
 
-                //seems to be alright, return scalar
-                Ok(sig[0].clone())
+                match (&sig[0], &sig[1], &sig[2]) {
+                    (Ty::Interval(a), Ty::Interval(b), Ty::Interval(alpha)) => {
+                        let rt = base_test(a, b, alpha)?;
+                        Ok(Ty::Interval(Box::new(rt)))
+                    }
+                    (Ty::Interval(_), Ty::Interval(_), _other) => Err(OptError::Any {
+                        text: format!(
+                            "{:?} can not mix intervals and none-intervals at the moment",
+                            self
+                        ),
+                    }),
+                    (a, b, alpha) => base_test(a, b, alpha),
+                }
             }
         }
     }

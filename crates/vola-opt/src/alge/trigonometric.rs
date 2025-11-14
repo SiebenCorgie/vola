@@ -116,14 +116,25 @@ impl DialectNode for Trig {
             }
         }
 
-        let input_ty = input_types[0].clone();
+        let input_ty = &input_types[0];
 
         match input_ty {
-            Ty::SCALAR_REAL => {}
-            Ty::Shaped {
+            &Ty::SCALAR_REAL
+            | Ty::Shaped {
                 ty: DataType::Real,
                 shape: Shape::Vec { .. },
             } => {}
+            Ty::Interval(ity) => match ity.as_ref() {
+                &Ty::SCALAR_REAL => {}
+                _ => {
+                    return Err(OptError::TypeDeriveError {
+                        text: format!(
+                            "{:?} only supports intervals of real-values, was {:?}",
+                            self.op, input_ty
+                        ),
+                    })
+                }
+            },
             _ => {
                 return Err(OptError::Any {
                     text: format!(
@@ -135,7 +146,7 @@ impl DialectNode for Trig {
         }
 
         //seems to be alright, return scalar
-        Ok(input_ty)
+        Ok(input_ty.clone())
     }
 
     fn structural_copy(&self, span: vola_common::Span) -> crate::OptNode {

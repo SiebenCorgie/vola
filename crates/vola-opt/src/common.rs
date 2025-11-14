@@ -340,6 +340,14 @@ impl Ty {
         }
     }
 
+    ///Tests whether `self` is an interval of a type that passes `test`.
+    pub fn is_interval_of(&self, test: impl Fn(&Ty) -> bool) -> bool {
+        match self {
+            Self::Interval(t) => test(t),
+            _ => false,
+        }
+    }
+
     ///If the type has a width, returns it. This is either the vector's or matrix's width,
     ///or the tensors first dimension.
     pub fn width(&self) -> Option<usize> {

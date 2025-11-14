@@ -90,7 +90,9 @@ impl BinaryArith {
                     });
                 }
 
-                if !sig[0].is_scalar_arithmetic() {
+                if !(sig[0].is_scalar_arithmetic()
+                    || sig[0].is_interval_of(Ty::is_scalar_arithmetic))
+                {
                     return Err(OptError::Any {
                         text: format!(
                             "{:?} expects algebraic operands (scalar, vector, matrix, tensor) got {}",
@@ -118,7 +120,9 @@ impl BinaryArith {
                     });
                 }
 
-                if !sig[0].is_scalar_arithmetic() {
+                if !(sig[0].is_scalar_arithmetic()
+                    || sig[0].is_interval_of(Ty::is_scalar_arithmetic))
+                {
                     return Err(OptError::Any {
                         text: format!(
                             "{:?} expects algebraic operands (scalar, vector, matrix, tensor) got {}",
@@ -127,7 +131,9 @@ impl BinaryArith {
                     });
                 }
 
-                if !sig[1].is_scalar_arithmetic() {
+                if !(sig[1].is_scalar_arithmetic()
+                    || sig[1].is_interval_of(Ty::is_scalar_arithmetic))
+                {
                     return Err(OptError::Any {
                         text: format!(
                             "{:?} expects algebraic operands (scalar, vector, matrix, tensor) got {}",
@@ -136,7 +142,7 @@ impl BinaryArith {
                     });
                 }
 
-                match (&sig[0], &sig[1]) {
+                let base_match = |a: &Ty, b: &Ty| match (a, b) {
                     //In that case, use the vector as return type
                     (
                         Ty::Shaped {
@@ -213,6 +219,15 @@ impl BinaryArith {
                             Ok(sig[0].clone())
                         }
                     }
+                };
+
+                //apply the base-matcher to either the ty directly
+                // or interval wrapped types
+                match (&sig[0], &sig[1]) {
+                    (Ty::Interval(a), Ty::Interval(b)) => base_match(a, b),
+                    (Ty::Interval(a), other_b) => base_match(a, other_b),
+                    (other_a, Ty::Interval(b)) => base_match(other_a, b),
+                    (a, b) => base_match(a, b),
                 }
             }
         }
@@ -365,7 +380,9 @@ impl DialectNode for UnaryArith {
 
         match &self.op {
             UnaryArithOp::Neg => {
-                if !input_ty.is_scalar_arithmetic() {
+                if !(input_ty.is_scalar_arithmetic()
+                    || input_ty.is_interval_of(Ty::is_scalar_arithmetic))
+                {
                     return Err(OptError::Any {
                         text: format!(
                             "{:?} expects algebraic operand (scalar, vector, matrix, tensor) got {:?}",
@@ -381,20 +398,23 @@ impl DialectNode for UnaryArith {
             | UnaryArithOp::Round
             | UnaryArithOp::Ceil
             | UnaryArithOp::Floor => {
-                match input_ty {
-                    Ty::SCALAR_REAL => {}
-                    Ty::Shaped {
+                let base_test = |input_ty: &Ty| match *input_ty {
+                    Ty::SCALAR_REAL
+                    | Ty::Shaped {
                         ty: DataType::Real,
                         shape: Shape::Vec { .. },
-                    } => {}
-                    _ => {
-                        return Err(OptError::Any {
-                            text: format!(
-                                "{:?} expects operands of type scalar or vector, got {:?}",
-                                self.op, input_ty
-                            ),
-                        })
-                    }
+                    } => Ok(()),
+                    _ => Err(OptError::Any {
+                        text: format!(
+                            "{:?} expects operands of type scalar or vector, got {:?}",
+                            self.op, input_ty
+                        ),
+                    }),
+                };
+
+                match &input_ty {
+                    Ty::Interval(t) => base_test(t)?,
+                    other => base_test(other)?,
                 }
 
                 //seems to be alright, return scalar
