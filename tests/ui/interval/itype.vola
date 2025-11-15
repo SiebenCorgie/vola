@@ -13,5 +13,6 @@ export fn call(p: real) -> real{
     let a = [sin(p); 3];
 
     let ai = bound(a, p, [-INF..INF]);
+    //NOTE: This checks that the interval-in-fn-call process functions
     sub_function(ai)
 }

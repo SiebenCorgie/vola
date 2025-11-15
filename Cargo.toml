@@ -40,7 +40,7 @@ vola-fmt = { path = "crates/vola-fmt" }
 wasm-runtime = { path = "crates/wasm-runtime" }
 
 tree-sitter = "0.25.3"
-thiserror = "1.0.44"
+thiserror = "2.0.17"
 ahash = "0.8.7"
 slotmap = "1.0"
 graphviz-rust = "0.7.1"

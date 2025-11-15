@@ -1,0 +1,8 @@
+//BEGIN-CONFIG
+//ERROR:Type derive failed: Cannot construct "List" from intervals (Interval<scalar<Real>>) try constructing an interval from lists<!!>Type derive failed: Result is of type "vec2<Real>", but result was untyped.
+//END-CONFIG
+
+export fn call(p: real) -> vec2{
+    let ai = [[-2.0 .. 3.0]; 3];
+    [ai.x.start, ai.x.end]
+}

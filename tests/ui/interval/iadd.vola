@@ -1,0 +1,12 @@
+//BEGIN-CONFIG
+//EXEC-FN:call
+//EXEC-ARGS:0.0
+//EXEC-EPS:0.0
+//EXEC-RES:0.0,2.0
+//END-CONFIG
+
+export fn call(p: real) -> vec2{
+    let a = sin(p) + 1.0;
+    let ai = bound(a, p, [-INF..INF]);
+    [ai.start, ai.end]
+}
