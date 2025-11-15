@@ -29,6 +29,8 @@ pub enum IntervalError {
     UnsupportedOp(String),
     #[error("Can not index interval with {0}. Must be either 0 (lower) or 1 (upper) bound")]
     InvalidIntervalIndex(usize),
+    #[error("There is an interval-type in an exported function. This will be lowered to a tuple of the interval's data type.")]
+    InExport,
 }
 
 //Macro that implements the "View" trait for the Interval

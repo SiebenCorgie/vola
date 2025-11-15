@@ -6,13 +6,20 @@
  * 2025 Tendsin Mende
  */
 
+use std::collections::VecDeque;
+
 use ahash::AHashMap;
-use rvsdg::edge::OutportLocation;
+use rvsdg::{
+    edge::OutportLocation, region::RegionLocation, util::abstract_node_type::AbstractNodeType,
+    NodeRef,
+};
 use rvsdg_viewer::View;
 use vola_common::{Span, VolaError};
 
 mod arith;
 mod buildin;
+mod calling;
+mod cf;
 mod trigonometric;
 mod typelevel;
 
@@ -31,21 +38,32 @@ use crate::{
 ///
 /// For instance it'll replace an operation `a + b` with `a`/`b` being intervals with `(a.start + b.start, a.end + b.end)`.
 ///
-/// Those rules can become more involved for specific rules here. The main problem here is the monotonic property of an operation. If we know it
+/// Those rules can become more involved for specific rules here. The main problem is the monotonic property of an operation. If we know it
 /// we can, for monoton increasing or decreasing function, trivially apply the transformation (see the `a+b` example).
-/// For non monotonic functions however, we need to _know_ (or analyse) extrem points. We do that whenever possible, or fall back to conservative bounds. For instance if the input interval `x` in `sin(x)` is constant, we can produce an exact interval, otherwise we fall-back to `[-1..1]`
+/// For non monotonic functions however, we need to _know_ (or analyse) extrem points. We do that whenever possible, or fall back
+/// to conservative bounds. For instance if the input interval `x` in `sin(x)` is constant, we can produce an exact interval,
+/// otherwise we fall-back to `[-1..1]`.
+///
+/// The pass traverses interval-calculations and substitudes any simple-node output that is an interval (read of type `interval<something>`) with a
+/// mapping to its _lowered_ `start` and `end` calculation. For control-flow and function-calls we combine those into the former mentioned tuples (i.e `interval<t>` -> `(t, t)`).
+///
+/// This translates well to any indexing operation, since they stay essentially the same.
 pub struct LowerIntervals<'opt> {
     pub(crate) optimizer: &'opt mut Optimizer,
 
     ///Maps a interval port to the already resolved lower and upper bound of some _primitive_ type
     pub(crate) mapping: AHashMap<OutportLocation, (OutportLocation, OutportLocation)>,
+    pub(crate) region_queue: VecDeque<RegionLocation>,
 }
 
 impl<'opt> LowerIntervals<'opt> {
     pub fn setup(optimizer: &'opt mut Optimizer) -> Self {
+        let mut region_queue = VecDeque::new();
+        region_queue.push_front(optimizer.graph.toplevel_region());
         LowerIntervals {
             optimizer,
             mapping: AHashMap::default(),
+            region_queue,
         }
     }
 
@@ -64,39 +82,36 @@ impl<'opt> LowerIntervals<'opt> {
         // Two observations: Since we iterate the _before transformation_ state, we won't have
         // to consider _created_ nodes. Since we iterate it in topological order, we can assume that, for any node
         // that consumes some interval, an equivalent lowered representation already exists in `mapping`.
-        let live_nodes = self
-            .optimizer
-            .graph
-            .live_nodes(self.optimizer.graph.toplevel_region());
-        let topoord = self
-            .optimizer
-            .graph
-            .topological_order_nodes(live_nodes.into_iter());
-        //TODO: Maybe we want to use the per-port liveness analysis here? There we could _not process_ dead
-        //      outputs. But not sure if the additional granularity is really needed.
-        for node in topoord {
-            //if the node produces any interval edges, handle it
-            for port in self.optimizer.graph.outports(node) {
-                if self.optimizer.get_or_derive_type(port, false).is_interval() {
-                    self.handle_value(port)?
+        //
+        // Since we are building the live-node/topo-ord for each region only once they are touched, we
+        // can modify interfaces of λ-nodes _before_ their region is actually lowered.
+
+        while let Some(next_region) = self.region_queue.pop_back() {
+            //discover live nodes and order them
+            let topoord = self.optimizer.graph.topological_order_region(next_region);
+
+            //TODO: Maybe we want to use the per-port liveness analysis here? There we could _not process_ dead
+            //      outputs. But not sure if the additional granularity is really needed.
+            // NOTE: This _might_ enqueue additional regions, if any of the non-simple nodes decide so while
+            //       being lowered.
+            for node in topoord {
+                match self.optimizer.graph[node].into_abstract() {
+                    AbstractNodeType::Simple => self.handle_simple_node(node)?,
+                    AbstractNodeType::Lambda => self.lower_lambda(node)?,
+                    AbstractNodeType::Apply => self.lower_apply(node)?,
+                    AbstractNodeType::Theta => self.lower_theta(node)?,
+                    AbstractNodeType::Gamma => self.lower_gamma(node)?,
+                    AbstractNodeType::Omega => {
+                        //This we can safely ignore :)
+                    }
+                    other => {
+                        return Err(VolaError::new(
+                            IntervalError::UnsupportedOp(format!("Unexpected node type: {other}"))
+                                .into(),
+                        ))
+                    }
                 }
             }
-
-            //If this node is a interval-indexing operation, we have the special case, where
-            // we can now flatten that index into a specific value.
-            if let Some(iindex) = self.optimizer.try_unwrap_node::<ConstantIndex>(node) {
-                let index = iindex.access;
-                let is_indexing_interval = self
-                    .optimizer
-                    .get_or_derive_type_input(node.input(0), false)
-                    .is_interval();
-                //If this is actually indexing an interval, call the unwraping handler
-                if is_indexing_interval {
-                    self.lower_constant_index(node, index)?;
-                }
-            }
-
-            //If this is uniform construct, where one or more of the participants are intervals,
         }
 
         if std::env::var("VOLA_DUMP_ALL").is_ok()
@@ -104,6 +119,32 @@ impl<'opt> LowerIntervals<'opt> {
         {
             self.optimizer
                 .push_debug_state(&format!("post-interval-lower"));
+        }
+
+        Ok(())
+    }
+
+    ///Handles any simple node
+    fn handle_simple_node(&mut self, node: NodeRef) -> Result<(), VolaError<OptError>> {
+        //if the node produces any interval edges, handle it
+        for port in self.optimizer.graph.outports(node) {
+            if self.optimizer.get_or_derive_type(port, false).is_interval() {
+                self.handle_value(port)?
+            }
+        }
+
+        //If this node is a interval-indexing operation, we have the special case, where
+        // we can now flatten that index into a specific value.
+        if let Some(iindex) = self.optimizer.try_unwrap_node::<ConstantIndex>(node) {
+            let index = iindex.access;
+            let is_indexing_interval = self
+                .optimizer
+                .get_or_derive_type_input(node.input(0), false)
+                .is_interval();
+            //If this is actually indexing an interval, call the unwraping handler
+            if is_indexing_interval {
+                self.lower_constant_index(node, index)?;
+            }
         }
 
         Ok(())

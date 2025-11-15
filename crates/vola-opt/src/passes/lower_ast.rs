@@ -44,7 +44,7 @@ impl Optimizer {
                 AstEntry::CsgDef(def) => {
                     self.add_csgdef(span.clone(), ct_args.clone(), def.clone())
                 }
-                AstEntry::Func(f) => self.define_func(f),
+                AstEntry::Func(f) => self.define_func(f, ct_args.clone()),
                 _ => Ok(()),
             };
 

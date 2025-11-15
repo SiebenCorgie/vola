@@ -13,7 +13,7 @@ use crate::{
     alge::arithmetic::{BinaryArith, BinaryArithOp, UnaryArith, UnaryArithOp},
     imm::ImmScalar,
     interval::{lower_intervals::LowerIntervals, IntervalError},
-    route_new, OptError, OptNode,
+    route_new, OptError,
 };
 impl<'opt> LowerIntervals<'opt> {
     pub(crate) fn lower_binary_arith(
