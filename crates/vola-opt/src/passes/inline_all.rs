@@ -52,6 +52,13 @@ impl Optimizer {
                 })?;
                 //ninline += 1;
                 //now inline ourselfs
+
+                if !self.should_inline_apply(node) {
+                    #[cfg(feature = "log")]
+                    log::warn!("Trying to inline all, but function is tagged as no_inline, not inlining this one...");
+                    continue;
+                }
+
                 let paths = self.graph.inline_apply_node(node).unwrap();
                 for p in paths {
                     if let Err(e) = self.type_path(&p) {

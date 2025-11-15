@@ -52,6 +52,7 @@ pub struct Function {
     pub lambda: NodeRef,
     pub args: SmallColl<(String, Ty)>,
     pub return_type: Ty,
+    pub no_inline: bool,
 }
 
 impl Function {

@@ -49,8 +49,28 @@ impl Optimizer {
 
         //NOTE: must be at least connected to us
         let users = self.graph.find_caller(calldef.node).unwrap();
+        //try to read the inline property, otherwise assume its not tagged no_inline
+        println!(
+            "Searching for {} in: \n {:#?}",
+            calldef.node,
+            self.functions
+                .values()
+                .map(|f| format!("{}:{}:no_inline({})", f.lambda, f.name, f.no_inline))
+                .collect::<Vec<_>>()
+        );
+        let is_no_inline = self
+            .functions
+            .values()
+            .find(|f| f.lambda == calldef.node)
+            .map(|f| f.no_inline)
+            .unwrap_or(false);
+
+        if is_no_inline {
+            println!("Is no inline!");
+        }
+
         //Heuristic currently fires at > 1. So basically, if there is only one user, it won't inline, if there are several, it will
-        if users.len() > 1 {
+        if users.len() > 1 || is_no_inline {
             false
         } else {
             true

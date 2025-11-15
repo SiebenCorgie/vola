@@ -84,6 +84,9 @@ impl Optimizer {
                 })?;
                 //ninline += 1;
                 //now inline ourselfs
+                #[cfg(feature = "log")]
+                log::trace!("Inlining {node}");
+
                 let paths = self.graph.inline_apply_node(node).unwrap();
                 for p in paths {
                     if let Err(e) = self.type_path(&p) {

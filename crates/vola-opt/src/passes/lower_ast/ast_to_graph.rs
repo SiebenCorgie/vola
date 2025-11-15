@@ -88,7 +88,11 @@ impl Optimizer {
     }
 
     ///Creates the λ node in the omega region,  but does not fill it (yet).
-    pub(crate) fn define_func(&mut self, func: &Func) -> Result<(), VolaError<OptError>> {
+    pub(crate) fn define_func(
+        &mut self,
+        func: &Func,
+        ct_args: Vec<CTArg>,
+    ) -> Result<(), VolaError<OptError>> {
         //Parse the function signature, and build the entry in the lookup table
         let name = func.name.0.clone();
         if let Some(existing) = self.functions.get(&name) {
@@ -137,6 +141,10 @@ impl Optimizer {
         //At this point everything should be hooked-up and typed. therfore we can return
         self.names.set(lambda.into(), func.name.0.clone());
         self.span_tags.set(lambda.into(), func.head_span());
+        let no_inline = ct_args
+            .iter()
+            .find(|arg| arg.ident.0.as_str() == "no_inline")
+            .is_some();
         let interned = Function {
             name: func.name.0.clone(),
             region_span,
@@ -144,6 +152,7 @@ impl Optimizer {
             lambda,
             args,
             return_type,
+            no_inline,
         };
         self.functions.insert(name, interned);
 
