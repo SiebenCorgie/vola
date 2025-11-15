@@ -9,12 +9,13 @@ Operations are generally evaluated conservatively. If no tight bound can be calc
 [^0]: See [T. Hickey's](https://fab.cba.mit.edu/classes/S62.12/docs/Hickey_interval.pdf) introduction to interval arithmetics.
 
 ### Example
-´´´
+
+```
 let a = sin(x);
 let ai = bound(ai, x, [-INF..INF]);
 assert(ai.start == -1.0);
 assert(ai.end == 1.0);
-´´´
+```
 
 # Restrictions
 

@@ -3,8 +3,8 @@
 
 ## Content
 
-- [Ideas](ideas.md) (outdated)
-- [Goals](goals.md) (outdated)
+- [Goals](goals.md)
+- [Ideas](ideas.md)
 - [Reserved](reserved.md)
 - [Automatic Differentiation](automatic-differentiation.md)
 - [Interval Arithmetic](interval_arithmetic.md)
