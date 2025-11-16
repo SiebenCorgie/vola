@@ -1,0 +1,19 @@
+//BEGIN-CONFIG
+//EXEC-FN:call
+//EXEC-ARGS:0.0
+//EXEC-EPS:0.0
+//EXEC-RES:-1.0,1.0
+//END-CONFIG
+
+export fn call(p: real) -> vec2{
+
+    let t = [0.0 .. 1.0];
+
+    if p > 1.0{
+        t = t + [sin(p) .. (sin(p)+1.0)];
+    }else{
+        t = [3.0..4.0];
+    }
+
+    [t.start, t.end]
+}

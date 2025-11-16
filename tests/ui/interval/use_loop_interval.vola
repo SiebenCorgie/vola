@@ -1,0 +1,16 @@
+//BEGIN-CONFIG
+//EXEC-FN:call
+//EXEC-ARGS:0.0
+//EXEC-EPS:0.0
+//EXEC-RES:-1.0,1.0
+//END-CONFIG
+
+export fn call(p: real) -> vec2{
+
+    let t = [0.0 .. 1.0];
+    for i in 1..10{
+        t = t + [i::<real> .. 20.0];
+    }
+
+    [t.start, t.end]
+}
