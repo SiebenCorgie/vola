@@ -26,8 +26,18 @@ impl<'opt> LowerIntervals<'opt> {
         // This manly means that there is in-fact no interval-typed input or output.
         //
         // Any interval-related apply-node should have been handeled before in the λ-lowering of the called λ-node.
-        let has_any_interval_ports = self
-            .optimizer
+        let has_any_interval_ports = self.has_interval_in_or_out(node);
+
+        if has_any_interval_ports {
+            Err(VolaError::new(OptError::Internal(format!("There is a bug in the interval lowering, the function-call still operates on intervals!"))))
+        } else {
+            Ok(())
+        }
+    }
+
+    ///Returns true if any of the `node`'s inputs or outputs are interval-typed.
+    pub(crate) fn has_interval_in_or_out(&self, node: NodeRef) -> bool {
+        self.optimizer
             .graph
             .inports(node)
             .into_iter()
@@ -60,21 +70,11 @@ impl<'opt> LowerIntervals<'opt> {
                     }),
             )
             .next()
-            .is_some();
-
-        if has_any_interval_ports {
-            Err(VolaError::new(OptError::Internal(format!("There is a bug in the interval lowering, the function-call still operates on intervals!"))))
-        } else {
-            Ok(())
-        }
+            .is_some()
     }
 
-    ///Returns true if region-0 of this `node` has a interval-typed result or argument.
-    fn has_interval_in_interface(&self, node: NodeRef) -> bool {
-        let region = RegionLocation {
-            node,
-            region_index: 0,
-        };
+    ///Returns true if any of `region`'s arguments or results contain a interval-typed value.
+    pub(crate) fn has_interval_in_region_interface(&self, region: RegionLocation) -> bool {
         //Note this basically just maps each result to its port, and then checks whether there
         // is a interval type
         self.optimizer
@@ -128,7 +128,10 @@ impl<'opt> LowerIntervals<'opt> {
             .filter(|reg| reg.node == node)
             .next()
             .is_some();
-        let has_interval_in_interface = self.has_interval_in_interface(node);
+        let has_interval_in_interface = self.has_interval_in_region_interface(RegionLocation {
+            node,
+            region_index: 0,
+        });
         if is_exported && has_interval_in_interface {
             //warn that this uses an interval in the export
             let span = self.optimizer.find_span(node).unwrap_or(Span::empty());
@@ -213,8 +216,8 @@ impl<'opt> LowerIntervals<'opt> {
     }
 
     ///Turns a interval typed Outport into a tuple typed port that constructs
-    /// an interval from that tuple.
-    fn itt_outport(&mut self, region: RegionLocation, port: OutportLocation) {
+    /// an interval from that tuple. Records the interval-mapping nevertheless
+    pub(crate) fn itt_outport(&mut self, region: RegionLocation, port: OutportLocation) {
         let Ty::Interval(base_type) = self.optimizer.find_type(port).unwrap() else {
             panic!("Must be interval type")
         };
@@ -224,7 +227,8 @@ impl<'opt> LowerIntervals<'opt> {
         //setup the new_type
         let tuple_type = Ty::Tuple(vec![base_type.as_ref().clone(), base_type.as_ref().clone()]);
         //setup the interval_from_tuple, then disconnect all arg-connected edges, and reconnect them to the just created
-        self.optimizer
+        let (start, end) = self
+            .optimizer
             .graph
             .on_region(&region, |reg| {
                 let istart = reg.insert_node(OptNode::new(ConstantIndex::new(0), span.clone()));
@@ -265,6 +269,8 @@ impl<'opt> LowerIntervals<'opt> {
                         OptEdge::value_edge_unset().with_type(tuple_type.clone()),
                     )
                     .unwrap();
+
+                (istart.output(0), iend.output(0))
             })
             .unwrap();
         //now last, overwrite the output's type, if the port was set before, it must have been
@@ -272,11 +278,12 @@ impl<'opt> LowerIntervals<'opt> {
         if let Some(old) = self.optimizer.typemap.set(port.into(), tuple_type) {
             assert!(old.is_interval())
         }
+        assert!(self.mapping.insert(port, (start, end)).is_none())
     }
 
     ///Turns a interval typed Inport into a tuple typed port by constructing
     /// a tuple from the indexed interval
-    fn itt_inport(&mut self, region: RegionLocation, port: InportLocation) {
+    pub(crate) fn itt_inport(&mut self, region: RegionLocation, port: InportLocation) {
         //We do this by building a tuple via indexing into the original interval. Then reconnecting the
         // `port` to to that just build tuple
 
