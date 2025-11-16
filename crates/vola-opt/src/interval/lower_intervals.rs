@@ -88,7 +88,36 @@ impl<'opt> LowerIntervals<'opt> {
 
         while let Some(next_region) = self.region_queue.pop_back() {
             //discover live nodes and order them
-            let topoord = self.optimizer.graph.topological_order_region(next_region);
+            let live_in_region = self.optimizer.graph.live_nodes_in_region(next_region);
+            let mut topoord = self
+                .optimizer
+                .graph
+                .topological_order_nodes(live_in_region.into_iter());
+
+            //Now, pre-handle any none_simple node, i.e. Control-flow and inter-procedural stuff
+            // We must do that, because this changes the live-nodes in this region.
+            let mut changed_any = false;
+            for node in &topoord {
+                let pre_transform_changed_any = match self.optimizer.graph[*node].into_abstract() {
+                    AbstractNodeType::Lambda => self.lower_lambda(*node)?,
+                    AbstractNodeType::Theta => self.lower_theta(*node)?,
+                    AbstractNodeType::Gamma => self.lower_gamma(*node)?,
+                    _other => false,
+                };
+                if pre_transform_changed_any {
+                    changed_any = true;
+                }
+            }
+
+            //now, if any of the live-nodes changed, re-do the topo-ord since some of the old indexing operations
+            // might have become invalid
+            if changed_any {
+                let live_in_region = self.optimizer.graph.live_nodes_in_region(next_region);
+                topoord = self
+                    .optimizer
+                    .graph
+                    .topological_order_nodes(live_in_region.into_iter());
+            }
 
             //TODO: Maybe we want to use the per-port liveness analysis here? There we could _not process_ dead
             //      outputs. But not sure if the additional granularity is really needed.
@@ -97,10 +126,19 @@ impl<'opt> LowerIntervals<'opt> {
             for node in topoord {
                 match self.optimizer.graph[node].into_abstract() {
                     AbstractNodeType::Simple => self.handle_simple_node(node)?,
-                    AbstractNodeType::Lambda => self.lower_lambda(node)?,
+                    AbstractNodeType::Lambda
+                    | AbstractNodeType::Gamma
+                    | AbstractNodeType::Theta => {
+                        //Those should be pre-transformed, but make sure for sanity reasons.
+                        assert!(!self.has_interval_in_or_out(node));
+                        for region_index in 0..self.optimizer.graph[node].regions().len() {
+                            assert!(!self.has_interval_in_region_interface(RegionLocation {
+                                node,
+                                region_index
+                            }));
+                        }
+                    }
                     AbstractNodeType::Apply => self.lower_apply(node)?,
-                    AbstractNodeType::Theta => self.lower_theta(node)?,
-                    AbstractNodeType::Gamma => self.lower_gamma(node)?,
                     AbstractNodeType::Omega => {
                         //This we can safely ignore :)
                     }

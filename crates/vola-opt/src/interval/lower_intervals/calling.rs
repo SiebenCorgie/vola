@@ -21,6 +21,7 @@ use crate::{
 };
 
 impl<'opt> LowerIntervals<'opt> {
+    ///Checks that the apply-node was handled before
     pub(crate) fn lower_apply(&mut self, node: NodeRef) -> Result<(), VolaError<OptError>> {
         //For sanity, make sure the λ's results/arguments where lowered already
         // This manly means that there is in-fact no interval-typed input or output.
@@ -114,7 +115,9 @@ impl<'opt> LowerIntervals<'opt> {
             .is_some()
     }
 
-    pub(crate) fn lower_lambda(&mut self, node: NodeRef) -> Result<(), VolaError<OptError>> {
+    //Handles the λ-node by lowering the interface to tuples for any interval-typed argument/result.
+    // returns true if any nodes where changed.
+    pub(crate) fn lower_lambda(&mut self, node: NodeRef) -> Result<bool, VolaError<OptError>> {
         //Checkout whether any of the arguments is an interval. If so, mutate them to a tuple,
         //For outputs, if they are a interval, mutate them to construct a tuple too, by indexing into the interval.
         // We need to do that, in order for a later lowering of the output-connected node to succeed
@@ -147,7 +150,7 @@ impl<'opt> LowerIntervals<'opt> {
         if call_sites.len() == 0 && !is_exported {
             #[cfg(feature = "log")]
             log::trace!("Not lowering λ {}, since its not exported or called", node);
-            return Ok(());
+            return Ok(false);
         }
 
         //now, if there are any intervals in the interface, handle them
@@ -175,7 +178,7 @@ impl<'opt> LowerIntervals<'opt> {
             region_index: 0,
         });
 
-        Ok(())
+        Ok(true)
     }
 
     fn handle_arg(&mut self, region: RegionLocation, arg: OutportLocation, callsites: &[NodeRef]) {
@@ -233,6 +236,7 @@ impl<'opt> LowerIntervals<'opt> {
             .on_region(&region, |reg| {
                 let istart = reg.insert_node(OptNode::new(ConstantIndex::new(0), span.clone()));
                 let iend = reg.insert_node(OptNode::new(ConstantIndex::new(1), span.clone()));
+
                 //This creates the interval substitution
                 let (i_creation, _) = reg
                     .connect_node(
@@ -304,6 +308,7 @@ impl<'opt> LowerIntervals<'opt> {
             let (iend, _) = reg
                 .connect_node(OptNode::new(ConstantIndex::new(1), span.clone()), [src])
                 .unwrap();
+
             //setup the tuple
             let (tuple_const, _) = reg
                 .connect_node(

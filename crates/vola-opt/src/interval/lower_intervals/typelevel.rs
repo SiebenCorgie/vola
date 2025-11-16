@@ -125,7 +125,6 @@ impl<'opt> LowerIntervals<'opt> {
             })
             .unwrap();
 
-        println!("Mapping {:?} -> {:?} | {:?}", node, lower.node, upper.node);
         //Register the new lower/upper uc.
         assert!(self
             .mapping

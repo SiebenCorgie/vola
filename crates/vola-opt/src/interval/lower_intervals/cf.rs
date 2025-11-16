@@ -16,7 +16,9 @@ use vola_common::VolaError;
 use crate::{interval::lower_intervals::LowerIntervals, OptError};
 
 impl<'opt> LowerIntervals<'opt> {
-    pub(crate) fn lower_theta(&mut self, node: NodeRef) -> Result<(), VolaError<OptError>> {
+    ///Lowers theta node by changing any interval-typed loop variables to tuple. Returns true
+    /// if actually any nodes where changed.
+    pub(crate) fn lower_theta(&mut self, node: NodeRef) -> Result<bool, VolaError<OptError>> {
         //For theta nodes, we basically make sure that any
         // interval that crosses the theta's boundary is mapped to a tuple
         //
@@ -36,6 +38,7 @@ impl<'opt> LowerIntervals<'opt> {
         let parent_region = self.optimizer.graph[node].parent.unwrap();
 
         //now go through each lv and split/assemble them if they are interval typed
+        let mut changed_any = false;
         for lv in 0..self.optimizer.graph[node]
             .node_type
             .unwrap_theta_ref()
@@ -49,6 +52,7 @@ impl<'opt> LowerIntervals<'opt> {
             {
                 continue;
             }
+            changed_any = true;
 
             //unwrap the lv-input...
             self.itt_inport(parent_region, node.input(lv));
@@ -66,11 +70,87 @@ impl<'opt> LowerIntervals<'opt> {
             );
         }
 
-        Ok(())
+        Ok(changed_any)
     }
 
-    pub(crate) fn lower_gamma(&mut self, node: NodeRef) -> Result<(), VolaError<OptError>> {
+    ///Lowers gamma node by changing any interval-typed entry/exit variables to tuple. Returns true
+    /// if actually any nodes where changed.
+    pub(crate) fn lower_gamma(&mut self, node: NodeRef) -> Result<bool, VolaError<OptError>> {
+        let region_count = self.optimizer.graph[node].regions().len();
+        let parent_region = self.optimizer.graph[node].parent.unwrap();
+
+        //push each branch region
+        for region_index in 0..region_count {
+            self.region_queue
+                .push_front(RegionLocation { node, region_index });
+        }
+
+        let mut changed_any = false;
+
         //Similar to the theta implemenation we just assemble/disassemble inputs/outputs.
-        todo!()
+        for ev in 0..self.optimizer.graph[node]
+            .node_type
+            .unwrap_gamma_ref()
+            .entry_var_count()
+        {
+            if !self
+                .optimizer
+                .find_type(node.as_inport_location(InputType::EntryVariableInput(ev)))
+                .unwrap()
+                .is_interval()
+            {
+                continue;
+            }
+            changed_any = true;
+
+            //allright, has a entry variable, unwrap the input, and the argument in each branch
+            self.itt_inport(
+                parent_region,
+                node.as_inport_location(InputType::EntryVariableInput(ev)),
+            );
+            for region_index in 0..region_count {
+                let branch_region = RegionLocation { node, region_index };
+                self.itt_outport(
+                    branch_region,
+                    node.as_outport_location(OutputType::EntryVariableArgument {
+                        branch: region_index,
+                        entry_variable: ev,
+                    }),
+                );
+            }
+        }
+
+        //Now do the same for the exit-variables
+        for ex in 0..self.optimizer.graph[node]
+            .node_type
+            .unwrap_gamma_ref()
+            .exit_var_count()
+        {
+            if !self
+                .optimizer
+                .find_type(node.as_outport_location(OutputType::ExitVariableOutput(ex)))
+                .unwrap()
+                .is_interval()
+            {
+                continue;
+            }
+            changed_any = true;
+
+            //is interval-var, therfore hand the result of each branch, and then the output itself
+            for region_index in 0..region_count {
+                let branch_region = RegionLocation { node, region_index };
+                let result = node.as_inport_location(InputType::ExitVariableResult {
+                    branch: region_index,
+                    exit_variable: ex,
+                });
+                self.itt_inport(branch_region, result);
+            }
+            self.itt_outport(
+                parent_region,
+                node.as_outport_location(OutputType::ExitVariableOutput(ex)),
+            );
+        }
+
+        Ok(changed_any)
     }
 }
