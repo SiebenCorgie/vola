@@ -31,6 +31,8 @@ pub enum IntervalError {
     InvalidIntervalIndex(usize),
     #[error("There is an interval-type in an exported function. This will be lowered to a tuple of the interval's data type.")]
     InExport,
+    #[error("Does not pass type-derive after interval lowering. Please file an issue!")]
+    DoesNotPassTypeDerive,
 }
 
 //Macro that implements the "View" trait for the Interval
