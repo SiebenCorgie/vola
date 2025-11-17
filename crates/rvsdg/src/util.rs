@@ -33,6 +33,7 @@ pub mod liveness;
 pub mod node_equality;
 #[cfg(feature = "parse")]
 pub mod parse;
+pub mod port_region;
 pub mod region_utils;
 pub mod theta_utils;
 pub mod unroll;
