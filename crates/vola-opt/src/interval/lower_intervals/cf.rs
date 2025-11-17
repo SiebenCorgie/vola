@@ -110,13 +110,15 @@ impl<'opt> LowerIntervals<'opt> {
             );
             for region_index in 0..region_count {
                 let branch_region = RegionLocation { node, region_index };
-                self.itt_outport(
-                    branch_region,
-                    node.as_outport_location(OutputType::EntryVariableArgument {
-                        branch: region_index,
-                        entry_variable: ev,
-                    }),
-                );
+                let port = node.as_outport_location(OutputType::EntryVariableArgument {
+                    branch: region_index,
+                    entry_variable: ev,
+                });
+                //Ignore unconneted branches, this happens a lot and generates useless indexing code..
+                if self.optimizer.graph[port].edges.is_empty() {
+                    continue;
+                }
+                self.itt_outport(branch_region, port);
             }
         }
 

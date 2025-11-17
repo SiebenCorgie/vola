@@ -221,14 +221,15 @@ impl<'opt> LowerIntervals<'opt> {
     ///Turns a interval typed Outport into a tuple typed port that constructs
     /// an interval from that tuple. Records the interval-mapping nevertheless
     pub(crate) fn itt_outport(&mut self, region: RegionLocation, port: OutportLocation) {
-        let Ty::Interval(base_type) = self.optimizer.find_type(port).unwrap() else {
-            panic!("Must be interval type")
+        let base_type = match self.optimizer.find_type(port) {
+            Some(Ty::Interval(i)) => *i,
+            other => panic!("Expected interval type, got {other:?}"),
         };
         //Set the span to the function's call-site for now.
         let span = self.optimizer.find_span(port.node).unwrap_or(Span::empty());
 
         //setup the new_type
-        let tuple_type = Ty::Tuple(vec![base_type.as_ref().clone(), base_type.as_ref().clone()]);
+        let tuple_type = Ty::Tuple(vec![base_type.clone(), base_type.clone()]);
         //setup the interval_from_tuple, then disconnect all arg-connected edges, and reconnect them to the just created
         let (start, end) = self
             .optimizer

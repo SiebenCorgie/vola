@@ -6,21 +6,24 @@
  * 2025 Tendsin Mende
  */
 
-use std::collections::VecDeque;
+use std::{collections::VecDeque, ops::Not};
 
 use ahash::{AHashMap, AHashSet};
 use rvsdg::{
-    edge::{InportLocation, LangEdge, OutportLocation},
+    edge::{InportLocation, InputType, LangEdge, OutportLocation, OutputType},
+    region::RegionLocation,
     util::abstract_node_type::AbstractNodeType,
     NodeRef,
 };
+use rvsdg_viewer::View;
 use vola_common::{Span, VolaError};
 
 use crate::{
+    common::Ty,
     interval::{IntervalError, IntervalExtension},
     passes::activity::{Activity, ActivityAnalysis},
     typelevel::IntervalConstruct,
-    OptEdge, OptError, OptNode, Optimizer,
+    OptEdge, OptError, OptNode, Optimizer, TypeState,
 };
 
 /// Pass that handles the [interval-extension](https://en.wikipedia.org/wiki/Interval_arithmetic#Interval_extensions_of_general_functions) for any call to
@@ -29,6 +32,9 @@ pub struct IntervalExtensionPass<'opt> {
     optimizer: &'opt mut Optimizer,
     //caches the vec-deque so we don't have to allocate all the time.
     rewriter_queue: VecDeque<OutportLocation>,
+    ///Caches the rewire-ports _in-order_ so we can rebuild the interval-typed
+    /// expression after copying/transforming intervals
+    wire_queue: Vec<(OutportLocation, OutportLocation)>,
     output_interval_mapping: AHashMap<OutportLocation, OutportLocation>,
     input_interval_mapping: AHashMap<InportLocation, InportLocation>,
     seen: AHashSet<OutportLocation>,
@@ -39,6 +45,7 @@ impl<'opt> IntervalExtensionPass<'opt> {
         IntervalExtensionPass {
             optimizer,
             rewriter_queue: VecDeque::with_capacity(0),
+            wire_queue: Vec::default(),
             output_interval_mapping: AHashMap::default(),
             input_interval_mapping: AHashMap::default(),
             seen: AHashSet::default(),
@@ -160,6 +167,7 @@ impl<'opt> IntervalExtensionPass<'opt> {
     ) -> Result<OutportLocation, VolaError<OptError>> {
         //setup the internal rewriter queue.
         self.rewriter_queue.clear();
+        self.wire_queue.clear();
         self.output_interval_mapping.clear();
         self.input_interval_mapping.clear();
         self.seen.clear();
@@ -181,6 +189,10 @@ impl<'opt> IntervalExtensionPass<'opt> {
         // if not active:
         //     - Create the minimum-interval of the inactive value (if not already in cache)
         //     - connect to successor's interval representation.
+
+        self.optimizer.push_debug_state_with("PreTrans", |pre| {
+            pre.with_flags("activity", &activity.active)
+        });
 
         while let Some(next) = self.rewriter_queue.pop_back() {
             let region = self.optimizer.graph[next.node].parent.unwrap();
@@ -207,26 +219,14 @@ impl<'opt> IntervalExtensionPass<'opt> {
                         // For all others, shell out to a special handling routine, Those mostly handle
                         // the copying of the node (gamma/theta/lambda), and setting up activity state in those nodes
                         // in order to make activity tracing _correct_ too.
-
-                        let copy = match self.optimizer.graph[next.node].into_abstract() {
-                            AbstractNodeType::Simple => {
-                                //For simple nodes, just copy the node itself, carry over some
-                                // tags and return
-                                let copy = self.optimizer.graph.deep_copy_node(next.node, region);
-                                self.optimizer
-                                    .span_tags
-                                    .copy(&next.node.into(), copy.into());
-                                self.optimizer.names.copy(&next.node.into(), copy.into());
-                                copy
-                            }
+                        match self.optimizer.graph[next.node].into_abstract() {
+                            AbstractNodeType::Simple => self.handle_simple(region, next.node)?,
                             //NOTE: we start handling of λ nodes on the first invocation. I.e. We should never encounter a
                             //      λ-node itself.
                             AbstractNodeType::Apply => {
                                 todo!()
                             }
-                            AbstractNodeType::Gamma => {
-                                todo!()
-                            }
+                            AbstractNodeType::Gamma => self.handle_gamma(activity, next.node)?,
                             AbstractNodeType::Theta => {
                                 todo!()
                             }
@@ -240,45 +240,23 @@ impl<'opt> IntervalExtensionPass<'opt> {
                             }
                         };
 
-                        //register all inputs and outputs in mapping
-                        // also register all input-connected nodes for further consideration.
-                        for inport in self.optimizer.graph.inports(next.node) {
-                            let mapped = inport.input.to_location(copy);
-                            assert!(
-                                self.input_interval_mapping.insert(inport, mapped).is_none(),
-                                "If already in there, cache should be used"
-                            );
-                            if let Some(connected) = self.optimizer.graph.inport_src(inport) {
-                                if !self.seen.contains(&connected) {
-                                    self.rewriter_queue.push_front(connected);
-                                    self.seen.insert(connected);
-                                }
-                            }
-                        }
-                        for output in self.optimizer.graph.outports(next.node) {
-                            let mapped = output.output.to_location(copy);
-                            assert!(
-                                self.output_interval_mapping
-                                    .insert(output, mapped)
-                                    .is_none(),
-                                "If already in there, cache should be used"
-                            );
-                        }
-
                         //now the searched-for port _must be_ present
                         *self.output_interval_mapping.get(&next).unwrap()
                     }
                 } else {
                     //not active, just build the minimum interval, i.e the interval [x..x]
                     let span = self.optimizer.find_span(next).unwrap_or(Span::empty());
+                    let src_reg = self.optimizer.graph.outport_region(next);
+                    let edgety =
+                        OptEdge::value_edge().with_type(self.optimizer.find_type(next).unwrap());
                     let output = self
                         .optimizer
                         .graph
-                        .on_region(&region, |reg| {
+                        .on_region(&src_reg, |reg| {
                             let (node, _) = reg
-                                .connect_node(
+                                .connect_node_with(
                                     OptNode::new(IntervalConstruct::default(), span),
-                                    [next, next],
+                                    [(next, edgety.clone()), (next, edgety)],
                                 )
                                 .unwrap();
                             node.output(0)
@@ -291,30 +269,13 @@ impl<'opt> IntervalExtensionPass<'opt> {
                 }
             };
 
-            //Finally rewire the original edge
-            //do this by finding the _originally-connected-to_ inports.
-            // If they are mapped already, they are part of the interval-expression
-            // therefore doublicate the edge
-            // and rebuild it in the interval representation.
-            for edge in self.optimizer.graph[next].edges.clone() {
-                let dst = *self.optimizer.graph[edge].dst();
-                if self.input_interval_mapping.contains_key(&dst) {
-                    //is mapped, therfore copy edge type, and rebuild the edge on both mappings
-                    let edge_type = if self.optimizer.graph[edge].ty.is_state_edge() {
-                        OptEdge::State
-                    } else {
-                        OptEdge::value_edge_unset()
-                    };
-                    let mapped_src = *self.output_interval_mapping.get(&next).unwrap();
-                    assert_eq!(mapped_src, interval_port);
-                    let mapped_dst = *self.input_interval_mapping.get(&dst).unwrap();
+            self.wire_queue.push((next, interval_port));
+        }
 
-                    self.optimizer
-                        .graph
-                        .connect(mapped_src, mapped_dst, edge_type)
-                        .unwrap();
-                }
-            }
+        let mut swap = Vec::with_capacity(0);
+        std::mem::swap(&mut self.wire_queue, &mut swap);
+        for (original, interval) in swap {
+            self.rewire_for_interval(original, interval)?;
         }
 
         //Return the mapped initial output
@@ -322,5 +283,247 @@ impl<'opt> IntervalExtensionPass<'opt> {
             .output_interval_mapping
             .get(&value)
             .expect("Initial value must be mapped at least"))
+    }
+
+    fn rewire_for_interval(
+        &mut self,
+        port: OutportLocation,
+        interval_port: OutportLocation,
+    ) -> Result<(), VolaError<OptError>> {
+        //do this by finding the _originally-connected-to_ inports.
+        // If they are mapped already, they are part of the interval-expression
+        // therefore doublicate the edge
+        // and rebuild it in the interval representation.
+        for edge in self.optimizer.graph[port].edges.clone() {
+            println!("Connecting dst-ports for: {}", port);
+            let dst = *self.optimizer.graph[edge].dst();
+            if self.input_interval_mapping.contains_key(&dst) {
+                //is mapped, therfore copy edge type, and rebuild the edge on both mappings
+                let edge_type = match self.optimizer.graph[edge].ty.clone() {
+                    OptEdge::State => OptEdge::State,
+                    OptEdge::Value { ty } => {
+                        let ty = match ty {
+                            TypeState::Derived(t) => {
+                                assert!(t.is_interval().not());
+                                TypeState::Derived(Ty::Interval(Box::new(t)))
+                            }
+                            TypeState::Set(t) => {
+                                assert!(t.is_interval().not());
+                                TypeState::Set(Ty::Interval(Box::new(t)))
+                            }
+                            TypeState::Unset => TypeState::Unset,
+                        };
+                        OptEdge::Value { ty }
+                    }
+                };
+                let mapped_src = *self.output_interval_mapping.get(&port).unwrap();
+                assert_eq!(mapped_src, interval_port);
+                let mapped_dst = *self.input_interval_mapping.get(&dst).unwrap();
+
+                let src_region = self.optimizer.graph.outport_region(mapped_src);
+                let dst_region = self.optimizer.graph.inport_region(mapped_dst);
+
+                let src_port = if src_region != dst_region {
+                    assert!(
+                        self.optimizer
+                            .graph
+                            .is_in_parent(dst_region.node, src_region.node),
+                        "Src region must be same or parent to dst-region"
+                    );
+                    //import src into dst
+                    let (imported_at, path) = self
+                        .optimizer
+                        .graph
+                        .import_argument(mapped_src, dst_region)
+                        .map_err(|e| VolaError::new(e.into()))?;
+                    if let Some(path) = path {
+                        self.optimizer.type_path(&path).unwrap();
+                    }
+                    imported_at
+                } else {
+                    mapped_src
+                };
+
+                println!("{src_port} -> {mapped_dst}");
+                self.optimizer
+                    .graph
+                    .connect(src_port, mapped_dst, edge_type)
+                    .unwrap();
+            }
+        }
+
+        Ok(())
+    }
+
+    fn handle_simple(
+        &mut self,
+        region: RegionLocation,
+        node: NodeRef,
+    ) -> Result<(), VolaError<OptError>> {
+        println!("Simple {} : {}", self.optimizer.graph[node].name(), node);
+        //For simple nodes, just copy the node itself, carry over some
+        // tags and return
+        let copy = self.optimizer.graph.deep_copy_node(node, region);
+        self.optimizer.span_tags.copy(&node.into(), copy.into());
+        self.optimizer.names.copy(&node.into(), copy.into());
+
+        //register all inputs and outputs in mapping
+        // also register all input-connected nodes for further consideration.
+        for inport in self.optimizer.graph.inports(node) {
+            let mapped = inport.input.to_location(copy);
+            assert!(
+                self.input_interval_mapping.insert(inport, mapped).is_none(),
+                "If already in there, cache should be used"
+            );
+            println!("   Enqueue {inport}");
+            self.register_inport_queue(inport);
+        }
+        for output in self.optimizer.graph.outports(node) {
+            let mapped = output.output.to_location(copy);
+            assert!(
+                self.output_interval_mapping
+                    .insert(output, mapped)
+                    .is_none(),
+                "If already in there, cache should be used"
+            );
+        }
+
+        Ok(())
+    }
+
+    ///Registers the `inport`'s produce, it it was not seen yet.
+    fn register_inport_queue(&mut self, inport: InportLocation) {
+        if let Some(connected) = self.optimizer.graph.inport_src(inport) {
+            if !self.seen.contains(&connected) {
+                self.rewriter_queue.push_front(connected);
+                self.seen.insert(connected);
+            } else {
+                println!("    Reject(seen): {inport}")
+            }
+        } else {
+            println!("   Reject(no-connection): {inport}")
+        }
+    }
+
+    ///Handles the Gamma input/output interface
+    /// to produce a valid interval-mapping
+    /// for each input/output
+    fn handle_gamma(
+        &mut self,
+        activity: &mut Activity,
+        node: NodeRef,
+    ) -> Result<(), VolaError<OptError>> {
+        //For gamma (and theta) nodes our strategy iterates all inputs and results.
+        // For each active port we create a copy for that port and register its mapping.
+        // Then we register the input-connected nodes in the rewriter queue.
+        //
+        // This implicitly traverses region boundaries where needed.
+        //
+        // Since we do this for _all_ inports of this node, the caching later on pick up on it
+        // which prevents multiple iterations.
+
+        //Handle active entry-variables by creating a new entry-variable,
+        // inserting it as a mapping, and enquing all entry-var-connected nodes
+        // in the rewriter queue.
+        for ev in 0..self.optimizer.graph[node]
+            .node_type
+            .unwrap_gamma_ref()
+            .entry_var_count()
+        {
+            //Ignore none-active entry-variables
+            if !activity
+                .active
+                .get(&InputType::EntryVariableInput(ev).to_location(node).into())
+                .unwrap_or(&false)
+            {
+                continue;
+            }
+
+            //Create the new EV that stands for the interval
+            let interval_ev = self.optimizer.graph[node]
+                .node_type
+                .unwrap_gamma_mut()
+                .add_entry_var();
+
+            //Insert the input mapping...
+            assert!(self
+                .input_interval_mapping
+                .insert(
+                    InputType::EntryVariableInput(ev).to_location(node),
+                    InputType::EntryVariableInput(interval_ev).to_location(node),
+                )
+                .is_none());
+            //.. and for each branch the output mapping
+            for branch in 0..self.optimizer.graph[node].regions().len() {
+                assert!(self
+                    .output_interval_mapping
+                    .insert(
+                        OutputType::EntryVariableArgument {
+                            branch,
+                            entry_variable: ev,
+                        }
+                        .to_location(node),
+                        OutputType::EntryVariableArgument {
+                            branch,
+                            entry_variable: interval_ev,
+                        }
+                        .to_location(node),
+                    )
+                    .is_none());
+            }
+
+            //Finally register each connected value in the queue
+            self.register_inport_queue(InputType::EntryVariableInput(ev).to_location(node));
+        }
+
+        //Now do, conceptually the same for exit-variables:
+        // Copy active exit-vars, register them in the mapping, and push all in-branch connected
+        // values
+        for ex in 0..self.optimizer.graph[node]
+            .node_type
+            .unwrap_gamma_ref()
+            .exit_var_count()
+        {
+            let ex_output = OutputType::ExitVariableOutput(ex).to_location(node);
+            //ignore inactive exit-variables
+            if !activity.is_active_port(&self.optimizer, ex_output) {
+                continue;
+            }
+
+            let interval_ex = self.optimizer.graph[node]
+                .node_type
+                .unwrap_gamma_mut()
+                .add_exit_var();
+            //register the output mapping
+            assert!(self
+                .output_interval_mapping
+                .insert(
+                    ex_output,
+                    OutputType::ExitVariableOutput(interval_ex).to_location(node)
+                )
+                .is_none());
+            //now iterate all branches, register the input mapping and push all connected sources
+            for branch in 0..self.optimizer.graph[node].regions().len() {
+                let branch_result = InputType::ExitVariableResult {
+                    branch,
+                    exit_variable: ex,
+                }
+                .to_location(node);
+                assert!(self
+                    .input_interval_mapping
+                    .insert(
+                        branch_result,
+                        InputType::ExitVariableResult {
+                            branch,
+                            exit_variable: interval_ex
+                        }
+                        .to_location(node)
+                    )
+                    .is_none());
+                self.register_inport_queue(branch_result);
+            }
+        }
+
+        Ok(())
     }
 }
