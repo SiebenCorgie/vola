@@ -185,14 +185,6 @@ impl<'opt> IntervalExtensionPass<'opt> {
         while let Some(next) = self.rewriter_queue.pop_back() {
             let region = self.optimizer.graph[next.node].parent.unwrap();
 
-            if self.optimizer.graph[next.node].node_type.is_apply() {
-                let span = self.optimizer.find_span(next.node).unwrap_or(Span::empty());
-                return Err(VolaError::new(OptError::Interval(
-                    IntervalError::UnsupportedNodeType(AbstractNodeType::Apply),
-                ))
-                .with_error(span, "here"));
-            }
-
             //Try to use a cached representation
             let interval_port = if let Some(cached) = self.output_interval_mapping.get(&next) {
                 *cached
@@ -208,32 +200,45 @@ impl<'opt> IntervalExtensionPass<'opt> {
                             .is_none());
                         interval
                     } else {
-                        //is not wrt proucer, active, and not yet cached. Therefore copy the node, register all inputs/outputs in the
-                        // maps, and return the mapped port
-                        let copy = self.optimizer.graph.deep_copy_node(next.node, region);
-                        self.optimizer
-                            .span_tags
-                            .copy(&next.node.into(), copy.into());
-                        self.optimizer.names.copy(&next.node.into(), copy.into());
+                        // Is not wrt proucer, active, and not yet cached.
+                        // Check the node type. For simple nodes, copy the node,
+                        // register all inputs/outputs in the maps, and return
+                        // the mapped port.
+                        // For all others, shell out to a special handling routine, Those mostly handle
+                        // the copying of the node (gamma/theta/lambda), and setting up activity state in those nodes
+                        // in order to make activity tracing _correct_ too.
 
-                        //TODO: handle the enquing of value producers _in_ this node.
-                        if self.optimizer.graph[copy].regions().len() > 0 {
-                            //NOTE: Just copying the node is not really good here.
-                            //      The Activity thing doesn't really work that way atm.
-                            //
-                            //      We have two options:
-                            //      1. Better Activity utility that supports adding new nodes with inner regions. I.e
-                            //         that discovers activity in that case _correctly_
-                            //      2. Do not copy such nodes. Instead, for each active result, add another _interval_ result,
-                            //         and then let the normal recursion scheme handle that case. (I think that would be better).
-                            let span = self.optimizer.find_span(next.node).unwrap_or(Span::empty());
-                            return Err(VolaError::new(OptError::Interval(
-                                IntervalError::UnsupportedNodeType(
-                                    self.optimizer.graph[copy].into_abstract(),
-                                ),
-                            ))
-                            .with_error(span, "here"));
-                        }
+                        let copy = match self.optimizer.graph[next.node].into_abstract() {
+                            AbstractNodeType::Simple => {
+                                //For simple nodes, just copy the node itself, carry over some
+                                // tags and return
+                                let copy = self.optimizer.graph.deep_copy_node(next.node, region);
+                                self.optimizer
+                                    .span_tags
+                                    .copy(&next.node.into(), copy.into());
+                                self.optimizer.names.copy(&next.node.into(), copy.into());
+                                copy
+                            }
+                            //NOTE: we start handling of λ nodes on the first invocation. I.e. We should never encounter a
+                            //      λ-node itself.
+                            AbstractNodeType::Apply => {
+                                todo!()
+                            }
+                            AbstractNodeType::Gamma => {
+                                todo!()
+                            }
+                            AbstractNodeType::Theta => {
+                                todo!()
+                            }
+                            other => {
+                                let span =
+                                    self.optimizer.find_span(next.node).unwrap_or(Span::empty());
+                                return Err(VolaError::new(OptError::Interval(
+                                    IntervalError::UnsupportedNodeType(other),
+                                ))
+                                .with_error(span, "here"));
+                            }
+                        };
 
                         //register all inputs and outputs in mapping
                         // also register all input-connected nodes for further consideration.
@@ -264,7 +269,7 @@ impl<'opt> IntervalExtensionPass<'opt> {
                         *self.output_interval_mapping.get(&next).unwrap()
                     }
                 } else {
-                    //not active, just build the minimum interval
+                    //not active, just build the minimum interval, i.e the interval [x..x]
                     let span = self.optimizer.find_span(next).unwrap_or(Span::empty());
                     let output = self
                         .optimizer
