@@ -44,6 +44,13 @@ impl<'opt> LowerIntervals<'opt> {
             .unwrap_theta_ref()
             .loop_variable_count()
         {
+            //ignore loop variables that are not in use, i.e where
+            // the input is not connected and/or the result is not in use
+            if self.optimizer.graph[node.input(lv)].edge.is_none()
+                && self.optimizer.graph[node.output(lv)].edges.is_empty()
+            {
+                continue;
+            }
             if !self
                 .optimizer
                 .find_type(node.input(lv))

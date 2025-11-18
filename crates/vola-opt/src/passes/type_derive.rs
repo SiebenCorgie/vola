@@ -43,6 +43,32 @@ mod util;
 // over those.
 //
 impl Optimizer {
+    ///Same as [type_derive], but also verifies that the (still) dead impl blocks and functions are valid
+    pub fn initial_type_derive(&mut self) -> Result<(), Vec<VolaError<OptError>>> {
+        let mut errors = match self.type_derive(false) {
+            Err(e) => e,
+            Ok(()) => Vec::new(),
+        };
+
+        for implblock in self.concept_impl.values() {
+            if let Err(e) = self.verify_imblblock(implblock) {
+                errors.push(e)
+            }
+        }
+
+        for f in self.functions.values() {
+            if let Err(e) = self.verify_fn(f) {
+                errors.push(e);
+            }
+        }
+
+        if errors.is_empty() {
+            Ok(())
+        } else {
+            Err(errors)
+        }
+    }
+
     ///Runs the type resolution pass on all nodes.
     pub fn type_derive(&mut self, ignore_dead_nodes: bool) -> Result<(), Vec<VolaError<OptError>>> {
         #[cfg(feature = "log")]
@@ -61,18 +87,6 @@ impl Optimizer {
 
         for node in topoord {
             if let Err(e) = self.try_node_type_derive(node, ignore_dead_nodes) {
-                errors.push(e);
-            }
-        }
-
-        for implblock in self.concept_impl.values() {
-            if let Err(e) = self.verify_imblblock(implblock) {
-                errors.push(e)
-            }
-        }
-
-        for f in self.functions.values() {
-            if let Err(e) = self.verify_fn(f) {
                 errors.push(e);
             }
         }
