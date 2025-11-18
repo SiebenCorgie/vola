@@ -15,7 +15,6 @@ use rvsdg::{
     util::abstract_node_type::AbstractNodeType,
     NodeRef,
 };
-use rvsdg_viewer::View;
 use vola_common::{Span, VolaError};
 
 use crate::{
@@ -196,7 +195,6 @@ impl<'opt> IntervalExtensionPass<'opt> {
 
         while let Some(next) = self.rewriter_queue.pop_back() {
             let region = self.optimizer.graph[next.node].parent.unwrap();
-
             //Try to use a cached representation
             let interval_port = if let Some(cached) = self.output_interval_mapping.get(&next) {
                 *cached
@@ -223,13 +221,9 @@ impl<'opt> IntervalExtensionPass<'opt> {
                             AbstractNodeType::Simple => self.handle_simple(region, next.node)?,
                             //NOTE: we start handling of λ nodes on the first invocation. I.e. We should never encounter a
                             //      λ-node itself.
-                            AbstractNodeType::Apply => {
-                                todo!()
-                            }
+                            AbstractNodeType::Apply => self.handle_apply(activity, next.node)?,
                             AbstractNodeType::Gamma => self.handle_gamma(activity, next.node)?,
-                            AbstractNodeType::Theta => {
-                                todo!()
-                            }
+                            AbstractNodeType::Theta => self.handle_theta(activity, next.node)?,
                             other => {
                                 let span =
                                     self.optimizer.find_span(next.node).unwrap_or(Span::empty());
@@ -295,7 +289,6 @@ impl<'opt> IntervalExtensionPass<'opt> {
         // therefore doublicate the edge
         // and rebuild it in the interval representation.
         for edge in self.optimizer.graph[port].edges.clone() {
-            println!("Connecting dst-ports for: {}", port);
             let dst = *self.optimizer.graph[edge].dst();
             if self.input_interval_mapping.contains_key(&dst) {
                 //is mapped, therfore copy edge type, and rebuild the edge on both mappings
@@ -344,7 +337,6 @@ impl<'opt> IntervalExtensionPass<'opt> {
                     mapped_src
                 };
 
-                println!("{src_port} -> {mapped_dst}");
                 self.optimizer
                     .graph
                     .connect(src_port, mapped_dst, edge_type)
@@ -360,7 +352,6 @@ impl<'opt> IntervalExtensionPass<'opt> {
         region: RegionLocation,
         node: NodeRef,
     ) -> Result<(), VolaError<OptError>> {
-        println!("Simple {} : {}", self.optimizer.graph[node].name(), node);
         //For simple nodes, just copy the node itself, carry over some
         // tags and return
         let copy = self.optimizer.graph.deep_copy_node(node, region);
@@ -375,7 +366,6 @@ impl<'opt> IntervalExtensionPass<'opt> {
                 self.input_interval_mapping.insert(inport, mapped).is_none(),
                 "If already in there, cache should be used"
             );
-            println!("   Enqueue {inport}");
             self.register_inport_queue(inport);
         }
         for output in self.optimizer.graph.outports(node) {
@@ -397,11 +387,7 @@ impl<'opt> IntervalExtensionPass<'opt> {
             if !self.seen.contains(&connected) {
                 self.rewriter_queue.push_front(connected);
                 self.seen.insert(connected);
-            } else {
-                println!("    Reject(seen): {inport}")
             }
-        } else {
-            println!("   Reject(no-connection): {inport}")
         }
     }
 
@@ -525,5 +511,76 @@ impl<'opt> IntervalExtensionPass<'opt> {
         }
 
         Ok(())
+    }
+
+    fn handle_theta(
+        &mut self,
+        activity: &mut Activity,
+        node: NodeRef,
+    ) -> Result<(), VolaError<OptError>> {
+        //See the gamma-comments. The main idea is to create a copy for any _needed-as-interval_
+        // ports and then record those into our mapping.
+
+        for lv in 0..self.optimizer.graph[node]
+            .node_type
+            .unwrap_theta_ref()
+            .loop_variable_count()
+        {
+            //for each loop variable, if its active add a interval-typed version
+            let loop_out = OutputType::Output(lv).to_location(node);
+            if !activity.is_active_port(&self.optimizer, loop_out) {
+                continue;
+            }
+
+            let interval_lv = self.optimizer.graph[node]
+                .node_type
+                .unwrap_theta_mut()
+                .add_loop_variable();
+            //now add all, the input/arg and result/output compinations to the mapping. Then enqueue both, input-connected
+            // and result-connected values to the queue
+            assert!(self
+                .input_interval_mapping
+                .insert(
+                    InputType::Input(lv).to_location(node),
+                    InputType::Input(interval_lv).to_location(node)
+                )
+                .is_none());
+            assert!(self
+                .output_interval_mapping
+                .insert(
+                    OutputType::Argument(lv).to_location(node),
+                    OutputType::Argument(interval_lv).to_location(node)
+                )
+                .is_none());
+
+            assert!(self
+                .input_interval_mapping
+                .insert(
+                    InputType::Result(lv).to_location(node),
+                    InputType::Result(interval_lv).to_location(node)
+                )
+                .is_none());
+            assert!(self
+                .output_interval_mapping
+                .insert(
+                    OutputType::Output(lv).to_location(node),
+                    OutputType::Output(interval_lv).to_location(node)
+                )
+                .is_none());
+
+            //Now register both input types
+            self.register_inport_queue(InputType::Input(lv).to_location(node));
+            self.register_inport_queue(InputType::Result(lv).to_location(node));
+        }
+
+        Ok(())
+    }
+
+    fn handle_apply(
+        &mut self,
+        activity: &mut Activity,
+        node: NodeRef,
+    ) -> Result<(), VolaError<OptError>> {
+        todo!()
     }
 }

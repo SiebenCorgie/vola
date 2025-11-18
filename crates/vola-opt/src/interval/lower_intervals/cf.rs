@@ -57,6 +57,8 @@ impl<'opt> LowerIntervals<'opt> {
             //unwrap the lv-input...
             self.itt_inport(parent_region, node.input(lv));
             //... and the associated lv-arg
+            // NOTE: Inner outputs, i.e the lv_argument must always connect
+            //       in case of an immutable value thought, it connects with itself
             self.itt_outport(
                 loop_body,
                 node.as_outport_location(OutputType::Argument(lv)),
@@ -64,10 +66,11 @@ impl<'opt> LowerIntervals<'opt> {
             //now do the same for the result...
             self.itt_inport(loop_body, node.as_inport_location(InputType::Result(lv)));
             //... and its associated output
-            self.itt_outport(
-                parent_region,
-                node.as_outport_location(OutputType::Output(lv)),
-            );
+            //Ignore unconneted branches, this happens a lot and generates useless indexing code..
+            let lv_output = node.as_outport_location(OutputType::Output(lv));
+            if !self.optimizer.graph[lv_output].edges.is_empty() {
+                self.itt_outport(parent_region, lv_output);
+            }
         }
 
         Ok(changed_any)

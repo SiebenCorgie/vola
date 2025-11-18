@@ -223,7 +223,7 @@ impl<'opt> LowerIntervals<'opt> {
     pub(crate) fn itt_outport(&mut self, region: RegionLocation, port: OutportLocation) {
         let base_type = match self.optimizer.find_type(port) {
             Some(Ty::Interval(i)) => *i,
-            other => panic!("Expected interval type, got {other:?}"),
+            other => panic!("Expected interval type on {port}, got {other:?}"),
         };
         //Set the span to the function's call-site for now.
         let span = self.optimizer.find_span(port.node).unwrap_or(Span::empty());
