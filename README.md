@@ -112,7 +112,7 @@ or a specific file via
 cargo run --bin test-runner -- -f tests/ui/some_file.vola
 ```
 
-Unit tests are handeled by Rust's native test framework. Just run
+Unit tests are handled by Rust's native test framework. Just run
 ```shell
 cargo test
 ```

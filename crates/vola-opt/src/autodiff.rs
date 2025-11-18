@@ -95,8 +95,8 @@ pub enum AutoDiffError {
     UndiffNode(String),
     #[error("Failed to canonicalize: {0:?}")]
     CanonicalizationFailed(String),
-    #[error("Port {0:?} was not yet handeled")]
-    FwPortUnhandeled(OutportLocation),
+    #[error("Port {0:?} was not yet handled")]
+    FwPortUnhandled(OutportLocation),
     #[error("GammaExitVariable {0:?} was connected in one branch, but not in the other")]
     GammaExitInvalid(OutportLocation),
 }

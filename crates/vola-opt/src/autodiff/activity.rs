@@ -655,7 +655,7 @@ impl Optimizer {
                             }
                         }
                     } else {
-                        panic!("Unhandeled Gamma Input {:?}", port.input);
+                        panic!("Unhandled Gamma Input {:?}", port.input);
                     }
                 }
                 AbstractNodeType::Lambda => {
@@ -670,7 +670,7 @@ impl Optimizer {
                             self.explore_inport(activity, prodmap, inport, index_path.clone());
                         }
                     } else {
-                        panic!("Unhandeled λ-none-context-variable input")
+                        panic!("Unhandled λ-none-context-variable input")
                     }
                 }
                 AbstractNodeType::Theta => {
@@ -692,7 +692,7 @@ impl Optimizer {
                     }
                 }
                 other => panic!(
-                    "encountered unhhandeled node type in producer exploration: {:?}",
+                    "encountered unhhandled node type in producer exploration: {:?}",
                     other
                 ),
             }

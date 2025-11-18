@@ -720,7 +720,7 @@ impl Optimizer {
         }
     }
 
-    ///Recursion wrapper that turns the `eval` node in the canonical-form that can be handeled by the specializer.
+    ///Recursion wrapper that turns the `eval` node in the canonical-form that can be handled by the specializer.
     ///Returns all (eval-node, csg-producer) pairs that need to be specialized for this _canonicalized_ node.
     fn spec_canonicalize_eval_node(
         &mut self,
@@ -896,7 +896,7 @@ impl Optimizer {
         //collect all context-srcs of the eval node. By definition the first is the csg-src we are currently working on
         //the rest must be imported whenever we build the substitution eval
         let mut needed_context_ports = self.graph[eval].input_srcs(&self.graph);
-        //NOTE: this is only the context-variable, at which the csg-var is in, we handel this _specifically_
+        //NOTE: this is only the context-variable, at which the csg-var is in, we handle this _specifically_
         //      in the first part of the per-branch loop.
         let _csgsrc = needed_context_ports.remove(0);
 
@@ -1111,7 +1111,7 @@ impl Optimizer {
                 //
                 // So what we actually did is place a eval-node here (pretending that works), connect the CSG source, from which we don't really know whats going on,
                 // and recurse the canonicalization. This will handle both cases. Either it'll just return the eval-node and the actual _outside_ CSG (case 1)
-                // or it handels moving the eval even further into the CF, and replacing everything that comes with it.
+                // or it handles moving the eval even further into the CF, and replacing everything that comes with it.
                 let mut new_pairs = self.spec_canonicalize_eval_node(created_eval)?;
                 //now append all new pairs we found in the recursion
                 collected.append(&mut new_pairs);

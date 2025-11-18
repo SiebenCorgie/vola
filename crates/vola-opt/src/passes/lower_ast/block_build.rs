@@ -767,8 +767,8 @@ impl Optimizer {
         region: RegionLocation,
         ctx: &mut BlockCtx,
     ) -> Result<(), VolaError<OptError>> {
-        //We have to write the loop down as a Gamma-Node, where the _no-iteration_ case is handeled by a branch, while the iteration itself
-        //is handeled by the theta node.
+        //We have to write the loop down as a Gamma-Node, where the _no-iteration_ case is handled by a branch, while the iteration itself
+        //is handled by the theta node.
         //
         //we do this constructing an artificial Branch AST node. The condition is the lower-bound of the iteration.
         //so given "for a in x..y" the "must-run" condition is x<y.

@@ -142,9 +142,14 @@ impl<'opt> IntervalExtensionPass<'opt> {
         // In this case only p is active in a, and c is constant. Therfore when transforming the expression of `a`, we only have to rewrite p as [-INF..INF], but c is the minimum-interval [c, c];
         //
         // In practice this means we can stop the forward-pass-style reverse-topology-order rewrite whenever we encounter a non-active value. In this case we just take the existing value, and create a IntervalConstruct for it.
-        let rewritten_value =
-            self.interval_rewrite(expr_src, interval_src, &mut active_dynamics)?;
 
+        self.interval_rewrite(expr_src, interval_src, &mut active_dynamics)?;
+        //Now, assuming all rewrites happened, re-trace the value producer of the interval-expression
+        // (it might have changed while rewriting), and look-up its interval-representation.
+        let rewritten_value = *self
+            .output_interval_mapping
+            .get(&self.optimizer.graph.inport_src(value_dst).unwrap())
+            .unwrap();
         //Finally replace the entry_point consumers with the new value
         self.optimizer
             .graph
@@ -163,7 +168,7 @@ impl<'opt> IntervalExtensionPass<'opt> {
         value: OutportLocation,
         interval: OutportLocation,
         activity: &mut Activity,
-    ) -> Result<OutportLocation, VolaError<OptError>> {
+    ) -> Result<(), VolaError<OptError>> {
         //setup the internal rewriter queue.
         self.rewriter_queue.clear();
         self.wire_queue.clear();
@@ -189,9 +194,13 @@ impl<'opt> IntervalExtensionPass<'opt> {
         //     - Create the minimum-interval of the inactive value (if not already in cache)
         //     - connect to successor's interval representation.
 
-        self.optimizer.push_debug_state_with("PreTrans", |pre| {
-            pre.with_flags("activity", &activity.active)
-        });
+        if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("DUMP_PRE_INTERVAL_EXT").is_ok()
+        {
+            self.optimizer
+                .push_debug_state_with(&format!("pre-interval-ext-{}", value.node), |w| {
+                    w.with_flags("Activity", &activity.active)
+                });
+        }
 
         while let Some(next) = self.rewriter_queue.pop_back() {
             let region = self.optimizer.graph[next.node].parent.unwrap();
@@ -221,7 +230,13 @@ impl<'opt> IntervalExtensionPass<'opt> {
                             AbstractNodeType::Simple => self.handle_simple(region, next.node)?,
                             //NOTE: we start handling of λ nodes on the first invocation. I.e. We should never encounter a
                             //      λ-node itself.
-                            AbstractNodeType::Apply => self.handle_apply(activity, next.node)?,
+                            AbstractNodeType::Apply => {
+                                //NOTE: we currently just inline the apply node
+                                //      therefore the output becomes invalid which is
+                                //      why we simply contiue afterward
+                                self.handle_apply(activity, next.node)?;
+                                continue;
+                            }
                             AbstractNodeType::Gamma => self.handle_gamma(activity, next.node)?,
                             AbstractNodeType::Theta => self.handle_theta(activity, next.node)?,
                             other => {
@@ -258,7 +273,7 @@ impl<'opt> IntervalExtensionPass<'opt> {
                         .unwrap();
 
                     //register mapping, we might need it again.
-                    self.output_interval_mapping.insert(next, output);
+                    let _ = self.output_interval_mapping.insert(next, output);
                     output
                 }
             };
@@ -273,10 +288,7 @@ impl<'opt> IntervalExtensionPass<'opt> {
         }
 
         //Return the mapped initial output
-        Ok(*self
-            .output_interval_mapping
-            .get(&value)
-            .expect("Initial value must be mapped at least"))
+        Ok(())
     }
 
     fn rewire_for_interval(
@@ -578,9 +590,35 @@ impl<'opt> IntervalExtensionPass<'opt> {
 
     fn handle_apply(
         &mut self,
-        activity: &mut Activity,
+        _activity: &mut Activity,
         node: NodeRef,
     ) -> Result<(), VolaError<OptError>> {
-        todo!()
+        //NOTE: we take a shortcut here and just inline the call.
+        //
+        //      The reason is, that the handling is not that easy:
+        //      We can't just use the activity state to extent whatever is
+        //      in the λ to produce an associated interval. IFF the λ is called
+        //      multiple times, we'd have to do this for each call-site, leading to
+        //      _many_ results. Same goes for any _active_ argument to the function. Those
+        //      would need to be extented as well _on-each-callsite_...
+        //
+        //      We can't _just_ copy the λ, since within the λ might be an additional
+        //      _to-be-extented_ interval-extension node. However, our extension pass currently
+        //      does not handle that case. So in the end we just inline the call, and register all result-connected
+        //      nodes in the queue
+        //
+        //TODO: 1. Use a queue for the interval-entry-points. This would let us copy λs
+        //      2. Then _just_ copy the function and create a new apply-node that calls the
+        //         interval version of a function.
+        //     3. Also record the λ-decl port in our mapping, so we don't copy λ-nodes more often than we should.
+
+        assert_eq!(self.optimizer.graph[node].outputs().len(), 1);
+        let original_dsts = self.optimizer.graph.unique_dst_ports(node);
+        self.optimizer.graph.inline_apply_node(node).unwrap();
+        for dst in original_dsts {
+            self.register_inport_queue(dst);
+        }
+
+        Ok(())
     }
 }

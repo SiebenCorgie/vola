@@ -630,7 +630,7 @@ impl Optimizer {
                     if let Some(diffed_port) = ctx.expr_cache.get(&port) {
                         Ok(*diffed_port)
                     } else {
-                        Err(AutoDiffError::FwPortUnhandeled(port))
+                        Err(AutoDiffError::FwPortUnhandled(port))
                     }
                 }
             }

@@ -26,7 +26,7 @@ impl<'opt> LowerIntervals<'opt> {
         //For sanity, make sure the λ's results/arguments where lowered already
         // This manly means that there is in-fact no interval-typed input or output.
         //
-        // Any interval-related apply-node should have been handeled before in the λ-lowering of the called λ-node.
+        // Any interval-related apply-node should have been handled before in the λ-lowering of the called λ-node.
         let has_any_interval_ports = self.has_interval_in_or_out(node);
 
         if has_any_interval_ports {
