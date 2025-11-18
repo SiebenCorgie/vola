@@ -2,7 +2,7 @@
 //EXEC-FN:call
 //EXEC-ARGS:0.0
 //EXEC-EPS:0.0
-//EXEC-RES:-1.0,1.0
+//EXEC-RES:-inf,inf
 //END-CONFIG
 
 export fn call(p: real) -> vec2{

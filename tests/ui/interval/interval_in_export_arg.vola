@@ -1,8 +1,8 @@
 //BEGIN-CONFIG
 //EXEC-FN:call
-//EXEC-ARGS:0.0
+//EXEC-ARGS:1.0,3.0
 //EXEC-EPS:0.0
-//EXEC-RES:0.0,2.0
+//EXEC-RES:4.0
 //END-CONFIG
 
 export fn call(p: interval<real>) -> real{
