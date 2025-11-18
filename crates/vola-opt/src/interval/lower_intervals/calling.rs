@@ -146,12 +146,14 @@ impl<'opt> LowerIntervals<'opt> {
         }
 
         let call_sites = self.optimizer.graph.find_caller(node).unwrap();
+        /* TODO: Reactivate if the _has-interval-in-interface_ function can handle it...
         //NOTE: If this λ is not exported, but also not called, we can safely bail
         if call_sites.len() == 0 && !is_exported {
             #[cfg(feature = "log")]
             log::trace!("Not lowering λ {}, since its not exported or called", node);
             return Ok(false);
         }
+        */
 
         //now, if there are any intervals in the interface, handle them
         if has_interval_in_interface {
