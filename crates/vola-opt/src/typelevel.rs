@@ -171,12 +171,22 @@ impl DialectNode for UniformConstruct {
                     Ok(Ty::shaped(DataType::Real, Shape::Tensor { sizes: dim }))
                 }
             },
-            Ty::Interval(_t) => Err(OptError::TypeDeriveError {
-                text: format!(
-                    "Cannot construct \"List\" from intervals ({}) try constructing an interval from lists",
-                    input_types[0]
-                ),
-            }),
+            Ty::Interval(t) => {
+                match t.as_ref(){
+                    //The construction of multiple scalar intervals into a vector interval
+                    &Ty::Shaped { ty: DataType::Real, shape: Shape::Scalar } => {
+                        Ok(Ty::Interval(Box::new(Ty::Shaped { ty: DataType::Real, shape: Shape::Vec { width: input_types.len() } })))
+                    },
+                    other => {
+                        Err(OptError::TypeDeriveError {
+                            text: format!(
+                                "Cannot construct \"List\" from interval<{}>. Try constructing an interval from lists",
+                                other
+                            ),
+                        })
+                    }
+                }
+            }
             _ => Err(OptError::TypeDeriveError {
                 text: format!("Cannot construct \"List\" from \"{}\"", input_types[0]),
             }),
