@@ -2,7 +2,7 @@
 //EXEC-FN:call
 //EXEC-ARGS:0.0
 //EXEC-EPS:0.0
-//EXEC-RES:0.0,2.0
+//EXEC-RES:0.0
 //END-CONFIG
 
 #[no_inline()]

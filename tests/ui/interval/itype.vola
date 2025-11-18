@@ -2,11 +2,11 @@
 //EXEC-FN:call
 //EXEC-ARGS:0.0
 //EXEC-EPS:0.0
-//EXEC-RES:-1.0,1.0
+//EXEC-RES:0.0
 //END-CONFIG
 
 fn sub_function(i: interval<vec3<real>>) -> real{
-    i.x.start
+    i.x.start + i.y.end
 }
 
 export fn call(p: real) -> real{
