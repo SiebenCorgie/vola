@@ -13,7 +13,7 @@ use rvsdg::{
 };
 use vola_common::VolaError;
 
-use crate::{interval::lower_intervals::LowerIntervals, OptError};
+use crate::{common::Ty, interval::lower_intervals::LowerIntervals, OptError};
 
 impl<'opt> LowerIntervals<'opt> {
     ///Lowers theta node by changing any interval-typed loop variables to tuple. Returns true
@@ -49,6 +49,18 @@ impl<'opt> LowerIntervals<'opt> {
             if self.optimizer.graph[node.input(lv)].edge.is_none()
                 && self.optimizer.graph[node.output(lv)].edges.is_empty()
             {
+                if let Some(Ty::Interval(t)) = self.optimizer.find_type(node.input(lv)) {
+                    self.optimizer.typemap.set(
+                        node.input(lv).into(),
+                        Ty::Tuple(vec![t.as_ref().clone(), *t]),
+                    );
+                }
+                if let Some(Ty::Interval(t)) = self.optimizer.find_type(node.output(lv)) {
+                    self.optimizer.typemap.set(
+                        node.output(lv).into(),
+                        Ty::Tuple(vec![t.as_ref().clone(), *t]),
+                    );
+                }
                 continue;
             }
             if !self
@@ -103,21 +115,25 @@ impl<'opt> LowerIntervals<'opt> {
             .unwrap_gamma_ref()
             .entry_var_count()
         {
-            if !self
-                .optimizer
-                .find_type(node.as_inport_location(InputType::EntryVariableInput(ev)))
-                .unwrap()
-                .is_interval()
-            {
+            let ev_input = node.as_inport_location(InputType::EntryVariableInput(ev));
+
+            if self.optimizer.graph[ev_input].edge.is_none() {
+                //NOTE: for compatiblity with the interface test, type-tag the port if its an interval
+                if let Some(Ty::Interval(t)) = self.optimizer.find_type(ev_input) {
+                    self.optimizer
+                        .typemap
+                        .set(ev_input.into(), Ty::Tuple(vec![t.as_ref().clone(), *t]));
+                }
+                continue;
+            }
+
+            if !self.optimizer.find_type(ev_input).unwrap().is_interval() {
                 continue;
             }
             changed_any = true;
 
             //allright, has a entry variable, unwrap the input, and the argument in each branch
-            self.itt_inport(
-                parent_region,
-                node.as_inport_location(InputType::EntryVariableInput(ev)),
-            );
+            self.itt_inport(parent_region, ev_input);
             for region_index in 0..region_count {
                 let branch_region = RegionLocation { node, region_index };
                 let port = node.as_outport_location(OutputType::EntryVariableArgument {
@@ -126,6 +142,11 @@ impl<'opt> LowerIntervals<'opt> {
                 });
                 //Ignore unconneted branches, this happens a lot and generates useless indexing code..
                 if self.optimizer.graph[port].edges.is_empty() {
+                    if let Some(Ty::Interval(t)) = self.optimizer.find_type(port) {
+                        self.optimizer
+                            .typemap
+                            .set(port.into(), Ty::Tuple(vec![t.as_ref().clone(), *t]));
+                    }
                     continue;
                 }
                 self.itt_outport(branch_region, port);
@@ -138,12 +159,16 @@ impl<'opt> LowerIntervals<'opt> {
             .unwrap_gamma_ref()
             .exit_var_count()
         {
-            if !self
-                .optimizer
-                .find_type(node.as_outport_location(OutputType::ExitVariableOutput(ex)))
-                .unwrap()
-                .is_interval()
-            {
+            let ex_output = node.as_outport_location(OutputType::ExitVariableOutput(ex));
+            if self.optimizer.graph[ex_output].edges.is_empty() {
+                if let Some(Ty::Interval(t)) = self.optimizer.find_type(ex_output) {
+                    self.optimizer
+                        .typemap
+                        .set(ex_output.into(), Ty::Tuple(vec![t.as_ref().clone(), *t]));
+                }
+                continue;
+            }
+            if !self.optimizer.find_type(ex_output).unwrap().is_interval() {
                 continue;
             }
             changed_any = true;
@@ -157,10 +182,7 @@ impl<'opt> LowerIntervals<'opt> {
                 });
                 self.itt_inport(branch_region, result);
             }
-            self.itt_outport(
-                parent_region,
-                node.as_outport_location(OutputType::ExitVariableOutput(ex)),
-            );
+            self.itt_outport(parent_region, ex_output);
         }
 
         Ok(changed_any)

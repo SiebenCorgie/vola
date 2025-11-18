@@ -132,10 +132,15 @@ impl<'opt> LowerIntervals<'opt> {
                         //Those should be pre-transformed, but make sure for sanity reasons.
                         assert!(!self.has_interval_in_or_out(node));
                         for region_index in 0..self.optimizer.graph[node].regions().len() {
-                            assert!(!self.has_interval_in_region_interface(RegionLocation {
+                            assert!(
+                                !self.has_interval_in_region_interface(RegionLocation {
+                                    node,
+                                    region_index
+                                }),
+                                "{} / {} had interval in interface!",
                                 node,
-                                region_index
-                            }));
+                                self.optimizer.graph[node].name()
+                            );
                         }
                     }
                     AbstractNodeType::Apply => self.lower_apply(node)?,
@@ -151,6 +156,9 @@ impl<'opt> LowerIntervals<'opt> {
                 }
             }
         }
+
+        //TODO: don't do that once a fix for #41 lands.
+        self.optimizer.inline_all().map_err(|e| VolaError::new(e))?;
 
         //Since we might change a lot of stuff here, do a type-derive
         // afterwards...
