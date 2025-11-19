@@ -345,8 +345,8 @@ impl Optimizer {
     pub(crate) fn gamma_unified_type(&self, gamma: NodeRef, exit_variable: usize) -> Option<Ty> {
         let mut candidate = None;
         for branch in 0..self.graph[gamma].regions().len() {
-            if let Some(ty) =
-                self.find_type(gamma.as_inport_location(InputType::ExitVariableResult {
+            if let Ok(ty) =
+                self.get_in_type(gamma.as_inport_location(InputType::ExitVariableResult {
                     branch,
                     exit_variable,
                 }))

@@ -483,11 +483,11 @@ impl Optimizer {
         //if we didn't find anything yet, try all ports instead
         for edg in &path.edges {
             let src = self.graph.edge(*edg).src().clone();
-            if let Some(t) = self.find_type(src) {
+            if let Ok(t) = self.get_out_type(src) {
                 return Ok(t);
             }
             let dst = self.graph.edge(*edg).dst().clone();
-            if let Some(t) = self.find_type(dst) {
+            if let Ok(t) = self.get_in_type(dst) {
                 return Ok(t);
             }
         }

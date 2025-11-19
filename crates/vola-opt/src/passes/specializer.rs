@@ -399,16 +399,12 @@ impl Optimizer {
                 .unwrap_or(spec_ctx.tree_access_span.clone());
             //NOTE: this _shouldn't_ happen, but its better to report, instead of
             //      panicing
-            let eval_ty =
-                self.find_type(spec_ctx.eval_node.output(0))
-                    .ok_or(VolaError::error_here(
-                        OptError::CsgStructureIssue(format!(
-                            "Expected eval ({}) to be typed",
-                            spec_ctx.eval_node
-                        )),
-                        span,
-                        "here",
-                    ))?;
+            let eval_ty = self
+                .get_out_type_mut(spec_ctx.eval_node.output(0))
+                .map_err(|e| {
+                    e.to_error()
+                        .with_error(span, "expected this eval to be typed")
+                })?;
             let call_src = if eval_region != csg_region {
                 self.import_context(
                     OutportLocation {
@@ -603,7 +599,7 @@ impl Optimizer {
             if let Some(producer) = self.graph.find_producer_inp(old_dst) {
                 let in_context_port = self.import_context(producer, region)?;
                 //Set type for import path
-                let ty = if let Some(ty) = self.find_type(in_context_port.clone()) {
+                let ty = if let Ok(ty) = self.get_out_type_mut(in_context_port.clone()) {
                     OptEdge::value_edge().with_type(ty)
                 } else {
                     log::warn!("Could not find type for imported prototype, using none");
