@@ -21,7 +21,7 @@ impl Optimizer {
         input: InportLocation,
         ignore_dead_nodes: bool,
     ) -> Ty {
-        if let Some(ty) = self.find_type(input) {
+        if let Some(ty) = self.try_read_type(input) {
             return ty;
         }
 
@@ -29,7 +29,8 @@ impl Optimizer {
         let any_output = *self.graph.outports(input.node).first().unwrap();
         let _outtype = self.get_or_derive_type(any_output, ignore_dead_nodes);
 
-        self.find_type(input).expect("Should be set after derive")
+        self.try_read_type(input)
+            .expect("Should be set after derive")
     }
 
     ///Tries to get the type of the port, If that is not possible, tries to derive a type. Panics if that is not possible, since the graph
@@ -39,7 +40,7 @@ impl Optimizer {
         output: OutportLocation,
         ignore_dead_nodes: bool,
     ) -> Ty {
-        if let Some(t) = self.find_type(output) {
+        if let Some(t) = self.try_read_type(output) {
             return t;
         }
 
@@ -53,7 +54,7 @@ impl Optimizer {
                 panic!("Could not type-derive, this is probably a bug in the Pipeline: {e}");
             }
         }
-        match self.find_type(output) {
+        match self.try_read_type(output) {
             Some(t) => t,
             None => {
                 if self.config.dump_on_error {

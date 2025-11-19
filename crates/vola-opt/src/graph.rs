@@ -369,7 +369,7 @@ impl Optimizer {
     }
 
     ///Utility that tries to find type information in the vicinity of `loc`
-    pub fn find_type(&self, loc: impl Into<AttribLocation>) -> Option<Ty> {
+    pub fn try_read_type(&self, loc: impl Into<AttribLocation>) -> Option<Ty> {
         let loc = loc.into();
         if let Some(t) = self.typemap.get(&loc) {
             return Some(t.clone());
@@ -432,10 +432,10 @@ impl Optimizer {
             AttribLocation::Region(_) => None,
             AttribLocation::Node(_) => None,
             AttribLocation::Edge(edg) => {
-                if let Some(t) = self.find_type(self.graph.edge(edg).src()) {
+                if let Some(t) = self.try_read_type(self.graph.edge(edg).src()) {
                     return Some(t);
                 }
-                self.find_type(self.graph.edge(edg).dst())
+                self.try_read_type(self.graph.edge(edg).dst())
             }
         }
     }
@@ -467,15 +467,15 @@ impl Optimizer {
     }
 
     pub fn find_path_type(&self, path: &Path) -> Result<Ty, OptError> {
-        if let Some(start_type) = self.find_type(path.start) {
+        if let Some(start_type) = self.try_read_type(path.start) {
             return Ok(start_type);
         }
-        if let Some(end_type) = self.find_type(path.end) {
+        if let Some(end_type) = self.try_read_type(path.end) {
             return Ok(end_type);
         }
 
         for edg in &path.edges {
-            if let Some(ty) = self.find_type(edg) {
+            if let Some(ty) = self.try_read_type(edg) {
                 return Ok(ty);
             }
         }
