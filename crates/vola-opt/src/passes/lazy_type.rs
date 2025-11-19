@@ -53,6 +53,10 @@ pub enum TypeError {
     MixedEdgeType,
     #[error("No edge was type-set")]
     NoEdgeTypeSet,
+    ///Note, you can usually recover from this, if you are operating on dead-code.
+    /// In that case just ignore the untyped-port since its dead anyways.
+    #[error("Encountered some unexpectedly unconnected port {0}")]
+    UnconnectedPort(AttribLocation),
     #[error("Type state derive got stuck at {0}")]
     Stuck(AttribLocation),
 }
@@ -282,7 +286,13 @@ impl Optimizer {
                                         lookat_queue.push(src);
                                     }
                                 } else {
-                                    panic!("Should be connected");
+                                    //NOTE: this can happen, if some immutable ex-variale was not
+                                    //      properly disconnected.
+                                    return Err(VolaError::error_here(
+                                        TypeError::UnconnectedPort(port.into()),
+                                        report_span,
+                                        "here",
+                                    ));
                                 }
                             }
                         }
@@ -298,7 +308,13 @@ impl Optimizer {
                                     lookat_queue.push(src);
                                 }
                             } else {
-                                panic!("Should be connected");
+                                //NOTE: this can happen, if some ev was not
+                                //      properly disconnected.
+                                return Err(VolaError::error_here(
+                                    TypeError::UnconnectedPort(port.into()),
+                                    report_span,
+                                    "here",
+                                ));
                             }
                         }
                         _ => unreachable!(),
@@ -320,7 +336,13 @@ impl Optimizer {
                                     lookat_queue.push(src);
                                 }
                             } else {
-                                panic!("Should be connected");
+                                //NOTE: this can happen, if some immutable loop-variale was not
+                                //      properly disconnected.
+                                return Err(VolaError::error_here(
+                                    TypeError::UnconnectedPort(port.into()),
+                                    report_span,
+                                    "here",
+                                ));
                             }
                         }
                         OutputType::Argument(_) => {
@@ -335,7 +357,13 @@ impl Optimizer {
                                     lookat_queue.push(src);
                                 }
                             } else {
-                                panic!("Should be connected");
+                                //NOTE: this can happen, if some immutable loop-variale was not
+                                //      properly disconnected.
+                                return Err(VolaError::error_here(
+                                    TypeError::UnconnectedPort(port.into()),
+                                    report_span,
+                                    "here",
+                                ));
                             }
                         }
                         _ => unreachable!(),
