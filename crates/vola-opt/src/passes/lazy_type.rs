@@ -10,23 +10,31 @@
 //!
 //! The whole algorithm operates under the following key-assumption:
 //!
-//! 1. Any argument of a λ-Node has a valid type-tag
-//! 2. Any result of a λ-Node has a valid type-tag
+//! 1. Any argument of a λ/ω-Node has a valid type-tag
+//! 2. Any result of a λ/ω-Node has a valid type-tag
 //! 3. Simple-Nodes with no inputs always successfuly output a type on [DialectNode::try_derive_type]
-//! 4. All inputs of a simple/apply node are in fact connected.
+//! 4. All inputs of a simple/apply node are in fact connected
+//! 5. All results of a lambda/phi node are in fact connected
 //!
 //! If those assumptions are holding true, the type-discovery algorithm always returns a type for any given out- or input.
 
+use ahash::AHashMap;
 use rvsdg::{
     attrib::AttribLocation,
-    edge::{InportLocation, OutportLocation},
+    edge::{InportLocation, InputType, OutportLocation, OutputType},
+    util::abstract_node_type::AbstractNodeType,
+    SmallColl,
 };
 use thiserror::Error;
 use vola_common::{Span, VolaError};
 
-use crate::{common::Ty, Optimizer};
+use crate::{common::Ty, OptEdge, Optimizer, TypeState};
 
+///Implements the immutable type resolver
+mod immutable;
 mod initial;
+///Implements the mutable type resolver
+mod mutable;
 
 #[derive(Debug, Error, Clone)]
 pub enum TypeError {
@@ -39,15 +47,25 @@ pub enum TypeError {
     },
     #[error("A key assumption was violated at {0}")]
     AssumptionViolation(AttribLocation),
+    #[error("{0} is part of a state-edge")]
+    IsState(AttribLocation),
+    #[error("Mixed state and value types")]
+    MixedEdgeType,
+    #[error("No edge was type-set")]
+    NoEdgeTypeSet,
+    #[error("Type state derive got stuck at {0}")]
+    Stuck(AttribLocation),
 }
 
 impl Optimizer {
-    ///Returns the type of `outport` without setting any edge-types in the process.
+    ///Returns the type of `outport` without setting any edge-types in the process. If you have mutable
+    /// access to the [Optimizer], prefer [get_out_type_mut].
     pub fn get_out_type(&self, outport: OutportLocation) -> Result<Ty, VolaError<TypeError>> {
-        todo!()
+        self.type_discover(outport)
     }
 
-    ///Returns the type of `inport` without setting any edge-types in the process.
+    ///Returns the type of `inport` without setting any edge-types in the process. If you have mutable
+    /// access to the [Optimizer], prefer [get_in_type_mut].
     pub fn get_in_type(&self, inport: InportLocation) -> Result<Ty, VolaError<TypeError>> {
         if let Some(src) = self.graph.inport_src(inport) {
             self.get_out_type(src)
@@ -66,7 +84,7 @@ impl Optimizer {
         &mut self,
         outport: OutportLocation,
     ) -> Result<Ty, VolaError<TypeError>> {
-        todo!()
+        self.type_discover_and_set(outport)
     }
 
     ///Returns the type of `outport`. Sets all known type state on unset-edges along the way.
@@ -80,6 +98,402 @@ impl Optimizer {
                 span,
                 "undefined value",
             ))
+        }
+    }
+
+    ///Tries to build a unified type from all connected edges of `outport`.
+    /// Unset value-edges are ignored/assumed to be the same.
+    /// Fails on type collisions, and edge-type collision (i.e. Value/State edge mixed on the same port).
+    pub fn unified_outport_type(&self, outport: OutportLocation) -> Result<OptEdge, TypeError> {
+        let mut unified = None;
+        for edge in &self.graph[outport].edges {
+            match (&unified, &self.graph[*edge].ty) {
+                //All right
+                (Some(OptEdge::State), OptEdge::State) => {}
+                //Test if the type-info is the same / could-be refined.
+                (Some(OptEdge::Value { ty: a }), OptEdge::Value { ty: b }) => {
+                    match (a.get_type(), b.get_type()) {
+                        (Some(aty), Some(bty)) => {
+                            if aty != bty {
+                                return Err(TypeError::Collision {
+                                    location: outport.into(),
+                                    was: bty,
+                                    derived: aty,
+                                });
+                            }
+                            //otherwise its okay
+                        }
+                        //In this case we _refined_ from just _Value_ to _TypeValue_
+                        (None, Some(ty)) | (Some(ty), None) => {
+                            unified = Some(OptEdge::Value {
+                                ty: TypeState::Derived(ty),
+                            });
+                        }
+                        //Also okay, both are unset type-state
+                        (None, None) => {}
+                    }
+                }
+                //First discovery of any state info
+                (None, any) => unified = Some(any.clone()),
+                //Mixed edge types are invalid
+                (Some(OptEdge::State), OptEdge::Value { .. })
+                | (Some(OptEdge::Value { .. }), OptEdge::State) => {
+                    return Err(TypeError::MixedEdgeType)
+                }
+            }
+        }
+
+        if let Some(ty) = unified {
+            Ok(ty)
+        } else {
+            Err(TypeError::NoEdgeTypeSet)
+        }
+    }
+
+    ///Explores `outport`'s predecesors until type information is known for each leaf of the dependency-dag.
+    ///
+    /// Returns the (reverse topological) order of the dependencies (i.e. if you reverse that, you get
+    /// the topo-order of the dependency-dag), as well as a localy build type-map. This typemap safes whether a outport was
+    /// discovered (exists as key), and what type information is known (the value).
+    fn type_exploration(
+        &self,
+        report_span: Span,
+        outport: OutportLocation,
+    ) -> Result<(Vec<OutportLocation>, AHashMap<OutportLocation, Option<Ty>>), VolaError<TypeError>>
+    {
+        // This iterate the ancestors of nodes until we
+        // a.) Find type information on a edge
+        // b.) Arrive at a λ-argument that is already type-set
+        //
+        // Once we found a type for any ancestor-seeding point, we iterate the queue backwards
+        // call the type-derive for that node, and record the edge-type mapping.
+        //
+        // In the mutable case we could record that directly to the edge. But we are in the immutable version,
+        // so we can't :(
+        let mut lookat_queue = Vec::default();
+        lookat_queue.push(outport);
+        let mut local_type_lookup: AHashMap<OutportLocation, Option<Ty>> = AHashMap::default();
+        local_type_lookup.insert(outport, None);
+
+        let mut qidx = 0;
+        'explore: loop {
+            let Some(port) = lookat_queue.get(qidx).cloned() else {
+                //No more ports in the queue, therfore end
+                break 'explore;
+            };
+
+            let node_type = self.graph[port.node].into_abstract();
+            //For all of those we can assume that the ports are indeed type-set
+            if node_type == AbstractNodeType::Lambda
+                || node_type == AbstractNodeType::Omega
+                || node_type == AbstractNodeType::Phi
+            {
+                let Some(ty) = self.typemap.get(&port.into()) else {
+                    return Err(VolaError::error_here(
+                        TypeError::AssumptionViolation(port.into()),
+                        report_span,
+                        "argument should be type-set",
+                    ));
+                };
+                local_type_lookup.insert(port, Some(ty.clone()));
+                //for lambda ports we _know_ that they must be type-set
+                // therefore we can skip
+                qidx = qidx + 1;
+                continue;
+            }
+
+            //TODO: This does not handle state-edges yet
+            match self.unified_outport_type(port) {
+                Ok(OptEdge::Value { ty }) => {
+                    if let Some(actual_type) = ty.get_type() {
+                        //The port is indeed typed, therefore we can bail
+                        local_type_lookup.insert(port, Some(actual_type));
+                        qidx = qidx + 1;
+                        continue;
+                    }
+                    //NOTE: we consider value-edges without a type _untyped_... duh
+                }
+                Ok(OptEdge::State) => {
+                    //This _should not_ fire till we actually introduce type edges. In that
+                    // case you'll need to handle that :)
+                    panic!("Encounterd state edge");
+                }
+                //This can indeed happen and is okay.
+                Err(TypeError::NoEdgeTypeSet) => {}
+                Err(other_error) => {
+                    return Err(VolaError::error_here(
+                        other_error,
+                        report_span,
+                        "while trying to calculate this values's type",
+                    ))
+                }
+            }
+
+            //Port can not derive type. Therfore enque all ancestors of this node
+            match self.graph[port.node].into_abstract() {
+                AbstractNodeType::Simple => {
+                    //Push all unique source ports to give the simple-node a change
+                    // to type-derive later on
+                    for src in self.graph.unique_src_ports(port.node) {
+                        if !local_type_lookup.contains_key(&src) {
+                            local_type_lookup.insert(src, None);
+                            lookat_queue.push(src);
+                        }
+                    }
+                }
+                AbstractNodeType::Apply => {
+                    //For apply-nodes, push the associated result in the λ node that is called
+                    let lmd = self.graph.find_called(port.node).unwrap();
+                    //now, assuming that the result exists, read-out the output index, and use that
+                    // to build the result port
+                    let OutputType::Output(idx) = port.output else {
+                        unreachable!()
+                    };
+                    let result_port = InputType::Result(idx).to_location(lmd.node);
+                    if let Some(src) = self.graph.inport_src(result_port) {
+                        if !local_type_lookup.contains_key(&src) {
+                            local_type_lookup.insert(src, None);
+                            lookat_queue.push(src);
+                        }
+                    } else {
+                        return Err(VolaError::error_here(
+                            TypeError::AssumptionViolation(port.into()),
+                            report_span,
+                            "called function's result undefined",
+                        ));
+                    }
+                }
+
+                AbstractNodeType::Gamma => {
+                    //There are two cases we have to handle: For an exit-var output, we map _into_ all branches and register
+                    // the sources.
+                    // For Entry-Var-Arg we map _out_ of the gamma-node and register all sources.
+                    match port.output {
+                        OutputType::ExitVariableOutput(_) => {
+                            for branch in 0..self.graph[port.node].regions().len() {
+                                if let Some(src) = self.graph.inport_src(
+                                    port.output
+                                        .map_to_in_region(branch)
+                                        .unwrap()
+                                        .to_location(port.node),
+                                ) {
+                                    if !local_type_lookup.contains_key(&src) {
+                                        local_type_lookup.insert(src, None);
+                                        lookat_queue.push(src);
+                                    }
+                                } else {
+                                    panic!("Should be connected");
+                                }
+                            }
+                        }
+                        OutputType::EntryVariableArgument { .. } => {
+                            if let Some(src) = self.graph.inport_src(
+                                port.output
+                                    .map_out_of_region()
+                                    .unwrap()
+                                    .to_location(port.node),
+                            ) {
+                                if !local_type_lookup.contains_key(&src) {
+                                    local_type_lookup.insert(src, None);
+                                    lookat_queue.push(src);
+                                }
+                            } else {
+                                panic!("Should be connected");
+                            }
+                        }
+                        _ => unreachable!(),
+                    }
+                }
+                AbstractNodeType::Theta => {
+                    //Theta works similar to gamma, map outputs _into_ the loop body, and
+                    // and arguments _out_
+                    match port.output {
+                        OutputType::Output(_) => {
+                            if let Some(src) = self.graph.inport_src(
+                                port.output
+                                    .map_to_in_region(0)
+                                    .unwrap()
+                                    .to_location(port.node),
+                            ) {
+                                if !local_type_lookup.contains_key(&src) {
+                                    local_type_lookup.insert(src, None);
+                                    lookat_queue.push(src);
+                                }
+                            } else {
+                                panic!("Should be connected");
+                            }
+                        }
+                        OutputType::Argument(_) => {
+                            if let Some(src) = self.graph.inport_src(
+                                port.output
+                                    .map_out_of_region()
+                                    .unwrap()
+                                    .to_location(port.node),
+                            ) {
+                                if !local_type_lookup.contains_key(&src) {
+                                    local_type_lookup.insert(src, None);
+                                    lookat_queue.push(src);
+                                }
+                            } else {
+                                panic!("Should be connected");
+                            }
+                        }
+                        _ => unreachable!(),
+                    }
+                }
+                //We don't use that at all I think...
+                AbstractNodeType::Delta => unimplemented!(),
+                //If you ended up here, the assumptions didn't hold true somewhere (but probably not here).
+                AbstractNodeType::Omega | AbstractNodeType::Lambda | AbstractNodeType::Phi => {
+                    unreachable!()
+                }
+            }
+
+            //Finally goto next exploration port
+            qidx = qidx + 1;
+        }
+
+        Ok((lookat_queue, local_type_lookup))
+    }
+
+    fn try_local_port_resolve(
+        &self,
+        port: OutportLocation,
+        lookup: &AHashMap<OutportLocation, Option<Ty>>,
+    ) -> Option<Ty> {
+        match self.graph[port.node].into_abstract() {
+            AbstractNodeType::Simple => {
+                assert_eq!(self.graph[port.node].outputs().len(), 1);
+                let input_types = self.graph[port.node]
+                    .input_srcs(&self.graph)
+                    .into_iter()
+                    .map(|port| {
+                        let ty = lookup
+                            .get(&port.unwrap())
+                            .as_ref()
+                            .expect("Port should be recorded")
+                            .as_ref()
+                            .expect("Port Should have set type!")
+                            .clone();
+                        ty
+                    })
+                    .collect::<SmallColl<_>>();
+                self.graph[port.node]
+                    .node_type
+                    .unwrap_simple_ref()
+                    .node
+                    .try_derive_type(&input_types, &self.concepts, &self.csg_node_defs)
+                    .ok()
+            }
+            AbstractNodeType::Apply => {
+                //For the apply node, go into the λ's region and read out the result's
+                // type
+                let lmd = self.graph.find_called(port.node).unwrap();
+                let OutputType::Output(index) = port.output else {
+                    panic!("Must be output!")
+                };
+                let Some(result_src) = self
+                    .graph
+                    .inport_src(InputType::Result(index).to_location(lmd.node))
+                else {
+                    return None;
+                };
+                lookup
+                    .get(&result_src)
+                    .expect("Result of λ should be set already")
+                    .clone()
+            }
+            AbstractNodeType::Gamma => {
+                //disect the two cases of entry or exit variable.
+                // for both we mearly read the predecesor and return its looked-up value
+                match port.output {
+                    OutputType::EntryVariableArgument { .. } => {
+                        let source_port = self
+                            .graph
+                            .inport_src(
+                                port.output
+                                    .map_out_of_region()
+                                    .unwrap()
+                                    .to_location(port.node),
+                            )
+                            .unwrap();
+                        lookup
+                            .get(&source_port)
+                            .expect("EV-Source should be set already")
+                            .clone()
+                    }
+                    OutputType::ExitVariableOutput(_) => {
+                        //We map into the first branch and _get_ the type.
+                        // For sanity we then check that all other branches produce the same
+                        // type.
+                        // NOTE: this should never be called for unconnected ex-vars, since the lazy_type_resolver
+                        //       only operates on _live_ nodes.
+                        //       If you fail here, you are probably operating on a broken graph, or dead nodes.
+                        let candidate_src = self
+                            .graph
+                            .inport_src(
+                                port.output
+                                    .map_to_in_region(0)
+                                    .unwrap()
+                                    .to_location(port.node),
+                            )
+                            .unwrap();
+                        let candidate_type = lookup.get(&candidate_src).unwrap().clone();
+                        for rest_region in 1..self.graph[port.node].regions().len() {
+                            let other_src = self
+                                .graph
+                                .inport_src(
+                                    port.output
+                                        .map_to_in_region(rest_region)
+                                        .unwrap()
+                                        .to_location(port.node),
+                                )
+                                .unwrap();
+                            let other_type = lookup.get(&other_src).unwrap().clone();
+                            assert_eq!(candidate_type, other_type);
+                        }
+                        candidate_type
+                    }
+                    _ => unreachable!(),
+                }
+            }
+            AbstractNodeType::Theta => {
+                //similar to gamma, but here we don't have to check any output collisions
+                match port.output {
+                    OutputType::Argument(_) => {
+                        let source_port = self
+                            .graph
+                            .inport_src(
+                                port.output
+                                    .map_out_of_region()
+                                    .unwrap()
+                                    .to_location(port.node),
+                            )
+                            .unwrap();
+                        lookup
+                            .get(&source_port)
+                            .expect("LV-Source should be set already")
+                            .clone()
+                    }
+                    OutputType::Output(_) => {
+                        let candidate_src = self
+                            .graph
+                            .inport_src(
+                                port.output
+                                    .map_to_in_region(0)
+                                    .unwrap()
+                                    .to_location(port.node),
+                            )
+                            .unwrap();
+                        lookup.get(&candidate_src).unwrap().clone()
+                    }
+                    _ => unreachable!(),
+                }
+            }
+            AbstractNodeType::Delta => unimplemented!(),
+            AbstractNodeType::Lambda | AbstractNodeType::Omega | AbstractNodeType::Phi => {
+                unreachable!("Should be caught before")
+            }
         }
     }
 }
