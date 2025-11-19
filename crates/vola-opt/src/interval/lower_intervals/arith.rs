@@ -125,7 +125,7 @@ impl<'opt> LowerIntervals<'opt> {
         let original_src = self.optimizer.graph.inport_src(node.input(0)).unwrap();
         let (in_start, in_end) = *self.mapping.get(&original_src).unwrap();
 
-        let inty = self.optimizer.get_or_derive_type(original_src, false);
+        let inty = self.optimizer.get_out_type_mut(original_src).unwrap();
         if !inty.is_scalar_arithmetic() {
             return Err(VolaError::error_here(
                 IntervalError::UnsupportedOp(format!(

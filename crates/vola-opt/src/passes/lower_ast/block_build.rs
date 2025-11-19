@@ -429,7 +429,7 @@ impl Optimizer {
                         AbstractNodeType::Apply => {
                             //if this is a apply node, make sure it does _not_ return a csg-type.
                             //try to deduce the type of this node
-                            let ty = self.get_or_derive_type(prod, false);
+                            let ty = self.get_out_type_mut(prod).unwrap();
                             if ty != Ty::CSG {
                                 let err = OptError::Any {
                                     text: format!(
@@ -513,7 +513,7 @@ impl Optimizer {
                         AbstractNodeType::Apply => {
                             //if this is a apply node, make sure it does _not_ return a csg-type.
                             //try to deduce the type of this node
-                            let ty = self.get_or_derive_type(prod, false);
+                            let ty = self.get_out_type_mut(prod).unwrap();
                             if ty == Ty::CSG {
                                 let err = OptError::Any {
                                     text: format!(

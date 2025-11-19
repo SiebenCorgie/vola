@@ -180,7 +180,7 @@ impl<'opt> LowerIntervals<'opt> {
     fn handle_simple_node(&mut self, node: NodeRef) -> Result<(), VolaError<OptError>> {
         //if the node produces any interval edges, handle it
         for port in self.optimizer.graph.outports(node) {
-            if self.optimizer.get_or_derive_type(port, false).is_interval() {
+            if self.optimizer.get_out_type_mut(port).unwrap().is_interval() {
                 self.handle_value(port)?
             }
         }
@@ -191,7 +191,8 @@ impl<'opt> LowerIntervals<'opt> {
             let index = iindex.access;
             let is_indexing_interval = self
                 .optimizer
-                .get_or_derive_type_input(node.input(0), false)
+                .get_in_type_mut(node.input(0))
+                .unwrap()
                 .is_interval();
             //If this is actually indexing an interval, call the unwraping handler
             if is_indexing_interval {

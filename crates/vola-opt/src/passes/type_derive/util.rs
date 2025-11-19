@@ -15,6 +15,7 @@ use vola_common::Span;
 use crate::{common::Ty, OptError, Optimizer};
 
 impl Optimizer {
+    /*
     ///Similar to [get_or_derive_type], but for inputs
     pub(crate) fn get_or_derive_type_input(
         &mut self,
@@ -111,4 +112,5 @@ impl Optimizer {
         }
         Ok(())
     }
+    */
 }

@@ -91,7 +91,7 @@ impl<'opt> LowerIntervals<'opt> {
             .map(|src| {
                 let src = src.expect("UniformConstant source value must be set");
                 //If the src is an interval, map it once to lower and upper bound, otherwise just pass through
-                if self.optimizer.get_or_derive_type(src, false).is_interval() {
+                if self.optimizer.get_out_type_mut(src).unwrap().is_interval() {
                     //Note: Must exist, since we assume a TopoOrd traversal
                     self.mapping.get(&src).unwrap().clone()
                 } else {

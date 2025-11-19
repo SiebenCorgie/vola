@@ -416,10 +416,10 @@ impl Optimizer {
                         .unwrap();
 
                     //type derive the min and max nodes before canonicalizing them
-                    self.type_derive_and_propagate(max, true)?;
+                    //self.type_derive_and_propagate(max, true)?;
                     //sub_canonicalize min and max
                     self.handle_canon_node(max)?;
-                    self.type_derive_and_propagate(min, true)?;
+                    //self.type_derive_and_propagate(min, true)?;
                     self.handle_canon_node(min)?;
 
                     //if succesful, replace
@@ -471,7 +471,7 @@ impl Optimizer {
             let new_src_port_in_region = if user_region == prod_region {
                 lmd_cpy_port
             } else {
-                let (import_port, _) = self.graph.import_context(lmd_cpy_port, user_region)?;
+                let import_port = self.import_context(lmd_cpy_port, user_region)?;
                 import_port
             };
             let user_calledg_port = user.input(0);

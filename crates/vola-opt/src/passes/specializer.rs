@@ -937,12 +937,10 @@ impl Optimizer {
                             //CVs can just be traced and imported. Find the actual producer...
                             let producer = self.graph.find_producer_out(*src).unwrap();
                             //... and import it into our branch
-                            let (import_cv, _) = self
-                                .graph
-                                .import_argument(producer, branch_region)
-                                .map_err(|e| {
+                            let import_cv =
+                                self.import_argument(producer, branch_region).map_err(|e| {
                                     VolaError::error_here(
-                                        OptError::InternalGraphError(e),
+                                        e,
                                         evalspan.clone(),
                                         "while trying to specialize this eval for branch",
                                     )
@@ -958,12 +956,10 @@ impl Optimizer {
                             //Hovere, there is a shortcut: If the argument is already in a parent-region, we can just import it as-is.
                             if self.graph.is_in_parent(branch_region.node, src.node) {
                                 //The data source is already in a parent, so we can _just_ import it.
-                                let (import_cv, _) = self
-                                    .graph
-                                    .import_context(*src, branch_region)
-                                    .map_err(|e| {
+                                let import_cv =
+                                    self.import_context(*src, branch_region).map_err(|e| {
                                         VolaError::error_here(
-                                            OptError::InternalGraphError(e),
+                                            e,
                                             evalspan.clone(),
                                             "while trying to specialize this eval for branch",
                                         )
@@ -1011,16 +1007,10 @@ impl Optimizer {
                                             most_outer_region = self.graph.toplevel_region();
                                         }
 
-                                        let (import_cv, _) = self
-                                                                        .graph
-                                                                        .import_context(argument_src, branch_region)
-                                                                        .map_err(|e| {
-                                                                            VolaError::error_here(
-                                                                                OptError::InternalGraphError(e),
-                                                                                evalspan.clone(),
-                                                                                "while trying to specialize this eval for branch",
-                                                                            )
-                                                                        })?;
+                                        let import_cv = self.import_context(argument_src, branch_region)
+                                            .map_err(|e| {
+                                                VolaError::error_here(e,evalspan.clone(),"while trying to specialize this eval for branch")
+                                            })?;
 
                                         import_cv
                                     } else {

@@ -41,7 +41,7 @@ impl Optimizer {
         region: RegionLocation,
         port: OutportLocation,
     ) -> OutportLocation {
-        let ty = self.get_or_derive_type(port, true);
+        let ty = self.get_out_type_mut(port).unwrap();
         self.splat_scalar(region, ImmScalar::new(0.0), ty)
     }
 

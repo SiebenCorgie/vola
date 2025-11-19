@@ -28,8 +28,8 @@ impl Optimizer {
         let left_src = self.graph.inport_src(node.input(0)).unwrap();
         let right_src = self.graph.inport_src(node.input(1)).unwrap();
 
-        let left_type = self.get_or_derive_type(left_src, true);
-        let right_type = self.get_or_derive_type(right_src, true);
+        let left_type = self.get_out_type_mut(left_src).unwrap();
+        let right_type = self.get_out_type_mut(right_src).unwrap();
 
         match (left_type.clone(), right_type.clone()) {
             (

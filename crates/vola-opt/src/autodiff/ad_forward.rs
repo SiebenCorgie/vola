@@ -367,7 +367,7 @@ impl Optimizer {
                 }
 
                 //build a new call node that is connected to the lmd copy
-                let (in_region_cpy_src, _) = self.graph.import_context(
+                let in_region_cpy_src = self.import_context(
                     lmd_cpy.as_outport_location(OutputType::LambdaDeclaration),
                     region,
                 )?;
