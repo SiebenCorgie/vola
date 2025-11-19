@@ -12,7 +12,7 @@ use crate::{
     },
     common::Ty,
     imm::ImmNat,
-    OptEdge, OptError, OptGraph, OptNode, Optimizer,
+    OptEdge, OptError, OptNode, Optimizer,
 };
 use ahash::AHashMap;
 use rvsdg::{
@@ -148,7 +148,7 @@ impl BlockCtx {
 
     pub fn write_or_define_var(
         &mut self,
-        graph: &mut OptGraph,
+        optimizer: &mut Optimizer,
         name: &str,
         new_origin: OutportLocation,
     ) -> Result<(), VolaError<OptError>> {
@@ -159,7 +159,7 @@ impl BlockCtx {
 
         //otherwise import (since this must have existed before),
         //and immediatly redefine last use at this port
-        let _ = self.try_import(graph, name)?;
+        let _ = self.try_import(optimizer, name)?;
         self.write_var(name, new_origin)
             .expect("Writing must work after importing");
         Ok(())
@@ -168,7 +168,7 @@ impl BlockCtx {
     ///Tries to find the variable in any of the parent scopes, if successful, imports it into this scope
     fn try_import(
         &mut self,
-        graph: &mut OptGraph,
+        optimizer: &mut Optimizer,
         name: &str,
     ) -> Result<OutportLocation, VolaError<OptError>> {
         //This is a two pass process. Frist we reverse-iterate all parent scopes (which is a AST concept),
@@ -212,19 +212,19 @@ impl BlockCtx {
 
         //we _silent-import_, if the port is already in the correct region. This happens if there is only a scope distinction on a AST
         //level, but not the graph anymore. For instance when _using_ stuff in a ScopedCall, without control-flow.
-        let imported_at = if graph[port.node].parent == Some(self.active_scope.region) {
+        let imported_at = if optimizer.graph[port.node].parent == Some(self.active_scope.region) {
             port
         } else {
             //NOTE: we decide the _import_ path, based on the producer _type_. λs are imported as context, everything else as
             //      as arguments
-            let producer_port = if let Some(prod) = graph.find_producer_out(port) {
+            let producer_port = if let Some(prod) = optimizer.graph.find_producer_out(port) {
                 prod
             } else {
                 //If we can't find the producer, check if it is a context variable. In that case, we are likely trying to import
                 //unset context (for instance when building an impl block).
                 //for those its okay to _just use_ that port, without having a producer
 
-                match (graph[port.node].into_abstract(), port.output) {
+                match (optimizer.graph[port.node].into_abstract(), port.output) {
                     (AbstractNodeType::Theta, OutputType::Argument(_)) => port,
                     (AbstractNodeType::Gamma, OutputType::EntryVariableArgument { .. }) => port,
                     (AbstractNodeType::Lambda, OutputType::ContextVariableArgument(_)) => port,
@@ -239,7 +239,10 @@ impl BlockCtx {
 
             //Note: We import Lambda-Declerations as context, everything else as arguments
             if producer_port.output == OutputType::LambdaDeclaration {
-                if graph.is_in_parent(self.active_scope.region.node, producer_port.node) {
+                if optimizer
+                    .graph
+                    .is_in_parent(self.active_scope.region.node, producer_port.node)
+                {
                     //this would create a recursive call, which is not allowed.
                     //
                     //bail in that case
@@ -256,12 +259,12 @@ impl BlockCtx {
                     ));
                 }
 
-                let (port, _path) = graph
+                let port = optimizer
                     .import_context(port, self.active_scope.region)
                     .map_err(|e| VolaError::new(e.into()))?;
                 port
             } else {
-                let (port, _path) = graph
+                let port = optimizer
                     .import_argument(port, self.active_scope.region)
                     .map_err(|e| VolaError::new(e.into()))?;
                 port
@@ -286,7 +289,7 @@ impl BlockCtx {
     ///in this, or any of the parent scopes.
     pub fn find_variable(
         &mut self,
-        graph: &mut OptGraph,
+        optimizer: &mut Optimizer,
         name: &str,
     ) -> Result<OutportLocation, VolaError<OptError>> {
         if let Some(src) = self.active_scope.get_var_use(name) {
@@ -294,7 +297,7 @@ impl BlockCtx {
             Ok(src)
         } else {
             //Did not find, try to import from parents
-            match self.try_import(graph, name) {
+            match self.try_import(optimizer, name) {
                 Ok(port) => Ok(port),
                 Err(err) => Err(err),
             }
@@ -368,7 +371,7 @@ impl Optimizer {
         ctx: &mut BlockCtx,
     ) -> Result<(), VolaError<OptError>> {
         match stmt {
-            Stmt::Assign(assign) => match ctx.find_variable(&mut self.graph, &assign.dst.0) {
+            Stmt::Assign(assign) => match ctx.find_variable(self, &assign.dst.0) {
                 Ok(_old_src) => {
                     let expr_src = self.build_expr(assign.expr, region, ctx)?;
                     self.names
@@ -1071,7 +1074,7 @@ impl Optimizer {
 
             //finally redefine the variable in the theta-parent (AST) scope
             ctx.write_or_define_var(
-                &mut self.graph,
+                self,
                 &ident,
                 gamma.as_outport_location(OutputType::ExitVariableOutput(export_ex)),
             )

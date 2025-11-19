@@ -135,6 +135,10 @@ impl Optimizer {
                 let result_port = lmd.add_result();
                 self.typemap.set(result_port.into(), return_type.clone());
             });
+            self.typemap.set(
+                OutputType::LambdaDeclaration.to_location(lmd).into(),
+                Ty::Callable,
+            );
             lmd
         });
 
