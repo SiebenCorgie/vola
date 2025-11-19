@@ -256,8 +256,8 @@ impl<'opt> IntervalExtensionPass<'opt> {
                     //not active, just build the minimum interval, i.e the interval [x..x]
                     let span = self.optimizer.find_span(next).unwrap_or(Span::empty());
                     let src_reg = self.optimizer.graph.outport_region(next);
-                    let edgety =
-                        OptEdge::value_edge().with_type(self.optimizer.find_type(next).unwrap());
+                    let edgety = OptEdge::value_edge()
+                        .with_type(self.optimizer.get_out_type_mut(next).unwrap());
                     let output = self
                         .optimizer
                         .graph
