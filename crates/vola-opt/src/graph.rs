@@ -473,10 +473,10 @@ impl Optimizer {
         //Use the lazy type-resolver to find the type of the path's end
         // then make sure its set on all edges of the path
 
-        let found_type = self
-            .get_out_type_mut(path.start)
-            .map_err(|e| OptError::from(e.error))?;
-
+        let found_type = self.get_out_type_mut(path.start).map_err(|e| {
+            e.report();
+            OptError::from(e.error)
+        })?;
         for edg in &path.edges {
             //NOTE: To keep our key assumptions true, set the port type of any λ result or
             // argument.
@@ -484,15 +484,34 @@ impl Optimizer {
             let src = *self.graph[*edg].src();
             let dst = *self.graph[*edg].dst();
 
-            if self.graph[src.node].node_type.is_lambda() {
+            if self.graph[src.node].is_callable() {
                 let _ = self.typemap.set(src.into(), found_type.clone());
             }
 
-            if self.graph[dst.node].node_type.is_lambda() {
+            if self.graph[dst.node].is_callable() {
                 let _ = self.typemap.set(dst.into(), found_type.clone());
             }
 
             self.graph.edge_mut(*edg).ty.set_type(found_type.clone());
+        }
+
+        //Also type path end/start if needed
+        if self.graph[path.start.node].is_callable() {
+            let _ = self.typemap.set(path.start.into(), found_type.clone());
+        }
+
+        if self.graph[path.end.node].is_callable() {
+            let _ = self.typemap.set(path.end.into(), found_type.clone());
+            //If the port can be mapped _into_ any region, type-set it too. This takes care, for instance
+            // on type-setting the output of context variables
+            for region_index in 0..self.graph[path.end.node].regions().len() {
+                if let Some(in_region) = path.end.input.map_to_in_region(region_index) {
+                    let _ = self.typemap.set(
+                        in_region.to_location(path.end.node).into(),
+                        found_type.clone(),
+                    );
+                }
+            }
         }
 
         Ok(found_type)
@@ -504,10 +523,10 @@ impl Optimizer {
         src: OutportLocation,
         target_region: RegionLocation,
     ) -> Result<OutportLocation, OptError> {
-        let (out, path) = self.graph.import_context(src, target_region)?;
+        let (out, path) = self.graph.import_context(src, target_region).unwrap();
         if let Some(p) = path {
             //Extend the path's type
-            let _ = self.type_path(&p)?;
+            let _ty = self.type_path(&p).unwrap();
         }
         Ok(out)
     }
@@ -520,8 +539,9 @@ impl Optimizer {
     ) -> Result<OutportLocation, OptError> {
         let (out, path) = self.graph.import_argument(src, target_region)?;
         if let Some(p) = path {
-            let _ = self.type_path(&p)?;
+            let _ty = self.type_path(&p)?;
         }
+
         Ok(out)
     }
 

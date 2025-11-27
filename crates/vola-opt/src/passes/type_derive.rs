@@ -52,13 +52,13 @@ impl Optimizer {
 
         for implblock in self.concept_impl.values() {
             if let Err(e) = self.verify_imblblock(implblock) {
-                //errors.push(e)
+                errors.push(e)
             }
         }
 
         for f in self.functions.values() {
             if let Err(e) = self.verify_fn(f) {
-                //errors.push(e);
+                errors.push(e);
             }
         }
 

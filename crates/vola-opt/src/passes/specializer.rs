@@ -406,14 +406,17 @@ impl Optimizer {
                         .with_error(span, "expected this eval to be typed")
                 })?;
             let call_src = if eval_region != csg_region {
-                self.import_context(
-                    OutportLocation {
-                        node: csg_impl_lambda,
-                        output: OutputType::LambdaDeclaration,
-                    },
-                    eval_region,
-                )
-                .unwrap()
+                let src = self
+                    .import_context(
+                        OutportLocation {
+                            node: csg_impl_lambda,
+                            output: OutputType::LambdaDeclaration,
+                        },
+                        eval_region,
+                    )
+                    .unwrap();
+
+                src
             } else {
                 //If the eval is in the host region, we can use the call-source as is
                 OutportLocation {
