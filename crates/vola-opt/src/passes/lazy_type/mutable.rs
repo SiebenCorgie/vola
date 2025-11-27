@@ -6,10 +6,16 @@
  * 2025 Tendsin Mende
  */
 
+use std::collections::VecDeque;
+
 use rvsdg::edge::OutportLocation;
 use vola_common::{Span, VolaError};
 
-use crate::{common::Ty, passes::lazy_type::TypeError, OptEdge, Optimizer};
+use crate::{
+    common::Ty,
+    passes::lazy_type::{ResolveState, TypeError},
+    OptEdge, Optimizer,
+};
 
 impl Optimizer {
     ///Immutable, iterative type discorvery on graph
@@ -26,6 +32,9 @@ impl Optimizer {
         //    stack till we arrive back at our chosen value.
 
         let src_span = self.find_span(outport).unwrap_or(Span::empty());
+
+        #[cfg(feature = "log")]
+        log::trace!("TypeDeriveMut[{outport}]");
 
         //So lets try the unified edge first. This _should_ be the common path
         if let Ok(opt_edge) = self.unified_outport_type(outport) {
@@ -53,10 +62,13 @@ impl Optimizer {
         //or ports, where we can access type-information.
         //Reverse iterate the queue and record+set the type-information for each port
 
-        //At this point we have a reverse queue of _things_ we still need to explore, as well as a
+        //At this point we have a queue of _things_ we still need to explore, as well as a
         // lookup table that is initialized for any leaf-node
+        // Now peel-back from the front of the reversed vector to type-derive.
         lookat_queue.reverse();
-        for port in lookat_queue {
+        let mut explore_queue = VecDeque::from(lookat_queue);
+
+        while let Some(port) = explore_queue.pop_front() {
             //try to lookup the port's type. If that possible, just don't do anyhing.
             // If its not possible, lookup all input's types, and call the node's local
             // type-derive. this _should_ succeed.
@@ -69,23 +81,43 @@ impl Optimizer {
             }
 
             //Not yet resolved, therefore do the resolving now.
-            if let Some(ty) = self.try_local_port_resolve(port, &local_type_lookup) {
-                let old = local_type_lookup.insert(port, Some(ty.clone()));
-                //make sure it wasn't set before, and set it
-                assert_eq!(old, Some(None));
-                //If that passed, set all edges of that port too
-                for edge in self.graph[port].edges.clone() {
-                    self.graph[edge].ty.set_derived_state(ty.clone()).unwrap();
+            // It can happen, that a port was not yet seen. This is signaled by the _waiting-for_ resolve.
+            // In that case, we iterare the pending queue, and re-insert the port _after_ the waited-for port.
+            //
+            // Since the whole graph is a DAG there _should_ not be any cases where this strategy gets stuck...
+            match self
+                .try_local_port_resolve(port, &local_type_lookup)
+                .map_err(|_e| {
+                    let span = self.find_span(port.node).unwrap_or(src_span.clone());
+                    VolaError::error_here(TypeError::Stuck(port.into()), span, "here")
+                })? {
+                ResolveState::WaitingFor(this) => {
+                    #[cfg(feature = "log")]
+                    log::trace!(
+                        "TypeDerive[{outport}]: Defer {port} type derive, waiting for {this}"
+                    );
+
+                    let Some(index) = explore_queue
+                        .iter()
+                        .enumerate()
+                        .find_map(|(idx, element)| if element == &this { Some(idx) } else { None })
+                    else {
+                        panic!("{port} waits for {this}, but its not part of the queue anymore...");
+                    };
+                    //Reinsert the port after the wait-for port was seen.
+                    explore_queue.insert(index + 1, port);
                 }
-            } else {
-                return Err(VolaError::error_here(
-                    TypeError::Stuck(port.into()),
-                    src_span,
-                    "Type derive stuck while calculating this type",
-                ));
+                ResolveState::ResolvedTo(ty) => {
+                    let old = local_type_lookup.insert(port, Some(ty.clone()));
+                    //make sure it wasn't set before, and set it
+                    assert_eq!(old, Some(None));
+                    //If that passed, set all edges of that port too
+                    for edge in self.graph[port].edges.clone() {
+                        self.graph[edge].ty.set_derived_state(ty.clone()).unwrap();
+                    }
+                }
             }
         }
-
         //finally we should be able to just read-out the type!
         local_type_lookup
             .get(&outport)

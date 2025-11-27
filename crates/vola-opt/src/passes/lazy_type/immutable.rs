@@ -6,11 +6,17 @@
  * 2025 Tendsin Mende
  */
 
+use std::collections::VecDeque;
+
 use rvsdg::edge::OutportLocation;
 
 use vola_common::{Span, VolaError};
 
-use crate::{common::Ty, passes::lazy_type::TypeError, OptEdge, Optimizer};
+use crate::{
+    common::Ty,
+    passes::lazy_type::{ResolveState, TypeError},
+    OptEdge, Optimizer,
+};
 
 impl Optimizer {
     ///Immutable, iterative type discorvery on graph
@@ -27,6 +33,9 @@ impl Optimizer {
         //    stack till we arrive back at our chosen value.
 
         let src_span = self.find_span(outport).unwrap_or(Span::empty());
+
+        #[cfg(feature = "log")]
+        log::trace!("TypeDeriveImmut[{outport}]");
 
         //So lets try the unified edge first. This _should_ be the common path
         if let Ok(opt_edge) = self.unified_outport_type(outport) {
@@ -57,7 +66,9 @@ impl Optimizer {
         //At this point we have a reverse queue of _things_ we still need to explore, as well as a
         // lookup table that is initialized for any leaf-node
         lookat_queue.reverse();
-        for port in lookat_queue {
+        let mut explore_queue = VecDeque::from(lookat_queue);
+
+        while let Some(port) = explore_queue.pop_front() {
             //try to lookup the port's type. If that possible, just don't do anyhing.
             // If its not possible, lookup all input's types, and call the node's local
             // type-derive. this _should_ succeed.
@@ -67,16 +78,37 @@ impl Optimizer {
             }
 
             //Not yet resolved, therefore do the resolving now.
-            if let Some(ty) = self.try_local_port_resolve(port, &local_type_lookup) {
-                let old = local_type_lookup.insert(port, Some(ty));
-                //make sure it wasn't set before, and set it
-                assert_eq!(old, Some(None))
-            } else {
-                return Err(VolaError::error_here(
-                    TypeError::Stuck(port.into()),
-                    src_span,
-                    "Type derive stuck while calculating this type",
-                ));
+            match self
+                .try_local_port_resolve(port, &local_type_lookup)
+                .map_err(|_e| {
+                    let span = self.find_span(port.node).unwrap_or(src_span.clone());
+                    VolaError::error_here(
+                        TypeError::Stuck(port.into()),
+                        span,
+                        "Type derive stuck while calculating this type",
+                    )
+                })? {
+                ResolveState::ResolvedTo(ty) => {
+                    let old = local_type_lookup.insert(port, Some(ty));
+                    //make sure it wasn't set before, and set it
+                    assert_eq!(old, Some(None))
+                }
+                ResolveState::WaitingFor(this) => {
+                    #[cfg(feature = "log")]
+                    log::trace!(
+                        "TypeDerive[{outport}]: Defer {port} type derive, waiting for {this}"
+                    );
+
+                    let Some(index) = explore_queue
+                        .iter()
+                        .enumerate()
+                        .find_map(|(idx, element)| if element == &this { Some(idx) } else { None })
+                    else {
+                        panic!("{port} waits for {this}, but its not part of the queue anymore...");
+                    };
+                    //Reinsert the port after the wait-for port was seen.
+                    explore_queue.insert(index + 1, port);
+                }
             }
         }
 

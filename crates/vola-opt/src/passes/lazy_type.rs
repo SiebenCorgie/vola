@@ -28,7 +28,7 @@ use rvsdg::{
 use thiserror::Error;
 use vola_common::{Span, VolaError};
 
-use crate::{common::Ty, OptEdge, Optimizer, TypeState};
+use crate::{common::Ty, OptEdge, OptError, Optimizer, TypeState};
 
 ///Implements the immutable type resolver
 mod immutable;
@@ -47,6 +47,16 @@ pub enum TypeError {
     },
     #[error("A key assumption was violated at {0}")]
     AssumptionViolation(AttribLocation),
+
+    ///Violation of 1.
+    #[error("Argument {0} of function has no type")]
+    LambdaArgumentUnset(usize),
+    #[error("Context {0} for function has no type set")]
+    LambdaContextUnset(usize),
+    ///Violation of 2
+    #[error("Result {0} of function has no type")]
+    LambdaResultUnset(usize),
+
     #[error("{0} is part of a state-edge")]
     IsState(AttribLocation),
     #[error("Mixed state and value types")]
@@ -59,6 +69,13 @@ pub enum TypeError {
     UnconnectedPort(AttribLocation),
     #[error("Type state derive got stuck at {0}")]
     Stuck(AttribLocation),
+}
+
+enum ResolveState {
+    ///Needs type info from a specific, recorded, but not yet resolved port
+    WaitingFor(OutportLocation),
+    ///Succesfuly resolved to this type
+    ResolvedTo(Ty),
 }
 
 impl Optimizer {
@@ -185,7 +202,6 @@ impl Optimizer {
                 //No more ports in the queue, therfore end
                 break 'explore;
             };
-
             let node_type = self.graph[port.node].into_abstract();
             //For all of those we can assume that the ports are indeed type-set
             if node_type == AbstractNodeType::Lambda
@@ -193,17 +209,46 @@ impl Optimizer {
                 || node_type == AbstractNodeType::Phi
             {
                 let Some(ty) = self.typemap.get(&port.into()) else {
-                    return Err(VolaError::error_here(
-                        TypeError::AssumptionViolation(port.into()),
-                        report_span,
-                        "argument should be type-set",
-                    ));
+                    match port.output {
+                        OutputType::Argument(index) => {
+                            let span = self.find_span(port.node).unwrap_or(report_span);
+                            return Err(VolaError::error_here(
+                                TypeError::LambdaArgumentUnset(index),
+                                span,
+                                "argument should be type-set",
+                            ));
+                        }
+                        OutputType::ContextVariableArgument(_) => {
+                            //NOTE: Context-variables can-not be assumed to exist, therefore push all
+                            //      connected producer...
+                            if let Some(src) = self.graph.inport_src(
+                                port.output
+                                    .map_out_of_region()
+                                    .unwrap()
+                                    .to_location(port.node),
+                            ) {
+                                if !local_type_lookup.contains_key(&src) {
+                                    local_type_lookup.insert(src, None);
+                                    lookat_queue.push(src);
+                                }
+                            } else {
+                                return Err(VolaError::error_here(
+                                    TypeError::UnconnectedPort(port.into()),
+                                    report_span,
+                                    "here",
+                                ));
+                            }
+                            //update the index and shortcut the loop
+                            qidx = qidx + 1;
+                            continue 'explore;
+                        }
+                        _ => panic!("Unexpected output type: {}", port.output),
+                    }
                 };
+                //Use the type info and skip to next port
                 local_type_lookup.insert(port, Some(ty.clone()));
-                //for lambda ports we _know_ that they must be type-set
-                // therefore we can skip
                 qidx = qidx + 1;
-                continue;
+                continue 'explore;
             }
 
             //TODO: This does not handle state-edges yet
@@ -254,17 +299,30 @@ impl Optimizer {
                         unreachable!()
                     };
                     let result_port = InputType::Result(idx).to_location(lmd.node);
-                    if let Some(src) = self.graph.inport_src(result_port) {
+                    //Now we can assume that the result is indeed already type-set
+                    // (per definition)
+                    if let Some(ty) = self.typemap.get(&result_port.into()) {
+                        let _ = local_type_lookup.insert(port, Some(ty.clone()));
+                    } else {
+                        let span = self.find_span(lmd.node).unwrap_or(report_span);
+                        let base_error = VolaError::error_here(
+                            TypeError::LambdaResultUnset(idx),
+                            span,
+                            "called function's result undefined",
+                        );
+                        if let Some(call_span) = self.find_span(port.node) {
+                            return Err(base_error.with_label(call_span, "called here"));
+                        } else {
+                            return Err(base_error);
+                        }
+                    }
+
+                    //also push all call-args
+                    for src in self.graph.unique_src_ports(port.node) {
                         if !local_type_lookup.contains_key(&src) {
                             local_type_lookup.insert(src, None);
                             lookat_queue.push(src);
                         }
-                    } else {
-                        return Err(VolaError::error_here(
-                            TypeError::AssumptionViolation(port.into()),
-                            report_span,
-                            "called function's result undefined",
-                        ));
                     }
                 }
 
@@ -376,7 +434,6 @@ impl Optimizer {
                     unreachable!()
                 }
             }
-
             //Finally goto next exploration port
             qidx = qidx + 1;
         }
@@ -384,34 +441,41 @@ impl Optimizer {
         Ok((lookat_queue, local_type_lookup))
     }
 
+    ///Tries to derive a type from the known state in `lookup` and the graph's cached type-state.
     fn try_local_port_resolve(
         &self,
         port: OutportLocation,
         lookup: &AHashMap<OutportLocation, Option<Ty>>,
-    ) -> Option<Ty> {
+    ) -> Result<ResolveState, OptError> {
         match self.graph[port.node].into_abstract() {
             AbstractNodeType::Simple => {
                 assert_eq!(self.graph[port.node].outputs().len(), 1);
-                let input_types = self.graph[port.node]
-                    .input_srcs(&self.graph)
-                    .into_iter()
-                    .map(|port| {
-                        let ty = lookup
-                            .get(&port.unwrap())
-                            .as_ref()
-                            .expect("Port should be recorded")
-                            .as_ref()
-                            .expect("Port Should have set type!")
-                            .clone();
-                        ty
-                    })
-                    .collect::<SmallColl<_>>();
-                self.graph[port.node]
+
+                let mut input_types = SmallColl::default();
+                for port in self.graph[port.node].input_srcs(&self.graph) {
+                    //NOTE: The port must be in the map (but maybe unset), which is why we unwrap.
+                    //      If this panics, there is something wrong in the explore stage...
+                    if let Some(ty) = lookup
+                        .get(port.as_ref().unwrap())
+                        .as_ref()
+                        .expect("Used port should be recorded")
+                    {
+                        input_types.push(ty.clone());
+                    } else {
+                        //Signal that we must postpone till the wait-for port was seen.
+                        return Ok(ResolveState::WaitingFor(port.unwrap()));
+                    }
+                }
+
+                match self.graph[port.node]
                     .node_type
                     .unwrap_simple_ref()
                     .node
                     .try_derive_type(&input_types, &self.concepts, &self.csg_node_defs)
-                    .ok()
+                {
+                    Ok(ty) => Ok(ResolveState::ResolvedTo(ty)),
+                    Err(e) => Err(e),
+                }
             }
             AbstractNodeType::Apply => {
                 //For the apply node, go into the λ's region and read out the result's
@@ -424,12 +488,13 @@ impl Optimizer {
                     .graph
                     .inport_src(InputType::Result(index).to_location(lmd.node))
                 else {
-                    return None;
+                    return Err(OptError::TypeError(TypeError::LambdaResultUnset(index)));
                 };
-                lookup
-                    .get(&result_src)
-                    .expect("Result of λ should be set already")
-                    .clone()
+                if let Some(src_type) = lookup.get(&result_src).as_ref().unwrap() {
+                    Ok(ResolveState::ResolvedTo(src_type.clone()))
+                } else {
+                    Ok(ResolveState::WaitingFor(result_src))
+                }
             }
             AbstractNodeType::Gamma => {
                 //disect the two cases of entry or exit variable.
@@ -445,10 +510,15 @@ impl Optimizer {
                                     .to_location(port.node),
                             )
                             .unwrap();
-                        lookup
+
+                        if let Some(ty) = lookup
                             .get(&source_port)
                             .expect("EV-Source should be set already")
-                            .clone()
+                        {
+                            Ok(ResolveState::ResolvedTo(ty.clone()))
+                        } else {
+                            Ok(ResolveState::WaitingFor(source_port))
+                        }
                     }
                     OutputType::ExitVariableOutput(_) => {
                         //We map into the first branch and _get_ the type.
@@ -480,7 +550,11 @@ impl Optimizer {
                             let other_type = lookup.get(&other_src).unwrap().clone();
                             assert_eq!(candidate_type, other_type);
                         }
-                        candidate_type
+                        if let Some(ty) = candidate_type {
+                            Ok(ResolveState::ResolvedTo(ty))
+                        } else {
+                            Ok(ResolveState::WaitingFor(candidate_src))
+                        }
                     }
                     _ => unreachable!(),
                 }
@@ -498,10 +572,11 @@ impl Optimizer {
                                     .to_location(port.node),
                             )
                             .unwrap();
-                        lookup
-                            .get(&source_port)
-                            .expect("LV-Source should be set already")
-                            .clone()
+                        if let Some(ty) = lookup.get(&source_port).as_ref().unwrap() {
+                            Ok(ResolveState::ResolvedTo(ty.clone()))
+                        } else {
+                            Ok(ResolveState::WaitingFor(source_port))
+                        }
                     }
                     OutputType::Output(_) => {
                         let candidate_src = self
@@ -513,13 +588,38 @@ impl Optimizer {
                                     .to_location(port.node),
                             )
                             .unwrap();
-                        lookup.get(&candidate_src).unwrap().clone()
+                        if let Some(ty) = lookup.get(&candidate_src).as_ref().unwrap() {
+                            Ok(ResolveState::ResolvedTo(ty.clone()))
+                        } else {
+                            Ok(ResolveState::WaitingFor(candidate_src))
+                        }
                     }
                     _ => unreachable!(),
                 }
             }
+            AbstractNodeType::Lambda => {
+                if let OutputType::ContextVariableArgument(_cv) = port.output {
+                    //Try get the src's type of this cv in the parent region. Otherwise wait for it.
+                    let produce = self
+                        .graph
+                        .inport_src(
+                            port.output
+                                .map_out_of_region()
+                                .unwrap()
+                                .to_location(port.node),
+                        )
+                        .unwrap();
+                    if let Some(ty) = lookup.get(&produce).as_ref().unwrap() {
+                        Ok(ResolveState::ResolvedTo(ty.clone()))
+                    } else {
+                        Ok(ResolveState::WaitingFor(produce))
+                    }
+                } else {
+                    unreachable!("any none-cv variable should have been caught before");
+                }
+            }
             AbstractNodeType::Delta => unimplemented!(),
-            AbstractNodeType::Lambda | AbstractNodeType::Omega | AbstractNodeType::Phi => {
+            AbstractNodeType::Omega | AbstractNodeType::Phi => {
                 unreachable!("Should be caught before")
             }
         }
