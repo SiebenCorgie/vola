@@ -87,7 +87,7 @@ impl Optimizer {
         }
     }
 
-    ///Creates the λ node in the omega region,  but does not fill it (yet).
+    ///Creates the λ node in the omega region, but does not fill it (yet).
     pub(crate) fn define_func(
         &mut self,
         func: &Func,

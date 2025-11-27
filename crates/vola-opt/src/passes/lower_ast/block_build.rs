@@ -258,7 +258,6 @@ impl BlockCtx {
                         "In this region",
                     ));
                 }
-
                 let port = optimizer
                     .import_context(port, self.active_scope.region)
                     .map_err(|e| VolaError::new(e.into()))?;
@@ -513,7 +512,7 @@ impl Optimizer {
                         AbstractNodeType::Apply => {
                             //if this is a apply node, make sure it does _not_ return a csg-type.
                             //try to deduce the type of this node
-                            let ty = self.get_out_type_mut(prod).unwrap();
+                            let ty = self.get_out_type_mut(prod).map_err(|e| e.to_error())?;
                             if ty == Ty::CSG {
                                 let err = OptError::Any {
                                     text: format!(
