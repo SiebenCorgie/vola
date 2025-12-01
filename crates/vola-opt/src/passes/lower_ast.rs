@@ -5,7 +5,7 @@
  *
  * 2024 Tendsin Mende
  */
-use crate::{OptError, Optimizer};
+use crate::{passes::initial_type_check::InitialTypeCheck, OptError, Optimizer};
 use vola_ast::{AstEntry, TopLevelNode, VolaAst};
 use vola_common::VolaError;
 mod ast_to_graph;
@@ -91,7 +91,8 @@ impl Optimizer {
         self.detect_recursive_calls()?;
 
         //do initial type resolving
-        self.initial_type_derive()?;
+        //self.initial_type_derive()?;
+        InitialTypeCheck::setup(self).execute()?;
 
         #[cfg(feature = "profile")]
         println!(
