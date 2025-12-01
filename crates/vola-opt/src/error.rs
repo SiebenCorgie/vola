@@ -10,6 +10,7 @@ use crate::{
     autodiff::AutoDiffError,
     common::Ty,
     interval::IntervalError,
+    passes::lazy_type::TypeError,
 };
 use rvsdg::{
     err::GraphError,
@@ -69,6 +70,8 @@ pub enum OptError {
     #[error("Failed to generate identitiy-implementation: {0}")]
     AIIFailed(String),
 
+    #[error(transparent)]
+    TypeError(#[from] TypeError),
     #[error(transparent)]
     AutoDiffError(#[from] AutoDiffError),
     #[error(transparent)]

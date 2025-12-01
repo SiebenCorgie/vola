@@ -53,7 +53,7 @@ impl<'a> GraphTypeTransformer for LoweringTransformer<'a> {
             .map(|port| {
                 if let Some(first_edge) = port.edges.get(0) {
                     let port = self.opt.graph[*first_edge].src().clone();
-                    self.opt.find_type(port)
+                    self.opt.get_out_type(port).ok()
                 } else {
                     //Has no connected edge, therfore no type
                     None

@@ -69,7 +69,7 @@ impl<'opt> IntervalExtensionPass<'opt> {
                 }
                 Ok(new_src) => {
                     //tick the type system for this
-                    let t = self.optimizer.get_or_derive_type(new_src, true);
+                    let t = self.optimizer.get_out_type_mut(new_src).unwrap();
                     assert!(t.is_interval(), "{new_src} {} should be interval", t);
                 }
             }
@@ -256,8 +256,8 @@ impl<'opt> IntervalExtensionPass<'opt> {
                     //not active, just build the minimum interval, i.e the interval [x..x]
                     let span = self.optimizer.find_span(next).unwrap_or(Span::empty());
                     let src_reg = self.optimizer.graph.outport_region(next);
-                    let edgety =
-                        OptEdge::value_edge().with_type(self.optimizer.find_type(next).unwrap());
+                    let edgety = OptEdge::value_edge()
+                        .with_type(self.optimizer.get_out_type_mut(next).unwrap());
                     let output = self
                         .optimizer
                         .graph
@@ -336,14 +336,11 @@ impl<'opt> IntervalExtensionPass<'opt> {
                         "Src region must be same or parent to dst-region"
                     );
                     //import src into dst
-                    let (imported_at, path) = self
+                    let imported_at = self
                         .optimizer
-                        .graph
                         .import_argument(mapped_src, dst_region)
                         .map_err(|e| VolaError::new(e.into()))?;
-                    if let Some(path) = path {
-                        self.optimizer.type_path(&path).unwrap();
-                    }
+
                     imported_at
                 } else {
                     mapped_src

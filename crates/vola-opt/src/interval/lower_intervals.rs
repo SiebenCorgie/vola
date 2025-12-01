@@ -68,6 +68,9 @@ impl<'opt> LowerIntervals<'opt> {
     }
 
     pub fn execute(mut self) -> Result<(), VolaError<OptError>> {
+        #[cfg(feature = "log")]
+        log::info!("Lower Intervals");
+
         if std::env::var("VOLA_DUMP_ALL").is_ok()
             || std::env::var("DUMP_PRE_INTERVAL_LOWER").is_ok()
         {
@@ -160,12 +163,6 @@ impl<'opt> LowerIntervals<'opt> {
         //TODO: don't do that once a fix for #41 lands.
         self.optimizer.inline_all().map_err(|e| VolaError::new(e))?;
 
-        //Since we might change a lot of stuff here, do a type-derive
-        // afterwards...
-        self.optimizer
-            .type_derive(true)
-            .map_err(|_errors| VolaError::new(IntervalError::DoesNotPassTypeDerive.into()))?;
-
         if std::env::var("VOLA_DUMP_ALL").is_ok()
             || std::env::var("DUMP_POST_INTERVAL_LOWER").is_ok()
         {
@@ -180,7 +177,12 @@ impl<'opt> LowerIntervals<'opt> {
     fn handle_simple_node(&mut self, node: NodeRef) -> Result<(), VolaError<OptError>> {
         //if the node produces any interval edges, handle it
         for port in self.optimizer.graph.outports(node) {
-            if self.optimizer.get_or_derive_type(port, false).is_interval() {
+            if self
+                .optimizer
+                .get_out_type_mut(port)
+                .map_err(|e| e.to_error())?
+                .is_interval()
+            {
                 self.handle_value(port)?
             }
         }
@@ -191,7 +193,8 @@ impl<'opt> LowerIntervals<'opt> {
             let index = iindex.access;
             let is_indexing_interval = self
                 .optimizer
-                .get_or_derive_type_input(node.input(0), false)
+                .get_in_type_mut(node.input(0))
+                .unwrap()
                 .is_interval();
             //If this is actually indexing an interval, call the unwraping handler
             if is_indexing_interval {

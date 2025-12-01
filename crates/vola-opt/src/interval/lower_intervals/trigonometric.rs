@@ -30,8 +30,8 @@ impl<'opt> LowerIntervals<'opt> {
             .get(&self.optimizer.graph.inport_src(node.input(0)).unwrap())
             .unwrap();
 
-        let in_low_ty = self.optimizer.get_or_derive_type(*in_low, false);
-        let in_up_ty = self.optimizer.get_or_derive_type(*in_up, false);
+        let in_low_ty = self.optimizer.get_out_type_mut(*in_low).unwrap();
+        let in_up_ty = self.optimizer.get_out_type_mut(*in_up).unwrap();
         assert_eq!(in_low_ty, in_up_ty);
 
         //For non-real values we bail atm.

@@ -71,8 +71,8 @@ impl Optimizer {
                 //there should not be a matrix-matrix, matrix-vector or vector-matrix multiplication.
                 //Only scalar-scalar are _right now_ implemented
 
-                let left_type = self.get_or_derive_type(left_src, false);
-                let right_type = self.get_or_derive_type(right_src, false);
+                let left_type = self.get_out_type_mut(left_src).unwrap();
+                let right_type = self.get_out_type_mut(right_src).unwrap();
 
                 let left_active = activity.is_active_port(self, left_src);
                 let right_active = activity.is_active_port(self, right_src);
@@ -308,7 +308,7 @@ impl Optimizer {
                 }
 
                 let x_src = self.graph.inport_src(node.input(0)).unwrap();
-                let x_ty = self.get_or_derive_type(x_src, false);
+                let x_ty = self.get_out_type_mut(x_src).unwrap();
                 let one = self.splat_scalar(region, ImmScalar::new(1.0), x_ty);
                 Ok(self.build_chain_rule_for(&region, node.output(0), one, x_src))
             }

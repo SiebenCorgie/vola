@@ -45,7 +45,7 @@ impl<'opt> LowerIntervals<'opt> {
             .filter_map(|port| {
                 if self
                     .optimizer
-                    .find_type(port)
+                    .get_in_type(port)
                     .map_or(false, |t| t.is_interval())
                 {
                     Some(())
@@ -61,7 +61,7 @@ impl<'opt> LowerIntervals<'opt> {
                     .filter_map(|port| {
                         if self
                             .optimizer
-                            .find_type(port)
+                            .get_out_type(port)
                             .map_or(false, |t| t.is_interval())
                         {
                             Some(())
@@ -85,7 +85,7 @@ impl<'opt> LowerIntervals<'opt> {
             .filter_map(|port| {
                 if self
                     .optimizer
-                    .find_type(port)
+                    .get_in_type(port)
                     .map_or(false, |t| t.is_interval())
                 {
                     Some(())
@@ -102,7 +102,7 @@ impl<'opt> LowerIntervals<'opt> {
                     .filter_map(|port| {
                         if self
                             .optimizer
-                            .find_type(port)
+                            .get_out_type(port)
                             .map_or(false, |t| t.is_interval())
                         {
                             Some(())
@@ -162,13 +162,23 @@ impl<'opt> LowerIntervals<'opt> {
                 region_index: 0,
             };
             for argument in self.optimizer.graph.argument_ports(region) {
-                if self.optimizer.find_type(argument).unwrap().is_interval() {
+                if self
+                    .optimizer
+                    .get_out_type_mut(argument)
+                    .unwrap()
+                    .is_interval()
+                {
                     self.handle_arg(region, argument, &call_sites);
                 }
             }
 
             for result in self.optimizer.graph.result_ports(region) {
-                if self.optimizer.find_type(result).unwrap().is_interval() {
+                if self
+                    .optimizer
+                    .get_in_type_mut(result)
+                    .unwrap()
+                    .is_interval()
+                {
                     self.handle_result(region, result, &call_sites);
                 }
             }
@@ -223,8 +233,8 @@ impl<'opt> LowerIntervals<'opt> {
     ///Turns a interval typed Outport into a tuple typed port that constructs
     /// an interval from that tuple. Records the interval-mapping nevertheless
     pub(crate) fn itt_outport(&mut self, region: RegionLocation, port: OutportLocation) {
-        let base_type = match self.optimizer.find_type(port) {
-            Some(Ty::Interval(i)) => *i,
+        let base_type = match self.optimizer.get_out_type_mut(port) {
+            Ok(Ty::Interval(i)) => *i,
             other => panic!("Expected interval type on {port}, got {other:?}"),
         };
         //Set the span to the function's call-site for now.
@@ -294,7 +304,7 @@ impl<'opt> LowerIntervals<'opt> {
         //We do this by building a tuple via indexing into the original interval. Then reconnecting the
         // `port` to to that just build tuple
 
-        let Ty::Interval(base_type) = self.optimizer.find_type(port).unwrap() else {
+        let Ty::Interval(base_type) = self.optimizer.get_in_type_mut(port).unwrap() else {
             panic!("Port must be interval typed!")
         };
 

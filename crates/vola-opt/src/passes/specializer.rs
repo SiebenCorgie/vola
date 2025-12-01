@@ -399,25 +399,24 @@ impl Optimizer {
                 .unwrap_or(spec_ctx.tree_access_span.clone());
             //NOTE: this _shouldn't_ happen, but its better to report, instead of
             //      panicing
-            let eval_ty =
-                self.find_type(spec_ctx.eval_node.output(0))
-                    .ok_or(VolaError::error_here(
-                        OptError::CsgStructureIssue(format!(
-                            "Expected eval ({}) to be typed",
-                            spec_ctx.eval_node
-                        )),
-                        span,
-                        "here",
-                    ))?;
+            let eval_ty = self
+                .get_out_type_mut(spec_ctx.eval_node.output(0))
+                .map_err(|e| {
+                    e.to_error()
+                        .with_error(span, "expected this eval to be typed")
+                })?;
             let call_src = if eval_region != csg_region {
-                self.import_context(
-                    OutportLocation {
-                        node: csg_impl_lambda,
-                        output: OutputType::LambdaDeclaration,
-                    },
-                    eval_region,
-                )
-                .unwrap()
+                let src = self
+                    .import_context(
+                        OutportLocation {
+                            node: csg_impl_lambda,
+                            output: OutputType::LambdaDeclaration,
+                        },
+                        eval_region,
+                    )
+                    .unwrap();
+
+                src
             } else {
                 //If the eval is in the host region, we can use the call-source as is
                 OutportLocation {
@@ -603,7 +602,7 @@ impl Optimizer {
             if let Some(producer) = self.graph.find_producer_inp(old_dst) {
                 let in_context_port = self.import_context(producer, region)?;
                 //Set type for import path
-                let ty = if let Some(ty) = self.find_type(in_context_port.clone()) {
+                let ty = if let Ok(ty) = self.get_out_type_mut(in_context_port.clone()) {
                     OptEdge::value_edge().with_type(ty)
                 } else {
                     log::warn!("Could not find type for imported prototype, using none");
@@ -941,12 +940,10 @@ impl Optimizer {
                             //CVs can just be traced and imported. Find the actual producer...
                             let producer = self.graph.find_producer_out(*src).unwrap();
                             //... and import it into our branch
-                            let (import_cv, _) = self
-                                .graph
-                                .import_argument(producer, branch_region)
-                                .map_err(|e| {
+                            let import_cv =
+                                self.import_argument(producer, branch_region).map_err(|e| {
                                     VolaError::error_here(
-                                        OptError::InternalGraphError(e),
+                                        e,
                                         evalspan.clone(),
                                         "while trying to specialize this eval for branch",
                                     )
@@ -962,12 +959,10 @@ impl Optimizer {
                             //Hovere, there is a shortcut: If the argument is already in a parent-region, we can just import it as-is.
                             if self.graph.is_in_parent(branch_region.node, src.node) {
                                 //The data source is already in a parent, so we can _just_ import it.
-                                let (import_cv, _) = self
-                                    .graph
-                                    .import_context(*src, branch_region)
-                                    .map_err(|e| {
+                                let import_cv =
+                                    self.import_context(*src, branch_region).map_err(|e| {
                                         VolaError::error_here(
-                                            OptError::InternalGraphError(e),
+                                            e,
                                             evalspan.clone(),
                                             "while trying to specialize this eval for branch",
                                         )
@@ -1015,16 +1010,10 @@ impl Optimizer {
                                             most_outer_region = self.graph.toplevel_region();
                                         }
 
-                                        let (import_cv, _) = self
-                                                                        .graph
-                                                                        .import_context(argument_src, branch_region)
-                                                                        .map_err(|e| {
-                                                                            VolaError::error_here(
-                                                                                OptError::InternalGraphError(e),
-                                                                                evalspan.clone(),
-                                                                                "while trying to specialize this eval for branch",
-                                                                            )
-                                                                        })?;
+                                        let import_cv = self.import_context(argument_src, branch_region)
+                                            .map_err(|e| {
+                                                VolaError::error_here(e,evalspan.clone(),"while trying to specialize this eval for branch")
+                                            })?;
 
                                         import_cv
                                     } else {
@@ -1133,9 +1122,6 @@ impl Optimizer {
         }
         //now delete the old eval-node, so it won't be re-discovered
         let _ = self.graph.remove_node(eval).unwrap();
-        //and re-type the parent region
-        let type_region_span = self.find_span(most_outer_region).unwrap_or(Span::empty());
-        self.derive_region(most_outer_region, type_region_span, true)?;
 
         Ok(collected)
     }

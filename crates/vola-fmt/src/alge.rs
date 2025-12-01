@@ -135,7 +135,10 @@ impl From<&ImplBlock> for FormatTree {
             header_builder.push(FormatTree::Wrapped {
                 left: '<',
                 right: '>',
-                sub: Box::new(FormatTree::seperated_list(",", value.operands.iter())),
+                sub: Box::new(FormatTree::seperated_list(
+                    ",",
+                    value.operands.iter().map(|(op, _span)| op),
+                )),
             });
         }
         header_builder.push(FormatTree::Keyword(Keyword::For));

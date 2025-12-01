@@ -87,7 +87,7 @@ impl Optimizer {
         }
     }
 
-    ///Creates the λ node in the omega region,  but does not fill it (yet).
+    ///Creates the λ node in the omega region, but does not fill it (yet).
     pub(crate) fn define_func(
         &mut self,
         func: &Func,
@@ -113,10 +113,10 @@ impl Optimizer {
             return Err(VolaError::error_here(err, func.span.clone(), "here"));
         }
 
-        let args: SmallColl<(String, Ty)> = func
+        let args: SmallColl<(String, Ty, Span)> = func
             .args
             .iter()
-            .map(|arg| (arg.ident.0.clone(), arg.clone().ty.into()))
+            .map(|arg| (arg.ident.0.clone(), arg.clone().ty.into(), arg.span.clone()))
             .collect();
         let region_span = func.span.clone();
         let def_span = func.head_span();
@@ -125,16 +125,22 @@ impl Optimizer {
         //setup the lambda node accordingly, as well as the block context, then launch the block builder.
         let lambda = self.graph.on_omega_node(|omg| {
             let (lmd, _) = omg.new_function(func.is_export, |lmd| {
-                //setup the args an results
+                //setup the args and results
                 for arg in &args {
                     let port = lmd.add_argument();
+                    self.span_tags.set(port.into(), arg.2.clone());
                     //Also tag with the correct type already
                     self.typemap.set(port.into(), arg.1.clone());
                 }
                 //setup result
                 let result_port = lmd.add_result();
                 self.typemap.set(result_port.into(), return_type.clone());
+                self.span_tags.set(result_port.into(), region_span.clone());
             });
+            self.typemap.set(
+                OutputType::LambdaDeclaration.to_location(lmd).into(),
+                Ty::Callable,
+            );
             lmd
         });
 
@@ -318,13 +324,15 @@ impl Optimizer {
                 //setup all operands as CV-Vars, and the arg as ... arg
                 for operand in &implblock.operands {
                     let (outside, within) = lmd.add_context_variable();
-                    if let Err(e) = initial_context.define_var(operand.0.clone(), within) {
+                    if let Err(e) = initial_context.define_var(operand.0 .0.clone(), within) {
                         let span = implblock.head_span();
                         return Err(VolaError::error_here(e, span, "here"));
                     }
                     //Directly set to CSG type
                     self.typemap.set(within.into(), Ty::CSG);
                     self.typemap.set(outside.into(), Ty::CSG);
+                    //and the report span
+                    self.span_tags.set(within.into(), operand.1.clone());
                 }
 
                 //setup all implicit variables
@@ -336,10 +344,12 @@ impl Optimizer {
                     }
                     //setup type
                     self.typemap.set(port.into(), arg.ty.clone().into());
+                    //and span
+                    self.span_tags.set(port.into(), arg.span.clone());
                     //and push into args collection
                     args.push((arg.ident.0.clone(), arg.ty.clone().into()));
                 }
-
+                //Add all of the concept's arguments
                 let port = lmd.add_argument();
                 initial_context
                     .define_var(implblock.concept_arg_name.0.clone(), port)
@@ -347,6 +357,9 @@ impl Optimizer {
 
                 //Also tag with the correct type already
                 self.typemap.set(port.into(), arg_ty.clone().into());
+                //and span
+                self.span_tags
+                    .set(port.into(), implblock.concept_arg_span.clone());
                 //Push the concept's arg as the last in the row
                 args.push((implblock.concept_arg_name.0.clone(), arg_ty.into()));
 
@@ -354,6 +367,7 @@ impl Optimizer {
                 let result_port = lmd.add_result();
                 self.typemap
                     .set(result_port.into(), return_ty.clone().into());
+                self.span_tags.set(result_port.into(), return_span.clone());
                 Ok(result_port)
             });
             result
@@ -367,6 +381,13 @@ impl Optimizer {
         };
 
         let def_span = implblock.head_span();
+        self.span_tags.set(lambda.into(), def_span.clone());
+
+        //Tag as callable
+        self.typemap.set(
+            OutputType::LambdaDeclaration.to_location(lambda).into(),
+            Ty::Callable,
+        );
 
         self.build_block(
             RegionLocation {
@@ -411,7 +432,7 @@ impl Optimizer {
             def_span,
             concept: implblock.concept.0.clone(),
             lambda,
-            subtrees: implblock.operands.into_iter().map(|a| a.0).collect(),
+            subtrees: implblock.operands.into_iter().map(|a| a.0 .0).collect(),
             args,
             return_type: return_ty.into(),
         };

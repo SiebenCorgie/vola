@@ -1,5 +1,5 @@
 //BEGIN-CONFIG
-//ERROR:Return type conflict. If branch returns vec2<Real>, but else branch returns vec3<Real><!!>impl-block's output was untyped
+//ERROR:Returns vec2<Real> in first branch, but vec3<Real> in 2-th
 //END-CONFIG
 
 module std;

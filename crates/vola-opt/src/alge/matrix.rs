@@ -18,7 +18,8 @@ use vola_ast::csg::{CsgConcept, CsgDef};
 
 use crate::{
     common::{DataType, Shape, Ty},
-    DialectNode, OptError, OptNode,
+    passes::lazy_type::TypeError,
+    DialectNode, OptNode,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -68,7 +69,7 @@ impl DialectNode for UnaryMatrix {
         input_types: &[Ty],
         _concepts: &AHashMap<String, CsgConcept>,
         _csg_defs: &AHashMap<String, CsgDef>,
-    ) -> Result<Ty, OptError> {
+    ) -> Result<Ty, TypeError> {
         assert_eq!(input_types.len(), 1);
         let input_ty = input_types[0].clone();
 
@@ -80,16 +81,14 @@ impl DialectNode for UnaryMatrix {
                         shape: Shape::Matrix { width, height },
                     } => {
                         if width != height {
-                            return Err(OptError::Any { text: format!("Inverse operation expects quadratic matrix, got one with width={width} & height={height}") });
+                            return Err(TypeError::Other(format!("Inverse operation expects quadratic matrix, got one with width={width} & height={height}") ));
                         }
                     }
                     _ => {
-                        return Err(OptError::Any {
-                            text: format!(
-                                "{:?} expects operands of type matrix, got {:?}",
-                                self.op, input_ty
-                            ),
-                        })
+                        return Err(TypeError::Other(format!(
+                            "{:?} expects operands of type matrix, got {:?}",
+                            self.op, input_ty
+                        )))
                     }
                 }
 

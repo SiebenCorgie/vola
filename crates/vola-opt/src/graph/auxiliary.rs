@@ -50,7 +50,7 @@ pub struct Function {
     pub region_span: Span,
     pub def_span: Span,
     pub lambda: NodeRef,
-    pub args: SmallColl<(String, Ty)>,
+    pub args: SmallColl<(String, Ty, Span)>,
     pub return_type: Ty,
     pub no_inline: bool,
 }

@@ -112,14 +112,12 @@ impl Optimizer {
             self.push_debug_state(&format!("fw-autodiff-{entrypoint}-canonicalized"));
         }
 
-        //do type derive and dead-node elemination in order to have
+        //do dead-node elemination in order to have
         // a) clean DAG (faster / easier transformation)
-        // b) type information to emit correct zero-nodes
         self.graph
             .dne_region(region)
             .map_err(|e| VolaError::new(e.into()))?;
         let span = self.find_span(region).unwrap_or(Span::empty());
-        self.derive_region(region, span.clone(), true)?;
 
         //All entrypoints are with respect to a single scalar at this point,
         //and hooked up to the vector-value_creator already (if-needed).
@@ -246,14 +244,6 @@ impl Optimizer {
             .get(&expr_src)
             .expect("Expected derivative for output!");
 
-        //Before ending, always do a final type derive though
-        let span = self.find_span(region).unwrap_or(Span::empty());
-        self.derive_region(region, span, true).map_err(|e| {
-            //report error immediatly, since we'll discard the context
-            e.report();
-            e.error
-        })?;
-
         Ok(derivative_src)
     }
 
@@ -367,7 +357,7 @@ impl Optimizer {
                 }
 
                 //build a new call node that is connected to the lmd copy
-                let (in_region_cpy_src, _) = self.graph.import_context(
+                let in_region_cpy_src = self.import_context(
                     lmd_cpy.as_outport_location(OutputType::LambdaDeclaration),
                     region,
                 )?;
@@ -412,16 +402,6 @@ impl Optimizer {
                             .connect(output, result_port, OptEdge::value_edge_unset())?;
                     }
                 }
-                //Post derive region after AD
-                self.derive_region(
-                    RegionLocation {
-                        node: lmd_cpy,
-                        region_index: 0,
-                    },
-                    Span::empty(),
-                    true,
-                )
-                .unwrap();
 
                 self.names
                     .set(lmd_cpy.into(), format!("λ derivative of {}", callsrc.node));

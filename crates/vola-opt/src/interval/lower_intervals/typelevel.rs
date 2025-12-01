@@ -58,10 +58,10 @@ impl<'opt> LowerIntervals<'opt> {
             }
         };
 
-        let selected_type = self.optimizer.get_or_derive_type(selected, false);
+        let selected_type = self.optimizer.get_out_type_mut(selected).unwrap();
         for consumer in self.optimizer.graph.find_consumer_out(node.output(0)) {
-            let consumers_type = self.optimizer.find_type(consumer);
-            assert_eq!(consumers_type, Some(selected_type.clone()));
+            let consumers_type = self.optimizer.get_in_type_mut(consumer).unwrap();
+            assert_eq!(consumers_type, selected_type);
             //Types match, therefore replace
             let edge = self.optimizer.graph[consumer].edge.unwrap();
             let ty = self.optimizer.graph.disconnect(edge).unwrap();
@@ -91,7 +91,7 @@ impl<'opt> LowerIntervals<'opt> {
             .map(|src| {
                 let src = src.expect("UniformConstant source value must be set");
                 //If the src is an interval, map it once to lower and upper bound, otherwise just pass through
-                if self.optimizer.get_or_derive_type(src, false).is_interval() {
+                if self.optimizer.get_out_type_mut(src).unwrap().is_interval() {
                     //Note: Must exist, since we assume a TopoOrd traversal
                     self.mapping.get(&src).unwrap().clone()
                 } else {

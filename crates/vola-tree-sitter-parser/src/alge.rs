@@ -505,7 +505,8 @@ impl FromTreeSitter for ImplBlock {
                 let mut operands = SmallVec::new();
                 while let Some(next_node) = children.next() {
                     match next_node.kind() {
-                        "identifier" => operands.push(Ident::parse(ctx, dta, &next_node)?),
+                        "identifier" => operands
+                            .push((Ident::parse(ctx, dta, &next_node)?, ctx.span(&next_node))),
                         _ => {
                             let err = ParserError::UnexpectedAstNode {
                                 kind: next_node.kind().to_owned(),
@@ -561,7 +562,9 @@ impl FromTreeSitter for ImplBlock {
 
         ParserError::consume_expected_node_string(ctx, dta, children.next(), "(")?;
 
-        let naming = Ident::parse(ctx, dta, children.next().as_ref().unwrap())?;
+        let concept_arg_name = children.next().unwrap();
+        let naming = Ident::parse(ctx, dta, &concept_arg_name)?;
+        let concept_arg_span = ctx.span(&concept_arg_name);
 
         ParserError::consume_expected_node_string(ctx, dta, children.next(), ")")?;
 
@@ -576,6 +579,7 @@ impl FromTreeSitter for ImplBlock {
             operands,
             concept,
             concept_arg_name: naming,
+            concept_arg_span,
             block,
         })
     }

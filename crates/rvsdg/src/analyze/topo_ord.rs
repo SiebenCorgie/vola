@@ -128,9 +128,14 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
 
         known
     }
+
     ///Returns `nodes` ordered topological. This means for any node
     /// `n` which produces a value for node `m`, `n` will occure before `m`.
     /// If `n` and `m` are in disjunct graphs, no guarantee over which comes first is given.
+    ///
+    /// Note that this won't handle the exploration of the graph. I.e. if `n` `ocures` before `m`
+    /// indirectly (i.e. transitive), but the in-between node `x` is not in `nodes`, then `n` won't necessarly be ordered
+    /// before `m`.
     pub fn topological_order_nodes(&self, nodes: impl Iterator<Item = NodeRef>) -> Vec<NodeRef> {
         //NOTE: we use Kahn's algorithm at the moment. If this ever bottlenecks, there are
         //      parallel algorithms.

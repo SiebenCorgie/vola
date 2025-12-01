@@ -16,7 +16,7 @@ use crate::{
     csg::CsgOp,
     imm::ImmBool,
     interval::IntervalExtension,
-    passes::lower_ast::block_build::VarDef,
+    passes::{lazy_type::TypeError, lower_ast::block_build::VarDef},
     typelevel::{IntervalConstruct, NonUniformConstruct, TypeCast},
     OptEdge, Optimizer,
 };
@@ -132,7 +132,7 @@ impl Optimizer {
                     } else {
                         //must be some kind of function, try to import it, and place a call
                         let call_output = ctx
-                            .find_variable(&mut self.graph, &c.ident.0)
+                            .find_variable(self, &c.ident.0)
                             .map_err(|e| e.with_label(expr_span.clone(), "here"))?;
                         //make sure this is actually a callable
                         if let Some(callable) = self.graph.find_callabel_def(call_output) {
@@ -237,7 +237,7 @@ impl Optimizer {
                 let mut args = SmallColl::new();
                 //first arg is, by definition the _hopefull_ defined var
                 let operand = ctx
-                    .find_variable(&mut self.graph, &evalexpr.evaluator.0)
+                    .find_variable(self, &evalexpr.evaluator.0)
                     .map_err(|e| e.with_label(expr_span.clone(), "here"))?;
                 args.push(operand);
 
@@ -269,7 +269,7 @@ impl Optimizer {
                 // return the value
 
                 let mut src = ctx
-                    .find_variable(&mut self.graph, &src.0)
+                    .find_variable(self, &src.0)
                     .map_err(|e| e.with_label(expr_span.clone(), "here"))?;
 
                 //Unwrap the `accessors` list into a chain of `ConstantIndex`, each feeding into its
@@ -303,7 +303,7 @@ impl Optimizer {
             ExprTy::Ident(i) => {
                 //try to resolve the ident, or throw an error if not possible
                 let ident_node = ctx
-                    .find_variable(&mut self.graph, &i.0)
+                    .find_variable(self, &i.0)
                     .map_err(|e| e.with_label(expr_span.clone(), "here"))?;
                 Ok(ident_node)
             }
@@ -538,8 +538,31 @@ impl Optimizer {
         ctx: &mut BlockCtx,
     ) -> Result<OutportLocation, VolaError<OptError>> {
         let (condition, if_branch) = branch.conditional;
+        let condition_span = condition.span.clone();
         //First build the condition in this region
         let condition = self.build_expr(condition, region, ctx)?;
+
+        //Make sure the condition is actually a boolean op
+        match self.get_out_type_mut(condition) {
+            Ok(ty) => {
+                if !(ty.is_bool() && ty.is_scalar()) {
+                    return Err(VolaError::error_here(
+                        TypeError::Other(format!("Condition must be bool, was {ty}")).into(),
+                        condition_span,
+                        "here",
+                    ));
+                }
+            }
+            Err(_e) => {
+                return Err(VolaError::error_here(
+                    TypeError::Other(format!("Could not derive a valid type for this condition!"))
+                        .into(),
+                    condition_span,
+                    "here",
+                ))
+            }
+        }
+
         //now build the condition block.
         let (gamma, if_idx, else_idx) = self
             .graph

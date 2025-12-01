@@ -3,7 +3,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  *
- * 2024 Tendsin Mende
+ * 2025 Tendsin Mende
  */
 
 //! Analyses and transformations implemented as functions on [crate::Optimizer] or full-fledged tools.
@@ -27,9 +27,13 @@ mod cleanup_backend;
 mod constant_folding;
 mod field_inliner;
 mod imm_scalarizer;
+mod initial_type_check;
 mod inline_all;
 mod interval_dispatch;
+pub mod lazy_type;
 mod lower_ast;
 mod recursion_detection;
 mod specializer;
-mod type_derive;
+mod type_edges;
+pub use type_edges::TypeEdges;
+//mod type_derive;
