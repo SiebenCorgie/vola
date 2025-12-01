@@ -560,7 +560,15 @@ impl Optimizer {
                                 )
                                 .unwrap();
                             let other_type = lookup.get(&other_src).unwrap().clone();
-                            assert_eq!(candidate_type, other_type);
+                            if candidate_type != other_type {
+                                //Oh no, there is a type conflict on the branch results
+                                return Err(TypeError::Other(format!(
+                                    "Returns {} in first branch, but {} in {}-th",
+                                    candidate_type.unwrap_or(Ty::VOID),
+                                    other_type.unwrap_or(Ty::VOID),
+                                    rest_region + 1
+                                )));
+                            }
                         }
                         if let Some(ty) = candidate_type {
                             Ok(ResolveState::ResolvedTo(ty))

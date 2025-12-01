@@ -16,7 +16,7 @@ use crate::{
     csg::CsgOp,
     imm::ImmBool,
     interval::IntervalExtension,
-    passes::lower_ast::block_build::VarDef,
+    passes::{lazy_type::TypeError, lower_ast::block_build::VarDef},
     typelevel::{IntervalConstruct, NonUniformConstruct, TypeCast},
     OptEdge, Optimizer,
 };
@@ -538,8 +538,31 @@ impl Optimizer {
         ctx: &mut BlockCtx,
     ) -> Result<OutportLocation, VolaError<OptError>> {
         let (condition, if_branch) = branch.conditional;
+        let condition_span = condition.span.clone();
         //First build the condition in this region
         let condition = self.build_expr(condition, region, ctx)?;
+
+        //Make sure the condition is actually a boolean op
+        match self.get_out_type_mut(condition) {
+            Ok(ty) => {
+                if !(ty.is_bool() && ty.is_scalar()) {
+                    return Err(VolaError::error_here(
+                        TypeError::Other(format!("Condition must be bool, was {ty}")).into(),
+                        condition_span,
+                        "here",
+                    ));
+                }
+            }
+            Err(_e) => {
+                return Err(VolaError::error_here(
+                    TypeError::Other(format!("Could not derive a valid type for this condition!"))
+                        .into(),
+                    condition_span,
+                    "here",
+                ))
+            }
+        }
+
         //now build the condition block.
         let (gamma, if_idx, else_idx) = self
             .graph

@@ -12,6 +12,7 @@ use crate::{
     },
     common::Ty,
     imm::ImmNat,
+    passes::lazy_type::TypeError,
     OptEdge, OptError, OptNode, Optimizer,
 };
 use ahash::AHashMap;
@@ -778,8 +779,36 @@ impl Optimizer {
         //in all other cases, x>=y holds, so we take the _is-not-running_ branch.
 
         let rangespan = loopstmt.range_expr_span();
+        let lowerspan = loopstmt.bound_lower.span.clone();
+        let upperspan = loopstmt.bound_upper.span.clone();
+
         let lower_bound = self.build_expr(loopstmt.bound_lower, region, ctx)?;
         let upper_bound = self.build_expr(loopstmt.bound_upper, region, ctx)?;
+
+        //Make sure both bounds are nat
+        let lower_ty_is_nat = self
+            .get_out_type_mut(lower_bound)
+            .map(|t| t.is_scalar() && t.is_integer())
+            .map_err(|e| e.to_error())?;
+        let upper_ty_is_nat = self
+            .get_out_type_mut(upper_bound)
+            .map(|t| t.is_scalar() && t.is_integer())
+            .map_err(|e| e.to_error())?;
+
+        if !lower_ty_is_nat {
+            return Err(VolaError::error_here(
+                TypeError::Other(format!("Loop's lower bound needs to be integer typed")).into(),
+                lowerspan,
+                "here",
+            ));
+        }
+        if !upper_ty_is_nat {
+            return Err(VolaError::error_here(
+                TypeError::Other(format!("Loop's upper bound needs to be integer typed")).into(),
+                upperspan,
+                "here",
+            ));
+        }
 
         let run_condition = self
             .graph
