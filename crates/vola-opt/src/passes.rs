@@ -34,4 +34,6 @@ pub mod lazy_type;
 mod lower_ast;
 mod recursion_detection;
 mod specializer;
-mod type_derive;
+mod type_edges;
+pub use type_edges::TypeEdges;
+//mod type_derive;

@@ -28,7 +28,7 @@ use vola_ast::VolaAst;
 mod error;
 pub use error::PipelineError;
 use vola_common::{reset_file_cache, VolaError};
-use vola_opt::Optimizer;
+use vola_opt::{passes::TypeEdges, Optimizer};
 
 pub mod backends;
 
@@ -270,6 +270,12 @@ impl Pipeline {
         self.backend.opt_pre_finalize(&mut opt)?;
 
         opt.cleanup_export_lmd();
+
+        //now type-derive all live results in order for the backends to have all
+        // type information available
+        TypeEdges::setup(&mut opt)
+            .execute()
+            .map_err(|e| vec![e.to_error()])?;
 
         if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("VOLA_OPT_FINAL").is_ok() {
             opt.push_debug_state("Final Optimizer state");
