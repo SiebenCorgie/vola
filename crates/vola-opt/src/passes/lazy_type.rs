@@ -218,6 +218,14 @@ impl Optimizer {
                                 "argument should be type-set",
                             ));
                         }
+                        OutputType::LambdaDeclaration => {
+                            let span = self.find_span(port.node).unwrap_or(report_span);
+                            return Err(VolaError::error_here(
+                                TypeError::AssumptionViolation(port.into()),
+                                span,
+                                "Function was not properly declared",
+                            ));
+                        }
                         OutputType::ContextVariableArgument(_) => {
                             //NOTE: Context-variables can-not be assumed to exist, therefore push all
                             //      connected producer...

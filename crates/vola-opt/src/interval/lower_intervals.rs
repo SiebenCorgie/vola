@@ -68,6 +68,9 @@ impl<'opt> LowerIntervals<'opt> {
     }
 
     pub fn execute(mut self) -> Result<(), VolaError<OptError>> {
+        #[cfg(feature = "log")]
+        log::info!("Lower Intervals");
+
         if std::env::var("VOLA_DUMP_ALL").is_ok()
             || std::env::var("DUMP_PRE_INTERVAL_LOWER").is_ok()
         {

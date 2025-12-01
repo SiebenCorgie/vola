@@ -27,6 +27,7 @@ mod cleanup_backend;
 mod constant_folding;
 mod field_inliner;
 mod imm_scalarizer;
+mod initial_type_check;
 mod inline_all;
 mod interval_dispatch;
 pub mod lazy_type;
