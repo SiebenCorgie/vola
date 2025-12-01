@@ -17,7 +17,7 @@ use rvsdg_viewer::View;
 use vola_ast::csg::{CsgConcept, CsgDef};
 use vola_common::Span;
 
-use crate::{common::Ty, imm::ImmBool, DialectNode, OptError, OptNode};
+use crate::{common::Ty, imm::ImmBool, passes::lazy_type::TypeError, DialectNode, OptNode};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UnaryBoolOp {
@@ -66,19 +66,17 @@ impl DialectNode for UnaryBool {
         input_types: &[Ty],
         _concepts: &AHashMap<String, CsgConcept>,
         _csg_defs: &AHashMap<String, CsgDef>,
-    ) -> Result<Ty, OptError> {
+    ) -> Result<Ty, TypeError> {
         assert_eq!(input_types.len(), 1);
         let input_ty = input_types[0].clone();
 
         match &self.op {
             UnaryBoolOp::Not => {
                 if !input_ty.is_scalar_arithmetic() {
-                    return Err(OptError::Any {
-                        text: format!(
-                            "{:?} expects algebraic operand (scalar, vector, matrix, tensor) got {:?}",
-                            self.op, input_ty
-                        ),
-                    });
+                    return Err(TypeError::Other(format!(
+                        "{:?} expects algebraic operand (scalar, vector, matrix, tensor) got {:?}",
+                        self.op, input_ty
+                    )));
                 }
                 //seem allright, for neg, we return the _same_ datatype as we get
                 Ok(input_ty)
@@ -176,25 +174,23 @@ impl DialectNode for BinaryBool {
         input_types: &[Ty],
         _concepts: &AHashMap<String, CsgConcept>,
         _csg_defs: &AHashMap<String, CsgDef>,
-    ) -> Result<Ty, OptError> {
+    ) -> Result<Ty, TypeError> {
         assert_eq!(input_types.len(), 2);
         let t0 = input_types[0].clone();
         let t1 = input_types[1].clone();
 
         //NOTE same test regardless if its & or |
         if t0 != t1 {
-            return Err(OptError::Any {
-                text: format!(
-                    "{:?} expectes the same type for both operands, got {} & {}",
-                    self.op, t0, t1
-                ),
-            });
+            return Err(TypeError::Other(format!(
+                "{:?} expectes the same type for both operands, got {} & {}",
+                self.op, t0, t1
+            )));
         }
 
         match t0{
             Ty::SCALAR_BOOL  =>  Ok(Ty::SCALAR_BOOL),
             any => {
-                Err(OptError::Any { text: format!("Cannot use comperator {:?} on {}. Consider breaking it down into a single bool value", self.op, any) })
+                Err(TypeError::Other(format!("Cannot use comperator {:?} on {}. Consider breaking it down into a single bool value", self.op, any) ))
             }
         }
     }

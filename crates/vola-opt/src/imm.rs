@@ -14,7 +14,8 @@ use vola_ast::csg::{CsgConcept, CsgDef};
 
 use crate::{
     common::{DataType, Shape, Ty},
-    DialectNode, OptError, OptNode,
+    passes::lazy_type::TypeError,
+    DialectNode, OptNode,
 };
 use rvsdg_viewer::Color;
 
@@ -82,7 +83,7 @@ impl DialectNode for ImmScalar {
         _inputs: &[Ty],
         _concepts: &AHashMap<String, CsgConcept>,
         _csg_defs: &ahash::AHashMap<String, CsgDef>,
-    ) -> Result<Ty, OptError> {
+    ) -> Result<Ty, TypeError> {
         //NOTE: all literals are translated to a _scalar_
         Ok(Ty::scalar_type(DataType::Real))
     }
@@ -136,7 +137,7 @@ impl DialectNode for ImmVector {
         _inputs: &[Ty],
         _concepts: &AHashMap<String, CsgConcept>,
         _csg_defs: &ahash::AHashMap<String, CsgDef>,
-    ) -> Result<Ty, OptError> {
+    ) -> Result<Ty, TypeError> {
         //NOTE: all literals are translated to a _scalar_
         Ok(Ty::Shaped {
             ty: DataType::Real,
@@ -209,7 +210,7 @@ impl DialectNode for ImmMatrix {
         _inputs: &[Ty],
         _concepts: &AHashMap<String, CsgConcept>,
         _csg_defs: &ahash::AHashMap<String, CsgDef>,
-    ) -> Result<Ty, OptError> {
+    ) -> Result<Ty, TypeError> {
         //NOTE: all literals are translated to a _scalar_
         Ok(Ty::Shaped {
             ty: DataType::Real,
@@ -270,7 +271,7 @@ impl DialectNode for ImmNat {
         _inputs: &[Ty],
         _concepts: &AHashMap<String, CsgConcept>,
         _csg_defs: &ahash::AHashMap<String, CsgDef>,
-    ) -> Result<Ty, OptError> {
+    ) -> Result<Ty, TypeError> {
         //NOTE: all literals are translated to a _scalar_
         Ok(Ty::scalar_type(DataType::Integer))
     }
@@ -323,7 +324,7 @@ impl DialectNode for ImmBool {
         _inputs: &[Ty],
         _concepts: &AHashMap<String, CsgConcept>,
         _csg_defs: &ahash::AHashMap<String, CsgDef>,
-    ) -> Result<Ty, OptError> {
+    ) -> Result<Ty, TypeError> {
         //NOTE: all literals are translated to a _scalar_
         Ok(Ty::scalar_type(DataType::Bool))
     }

@@ -915,7 +915,7 @@ impl Optimizer {
                 let ty = s
                     .node
                     .try_derive_type(&input_config, &self.concepts, &self.csg_node_defs)
-                    .map_err(|e| VolaError::error_here(e, span, "here"))?;
+                    .map_err(|e| VolaError::error_here(e.into(), span, "here"))?;
                 smallvec![(ty, node.output(0))]
             }
             NodeType::Apply(a) => {

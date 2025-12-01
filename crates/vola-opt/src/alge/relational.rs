@@ -19,7 +19,8 @@ use vola_common::Span;
 use crate::{
     common::{DataType, Ty},
     imm::{ImmBool, ImmNat, ImmScalar},
-    DialectNode, OptError, OptNode,
+    passes::lazy_type::TypeError,
+    DialectNode, OptNode,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -73,25 +74,23 @@ impl DialectNode for BinaryRel {
         input_types: &[Ty],
         _concepts: &AHashMap<String, CsgConcept>,
         _csg_defs: &AHashMap<String, CsgDef>,
-    ) -> Result<Ty, OptError> {
+    ) -> Result<Ty, TypeError> {
         assert_eq!(input_types.len(), 2);
         let t0 = input_types[0].clone();
         let t1 = input_types[1].clone();
 
         //NOTE same test regardless if its & or |
         if t0 != t1 {
-            return Err(OptError::Any {
-                text: format!(
-                    "{:?} expectes the same type for both operands, got {} & {}",
-                    self.op, t0, t1
-                ),
-            });
+            return Err(TypeError::Other(format!(
+                "{:?} expectes the same type for both operands, got {} & {}",
+                self.op, t0, t1
+            )));
         }
 
         match &t0{
             &Ty::SCALAR_INT | &Ty::SCALAR_REAL => Ok(Ty::scalar_type(DataType::Bool)),
             any => {
-                Err(OptError::Any { text: format!("Cannot use comperator {:?} on {}. Consider breaking it down to either a simple scalar or natural value", self.op, any) })
+                Err(TypeError::Other(format!("Cannot use comperator {:?} on {}. Consider breaking it down to either a simple scalar or natural value", self.op, any) ))
             }
         }
     }

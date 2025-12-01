@@ -28,7 +28,7 @@ use rvsdg::{
 use thiserror::Error;
 use vola_common::{Span, VolaError};
 
-use crate::{common::Ty, OptEdge, OptError, Optimizer, TypeState};
+use crate::{common::Ty, OptEdge, Optimizer, TypeState};
 
 ///Implements the immutable type resolver
 mod immutable;
@@ -69,6 +69,10 @@ pub enum TypeError {
     UnconnectedPort(AttribLocation),
     #[error("Type state derive got stuck at {0}")]
     Stuck(AttribLocation),
+    #[error("Shape Error: {0}")]
+    ShapeError(String),
+    #[error("{0}")]
+    Other(String),
 }
 
 enum ResolveState {
@@ -454,7 +458,7 @@ impl Optimizer {
         &self,
         port: OutportLocation,
         lookup: &AHashMap<OutportLocation, Option<Ty>>,
-    ) -> Result<ResolveState, OptError> {
+    ) -> Result<ResolveState, TypeError> {
         match self.graph[port.node].into_abstract() {
             AbstractNodeType::Simple => {
                 assert_eq!(self.graph[port.node].outputs().len(), 1);
@@ -496,7 +500,7 @@ impl Optimizer {
                     .graph
                     .inport_src(InputType::Result(index).to_location(lmd.node))
                 else {
-                    return Err(OptError::TypeError(TypeError::LambdaResultUnset(index)));
+                    return Err(TypeError::LambdaResultUnset(index));
                 };
                 if let Some(src_type) = lookup.get(&result_src).as_ref().unwrap() {
                     Ok(ResolveState::ResolvedTo(src_type.clone()))

@@ -9,7 +9,7 @@
 use rvsdg::smallvec::SmallVec;
 use std::fmt::Display;
 
-use crate::error::OptError;
+use crate::passes::lazy_type::TypeError;
 
 ///All data-types we might encounter in the optimizer
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
@@ -61,13 +61,13 @@ pub enum Shape {
 
 impl Shape {
     ///Tries to build the new shape, based on the given index
-    pub(crate) fn try_derive_access_index(&self, index: usize) -> Result<Shape, OptError> {
+    pub(crate) fn try_derive_access_index(&self, index: usize) -> Result<Shape, TypeError> {
         match self {
             Self::Vec { width } => {
                 if index >= *width {
-                    Err(OptError::Any {
-                        text: format!("Vector of width {width} cannot be indexed with {index}"),
-                    })
+                    Err(TypeError::ShapeError(format!(
+                        "Vector of width {width} cannot be indexed with {index}"
+                    )))
                 } else {
                     //Otherwise always resolves to an scalar
                     Ok(Self::Scalar)
@@ -75,17 +75,17 @@ impl Shape {
             }
             Self::Matrix { width, height } => {
                 if index >= *width {
-                    Err(OptError::Any {
-                        text: format!("Matrix {width}x{height} cannot be indexed with {index}"),
-                    })
+                    Err(TypeError::ShapeError(format!(
+                        "Matrix {width}x{height} cannot be indexed with {index}"
+                    )))
                 } else {
                     Ok(Self::Vec { width: *height })
                 }
             }
             Self::Tensor { sizes } => match sizes.len() {
-                0 => Err(OptError::Any {
-                    text: "Encountered zero dimensional tensor!".to_owned(),
-                }),
+                0 => Err(TypeError::ShapeError(
+                    "Encountered zero dimensional tensor!".to_owned(),
+                )),
                 1 => Self::Vec { width: sizes[0] }.try_derive_access_index(index),
                 2 => Self::Matrix {
                     width: sizes[1],
@@ -94,21 +94,20 @@ impl Shape {
                 .try_derive_access_index(index),
                 _any => {
                     if index >= sizes[0] {
-                        Err(OptError::Any {
-                            text: format!(
-                                "Cannot index tensor dimension of width={} with {index}",
-                                sizes[0]
-                            ),
-                        })
+                        Err(TypeError::ShapeError(format!(
+                            "Cannot index tensor dimension of width={} with {index}",
+                            sizes[0]
+                        )))
                     } else {
                         let new_dim = sizes[1..].iter().map(|d| *d).collect();
                         Ok(Self::Tensor { sizes: new_dim })
                     }
                 }
             },
-            other_ty => Err(OptError::Any {
-                text: format!("Cannot index into {:?}", other_ty),
-            }),
+            other_ty => Err(TypeError::ShapeError(format!(
+                "Cannot index into {:?}",
+                other_ty
+            ))),
         }
     }
 }
@@ -378,7 +377,7 @@ impl Ty {
     }
 
     ///Tries to derive a type that would be produced by indexing with `index` into the `Ty`.
-    pub(crate) fn try_derive_access_index(&self, index: usize) -> Result<Ty, OptError> {
+    pub(crate) fn try_derive_access_index(&self, index: usize) -> Result<Ty, TypeError> {
         match self {
             //Basically a scalar at this point, so we can't index
             Self::Shaped { ty, shape } => {
@@ -392,23 +391,24 @@ impl Ty {
                 if index <= 1 {
                     Ok(inner.as_ref().clone())
                 } else {
-                    Err(OptError::Any {
-                    text: format!("Interval cannot be indexed with {}, only 0 for the lower bound, and 1 for the upper bound are valid", index),
-                    })
+                    Err(TypeError::Other(format!("Interval cannot be indexed with {}, only 0 for the lower bound, and 1 for the upper bound are valid", index),
+                    ))
                 }
             }
             Self::Tuple(t) => {
                 if let Some(inner) = t.get(index) {
                     Ok(inner.clone())
                 } else {
-                    Err(OptError::Any {
-                        text: format!("Tuple of size {} has no element at index {index}", t.len()),
-                    })
+                    Err(TypeError::Other(format!(
+                        "Tuple of size {} has no element at index {index}",
+                        t.len()
+                    )))
                 }
             }
-            other_ty => Err(OptError::Any {
-                text: format!("Cannot index into {:?}", other_ty),
-            }),
+            other_ty => Err(TypeError::Other(format!(
+                "Cannot index into {:?}",
+                other_ty
+            ))),
         }
     }
 }

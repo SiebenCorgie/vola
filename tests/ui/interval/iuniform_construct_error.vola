@@ -1,5 +1,5 @@
 //BEGIN-CONFIG
-//ERROR:Type derive failed: Cannot construct "List" from interval<vec4<Real>>. Try constructing an interval from lists<!!>Type derive failed: Result is of type "vec2<Real>", but result was untyped.
+//ERROR:Cannot construct "List" from interval<vec4<Real>>. Try constructing an interval from lists
 //END-CONFIG
 
 export fn call(p: real) -> vec2{

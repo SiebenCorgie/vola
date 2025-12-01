@@ -16,7 +16,7 @@ use rvsdg::{
 };
 use thiserror::Error;
 
-use crate::{common::Ty, DialectNode, OptError, OptNode};
+use crate::{common::Ty, passes::lazy_type::TypeError, DialectNode, OptNode};
 
 pub mod extension;
 pub mod lower_intervals;
@@ -114,7 +114,7 @@ impl DialectNode for IntervalExtension {
         input_types: &[Ty],
         _concepts: &ahash::AHashMap<String, vola_ast::csg::CsgConcept>,
         _csg_defs: &ahash::AHashMap<String, vola_ast::csg::CsgDef>,
-    ) -> Result<Ty, OptError> {
+    ) -> Result<Ty, TypeError> {
         assert_eq!(input_types.len(), 3, "should have 3 inputs");
 
         // Now we have to verify, that the input matches the expectations. I.e.
@@ -122,26 +122,26 @@ impl DialectNode for IntervalExtension {
         // shape as the bounds. If so, return the Interval of the input param.
 
         if !input_types[0].is_shaped() || input_types[0] == Ty::CSG {
-            return Err(OptError::TypeDeriveError {
-                text: "Can only create intervals for (shaped) arithmetic types".to_owned(),
-            });
+            return Err(TypeError::Other(
+                "Can only create intervals for (shaped) arithmetic types".to_owned(),
+            ));
         }
 
         //Make sure the dynamic-value and the interval-type match
         if let (dynty, Ty::Interval(ity)) = (&input_types[1], &input_types[2]) {
             if dynty != ity.as_ref() {
-                Err(OptError::TypeDeriveError {
-                    text: format!("Dynamic value does not match interval-type: {dynty} != {ity}"),
-                })
+                Err(TypeError::Other(format!(
+                    "Dynamic value does not match interval-type: {dynty} != {ity}"
+                )))
             } else {
                 //Its alright, therefore create the interval version
                 // of the value's type
                 Ok(Ty::Interval(Box::new(input_types[0].clone())))
             }
         } else {
-            Err(OptError::TypeDeriveError {
-                text: format!("Third parameter must be interval"),
-            })
+            Err(TypeError::Other(format!(
+                "Third parameter must be interval"
+            )))
         }
     }
 

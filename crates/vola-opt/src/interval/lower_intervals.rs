@@ -183,7 +183,12 @@ impl<'opt> LowerIntervals<'opt> {
     fn handle_simple_node(&mut self, node: NodeRef) -> Result<(), VolaError<OptError>> {
         //if the node produces any interval edges, handle it
         for port in self.optimizer.graph.outports(node) {
-            if self.optimizer.get_out_type_mut(port).unwrap().is_interval() {
+            if self
+                .optimizer
+                .get_out_type_mut(port)
+                .map_err(|e| e.to_error())?
+                .is_interval()
+            {
                 self.handle_value(port)?
             }
         }

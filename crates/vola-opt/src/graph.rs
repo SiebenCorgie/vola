@@ -12,6 +12,7 @@ use std::{any::Any, fmt::Debug};
 
 use crate::error::OptError;
 use crate::imm::ImmBool;
+use crate::passes::lazy_type::TypeError;
 use crate::{common::Ty, Optimizer};
 use ahash::AHashMap;
 use rvsdg::attrib::AttribLocation;
@@ -50,10 +51,11 @@ pub trait DialectNode: LangNode + Any + View {
         _input_types: &[Ty],
         _concepts: &AHashMap<String, CsgConcept>,
         _csg_defs: &ahash::AHashMap<String, CsgDef>,
-    ) -> Result<Ty, OptError> {
-        Err(OptError::Any {
-            text: format!("Type resolution not implemented for {}", self.name()),
-        })
+    ) -> Result<Ty, TypeError> {
+        Err(TypeError::Other(format!(
+            "Type resolution not implemented for {}",
+            self.name()
+        )))
     }
 
     ///Used to check if two nodes implement the same operation.

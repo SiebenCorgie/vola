@@ -80,13 +80,9 @@ impl Optimizer {
             //Not yet resolved, therefore do the resolving now.
             match self
                 .try_local_port_resolve(port, &local_type_lookup)
-                .map_err(|_e| {
+                .map_err(|e| {
                     let span = self.find_span(port.node).unwrap_or(src_span.clone());
-                    VolaError::error_here(
-                        TypeError::Stuck(port.into()),
-                        span,
-                        "Type derive stuck while calculating this type",
-                    )
+                    VolaError::error_here(e, span, "Type derive stuck while calculating this type")
                 })? {
                 ResolveState::ResolvedTo(ty) => {
                     let old = local_type_lookup.insert(port, Some(ty));
