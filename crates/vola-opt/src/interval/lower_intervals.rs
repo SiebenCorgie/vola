@@ -163,12 +163,6 @@ impl<'opt> LowerIntervals<'opt> {
         //TODO: don't do that once a fix for #41 lands.
         self.optimizer.inline_all().map_err(|e| VolaError::new(e))?;
 
-        //Since we might change a lot of stuff here, do a type-derive
-        // afterwards...
-        self.optimizer
-            .type_derive(true)
-            .map_err(|_errors| VolaError::new(IntervalError::DoesNotPassTypeDerive.into()))?;
-
         if std::env::var("VOLA_DUMP_ALL").is_ok()
             || std::env::var("DUMP_POST_INTERVAL_LOWER").is_ok()
         {

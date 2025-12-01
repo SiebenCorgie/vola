@@ -1122,9 +1122,6 @@ impl Optimizer {
         }
         //now delete the old eval-node, so it won't be re-discovered
         let _ = self.graph.remove_node(eval).unwrap();
-        //and re-type the parent region
-        let type_region_span = self.find_span(most_outer_region).unwrap_or(Span::empty());
-        self.derive_region(most_outer_region, type_region_span, true)?;
 
         Ok(collected)
     }
