@@ -38,7 +38,9 @@ pub enum BuildinOp {
     Pow,
     Min,
     Max,
+    ///Called as `mix(a, b, mix_factor)`
     Mix,
+    ///Called as `clamp(value, lower_bound, upper_bound)`
     Clamp,
 }
 

@@ -31,36 +31,56 @@ impl<'opt> LowerIntervals<'opt> {
 
         let (start, end) = match op {
             BuildinOp::Clamp => {
-                return Err(VolaError::error_here(
-                    IntervalError::UnsupportedOp("clamp".to_string()).into(),
-                    span,
-                    "here",
-                ))
+                //This works similar to the min/max case. The clamp of an interval is just the interval-start max-ed with
+                // the lower bound and the interval-end min-ed with the upper bound.
+                // I.e given clamp(a, min, max) -> [max(a.start, min.start) .. (min(a.end, max.end))]
+                let (start_value, end_value) = get_interval_for_input(0).unwrap();
+                let (start_bound_lower, _end_bound_lower) = get_interval_for_input(1).unwrap();
+                let (_start_bound_upper, end_bound_upper) = get_interval_for_input(2).unwrap();
+                //now build the new interval
+                self.optimizer
+                    .graph
+                    .on_region(&region, |reg| {
+                        let start = route_new!(
+                            reg,
+                            BuildinOp::Max,
+                            span.clone(),
+                            [start_value, start_bound_lower]
+                        );
+                        let end = route_new!(
+                            reg,
+                            BuildinOp::Min,
+                            span.clone(),
+                            [end_value, end_bound_upper]
+                        );
+                        (start.output(0), end.output(0))
+                    })
+                    .unwrap()
             }
             BuildinOp::Cross => {
                 return Err(VolaError::error_here(
-                    IntervalError::UnsupportedOp("clamp".to_string()).into(),
+                    IntervalError::UnsupportedOp("cross".to_string()).into(),
                     span,
                     "here",
                 ))
             }
             BuildinOp::Dot => {
                 return Err(VolaError::error_here(
-                    IntervalError::UnsupportedOp("clamp".to_string()).into(),
+                    IntervalError::UnsupportedOp("dot".to_string()).into(),
                     span,
                     "here",
                 ))
             }
             BuildinOp::Exp => {
                 return Err(VolaError::error_here(
-                    IntervalError::UnsupportedOp("clamp".to_string()).into(),
+                    IntervalError::UnsupportedOp("exp".to_string()).into(),
                     span,
                     "here",
                 ))
             }
             BuildinOp::Length => {
                 return Err(VolaError::error_here(
-                    IntervalError::UnsupportedOp("clamp".to_string()).into(),
+                    IntervalError::UnsupportedOp("length".to_string()).into(),
                     span,
                     "here",
                 ))
@@ -82,21 +102,21 @@ impl<'opt> LowerIntervals<'opt> {
             }
             BuildinOp::Mix => {
                 return Err(VolaError::error_here(
-                    IntervalError::UnsupportedOp("clamp".to_string()).into(),
+                    IntervalError::UnsupportedOp("mix".to_string()).into(),
                     span,
                     "here",
                 ))
             }
             BuildinOp::Pow => {
                 return Err(VolaError::error_here(
-                    IntervalError::UnsupportedOp("clamp".to_string()).into(),
+                    IntervalError::UnsupportedOp("pow".to_string()).into(),
                     span,
                     "here",
                 ))
             }
             BuildinOp::SquareRoot => {
                 return Err(VolaError::error_here(
-                    IntervalError::UnsupportedOp("clamp".to_string()).into(),
+                    IntervalError::UnsupportedOp("sqrt".to_string()).into(),
                     span,
                     "here",
                 ))
