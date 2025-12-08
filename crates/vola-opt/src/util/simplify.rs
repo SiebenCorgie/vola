@@ -16,7 +16,7 @@ use crate::{
     common::{DataType, Shape, Ty},
     imm::ImmScalar,
     route_new,
-    typelevel::{ConstantIndex, UniformConstruct},
+    typelevel::{ConstantIndex, IntervalConstruct, UniformConstruct},
     Optimizer,
 };
 
@@ -98,7 +98,8 @@ impl<'opt> Simplify<'opt> {
         };
 
         let index_count = match self.opt.get_in_type_mut(self.node.input(0)).unwrap() {
-            Ty::Interval(i) => extract_component_count(i.as_ref())?,
+            //Cannot lower length for interval-valued length call
+            Ty::Interval(_i) => return None,
             other => extract_component_count(&other)?,
         };
 
@@ -236,31 +237,102 @@ impl<'opt> Simplify<'opt> {
             }
         };
 
-        let index_count = match self.opt.get_in_type_mut(self.node.input(0)).unwrap() {
-            Ty::Interval(i) => extract_component_count(i.as_ref())?,
-            other => extract_component_count(&other)?,
-        };
+        let region = self.opt.graph[self.node].parent.unwrap();
+        let span = self.opt.find_span(self.node).unwrap_or(Span::empty());
+        let mut node_collector = Vec::new();
+        let a = self.opt.graph.inport_src(self.node.input(0)).unwrap();
+        let b = self.opt.graph.inport_src(self.node.input(1)).unwrap();
+
+        struct IntervalSrcs {
+            astart: OutportLocation,
+            aend: OutportLocation,
+            bstart: OutportLocation,
+            bend: OutportLocation,
+        }
+
+        let (index_count, interval_bounds) =
+            match self.opt.get_in_type_mut(self.node.input(0)).unwrap() {
+                Ty::Interval(i) => {
+                    //For intervals, load the lower and upper bounds, and return those. They will be used by the
+                    // extraction function to setup scalar intervals for each index.
+
+                    let interval_extractors = self
+                        .opt
+                        .graph
+                        .on_region(&region, |reg| {
+                            let astart = route_new!(reg, ConstantIndex::new(0), span.clone(), [a]);
+                            node_collector.push(astart);
+                            let aend = route_new!(reg, ConstantIndex::new(1), span.clone(), [a]);
+                            node_collector.push(aend);
+
+                            let bstart = route_new!(reg, ConstantIndex::new(0), span.clone(), [b]);
+                            node_collector.push(bstart);
+                            let bend = route_new!(reg, ConstantIndex::new(1), span.clone(), [b]);
+                            node_collector.push(bend);
+
+                            IntervalSrcs {
+                                astart: astart.output(0),
+                                aend: aend.output(0),
+                                bstart: bstart.output(0),
+                                bend: bend.output(0),
+                            }
+                        })
+                        .unwrap();
+
+                    (
+                        extract_component_count(i.as_ref())?,
+                        Some(interval_extractors),
+                    )
+                }
+                other => (extract_component_count(&other)?, None),
+            };
 
         if index_count < 2 {
             return None;
         }
 
-        let region = self.opt.graph[self.node].parent.unwrap();
-        let span = self.opt.find_span(self.node).unwrap_or(Span::empty());
-        let mut node_collector = Vec::new();
-
-        let a = self.opt.graph.inport_src(self.node.input(0)).unwrap();
-        let b = self.opt.graph.inport_src(self.node.input(1)).unwrap();
-
         let extract_index = |g: &mut RegionBuilder<_, _>,
                              collector: &mut Vec<NodeRef>,
                              span: Span,
                              index: usize| {
-            let ia = route_new!(g, ConstantIndex::new(index), span.clone(), [a]);
-            collector.push(ia);
-            let ib = route_new!(g, ConstantIndex::new(index), span, [b]);
-            collector.push(ib);
-            (ia, ib)
+            if let Some(bounds) = &interval_bounds {
+                // we already pre-fetched the interval bound,
+                // now just setup the scalar-interval for the given index
+                // for both a and b, and return
+
+                let ia_start =
+                    route_new!(g, ConstantIndex::new(index), span.clone(), [bounds.astart]);
+                collector.push(ia_start);
+                let ia_end = route_new!(g, ConstantIndex::new(index), span.clone(), [bounds.aend]);
+                collector.push(ia_end);
+                let ia = route_new!(
+                    g,
+                    IntervalConstruct::default(),
+                    span.clone(),
+                    [ia_start.output(0), ia_end.output(0)]
+                );
+                collector.push(ia);
+
+                let ib_start =
+                    route_new!(g, ConstantIndex::new(index), span.clone(), [bounds.bstart]);
+                collector.push(ib_start);
+                let ib_end = route_new!(g, ConstantIndex::new(index), span.clone(), [bounds.bend]);
+                collector.push(ib_end);
+                let ib = route_new!(
+                    g,
+                    IntervalConstruct::default(),
+                    span.clone(),
+                    [ib_start.output(0), ib_end.output(0)]
+                );
+                collector.push(ib);
+                (ia, ib)
+            } else {
+                let ia = route_new!(g, ConstantIndex::new(index), span.clone(), [a]);
+                collector.push(ia);
+                let ib = route_new!(g, ConstantIndex::new(index), span, [b]);
+                collector.push(ib);
+                (ia, ib)
+            }
         };
 
         let new = self
@@ -345,7 +417,9 @@ impl<'opt> Simplify<'opt> {
         };
 
         let index_count = match self.opt.get_in_type_mut(self.node.input(0)).unwrap() {
-            Ty::Interval(i) => extract_component_count(i.as_ref())?,
+            //Not yet implemented, see the dot-implementation (mainly the extract_index closure)
+            // on how that would work in practice...
+            Ty::Interval(_i) => return None,
             other => extract_component_count(&other)?,
         };
 

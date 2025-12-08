@@ -296,7 +296,13 @@ impl BuildinOp {
                     )));
                 }
 
-                Ok(Ty::SCALAR_REAL)
+                //Keep the _interval-ness_
+                let result_type = if sig[0].is_interval() {
+                    Ty::Interval(Box::new(Ty::SCALAR_REAL))
+                } else {
+                    Ty::SCALAR_REAL
+                };
+                Ok(result_type)
             }
             Self::Cross => {
                 if sig.len() != 2 {
