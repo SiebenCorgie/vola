@@ -33,7 +33,7 @@ impl<'opt> LowerIntervals<'opt> {
         };
 
         //Regardless of early-exit or not, push the loop body
-        self.region_queue.push_front(loop_body);
+        self.region_queue.push_back(loop_body);
 
         let parent_region = self.optimizer.graph[node].parent.unwrap();
 
@@ -92,7 +92,7 @@ impl<'opt> LowerIntervals<'opt> {
         //push each branch region
         for region_index in 0..region_count {
             self.region_queue
-                .push_front(RegionLocation { node, region_index });
+                .push_back(RegionLocation { node, region_index });
         }
 
         let mut changed_any = false;

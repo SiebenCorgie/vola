@@ -321,6 +321,12 @@ impl BuildinOp {
                     )));
                 }
 
+                if sig[0].shape().unwrap().component_count() != 3 {
+                    return Err(TypeError::ShapeError(
+                        "Cross product is only valid on 3-component vectors".to_string(),
+                    ));
+                }
+
                 //Cross returns the same vector type as supplied
                 Ok(sig[0].clone())
             }

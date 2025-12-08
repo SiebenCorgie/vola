@@ -12,7 +12,7 @@
 //!
 //! 1. Any argument of a λ/ω-Node has a valid type-tag
 //! 2. Any result of a λ/ω-Node has a valid type-tag
-//! 3. Simple-Nodes with no inputs always successfuly output a type on [DialectNode::try_derive_type]
+//! 3. Simple-Nodes with no inputs always successfuly output a type on [crate::DialectNode::try_derive_type]
 //! 4. All inputs of a simple/apply node are in fact connected
 //! 5. All results of a lambda/phi node are in fact connected
 //!
@@ -84,13 +84,13 @@ enum ResolveState {
 
 impl Optimizer {
     ///Returns the type of `outport` without setting any edge-types in the process. If you have mutable
-    /// access to the [Optimizer], prefer [get_out_type_mut].
+    /// access to the [Optimizer], prefer [get_out_type_mut](crate::Optimizer::get_out_type_mut).
     pub fn get_out_type(&self, outport: OutportLocation) -> Result<Ty, VolaError<TypeError>> {
         self.type_discover(outport)
     }
 
     ///Returns the type of `inport` without setting any edge-types in the process. If you have mutable
-    /// access to the [Optimizer], prefer [get_in_type_mut].
+    /// access to the [Optimizer], prefer [get_in_type_mut](crate::Optimizer::get_in_type_mut).
     pub fn get_in_type(&self, inport: InportLocation) -> Result<Ty, VolaError<TypeError>> {
         if let Some(src) = self.graph.inport_src(inport) {
             self.get_out_type(src)

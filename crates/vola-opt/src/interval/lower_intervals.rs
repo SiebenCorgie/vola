@@ -54,6 +54,8 @@ pub struct LowerIntervals<'opt> {
     ///Maps a interval port to the already resolved lower and upper bound of some _primitive_ type
     pub(crate) mapping: AHashMap<OutportLocation, (OutportLocation, OutportLocation)>,
     pub(crate) region_queue: VecDeque<RegionLocation>,
+    ///The currently used queue of nodes in a region.
+    pub(crate) node_queue: VecDeque<NodeRef>,
 }
 
 impl<'opt> LowerIntervals<'opt> {
@@ -63,8 +65,13 @@ impl<'opt> LowerIntervals<'opt> {
         LowerIntervals {
             optimizer,
             mapping: AHashMap::default(),
+            node_queue: VecDeque::with_capacity(0),
             region_queue,
         }
+    }
+
+    pub fn inject_node(&mut self, node: NodeRef) {
+        self.node_queue.push_front(node);
     }
 
     pub fn execute(mut self) -> Result<(), VolaError<OptError>> {
@@ -89,22 +96,28 @@ impl<'opt> LowerIntervals<'opt> {
         // Since we are building the live-node/topo-ord for each region only once they are touched, we
         // can modify interfaces of λ-nodes _before_ their region is actually lowered.
 
-        while let Some(next_region) = self.region_queue.pop_back() {
+        while let Some(next_region) = self.region_queue.pop_front() {
             //discover live nodes and order them
             let live_in_region = self.optimizer.graph.live_nodes_in_region(next_region);
-            let mut topoord = self
+            let topoord = self
                 .optimizer
                 .graph
                 .topological_order_nodes(live_in_region.into_iter());
 
+            assert!(
+                self.node_queue.is_empty(),
+                "Expected node-queue to be empty when reusing"
+            );
+            self.node_queue = VecDeque::from(topoord);
+
             //Now, pre-handle any none_simple node, i.e. Control-flow and inter-procedural stuff
             // We must do that, because this changes the live-nodes in this region.
             let mut changed_any = false;
-            for node in &topoord {
-                let pre_transform_changed_any = match self.optimizer.graph[*node].into_abstract() {
-                    AbstractNodeType::Lambda => self.lower_lambda(*node)?,
-                    AbstractNodeType::Theta => self.lower_theta(*node)?,
-                    AbstractNodeType::Gamma => self.lower_gamma(*node)?,
+            for node in self.node_queue.clone() {
+                let pre_transform_changed_any = match self.optimizer.graph[node].into_abstract() {
+                    AbstractNodeType::Lambda => self.lower_lambda(node)?,
+                    AbstractNodeType::Theta => self.lower_theta(node)?,
+                    AbstractNodeType::Gamma => self.lower_gamma(node)?,
                     _other => false,
                 };
                 if pre_transform_changed_any {
@@ -116,17 +129,18 @@ impl<'opt> LowerIntervals<'opt> {
             // might have become invalid
             if changed_any {
                 let live_in_region = self.optimizer.graph.live_nodes_in_region(next_region);
-                topoord = self
-                    .optimizer
-                    .graph
-                    .topological_order_nodes(live_in_region.into_iter());
+                self.node_queue = VecDeque::from(
+                    self.optimizer
+                        .graph
+                        .topological_order_nodes(live_in_region.into_iter()),
+                );
             }
 
             //TODO: Maybe we want to use the per-port liveness analysis here? There we could _not process_ dead
             //      outputs. But not sure if the additional granularity is really needed.
             // NOTE: This _might_ enqueue additional regions, if any of the non-simple nodes decide so while
             //       being lowered.
-            for node in topoord {
+            while let Some(node) = self.node_queue.pop_front() {
                 match self.optimizer.graph[node].into_abstract() {
                     AbstractNodeType::Simple => self.handle_simple_node(node)?,
                     AbstractNodeType::Lambda

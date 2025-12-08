@@ -12,7 +12,9 @@ use vola_common::{Span, VolaError};
 use crate::{
     alge::buildin::{Buildin, BuildinOp},
     interval::{lower_intervals::LowerIntervals, IntervalError},
-    route_new, OptError,
+    route_new,
+    util::Simplify,
+    OptError,
 };
 
 impl<'opt> LowerIntervals<'opt> {
@@ -58,11 +60,13 @@ impl<'opt> LowerIntervals<'opt> {
                     .unwrap()
             }
             BuildinOp::Cross => {
-                return Err(VolaError::error_here(
-                    IntervalError::UnsupportedOp("cross".to_string()).into(),
-                    span,
-                    "here",
-                ))
+                //simplify the cross product and prepend the created nodes
+                let new_expr = Simplify::new(self.optimizer, node, true)
+                    .lower_cross()
+                    .unwrap();
+                //Now prepend the newly created nodes
+                self.node_queue.prepend(new_expr);
+                return Ok(());
             }
             BuildinOp::Dot => {
                 return Err(VolaError::error_here(

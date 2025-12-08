@@ -380,7 +380,7 @@ impl Optimizer {
                 }
                 BuildinOp::Clamp => {
                     //clamp(x, minval, maxval)
-                    //canonicalize as min(max(x, minval), maxval);
+                    //canonicalize as min(max(x, ^minval), maxval);
 
                     if !self.config.autodiff.canonicalize_undiff {
                         //None AD, since a > 1 && a < 0 is undefined

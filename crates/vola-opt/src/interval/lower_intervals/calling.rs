@@ -185,7 +185,7 @@ impl<'opt> LowerIntervals<'opt> {
         }
 
         //Regardless, enque this λ's region, since we where touched anyways
-        self.region_queue.push_front(RegionLocation {
+        self.region_queue.push_back(RegionLocation {
             node,
             region_index: 0,
         });
