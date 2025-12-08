@@ -31,6 +31,7 @@ mod mul;
 /// - `cross(a, b)` (for 2,3,4 components) => (for vec3): `[a.y * b.z - a.z * b.y, ...]` i.e. the typical unwraping.
 /// - `min(x, y)` => `(x + y - abs(x-y)) / 2`
 /// - `max(x, y)` => `(x + y + abs(x-y)) / 2`
+/// - `dot(a, b)` => `a.x * b.x + a.y * b.y + ...`
 /// - MulMatrixMatrix => (unroll)
 /// - MulMatrixVector => (unroll)
 /// - MulVectorMatrix => (unroll)
@@ -72,6 +73,7 @@ impl<'opt> Simplify<'opt> {
                 BuildinOp::Cross => return self.lower_cross(),
                 BuildinOp::Min => return self.lower_min_max(true),
                 BuildinOp::Max => return self.lower_min_max(false),
+                BuildinOp::Dot => return self.lower_dot(),
                 _ => {}
             }
         }
@@ -224,6 +226,83 @@ impl<'opt> Simplify<'opt> {
             .unwrap();
         Some(node_collector)
     }
+
+    pub fn lower_dot(self) -> Option<Vec<NodeRef>> {
+        let extract_component_count = |ty: &Ty| {
+            if ty.is_vector() {
+                Some(ty.shape().unwrap().component_count())
+            } else {
+                None
+            }
+        };
+
+        let index_count = match self.opt.get_in_type_mut(self.node.input(0)).unwrap() {
+            Ty::Interval(i) => extract_component_count(i.as_ref())?,
+            other => extract_component_count(&other)?,
+        };
+
+        if index_count < 2 {
+            return None;
+        }
+
+        let region = self.opt.graph[self.node].parent.unwrap();
+        let span = self.opt.find_span(self.node).unwrap_or(Span::empty());
+        let mut node_collector = Vec::new();
+
+        let a = self.opt.graph.inport_src(self.node.input(0)).unwrap();
+        let b = self.opt.graph.inport_src(self.node.input(1)).unwrap();
+
+        let extract_index = |g: &mut RegionBuilder<_, _>,
+                             collector: &mut Vec<NodeRef>,
+                             span: Span,
+                             index: usize| {
+            let ia = route_new!(g, ConstantIndex::new(index), span.clone(), [a]);
+            collector.push(ia);
+            let ib = route_new!(g, ConstantIndex::new(index), span, [b]);
+            collector.push(ib);
+            (ia, ib)
+        };
+
+        let new = self
+            .opt
+            .graph
+            .on_region(&region, |reg| {
+                let (ax, bx) = extract_index(reg, &mut node_collector, span.clone(), 0);
+                //iterate all indices, and add each _line_ together
+                let mut last_result = route_new!(
+                    reg,
+                    BinaryArithOp::Mul,
+                    span.clone(),
+                    [ax.output(0), bx.output(0)]
+                );
+                node_collector.push(last_result);
+                for i in 1..index_count {
+                    let (ia, ib) = extract_index(reg, &mut node_collector, span.clone(), i);
+                    let newline = route_new!(
+                        reg,
+                        BinaryArithOp::Mul,
+                        span.clone(),
+                        [ia.output(0), ib.output(0)]
+                    );
+                    node_collector.push(newline);
+                    let to_result = route_new!(
+                        reg,
+                        BinaryArithOp::Add,
+                        span.clone(),
+                        [last_result.output(0), newline.output(0)]
+                    );
+                    node_collector.push(to_result);
+                    last_result = to_result;
+                }
+
+                last_result
+            })
+            .unwrap();
+
+        self.opt.graph.replace_node_uses(self.node, new).unwrap();
+        Some(node_collector)
+    }
+
     pub fn lower_clamp(self) -> Option<Vec<NodeRef>> {
         let x_src = self.opt.graph.inport_src(self.node.input(0)).unwrap();
         let min_src = self.opt.graph.inport_src(self.node.input(1)).unwrap();

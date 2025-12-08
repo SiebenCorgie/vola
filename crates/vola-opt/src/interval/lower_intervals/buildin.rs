@@ -73,11 +73,13 @@ impl<'opt> LowerIntervals<'opt> {
                 return Ok(());
             }
             BuildinOp::Dot => {
-                return Err(VolaError::error_here(
-                    IntervalError::UnsupportedOp("dot".to_string()).into(),
-                    span,
-                    "here",
-                ))
+                //simplify the dot product and prepend the created nodes
+                let new_expr = Simplify::new(self.optimizer, node, true)
+                    .lower_dot()
+                    .unwrap();
+                //Now prepend the newly created nodes
+                self.node_queue.prepend(new_expr);
+                return Ok(());
             }
             BuildinOp::Exp => {
                 //as simple as [exp(start), exp(end)]
