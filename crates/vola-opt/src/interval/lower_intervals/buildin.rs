@@ -78,11 +78,16 @@ impl<'opt> LowerIntervals<'opt> {
                 ))
             }
             BuildinOp::Exp => {
-                return Err(VolaError::error_here(
-                    IntervalError::UnsupportedOp("exp".to_string()).into(),
-                    span,
-                    "here",
-                ))
+                //as simple as [exp(start), exp(end)]
+                let (start, end) = get_interval_for_input(0).unwrap();
+                self.optimizer
+                    .graph
+                    .on_region(&region, |reg| {
+                        let istart = route_new!(reg, BuildinOp::Exp, span.clone(), [start]);
+                        let iend = route_new!(reg, BuildinOp::Exp, span.clone(), [end]);
+                        (istart.output(0), iend.output(0))
+                    })
+                    .unwrap()
             }
             BuildinOp::Length => {
                 //For 'length' there is an interesting implementation in
