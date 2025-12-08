@@ -11,6 +11,8 @@ use vola_common::{Span, VolaError};
 
 use crate::{
     alge::buildin::{Buildin, BuildinOp},
+    imm,
+    imm::ImmScalar,
     interval::{lower_intervals::LowerIntervals, IntervalError},
     route_new,
     util::Simplify,
@@ -83,11 +85,74 @@ impl<'opt> LowerIntervals<'opt> {
                 ))
             }
             BuildinOp::Length => {
-                return Err(VolaError::error_here(
-                    IntervalError::UnsupportedOp("length".to_string()).into(),
-                    span,
-                    "here",
-                ))
+                //For 'length' there is an interesting implementation in
+                // "Introduction to interval analysis" by Moore/ Kaerfortt / Could
+                // that thinks of the interval-of a vector as a n-dimentional box.
+                // I.e. the 2D vector interval is a _region_ on x and y. They use this
+                // property to formulate a tight version of the euklidian
+                // length / norm operator.
+
+                //calc center / extent component wise. Then reduce into interval.
+                let (start, end) = get_interval_for_input(0).unwrap();
+                let span = self.optimizer.find_span(node).unwrap();
+                let region = self.optimizer.graph[node].parent.unwrap();
+                let interval_type = self.optimizer.get_out_type_mut(start).unwrap();
+                let half = self
+                    .optimizer
+                    .splat_scalar(region, ImmScalar::new(0.5), interval_type);
+                self.optimizer
+                    .graph
+                    .on_region(&region, |reg| {
+                        //calculate the per-component center c
+                        let start_plus_end =
+                            route_new!(reg, BinaryArithOp::Add, span.clone(), [start, end]);
+                        let center = route_new!(
+                            reg,
+                            BinaryArithOp::Mul,
+                            span.clone(),
+                            [start_plus_end.output(0), half]
+                        );
+
+                        //calculate the per-component radius r
+                        let end_minus_start =
+                            route_new!(reg, BinaryArithOp::Sub, span.clone(), [end, start]);
+                        let radius = route_new!(
+                            reg,
+                            BinaryArithOp::Mul,
+                            span.clone(),
+                            [end_minus_start.output(0), half]
+                        );
+                        //now build the length of both
+                        let norm_center =
+                            route_new!(reg, BuildinOp::Length, span.clone(), [center.output(0)]);
+                        let norm_radius =
+                            route_new!(reg, BuildinOp::Length, span.clone(), [radius.output(0)]);
+
+                        //and setup the new _interval_
+                        //lower is max(0.0, norm_center - norm_radius)
+                        let zero_scalar = imm!(reg, Real, 0.0);
+                        let nc_minus_nr = route_new!(
+                            reg,
+                            BinaryArithOp::Sub,
+                            span.clone(),
+                            [norm_center.output(0), norm_radius.output(0)]
+                        );
+                        let istart = route_new!(
+                            reg,
+                            BuildinOp::Max,
+                            span.clone(),
+                            [zero_scalar.output(0), nc_minus_nr.output(0)]
+                        );
+                        //upper is norm_center + norm_radius
+                        let iend = route_new!(
+                            reg,
+                            BinaryArithOp::Add,
+                            span,
+                            [norm_center.output(0), norm_radius.output(0)]
+                        );
+                        (istart.output(0), iend.output(0))
+                    })
+                    .unwrap()
             }
             BuildinOp::Max | BuildinOp::Min => {
                 //simply [op(start_a, start_b), op(end_a, end_b)]
