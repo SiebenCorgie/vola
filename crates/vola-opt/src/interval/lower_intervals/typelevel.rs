@@ -39,15 +39,12 @@ impl<'opt> LowerIntervals<'opt> {
         index: usize,
     ) -> Result<(), VolaError<OptError>> {
         //In this case, select either the lower, or upper bound, and feed that to all consumers directly.
-
         //Read the input's lower and upper bound.
-        let (lower, upper) = self
-            .mapping
-            .get(&self.optimizer.graph.inport_src(node.input(0)).unwrap())
-            .unwrap();
+        let (lower, upper) =
+            self.get_or_build_interval(self.optimizer.graph.inport_src(node.input(0)).unwrap());
         let selected = match index {
-            0 => *lower,
-            1 => *upper,
+            0 => lower,
+            1 => upper,
             other => {
                 let span = self.optimizer.find_span(node).unwrap_or(Span::empty());
                 return Err(VolaError::error_here(

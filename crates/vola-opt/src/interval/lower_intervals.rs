@@ -295,4 +295,29 @@ impl<'opt> LowerIntervals<'opt> {
             .with_error(span, "here"),
         )
     }
+
+    ///Returns a cached, or builds a trivial interval for the given outport
+    pub(crate) fn get_or_build_interval(
+        &mut self,
+        value: OutportLocation,
+    ) -> (OutportLocation, OutportLocation) {
+        if let Some(cached) = self.mapping.get(&value) {
+            cached.clone()
+        } else {
+            //not yet cached, assuming that this ain't no interval
+            // build a trivial [a, a] interval for a value a.
+            assert!(
+                !self
+                    .optimizer
+                    .get_out_type_mut(value)
+                    .unwrap()
+                    .is_interval(),
+                "If building a trivial interval, the value itself should not
+                be an interval yet"
+            );
+
+            assert!(self.mapping.insert(value, (value, value)).is_none());
+            (value, value)
+        }
+    }
 }

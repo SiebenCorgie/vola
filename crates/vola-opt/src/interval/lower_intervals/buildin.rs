@@ -8,20 +8,28 @@
 
 use std::f64;
 
-use rvsdg::{region::RegionLocation, NodeRef};
+use rvsdg::{edge::OutportLocation, region::RegionLocation, NodeRef};
 use vola_common::{Span, VolaError};
 
 use crate::{
     alge::buildin::{Buildin, BuildinOp},
     imm,
     imm::ImmScalar,
-    interval::{lower_intervals::LowerIntervals, IntervalError},
+    interval::lower_intervals::LowerIntervals,
     route_new,
     util::Simplify,
     OptError,
 };
 
 impl<'opt> LowerIntervals<'opt> {
+    fn interval_for_input(
+        &mut self,
+        node: NodeRef,
+        index: usize,
+    ) -> (OutportLocation, OutportLocation) {
+        self.get_or_build_interval(self.optimizer.graph.inport_src(node.input(index)).unwrap())
+    }
+
     pub(crate) fn lower_buildin(
         &mut self,
         region: RegionLocation,
@@ -29,20 +37,14 @@ impl<'opt> LowerIntervals<'opt> {
         node: NodeRef,
         op: BuildinOp,
     ) -> Result<(), VolaError<OptError>> {
-        let get_interval_for_input = |input: usize| {
-            self.mapping
-                .get(&self.optimizer.graph.inport_src(node.input(input)).unwrap())
-                .cloned()
-        };
-
         let (start, end) = match op {
             BuildinOp::Clamp => {
                 //This works similar to the min/max case. The clamp of an interval is just the interval-start max-ed with
                 // the lower bound and the interval-end min-ed with the upper bound.
                 // I.e given clamp(a, min, max) -> [max(a.start, min.start) .. (min(a.end, max.end))]
-                let (start_value, end_value) = get_interval_for_input(0).unwrap();
-                let (start_bound_lower, _end_bound_lower) = get_interval_for_input(1).unwrap();
-                let (_start_bound_upper, end_bound_upper) = get_interval_for_input(2).unwrap();
+                let (start_value, end_value) = self.interval_for_input(node, 0);
+                let (start_bound_lower, _end_bound_lower) = self.interval_for_input(node, 1);
+                let (_start_bound_upper, end_bound_upper) = self.interval_for_input(node, 2);
                 //now build the new interval
                 self.optimizer
                     .graph
@@ -83,7 +85,7 @@ impl<'opt> LowerIntervals<'opt> {
             }
             BuildinOp::Exp => {
                 //as simple as [exp(start), exp(end)]
-                let (start, end) = get_interval_for_input(0).unwrap();
+                let (start, end) = self.interval_for_input(node, 0);
                 self.optimizer
                     .graph
                     .on_region(&region, |reg| {
@@ -102,7 +104,7 @@ impl<'opt> LowerIntervals<'opt> {
                 // length / norm operator.
 
                 //calc center / extent component wise. Then reduce into interval.
-                let (start, end) = get_interval_for_input(0).unwrap();
+                let (start, end) = self.interval_for_input(node, 0);
                 let span = self.optimizer.find_span(node).unwrap();
                 let region = self.optimizer.graph[node].parent.unwrap();
                 let interval_type = self.optimizer.get_out_type_mut(start).unwrap();
@@ -165,8 +167,8 @@ impl<'opt> LowerIntervals<'opt> {
             }
             BuildinOp::Max | BuildinOp::Min => {
                 //simply [op(start_a, start_b), op(end_a, end_b)]
-                let (start_a, end_a) = get_interval_for_input(0).unwrap();
-                let (start_b, end_b) = get_interval_for_input(1).unwrap();
+                let (start_a, end_a) = self.interval_for_input(node, 0);
+                let (start_b, end_b) = self.interval_for_input(node, 1);
                 //now build the new interval
                 self.optimizer
                     .graph
@@ -182,8 +184,8 @@ impl<'opt> LowerIntervals<'opt> {
                 //We are conservative here and just use the min/max of the mixed values
                 // TODO: Inspect the alpha value, if its an interval, use that info to tighten the min/max
                 //       values
-                let (a_start, a_end) = get_interval_for_input(0).unwrap();
-                let (b_start, b_end) = get_interval_for_input(1).unwrap();
+                let (a_start, a_end) = self.interval_for_input(node, 0);
+                let (b_start, b_end) = self.interval_for_input(node, 1);
                 self.optimizer
                     .graph
                     .on_region(&region, |reg| {
@@ -197,7 +199,7 @@ impl<'opt> LowerIntervals<'opt> {
                 //For this we are lazy as fuck at the moment and return the unbound interval
                 // [-INF, INF]
                 // TODO: This should... at some point, inspect the exponent etc.
-                let (in_low, in_up) = get_interval_for_input(0).unwrap();
+                let (in_low, in_up) = self.interval_for_input(node, 0);
                 let in_low_ty = self.optimizer.get_out_type_mut(in_low).unwrap();
                 let in_up_ty = self.optimizer.get_out_type_mut(in_up).unwrap();
                 assert_eq!(in_low_ty, in_up_ty);
@@ -216,7 +218,7 @@ impl<'opt> LowerIntervals<'opt> {
                 // TODO: We _should_ modify this to test whether the full
                 // interval is in the positive space. Right now this might introduce NANs
                 // is either is negative.
-                let (start, end) = get_interval_for_input(0).unwrap();
+                let (start, end) = self.interval_for_input(node, 0);
                 self.optimizer
                     .graph
                     .on_region(&region, |reg| {

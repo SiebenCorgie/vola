@@ -25,14 +25,10 @@ impl<'opt> LowerIntervals<'opt> {
     ) -> Result<(), VolaError<OptError>> {
         assert_eq!(self.optimizer.graph[node].inputs().len(), 2);
 
-        let (a_start, a_end) = *self
-            .mapping
-            .get(&self.optimizer.graph.inport_src(node.input(0)).unwrap())
-            .unwrap();
-        let (b_start, b_end) = *self
-            .mapping
-            .get(&self.optimizer.graph.inport_src(node.input(1)).unwrap())
-            .unwrap();
+        let (a_start, a_end) =
+            self.get_or_build_interval(self.optimizer.graph.inport_src(node.input(0)).unwrap());
+        let (b_start, b_end) =
+            self.get_or_build_interval(self.optimizer.graph.inport_src(node.input(1)).unwrap());
 
         let (start, end) = match op {
             BinaryArithOp::Add => self
@@ -123,7 +119,7 @@ impl<'opt> LowerIntervals<'opt> {
     ) -> Result<(), VolaError<OptError>> {
         assert_eq!(self.optimizer.graph[node].inputs().len(), 1);
         let original_src = self.optimizer.graph.inport_src(node.input(0)).unwrap();
-        let (in_start, in_end) = *self.mapping.get(&original_src).unwrap();
+        let (in_start, in_end) = self.get_or_build_interval(original_src);
 
         let inty = self.optimizer.get_out_type_mut(original_src).unwrap();
         if !inty.is_scalar_arithmetic() {
