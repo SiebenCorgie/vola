@@ -6,6 +6,8 @@
  * 2025 Tendsin Mende
  */
 
+use std::f64;
+
 use rvsdg::{region::RegionLocation, NodeRef};
 use vola_common::{Span, VolaError};
 
@@ -182,18 +184,37 @@ impl<'opt> LowerIntervals<'opt> {
                 ))
             }
             BuildinOp::Pow => {
-                return Err(VolaError::error_here(
-                    IntervalError::UnsupportedOp("pow".to_string()).into(),
-                    span,
-                    "here",
-                ))
+                //For this we are lazy as fuck at the moment and return the unbound interval
+                // [-INF, INF]
+                // This should... at some point, inspect the exponent etc.
+                let (in_low, in_up) = get_interval_for_input(0).unwrap();
+                let in_low_ty = self.optimizer.get_out_type_mut(in_low).unwrap();
+                let in_up_ty = self.optimizer.get_out_type_mut(in_up).unwrap();
+                assert_eq!(in_low_ty, in_up_ty);
+                let lower = self.optimizer.splat_scalar(
+                    region,
+                    ImmScalar::new(f64::NEG_INFINITY),
+                    in_low_ty.clone(),
+                );
+                let upper =
+                    self.optimizer
+                        .splat_scalar(region, ImmScalar::new(f64::INFINITY), in_up_ty);
+                (lower, upper)
             }
             BuildinOp::SquareRoot => {
-                return Err(VolaError::error_here(
-                    IntervalError::UnsupportedOp("sqrt".to_string()).into(),
-                    span,
-                    "here",
-                ))
+                //as simple as [sqrt(start), sqrt(end)]
+                // We _should_ modify this to test whether the full
+                // interval is in the positive space. Right now this might introduce NANs
+                // is either is negative.
+                let (start, end) = get_interval_for_input(0).unwrap();
+                self.optimizer
+                    .graph
+                    .on_region(&region, |reg| {
+                        let istart = route_new!(reg, BuildinOp::SquareRoot, span.clone(), [start]);
+                        let iend = route_new!(reg, BuildinOp::SquareRoot, span.clone(), [end]);
+                        (istart.output(0), iend.output(0))
+                    })
+                    .unwrap()
             }
         };
 
