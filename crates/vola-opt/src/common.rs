@@ -110,6 +110,19 @@ impl Shape {
             ))),
         }
     }
+
+    ///Returns how many components this shape has. I.e. the
+    /// valid index range.
+    ///
+    /// Example: `vec3` has a component count of 3. `mat4x3` has a component count of 4. Scalar has a component count of 1.
+    pub fn component_count(&self) -> usize {
+        match self {
+            Self::Matrix { width, .. } => *width,
+            Self::Scalar => 1,
+            Self::Tensor { sizes } => sizes[0],
+            Self::Vec { width } => *width,
+        }
+    }
 }
 
 impl From<vola_ast::common::Shape> for Shape {
@@ -224,6 +237,18 @@ impl Ty {
     pub const CSG: Self = Self::Shaped {
         ty: DataType::Csg,
         shape: Shape::Scalar,
+    };
+    pub const VEC2: Self = Self::Shaped {
+        ty: DataType::Real,
+        shape: Shape::Vec { width: 2 },
+    };
+    pub const VEC3: Self = Self::Shaped {
+        ty: DataType::Real,
+        shape: Shape::Vec { width: 3 },
+    };
+    pub const VEC4: Self = Self::Shaped {
+        ty: DataType::Real,
+        shape: Shape::Vec { width: 4 },
     };
 
     pub const fn shaped(data_ty: DataType, shape: Shape) -> Self {
