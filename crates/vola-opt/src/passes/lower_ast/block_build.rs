@@ -12,7 +12,8 @@ use crate::{
     },
     common::Ty,
     imm::ImmNat,
-    OptEdge, OptError, OptGraph, OptNode, Optimizer,
+    passes::lazy_type::TypeError,
+    OptEdge, OptError, OptNode, Optimizer,
 };
 use ahash::AHashMap;
 use rvsdg::{
@@ -148,7 +149,7 @@ impl BlockCtx {
 
     pub fn write_or_define_var(
         &mut self,
-        graph: &mut OptGraph,
+        optimizer: &mut Optimizer,
         name: &str,
         new_origin: OutportLocation,
     ) -> Result<(), VolaError<OptError>> {
@@ -159,7 +160,7 @@ impl BlockCtx {
 
         //otherwise import (since this must have existed before),
         //and immediatly redefine last use at this port
-        let _ = self.try_import(graph, name)?;
+        let _ = self.try_import(optimizer, name)?;
         self.write_var(name, new_origin)
             .expect("Writing must work after importing");
         Ok(())
@@ -168,7 +169,7 @@ impl BlockCtx {
     ///Tries to find the variable in any of the parent scopes, if successful, imports it into this scope
     fn try_import(
         &mut self,
-        graph: &mut OptGraph,
+        optimizer: &mut Optimizer,
         name: &str,
     ) -> Result<OutportLocation, VolaError<OptError>> {
         //This is a two pass process. Frist we reverse-iterate all parent scopes (which is a AST concept),
@@ -212,19 +213,19 @@ impl BlockCtx {
 
         //we _silent-import_, if the port is already in the correct region. This happens if there is only a scope distinction on a AST
         //level, but not the graph anymore. For instance when _using_ stuff in a ScopedCall, without control-flow.
-        let imported_at = if graph[port.node].parent == Some(self.active_scope.region) {
+        let imported_at = if optimizer.graph[port.node].parent == Some(self.active_scope.region) {
             port
         } else {
             //NOTE: we decide the _import_ path, based on the producer _type_. λs are imported as context, everything else as
             //      as arguments
-            let producer_port = if let Some(prod) = graph.find_producer_out(port) {
+            let producer_port = if let Some(prod) = optimizer.graph.find_producer_out(port) {
                 prod
             } else {
                 //If we can't find the producer, check if it is a context variable. In that case, we are likely trying to import
                 //unset context (for instance when building an impl block).
                 //for those its okay to _just use_ that port, without having a producer
 
-                match (graph[port.node].into_abstract(), port.output) {
+                match (optimizer.graph[port.node].into_abstract(), port.output) {
                     (AbstractNodeType::Theta, OutputType::Argument(_)) => port,
                     (AbstractNodeType::Gamma, OutputType::EntryVariableArgument { .. }) => port,
                     (AbstractNodeType::Lambda, OutputType::ContextVariableArgument(_)) => port,
@@ -239,7 +240,10 @@ impl BlockCtx {
 
             //Note: We import Lambda-Declerations as context, everything else as arguments
             if producer_port.output == OutputType::LambdaDeclaration {
-                if graph.is_in_parent(self.active_scope.region.node, producer_port.node) {
+                if optimizer
+                    .graph
+                    .is_in_parent(self.active_scope.region.node, producer_port.node)
+                {
                     //this would create a recursive call, which is not allowed.
                     //
                     //bail in that case
@@ -255,13 +259,12 @@ impl BlockCtx {
                         "In this region",
                     ));
                 }
-
-                let (port, _path) = graph
+                let port = optimizer
                     .import_context(port, self.active_scope.region)
                     .map_err(|e| VolaError::new(e.into()))?;
                 port
             } else {
-                let (port, _path) = graph
+                let port = optimizer
                     .import_argument(port, self.active_scope.region)
                     .map_err(|e| VolaError::new(e.into()))?;
                 port
@@ -286,7 +289,7 @@ impl BlockCtx {
     ///in this, or any of the parent scopes.
     pub fn find_variable(
         &mut self,
-        graph: &mut OptGraph,
+        optimizer: &mut Optimizer,
         name: &str,
     ) -> Result<OutportLocation, VolaError<OptError>> {
         if let Some(src) = self.active_scope.get_var_use(name) {
@@ -294,7 +297,7 @@ impl BlockCtx {
             Ok(src)
         } else {
             //Did not find, try to import from parents
-            match self.try_import(graph, name) {
+            match self.try_import(optimizer, name) {
                 Ok(port) => Ok(port),
                 Err(err) => Err(err),
             }
@@ -368,7 +371,7 @@ impl Optimizer {
         ctx: &mut BlockCtx,
     ) -> Result<(), VolaError<OptError>> {
         match stmt {
-            Stmt::Assign(assign) => match ctx.find_variable(&mut self.graph, &assign.dst.0) {
+            Stmt::Assign(assign) => match ctx.find_variable(self, &assign.dst.0) {
                 Ok(_old_src) => {
                     let expr_src = self.build_expr(assign.expr, region, ctx)?;
                     self.names
@@ -394,7 +397,7 @@ impl Optimizer {
                 let producer = self.graph.find_producer_simple(expr_src);
                 for prod in producer {
                     let node_name = self.graph[prod.node].name();
-                    let node_span = self.find_span(prod.node.into());
+                    let node_span = self.find_span(prod.node);
                     match self.graph[prod.node].into_abstract() {
                         AbstractNodeType::Simple => {
                             if self.graph[prod.node]
@@ -426,7 +429,7 @@ impl Optimizer {
                         AbstractNodeType::Apply => {
                             //if this is a apply node, make sure it does _not_ return a csg-type.
                             //try to deduce the type of this node
-                            let ty = self.get_or_derive_type(prod, false);
+                            let ty = self.get_out_type_mut(prod).unwrap();
                             if ty != Ty::CSG {
                                 let err = OptError::Any {
                                     text: format!(
@@ -473,7 +476,7 @@ impl Optimizer {
                 for prod in producer {
                     //note we can only check nodes that are created _here_.
                     let node_name = self.graph[prod.node].name();
-                    let node_span = self.find_span(prod.node.into());
+                    let node_span = self.find_span(prod.node);
                     match self.graph[prod.node].into_abstract() {
                         AbstractNodeType::Simple => {
                             if self.graph[prod.node]
@@ -510,7 +513,7 @@ impl Optimizer {
                         AbstractNodeType::Apply => {
                             //if this is a apply node, make sure it does _not_ return a csg-type.
                             //try to deduce the type of this node
-                            let ty = self.get_or_derive_type(prod, false);
+                            let ty = self.get_out_type_mut(prod).map_err(|e| e.to_error())?;
                             if ty == Ty::CSG {
                                 let err = OptError::Any {
                                     text: format!(
@@ -561,7 +564,7 @@ impl Optimizer {
                         OptError::Any {
                             text: "block has unexpected result".to_owned(),
                         },
-                        self.find_span(return_value.into()).unwrap_or(Span::empty()),
+                        self.find_span(return_value).unwrap_or(Span::empty()),
                         "Block statement should not have a return-value, consider binding the value to a result",
                     ));
                 }
@@ -767,8 +770,8 @@ impl Optimizer {
         region: RegionLocation,
         ctx: &mut BlockCtx,
     ) -> Result<(), VolaError<OptError>> {
-        //We have to write the loop down as a Gamma-Node, where the _no-iteration_ case is handeled by a branch, while the iteration itself
-        //is handeled by the theta node.
+        //We have to write the loop down as a Gamma-Node, where the _no-iteration_ case is handled by a branch, while the iteration itself
+        //is handled by the theta node.
         //
         //we do this constructing an artificial Branch AST node. The condition is the lower-bound of the iteration.
         //so given "for a in x..y" the "must-run" condition is x<y.
@@ -776,8 +779,36 @@ impl Optimizer {
         //in all other cases, x>=y holds, so we take the _is-not-running_ branch.
 
         let rangespan = loopstmt.range_expr_span();
+        let lowerspan = loopstmt.bound_lower.span.clone();
+        let upperspan = loopstmt.bound_upper.span.clone();
+
         let lower_bound = self.build_expr(loopstmt.bound_lower, region, ctx)?;
         let upper_bound = self.build_expr(loopstmt.bound_upper, region, ctx)?;
+
+        //Make sure both bounds are nat
+        let lower_ty_is_nat = self
+            .get_out_type_mut(lower_bound)
+            .map(|t| t.is_scalar() && t.is_integer())
+            .map_err(|e| e.to_error())?;
+        let upper_ty_is_nat = self
+            .get_out_type_mut(upper_bound)
+            .map(|t| t.is_scalar() && t.is_integer())
+            .map_err(|e| e.to_error())?;
+
+        if !lower_ty_is_nat {
+            return Err(VolaError::error_here(
+                TypeError::Other(format!("Loop's lower bound needs to be integer typed")).into(),
+                lowerspan,
+                "here",
+            ));
+        }
+        if !upper_ty_is_nat {
+            return Err(VolaError::error_here(
+                TypeError::Other(format!("Loop's upper bound needs to be integer typed")).into(),
+                upperspan,
+                "here",
+            ));
+        }
 
         let run_condition = self
             .graph
@@ -1071,7 +1102,7 @@ impl Optimizer {
 
             //finally redefine the variable in the theta-parent (AST) scope
             ctx.write_or_define_var(
-                &mut self.graph,
+                self,
                 &ident,
                 gamma.as_outport_location(OutputType::ExitVariableOutput(export_ex)),
             )

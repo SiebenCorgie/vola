@@ -127,6 +127,7 @@ impl Expr {
             ExprTy::Branch(e) => e.span.clone(),
             ExprTy::Splat { expr, count: _ } => expr.span.clone(),
             ExprTy::Cast { span, .. } => span.clone(),
+            ExprTy::Interval { span, .. } => span.clone(),
         }
     }
 }
@@ -152,10 +153,14 @@ impl FieldAccessor {
         match self {
             Self::Digit { digit, .. } => Some(*digit),
             Self::Ident { ident, .. } => match ident.0.as_str() {
+                //Standard accessors for vectors
                 "x" => Some(0),
                 "y" => Some(1),
                 "z" => Some(2),
                 "w" => Some(3),
+                //for intervals
+                "start" => Some(0),
+                "end" => Some(1),
                 _ => None,
             },
         }
@@ -195,6 +200,11 @@ pub enum ExprTy {
         span: Span,
         expr: Box<Expr>,
         ty: Ty,
+    },
+    Interval {
+        span: Span,
+        lower: Box<Expr>,
+        upper: Box<Expr>,
     },
 }
 

@@ -3,8 +3,10 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  *
- * 2024 Tendsin Mende
+ * 2025 Tendsin Mende
  */
+
+///! Smaller utility analyzers/passes that don't make sense on their own.
 use rvsdg::{
     edge::{InportLocation, OutportLocation, OutputType},
     smallvec::SmallVec,
@@ -12,6 +14,11 @@ use rvsdg::{
 };
 
 use crate::{common::Ty, Optimizer};
+
+pub mod macros_graph;
+pub mod simplify;
+
+pub use simplify::Simplify;
 
 impl Optimizer {
     pub fn get_type_for_inport(&self, port: InportLocation) -> Option<Ty> {

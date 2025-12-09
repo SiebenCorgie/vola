@@ -375,6 +375,22 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
         }
     }
 
+    ///Returns the lambda or phi definition-port that is called by this `apply` node. Returns none if this is
+    ///
+    /// a) no apply node
+    /// b) the call-def is not connected
+    pub fn find_called(&self, apply_node: NodeRef) -> Option<OutportLocation> {
+        if !self[apply_node].node_type.is_apply() {
+            return None;
+        }
+
+        if let Some(src) = self.inport_src(InputType::Input(0).to_location(apply_node)) {
+            self.find_callabel_def(src)
+        } else {
+            None
+        }
+    }
+
     ///Traverses all connections of the `node` definition port and collects all `apply` nods that are connected
     /// to it. This includes connections through context variables and recursion variables.
     ///

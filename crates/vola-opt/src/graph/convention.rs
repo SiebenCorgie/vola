@@ -31,6 +31,15 @@ impl Optimizer {
         }
     }
 
+    ///Returns true if this `node` is tagged as `#[no_inline]`
+    pub fn is_tagged_no_inline(&self, node: NodeRef) -> bool {
+        self.functions
+            .values()
+            .find(|f| f.lambda == node)
+            .map(|f| f.no_inline)
+            .unwrap_or(false)
+    }
+
     ///Implements the heuristic that hints if a apply node should be inlined. Also returns false if `node` is not an Apply node.
     pub fn should_inline_apply(&self, node: NodeRef) -> bool {
         if !self.graph[node].node_type.is_apply() {
@@ -49,8 +58,11 @@ impl Optimizer {
 
         //NOTE: must be at least connected to us
         let users = self.graph.find_caller(calldef.node).unwrap();
+        //try to read the inline property, otherwise assume its not tagged no_inline
+        let is_no_inline = self.is_tagged_no_inline(calldef.node);
+
         //Heuristic currently fires at > 1. So basically, if there is only one user, it won't inline, if there are several, it will
-        if users.len() > 1 {
+        if users.len() > 1 || is_no_inline {
             false
         } else {
             true

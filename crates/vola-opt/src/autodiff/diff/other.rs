@@ -3,7 +3,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  *
- * 2024 Tendsin Mende
+ * 2025 Tendsin Mende
  */
 
 ///Shortcut to insert the given binary operation into `graph` and hook it up. Returns the created node

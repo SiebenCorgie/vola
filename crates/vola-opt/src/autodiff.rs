@@ -10,10 +10,9 @@
 //!
 //! Takes care of defining all nodes needed for our autodiff framework.
 //!
-//! The submoduls implement the actual autodiff pass as well a specific optimizations.
+//! The submodules implement the actual autodiff pass as well a specific optimizations.
 
-mod activity;
-mod ad_dispatch;
+pub(crate) mod activity;
 mod ad_forward;
 mod ad_utils;
 mod canonicalize;
@@ -27,11 +26,12 @@ use rvsdg::{
     util::abstract_node_type::AbstractNodeType,
     SmallColl,
 };
-use vola_common::thiserror::Error;
+use thiserror::Error;
 
 use crate::{
     common::{DataType, Shape, Ty},
-    DialectNode, OptError, OptNode,
+    passes::lazy_type::TypeError,
+    DialectNode, OptNode,
 };
 
 ///Generic respons of a differentiation implementation of some node
@@ -96,8 +96,8 @@ pub enum AutoDiffError {
     UndiffNode(String),
     #[error("Failed to canonicalize: {0:?}")]
     CanonicalizationFailed(String),
-    #[error("Port {0:?} was not yet handeled")]
-    FwPortUnhandeled(OutportLocation),
+    #[error("Port {0:?} was not yet handled")]
+    FwPortUnhandled(OutportLocation),
     #[error("GammaExitVariable {0:?} was connected in one branch, but not in the other")]
     GammaExitInvalid(OutportLocation),
 }
@@ -178,7 +178,7 @@ impl DialectNode for AutoDiff {
         input_types: &[Ty],
         _concepts: &ahash::AHashMap<String, vola_ast::csg::CsgConcept>,
         _csg_defs: &ahash::AHashMap<String, vola_ast::csg::CsgDef>,
-    ) -> Result<Ty, OptError> {
+    ) -> Result<Ty, TypeError> {
         //By definition we only allow expressions that
         //output scalars or vectors.
         //We also only allow _wrt_ args that are scalars or vectors.
@@ -189,14 +189,14 @@ impl DialectNode for AutoDiff {
 
         //Make sure the expression has either scalar or vector type
         if !expr_type.is_scalar() && !expr_type.is_vector() {
-            return Err(OptError::TypeDeriveError { text: format!("diff() can only be applied to expressions of type Scalar or Vector, expression had {}", expr_type) });
+            return Err(TypeError::Other( format!("diff() can only be applied to expressions of type Scalar or Vector, expression had {}", expr_type) ));
         }
 
         let wrt_type = input_types[1].clone();
 
         //Make sure the wrt has either scalar or vector type
         if !wrt_type.is_scalar() && !wrt_type.is_vector() {
-            return Err(OptError::TypeDeriveError { text: format!("diff() can only be applied with respect to either Scalar or Vector, wrt-argument was {}", wrt_type) });
+            return Err(TypeError::Other(format!("diff() can only be applied with respect to either Scalar or Vector, wrt-argument was {}", wrt_type) ));
         }
 
         //types check out, construct the return type
@@ -260,13 +260,5 @@ impl DialectNode for AutoDiff {
 
     fn structural_copy(&self, span: vola_common::Span) -> crate::OptNode {
         OptNode::new(AutoDiff::default(), span)
-    }
-
-    fn try_constant_fold(
-        &self,
-        #[allow(unused_variables)] src_nodes: &[Option<&rvsdg::nodes::Node<OptNode>>],
-    ) -> Option<OptNode> {
-        //TODO: Can we do compile-time AD?
-        None
     }
 }

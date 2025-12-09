@@ -264,7 +264,7 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
                             waiting_ports.push_back(new_inport);
                         }
                     }
-                    //all others are handeled by the mapping above.
+                    //all others are handled by the mapping above.
                     _ => {}
                 }
 

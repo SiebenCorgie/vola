@@ -24,6 +24,9 @@ impl Optimizer {
         //The idea is, that we traverse the graph in reverse-topological order whenever we encounter a
         //ImmVector or ImmMatrix, we call the scalarizer on that subtree. They'll take care of replacing the nodes.
 
+        #[cfg(feature = "log")]
+        log::info!("Imm Scalarize");
+
         if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("DUMP_BEFORE_SCALARIZE").is_ok()
         {
             self.push_debug_state("pre imm scalarize");

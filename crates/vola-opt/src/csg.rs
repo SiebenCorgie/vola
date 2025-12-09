@@ -9,7 +9,7 @@
 
 use crate::{
     common::{DataType, Ty},
-    error::OptError,
+    passes::lazy_type::TypeError,
     DialectNode, OptNode,
 };
 use ahash::AHashMap;
@@ -115,7 +115,7 @@ impl DialectNode for CsgOp {
         inputs: &[Ty],
         _concepts: &AHashMap<String, CsgConcept>,
         csg_defs: &AHashMap<String, CsgDef>,
-    ) -> Result<Ty, OptError> {
+    ) -> Result<Ty, TypeError> {
         //We resole the CSG op by checking, that all inputs adher to the op's specification.
         // Which means the arguments that are connected are equal to the one specified by the
         // implemented operation or entity
@@ -133,13 +133,11 @@ impl DialectNode for CsgOp {
             .collect::<SmallVec<[Ty; 3]>>();
 
         if inputs.len() != expected_signature.len() + self.subtree_count {
-            return Err(OptError::TypeDeriveError {
-                text: format!(
-                    "Argument count missmatch: \nexpected:    {}\ncalled with: {}",
-                    expected_signature.len() + self.subtree_count,
-                    inputs.len()
-                ),
-            });
+            return Err(TypeError::Other(format!(
+                "Argument count missmatch: \nexpected:    {}\ncalled with: {}",
+                expected_signature.len() + self.subtree_count,
+                inputs.len()
+            )));
         }
 
         //we always output a _CSGTree_ component.
@@ -151,20 +149,19 @@ impl DialectNode for CsgOp {
         for i in 0..self.subtree_count {
             //should be CSG typed
             if inputs[i] != Ty::CSG {
-                return Err(OptError::Any {
-                    text: format!("Subtree {i} was not of type CSGTree for CSGOp {}", self.op),
-                });
+                return Err(TypeError::Other(format!(
+                    "Subtree {i} was not of type CSGTree for CSGOp {}",
+                    self.op
+                )));
             }
         }
 
         for (idx, alge_arg_ty) in inputs[self.subtree_count..].iter().enumerate() {
             if alge_arg_ty != &expected_signature[idx] {
-                return Err(OptError::Any {
-                    text: format!(
-                        "expected {idx}-th argument to be {:?} not {:?} for CSGOp {}",
-                        expected_signature[idx], alge_arg_ty, self.op
-                    ),
-                });
+                return Err(TypeError::Other(format!(
+                    "expected {idx}-th argument to be {:?} not {:?} for CSGOp {}",
+                    expected_signature[idx], alge_arg_ty, self.op
+                )));
             }
         }
 

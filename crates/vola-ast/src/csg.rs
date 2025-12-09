@@ -80,11 +80,13 @@ pub struct ImplBlock {
     //What is being implemented
     pub dst: Ident,
     //On how many operands we implement
-    pub operands: SmallVec<[Ident; 2]>,
+    pub operands: SmallVec<[(Ident, Span); 2]>,
     ///The concept on which we implement
     pub concept: Ident,
     ///(Re)naming of the concepts input argument.
     pub concept_arg_name: Ident,
+    ///The span of th concept arg.
+    pub concept_arg_span: Span,
     pub block: Block,
 }
 

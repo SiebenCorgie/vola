@@ -126,7 +126,7 @@ impl Optimizer {
             .try_downcast_ref::<ConstantIndex>()
             .unwrap()
             .access;
-        let span = self.find_span(node.into()).unwrap_or(Span::empty());
+        let span = self.find_span(node).unwrap_or(Span::empty());
         let sub_src = self.graph.inport_src(node.input(0)).unwrap();
         let mut subdiffs = SmallVec::new();
         let result = self
@@ -150,7 +150,7 @@ impl Optimizer {
         node: NodeRef,
     ) -> Result<AdResponse, AutoDiffError> {
         //Just build a vector of all derivatives
-        let span = self.find_span(node.into()).unwrap_or(Span::empty());
+        let span = self.find_span(node).unwrap_or(Span::empty());
 
         let srcs = self.graph[node].input_srcs(&self.graph);
         let const_width = srcs.len();
@@ -182,7 +182,7 @@ impl Optimizer {
         region: RegionLocation,
         node: NodeRef,
     ) -> Result<AdResponse, AutoDiffError> {
-        let span = self.find_span(node.into()).unwrap_or(Span::empty());
+        let span = self.find_span(node).unwrap_or(Span::empty());
         let src = self.graph.inport_src(node.input(0)).unwrap();
         match self.graph[node]
             .node_type
@@ -227,7 +227,7 @@ impl Optimizer {
                 //special case of (cf)' => c f' for c=constant
                 //in this case c = -1.
                 let f_src = self.graph.inport_src(node.input(0)).unwrap();
-                let f_ty = self.find_type(&f_src.into()).unwrap();
+                let f_ty = self.get_out_type_mut(f_src).unwrap();
                 let negone = self.splat_scalar(region, ImmScalar::new(-1.0), f_ty);
                 let (diff_dst, result) = self
                     .graph
@@ -259,7 +259,7 @@ impl Optimizer {
                 }
 
                 let x_src = self.graph.inport_src(node.input(0)).unwrap();
-                let x_ty = self.find_type(&x_src.into()).unwrap();
+                let x_ty = self.get_out_type_mut(x_src).unwrap();
                 let zero = self.splat_scalar(region, ImmScalar::new(0.0), x_ty);
 
                 Ok(AdResponse::new(node.output(0), zero))
@@ -311,7 +311,7 @@ impl Optimizer {
         node: NodeRef,
         activity: &mut Activity,
     ) -> Result<AdResponse, AutoDiffError> {
-        let span = self.find_span(node.into()).unwrap_or(Span::empty());
+        let span = self.find_span(node).unwrap_or(Span::empty());
         let src = self.graph.inport_src(node.input(0)).unwrap();
         let trigop = self.graph[node]
             .node_type
@@ -431,7 +431,7 @@ impl Optimizer {
                 let left_active = activity.is_active_port(self, left_src);
                 let right_active = activity.is_active_port(self, right_src);
 
-                let original_span = self.find_span(node.into()).unwrap_or(Span::empty());
+                let original_span = self.find_span(node).unwrap_or(Span::empty());
                 //Builds d-left i.e. dx into the region, returns the result port
                 // (-y) / (x*x + y*y)
                 let build_d_left = |region_builder: &mut RegionBuilder<OptNode, OptEdge>| {

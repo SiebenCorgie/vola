@@ -32,9 +32,30 @@ impl Default for ConfigAutoDiff {
     }
 }
 
+///Allows tagging whether _pass-nodes_ (i.e. nodes that signal)
+/// the dispatch of expensive "special" passes where seen
+/// while lowering a AST.
+///
+/// This allows us to omit those passes if not a single node of this type has been seen.
+#[derive(Debug, Clone)]
+pub struct SeenPassNodes {
+    pub autodiff: bool,
+    pub interval: bool,
+}
+
+impl Default for SeenPassNodes {
+    fn default() -> Self {
+        SeenPassNodes {
+            autodiff: false,
+            interval: false,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct Config {
     pub autodiff: ConfigAutoDiff,
+    pub seen_pass_nodes: SeenPassNodes,
     //True if the compiler should dump its state on error
     pub dump_on_error: bool,
 }

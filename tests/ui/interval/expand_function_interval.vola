@@ -1,0 +1,18 @@
+//BEGIN-CONFIG
+//EXEC-FN:call
+//EXEC-ARGS:0.0
+//EXEC-EPS:0.0
+//EXEC-RES:2.0,4.0
+//END-CONFIG
+//NOTE: this traces the expansion _through_ the call
+//      of my_fn, since the argument itself is extended
+#[no_inline()]
+fn my_fn(i: real) -> real{
+    3.0 + sin(i)
+}
+
+export fn call(p: real) -> vec2{
+    let t = my_fn(p);
+    let ai = bound(t, p, [-INF..INF]);
+    [ai.start, ai.end]
+}

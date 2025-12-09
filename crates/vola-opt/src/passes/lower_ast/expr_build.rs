@@ -12,10 +12,12 @@ use rvsdg::{
 };
 
 use crate::{
+    autodiff::AutoDiff,
     csg::CsgOp,
     imm::ImmBool,
-    passes::lower_ast::block_build::VarDef,
-    typelevel::{NonUniformConstruct, TypeCast},
+    interval::IntervalExtension,
+    passes::{lazy_type::TypeError, lower_ast::block_build::VarDef},
+    typelevel::{IntervalConstruct, NonUniformConstruct, TypeCast},
     OptEdge, Optimizer,
 };
 
@@ -109,11 +111,28 @@ impl Optimizer {
                     //Either a building _special_ call, or an actual call to a λ.
                     //The latter is resolved as a simple _call_
                     if let Some(intr) = OptNode::try_parse(&c.ident.0) {
+                        //Notify the compiler if this is one of the pass nodes.
+                        if intr.try_downcast_ref::<AutoDiff>().is_some() {
+                            #[cfg(feature = "log")]
+                            if !self.config.seen_pass_nodes.autodiff {
+                                log::info!("Registering first AutoDiff");
+                            }
+
+                            self.config.seen_pass_nodes.autodiff = true;
+                        }
+                        if intr.try_downcast_ref::<IntervalExtension>().is_some() {
+                            #[cfg(feature = "log")]
+                            if !self.config.seen_pass_nodes.interval {
+                                log::info!("Registering first IntervalExtension");
+                            }
+                            self.config.seen_pass_nodes.interval = true;
+                        }
+
                         CallResult::Node(intr.with_span(expr_span.clone()))
                     } else {
                         //must be some kind of function, try to import it, and place a call
                         let call_output = ctx
-                            .find_variable(&mut self.graph, &c.ident.0)
+                            .find_variable(self, &c.ident.0)
                             .map_err(|e| e.with_label(expr_span.clone(), "here"))?;
                         //make sure this is actually a callable
                         if let Some(callable) = self.graph.find_callabel_def(call_output) {
@@ -132,7 +151,7 @@ impl Optimizer {
                                 expr_span,
                                 "trying to call this",
                             );
-                            if let Some(outspan) = self.find_span(call_output.into()) {
+                            if let Some(outspan) = self.find_span(call_output) {
                                 return Err(err.with_label(outspan, "found this"));
                             } else {
                                 return Err(err);
@@ -177,7 +196,7 @@ impl Optimizer {
                             .argument_count();
                         if argcount != args.len() {
                             let lmd_name = self.node_name(lambda.node);
-                            let lmd_span = self.find_span(lambda.node.into());
+                            let lmd_span = self.find_span(lambda.node);
                             let err = VolaError::error_here(
                                 OptError::Any {
                                     text: format!(
@@ -218,7 +237,7 @@ impl Optimizer {
                 let mut args = SmallColl::new();
                 //first arg is, by definition the _hopefull_ defined var
                 let operand = ctx
-                    .find_variable(&mut self.graph, &evalexpr.evaluator.0)
+                    .find_variable(self, &evalexpr.evaluator.0)
                     .map_err(|e| e.with_label(expr_span.clone(), "here"))?;
                 args.push(operand);
 
@@ -250,7 +269,7 @@ impl Optimizer {
                 // return the value
 
                 let mut src = ctx
-                    .find_variable(&mut self.graph, &src.0)
+                    .find_variable(self, &src.0)
                     .map_err(|e| e.with_label(expr_span.clone(), "here"))?;
 
                 //Unwrap the `accessors` list into a chain of `ConstantIndex`, each feeding into its
@@ -284,7 +303,7 @@ impl Optimizer {
             ExprTy::Ident(i) => {
                 //try to resolve the ident, or throw an error if not possible
                 let ident_node = ctx
-                    .find_variable(&mut self.graph, &i.0)
+                    .find_variable(self, &i.0)
                     .map_err(|e| e.with_label(expr_span.clone(), "here"))?;
                 Ok(ident_node)
             }
@@ -490,6 +509,23 @@ impl Optimizer {
                     .unwrap();
                 Ok(opnode)
             }
+            ExprTy::Interval { span, lower, upper } => {
+                let lower = self.build_expr(*lower, region, ctx)?;
+                let upper = self.build_expr(*upper, region, ctx)?;
+                let opnode = self
+                    .graph
+                    .on_region(&region, |reg| {
+                        let (opnode, _) = reg
+                            .connect_node(
+                                OptNode::new(IntervalConstruct::default(), span),
+                                [lower, upper],
+                            )
+                            .unwrap();
+                        opnode.output(0)
+                    })
+                    .unwrap();
+                Ok(opnode)
+            }
             ExprTy::Branch(e) => self.build_branch_expr(*e, region, ctx),
         }
     }
@@ -502,8 +538,31 @@ impl Optimizer {
         ctx: &mut BlockCtx,
     ) -> Result<OutportLocation, VolaError<OptError>> {
         let (condition, if_branch) = branch.conditional;
+        let condition_span = condition.span.clone();
         //First build the condition in this region
         let condition = self.build_expr(condition, region, ctx)?;
+
+        //Make sure the condition is actually a boolean op
+        match self.get_out_type_mut(condition) {
+            Ok(ty) => {
+                if !(ty.is_bool() && ty.is_scalar()) {
+                    return Err(VolaError::error_here(
+                        TypeError::Other(format!("Condition must be bool, was {ty}")).into(),
+                        condition_span,
+                        "here",
+                    ));
+                }
+            }
+            Err(_e) => {
+                return Err(VolaError::error_here(
+                    TypeError::Other(format!("Could not derive a valid type for this condition!"))
+                        .into(),
+                    condition_span,
+                    "here",
+                ))
+            }
+        }
+
         //now build the condition block.
         let (gamma, if_idx, else_idx) = self
             .graph

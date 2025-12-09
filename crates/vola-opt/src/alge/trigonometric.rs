@@ -22,7 +22,8 @@ use vola_common::Span;
 use crate::{
     common::{DataType, Shape, Ty},
     imm::{ImmScalar, ImmVector},
-    DialectNode, OptError, OptNode,
+    passes::lazy_type::TypeError,
+    DialectNode, OptNode,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -95,20 +96,20 @@ impl DialectNode for Trig {
         input_types: &[Ty],
         _concepts: &AHashMap<String, CsgConcept>,
         _csg_defs: &ahash::AHashMap<String, CsgDef>,
-    ) -> Result<Ty, OptError> {
+    ) -> Result<Ty, TypeError> {
         //check input count
         match self.op {
             TrigOp::ATan2 => {
                 assert!(input_types.len() == 2);
                 if input_types[0] != input_types[1] {
-                    return Err(OptError::TypeDeriveError {
-                        text: "Inputs need to be of same type".to_owned(),
-                    });
+                    return Err(TypeError::Other(
+                        "Inputs need to be of same type".to_owned(),
+                    ));
                 }
                 if !(input_types[0] == Ty::SCALAR_INT || input_types[0] == Ty::SCALAR_REAL) {
-                    return Err(OptError::TypeDeriveError {
-                        text: "Inputs need to be either real, or integer".to_owned(),
-                    });
+                    return Err(TypeError::Other(
+                        "Inputs need to be either real, or integer".to_owned(),
+                    ));
                 }
             }
             _ => {
@@ -116,26 +117,33 @@ impl DialectNode for Trig {
             }
         }
 
-        let input_ty = input_types[0].clone();
+        let input_ty = &input_types[0];
 
         match input_ty {
-            Ty::SCALAR_REAL => {}
-            Ty::Shaped {
+            &Ty::SCALAR_REAL
+            | Ty::Shaped {
                 ty: DataType::Real,
                 shape: Shape::Vec { .. },
             } => {}
-            _ => {
-                return Err(OptError::Any {
-                    text: format!(
-                        "{:?} expects operands of type scalar or vector, got {:?}",
+            Ty::Interval(ity) => match ity.as_ref() {
+                &Ty::SCALAR_REAL => {}
+                _ => {
+                    return Err(TypeError::Other(format!(
+                        "{:?} only supports intervals of real-values, was {:?}",
                         self.op, input_ty
-                    ),
-                })
+                    )))
+                }
+            },
+            _ => {
+                return Err(TypeError::Other(format!(
+                    "{:?} expects operands of type scalar or vector, got {:?}",
+                    self.op, input_ty
+                )))
             }
         }
 
         //seems to be alright, return scalar
-        Ok(input_ty)
+        Ok(input_ty.clone())
     }
 
     fn structural_copy(&self, span: vola_common::Span) -> crate::OptNode {

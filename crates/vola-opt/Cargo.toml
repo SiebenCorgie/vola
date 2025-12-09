@@ -20,6 +20,7 @@ vola-ast.workspace = true
 vola-common.workspace = true
 ahash.workspace = true
 log = { workspace = true, optional = true }
+thiserror.workspace = true
 
 [dev-dependencies]
 pretty_env_logger.workspace = true

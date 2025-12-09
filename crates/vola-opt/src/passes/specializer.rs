@@ -30,6 +30,9 @@ struct SpecCtx {
 impl Optimizer {
     /// Shortcut to call [Self::specialize_region] for all exported λs
     pub fn specialize_all_exports(&mut self) -> Result<(), Vec<VolaError<OptError>>> {
+        #[cfg(feature = "log")]
+        log::info!("Specialize all exports");
+
         let mut errors = Vec::with_capacity(0);
 
         //specialize all functions:
@@ -156,7 +159,7 @@ impl Optimizer {
 
         //NOTE inline takes care of bringing all CSG nodes into the same region
         //TODO: Don't inline all, use heuristic instead.
-        let region_span = self.find_span(region.into()).unwrap_or(Span::empty());
+        let region_span = self.find_span(region).unwrap_or(Span::empty());
         self.inline_all_region(region)
             .map_err(|e| VolaError::error_here(e, region_span.clone(), "in this region"))?;
 
@@ -177,7 +180,7 @@ impl Optimizer {
                 if self.is_node_type::<EvalNode>(node) {
                     //ignore dead eval nodes
                     if !liveness.get(&node.into()).cloned().unwrap_or(false) {
-                        if let Some(span) = self.find_span(node.into()) {
+                        if let Some(span) = self.find_span(node) {
                             report(
                                 warning_reporter("unused eval", span.clone())
                                     .with_label(
@@ -192,7 +195,7 @@ impl Optimizer {
                     }
 
                     //node seems good, start specializer
-                    let span = self.find_span(node.into()).unwrap_or(region_span.clone());
+                    let span = self.find_span(node).unwrap_or(region_span.clone());
                     self.specialize_eval_entry(node)
                         .map_err(|e| e.with_label(span, "while specializing this"))?;
                     continue 'restart;
@@ -392,29 +395,28 @@ impl Optimizer {
                 .clone()
                 .unwrap();
             let span = self
-                .find_span(spec_ctx.eval_node.into())
+                .find_span(spec_ctx.eval_node)
                 .unwrap_or(spec_ctx.tree_access_span.clone());
             //NOTE: this _shouldn't_ happen, but its better to report, instead of
             //      panicing
-            let eval_ty = self.find_type(&spec_ctx.eval_node.output(0).into()).ok_or(
-                VolaError::error_here(
-                    OptError::CsgStructureIssue(format!(
-                        "Expected eval ({}) to be typed",
-                        spec_ctx.eval_node
-                    )),
-                    span,
-                    "here",
-                ),
-            )?;
+            let eval_ty = self
+                .get_out_type_mut(spec_ctx.eval_node.output(0))
+                .map_err(|e| {
+                    e.to_error()
+                        .with_error(span, "expected this eval to be typed")
+                })?;
             let call_src = if eval_region != csg_region {
-                self.import_context(
-                    OutportLocation {
-                        node: csg_impl_lambda,
-                        output: OutputType::LambdaDeclaration,
-                    },
-                    eval_region,
-                )
-                .unwrap()
+                let src = self
+                    .import_context(
+                        OutportLocation {
+                            node: csg_impl_lambda,
+                            output: OutputType::LambdaDeclaration,
+                        },
+                        eval_region,
+                    )
+                    .unwrap();
+
+                src
             } else {
                 //If the eval is in the host region, we can use the call-source as is
                 OutportLocation {
@@ -600,7 +602,7 @@ impl Optimizer {
             if let Some(producer) = self.graph.find_producer_inp(old_dst) {
                 let in_context_port = self.import_context(producer, region)?;
                 //Set type for import path
-                let ty = if let Some(ty) = self.find_type(&in_context_port.clone().into()) {
+                let ty = if let Ok(ty) = self.get_out_type_mut(in_context_port.clone()) {
                     OptEdge::value_edge().with_type(ty)
                 } else {
                     log::warn!("Could not find type for imported prototype, using none");
@@ -717,7 +719,7 @@ impl Optimizer {
         }
     }
 
-    ///Recursion wrapper that turns the `eval` node in the canonical-form that can be handeled by the specializer.
+    ///Recursion wrapper that turns the `eval` node in the canonical-form that can be handled by the specializer.
     ///Returns all (eval-node, csg-producer) pairs that need to be specialized for this _canonicalized_ node.
     fn spec_canonicalize_eval_node(
         &mut self,
@@ -765,7 +767,7 @@ impl Optimizer {
         //Is a theta node. Try to find the loop-bound, and iff successful, unroll
         if self.graph[prod.node].node_type.is_theta() {
             //NOTE: loops should always be annotated.
-            let loop_span = self.find_span(prod.node.into());
+            let loop_span = self.find_span(prod.node);
             let count = self.loop_count(prod.node).map_err(|e| {
                 let err = VolaError::new(e.into());
                 if let Some(span) = loop_span.clone() {
@@ -816,7 +818,7 @@ impl Optimizer {
 
         //Was not a CsgNode nor a CF-Node, so is some kind of _wrong_ tree.
         let err = OptError::CsgStructureIssue("Non-CSG value used in CSG tree!".to_owned());
-        let error = if let Some(span) = self.find_span(prod.node.into()) {
+        let error = if let Some(span) = self.find_span(prod.node) {
             VolaError::error_here(err, span.clone(), "this should be a CSG value")
         } else {
             VolaError::new(err)
@@ -861,7 +863,7 @@ impl Optimizer {
 
                     if !self.is_node_type::<CsgOp>(prod.node) {
                         let e = OptError::CsgStructureIssue(format!("Could not specialize branch [{branch}]: The branch uses a CSG-value, that itself comes from a branch. Which is an edge-case we currently don't support. Please file an issue!"));
-                        let err = if let Some(span) = self.find_span(prod.node.into()) {
+                        let err = if let Some(span) = self.find_span(prod.node) {
                             VolaError::error_here(e, span, "The CSG-value comes from here. Consider moving that out of a branch for now!")
                         } else {
                             VolaError::new(e)
@@ -893,7 +895,7 @@ impl Optimizer {
         //collect all context-srcs of the eval node. By definition the first is the csg-src we are currently working on
         //the rest must be imported whenever we build the substitution eval
         let mut needed_context_ports = self.graph[eval].input_srcs(&self.graph);
-        //NOTE: this is only the context-variable, at which the csg-var is in, we handel this _specifically_
+        //NOTE: this is only the context-variable, at which the csg-var is in, we handle this _specifically_
         //      in the first part of the per-branch loop.
         let _csgsrc = needed_context_ports.remove(0);
 
@@ -938,12 +940,10 @@ impl Optimizer {
                             //CVs can just be traced and imported. Find the actual producer...
                             let producer = self.graph.find_producer_out(*src).unwrap();
                             //... and import it into our branch
-                            let (import_cv, _) = self
-                                .graph
-                                .import_argument(producer, branch_region)
-                                .map_err(|e| {
+                            let import_cv =
+                                self.import_argument(producer, branch_region).map_err(|e| {
                                     VolaError::error_here(
-                                        OptError::InternalGraphError(e),
+                                        e,
                                         evalspan.clone(),
                                         "while trying to specialize this eval for branch",
                                     )
@@ -959,12 +959,10 @@ impl Optimizer {
                             //Hovere, there is a shortcut: If the argument is already in a parent-region, we can just import it as-is.
                             if self.graph.is_in_parent(branch_region.node, src.node) {
                                 //The data source is already in a parent, so we can _just_ import it.
-                                let (import_cv, _) = self
-                                    .graph
-                                    .import_context(*src, branch_region)
-                                    .map_err(|e| {
+                                let import_cv =
+                                    self.import_context(*src, branch_region).map_err(|e| {
                                         VolaError::error_here(
-                                            OptError::InternalGraphError(e),
+                                            e,
                                             evalspan.clone(),
                                             "while trying to specialize this eval for branch",
                                         )
@@ -1012,16 +1010,10 @@ impl Optimizer {
                                             most_outer_region = self.graph.toplevel_region();
                                         }
 
-                                        let (import_cv, _) = self
-                                                                        .graph
-                                                                        .import_context(argument_src, branch_region)
-                                                                        .map_err(|e| {
-                                                                            VolaError::error_here(
-                                                                                OptError::InternalGraphError(e),
-                                                                                evalspan.clone(),
-                                                                                "while trying to specialize this eval for branch",
-                                                                            )
-                                                                        })?;
+                                        let import_cv = self.import_context(argument_src, branch_region)
+                                            .map_err(|e| {
+                                                VolaError::error_here(e,evalspan.clone(),"while trying to specialize this eval for branch")
+                                            })?;
 
                                         import_cv
                                     } else {
@@ -1108,7 +1100,7 @@ impl Optimizer {
                 //
                 // So what we actually did is place a eval-node here (pretending that works), connect the CSG source, from which we don't really know whats going on,
                 // and recurse the canonicalization. This will handle both cases. Either it'll just return the eval-node and the actual _outside_ CSG (case 1)
-                // or it handels moving the eval even further into the CF, and replacing everything that comes with it.
+                // or it handles moving the eval even further into the CF, and replacing everything that comes with it.
                 let mut new_pairs = self.spec_canonicalize_eval_node(created_eval)?;
                 //now append all new pairs we found in the recursion
                 collected.append(&mut new_pairs);
@@ -1130,11 +1122,6 @@ impl Optimizer {
         }
         //now delete the old eval-node, so it won't be re-discovered
         let _ = self.graph.remove_node(eval).unwrap();
-        //and re-type the parent region
-        let type_region_span = self
-            .find_span(most_outer_region.into())
-            .unwrap_or(Span::empty());
-        self.derive_region(most_outer_region, type_region_span, true)?;
 
         Ok(collected)
     }

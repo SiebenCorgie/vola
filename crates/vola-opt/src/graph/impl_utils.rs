@@ -339,42 +339,10 @@ impl Optimizer {
         Ok((higher - lower).try_into().unwrap())
     }
 
-    ///Tries to build a single unified type for all branches of `gamma` that make the `exit_variable`'s type.
-    ///
-    /// Returns None on missmatching types.
-    pub(crate) fn gamma_unified_type(&self, gamma: NodeRef, exit_variable: usize) -> Option<Ty> {
-        let mut candidate = None;
-        for branch in 0..self.graph[gamma].regions().len() {
-            if let Some(ty) = self.find_type(
-                &gamma
-                    .as_inport_location(InputType::ExitVariableResult {
-                        branch,
-                        exit_variable,
-                    })
-                    .into(),
-            ) {
-                if let Some(candidate) = &candidate {
-                    if *candidate != ty {
-                        //missmatch
-                        return None;
-                    }
-                } else {
-                    //no candidate yet, set it
-                    candidate = Some(ty);
-                }
-            }
-        }
-
-        candidate
-    }
-
     ///Returns a list of all currently exported λ-bodies
     pub(crate) fn exported_functions(&self) -> SmallColl<RegionLocation> {
         let mut export_lambdas = SmallColl::default();
-        for result in self
-            .graph
-            .result_ports(self.graph.toplevel_region().node, 0)
-        {
+        for result in self.graph.result_ports(self.graph.toplevel_region()) {
             if let Some(src) = self.graph.inport_src(result) {
                 if self.graph[src.node].node_type.is_lambda() {
                     export_lambdas.push(RegionLocation {

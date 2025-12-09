@@ -13,7 +13,8 @@ use std::ops::Neg;
 use crate::{
     common::{DataType, Shape, Ty},
     imm::{ImmMatrix, ImmScalar, ImmVector},
-    DialectNode, OptError, OptNode,
+    passes::lazy_type::TypeError,
+    DialectNode, OptNode,
 };
 use ahash::AHashMap;
 use rvsdg::{
@@ -78,25 +79,23 @@ impl BinaryArith {
         }
     }
 
-    pub fn derive_type(&self, sig: [Ty; 2]) -> Result<Ty, OptError> {
+    pub fn derive_type(&self, sig: [Ty; 2]) -> Result<Ty, TypeError> {
         match &self.op {
             BinaryArithOp::Add | BinaryArithOp::Sub | BinaryArithOp::Div | BinaryArithOp::Mod => {
                 if sig[0] != sig[1] {
-                    return Err(OptError::Any {
-                        text: format!(
-                            "{:?} expects the two operands to be of the same type. but got {} & {}",
-                            self.op, sig[0], sig[1]
-                        ),
-                    });
+                    return Err(TypeError::Other(format!(
+                        "{:?} expects the two operands to be of the same type. but got {} & {}",
+                        self.op, sig[0], sig[1]
+                    )));
                 }
 
-                if !sig[0].is_algebraic() {
-                    return Err(OptError::Any {
-                        text: format!(
-                            "{:?} expects algebraic operands (scalar, vector, matrix, tensor) got {}",
-                            self.op, sig[0]
-                        ),
-                    });
+                if !(sig[0].is_scalar_arithmetic()
+                    || sig[0].is_interval_of(Ty::is_scalar_arithmetic))
+                {
+                    return Err(TypeError::Other(format!(
+                        "{:?} expects algebraic operands (scalar, vector, matrix, tensor) got {}",
+                        self.op, sig[0]
+                    )));
                 }
 
                 //Is okay, for these we return the _same_ type that we got
@@ -113,30 +112,32 @@ impl BinaryArith {
 
                 //Still always two inputs one output
                 if sig.len() != 2 {
-                    return Err(OptError::Any {
-                        text: format!("{:?} expects two operands, got {}", self.op, sig.len()),
-                    });
+                    return Err(TypeError::Other(format!(
+                        "{:?} expects two operands, got {}",
+                        self.op,
+                        sig.len()
+                    )));
                 }
 
-                if !sig[0].is_algebraic() {
-                    return Err(OptError::Any {
-                        text: format!(
-                            "{:?} expects algebraic operands (scalar, vector, matrix, tensor) got {}",
-                            self.op, sig[0]
-                        ),
-                    });
+                if !(sig[0].is_scalar_arithmetic()
+                    || sig[0].is_interval_of(Ty::is_scalar_arithmetic))
+                {
+                    return Err(TypeError::Other(format!(
+                        "{:?} expects algebraic operands (scalar, vector, matrix, tensor) got {}",
+                        self.op, sig[0]
+                    )));
                 }
 
-                if !sig[1].is_algebraic() {
-                    return Err(OptError::Any {
-                        text: format!(
-                            "{:?} expects algebraic operands (scalar, vector, matrix, tensor) got {}",
-                            self.op, sig[1]
-                        ),
-                    });
+                if !(sig[1].is_scalar_arithmetic()
+                    || sig[1].is_interval_of(Ty::is_scalar_arithmetic))
+                {
+                    return Err(TypeError::Other(format!(
+                        "{:?} expects algebraic operands (scalar, vector, matrix, tensor) got {}",
+                        self.op, sig[1]
+                    )));
                 }
 
-                match (&sig[0], &sig[1]) {
+                let base_match = |a: &Ty, b: &Ty| match (a, b) {
                     //In that case, use the vector as return type
                     (
                         Ty::Shaped {
@@ -173,7 +174,7 @@ impl BinaryArith {
                         //      generally speaking this is more of a SPIR-V issue. Other backends could implement
                         //      other Matrix/Vector multiplication
                         if vecwidth != num_columns {
-                            Err(OptError::Any { text: format!("Vector-Matrix multiplication expects the Matrix's \"width\" to be equal to Vector's \"width\". Matrix width = {num_columns} & vector_width = {vecwidth}") })
+                            Err(TypeError::ShapeError(format!("Vector-Matrix multiplication expects the Matrix's \"width\" to be equal to Vector's \"width\". Matrix width = {num_columns} & vector_width = {vecwidth}") ))
                         } else {
                             //Use the vector's type.
                             Ok(sig[0].clone())
@@ -194,7 +195,7 @@ impl BinaryArith {
                     ) => {
                         //Similar to above.
                         if num_columns != vecwidth {
-                            Err(OptError::Any { text: format!("Matrix-Vector multiplication expects the Matrix's \"width\" to be equal to Vector's \"width\". Matrix width = {num_columns} & vector_width = {vecwidth}") })
+                            Err(TypeError::ShapeError(format!("Matrix-Vector multiplication expects the Matrix's \"width\" to be equal to Vector's \"width\". Matrix width = {num_columns} & vector_width = {vecwidth}") ))
                         } else {
                             //Use the vector's type.
                             Ok(sig[1].clone())
@@ -205,14 +206,22 @@ impl BinaryArith {
                     //we actually need to return Err
                     (a, b) => {
                         if a != b {
-                            Err(OptError::Any {
-                                text: format!("{:?} expects the two operands, to be of the same type. but got {:?} & {:?}", self.op, sig[0], sig[1]),
-                            })
+                            Err(TypeError::Other( format!("{:?} expects the two operands, to be of the same type. but got {:?} & {:?}", self.op, sig[0], sig[1]),
+                            ))
                         } else {
                             //thats okay
                             Ok(sig[0].clone())
                         }
                     }
+                };
+
+                //apply the base-matcher to either the ty directly
+                // or interval wrapped types
+                match (&sig[0], &sig[1]) {
+                    (Ty::Interval(a), Ty::Interval(b)) => base_match(a, b),
+                    (Ty::Interval(a), other_b) => base_match(a, other_b),
+                    (other_a, Ty::Interval(b)) => base_match(other_a, b),
+                    (a, b) => base_match(a, b),
                 }
             }
         }
@@ -229,18 +238,16 @@ impl DialectNode for BinaryArith {
         input_types: &[Ty],
         _concepts: &AHashMap<String, CsgConcept>,
         _csg_defs: &AHashMap<String, CsgDef>,
-    ) -> Result<Ty, OptError> {
+    ) -> Result<Ty, TypeError> {
         //For all WKOps we first collect all inputs, then let the op check itself.
         // For now we already bail if any type is unset, since we currently don't have any ops that
         // _don't_ care about any input.
 
         if input_types.len() != 2 {
-            return Err(OptError::TypeDeriveError {
-                text: format!(
-                    "Binary operation expects 2 inputs, had {}",
-                    input_types.len()
-                ),
-            });
+            return Err(TypeError::Other(format!(
+                "Binary operation expects 2 inputs, had {}",
+                input_types.len()
+            )));
         }
 
         let signature = [input_types[0].clone(), input_types[1].clone()];
@@ -359,19 +366,19 @@ impl DialectNode for UnaryArith {
         input_types: &[Ty],
         _concepts: &AHashMap<String, CsgConcept>,
         _csg_defs: &AHashMap<String, CsgDef>,
-    ) -> Result<Ty, OptError> {
+    ) -> Result<Ty, TypeError> {
         assert_eq!(input_types.len(), 1);
         let input_ty = input_types[0].clone();
 
         match &self.op {
             UnaryArithOp::Neg => {
-                if !input_ty.is_algebraic() {
-                    return Err(OptError::Any {
-                        text: format!(
-                            "{:?} expects algebraic operand (scalar, vector, matrix, tensor) got {:?}",
-                            self.op,input_ty
-                        ),
-                    });
+                if !(input_ty.is_scalar_arithmetic()
+                    || input_ty.is_interval_of(Ty::is_scalar_arithmetic))
+                {
+                    return Err(TypeError::Other(format!(
+                        "{:?} expects algebraic operand (scalar, vector, matrix, tensor) got {:?}",
+                        self.op, input_ty
+                    )));
                 }
                 //seem allright, for neg, we return the _same_ datatype as we get
                 Ok(input_ty)
@@ -381,20 +388,21 @@ impl DialectNode for UnaryArith {
             | UnaryArithOp::Round
             | UnaryArithOp::Ceil
             | UnaryArithOp::Floor => {
-                match input_ty {
-                    Ty::SCALAR_REAL => {}
-                    Ty::Shaped {
+                let base_test = |input_ty: &Ty| match *input_ty {
+                    Ty::SCALAR_REAL
+                    | Ty::Shaped {
                         ty: DataType::Real,
                         shape: Shape::Vec { .. },
-                    } => {}
-                    _ => {
-                        return Err(OptError::Any {
-                            text: format!(
-                                "{:?} expects operands of type scalar or vector, got {:?}",
-                                self.op, input_ty
-                            ),
-                        })
-                    }
+                    } => Ok(()),
+                    _ => Err(TypeError::Other(format!(
+                        "{:?} expects operands of type scalar or vector, got {:?}",
+                        self.op, input_ty
+                    ))),
+                };
+
+                match &input_ty {
+                    Ty::Interval(t) => base_test(t)?,
+                    other => base_test(other)?,
                 }
 
                 //seems to be alright, return scalar

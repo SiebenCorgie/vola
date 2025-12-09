@@ -566,11 +566,14 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
     }
 
     ///Builds a all argument locations for the `region_index`-th inner region of `node`.
-    pub fn argument_ports(&self, node: NodeRef, region_index: usize) -> SmallColl<OutportLocation> {
-        self[node]
-            .argument_types(region_index)
+    pub fn argument_ports(&self, region: RegionLocation) -> SmallColl<OutportLocation> {
+        self[region.node]
+            .argument_types(region.region_index)
             .into_iter()
-            .map(|output| OutportLocation { node, output })
+            .map(|output| OutportLocation {
+                node: region.node,
+                output,
+            })
             .collect()
     }
 
@@ -583,11 +586,14 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
             .collect()
     }
     ///Builds a all result locations for the `region_index`-th inner region of `node`.
-    pub fn result_ports(&self, node: NodeRef, region_index: usize) -> SmallColl<InportLocation> {
-        self[node]
-            .result_types(region_index)
+    pub fn result_ports(&self, region: RegionLocation) -> SmallColl<InportLocation> {
+        self[region.node]
+            .result_types(region.region_index)
             .into_iter()
-            .map(|input| InportLocation { node, input })
+            .map(|input| InportLocation {
+                node: region.node,
+                input,
+            })
             .collect()
     }
 }

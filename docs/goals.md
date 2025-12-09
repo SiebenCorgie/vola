@@ -1,8 +1,16 @@
 ### Goals
-High-level goals of the compiler / language
+
+High-level goals of the compiler / language:
+
+- Creation of complex operation [CSG](https://en.wikipedia.org/wiki/Constructive_solid_geometry)-[DAGs](https://en.wikipedia.org/wiki/Directed_acyclic_graph) that make up an object
+- Such DAGs can describe many properties through the interpreation of _concepts_ on such CSG objects
+  - i.e interpretation under _color_, _roughness_, _density_ etc.
+- Fast / easy mutation of such structures
+- Effortless execution on both CPU and GPU targets
 
 
-- Fast mutation of distance field code in user defined shaders
-- Compiletime derivative calculation for possible Libschitz calculation for [segment tracing](https://onlinelibrary.wiley.com/doi/epdf/10.1111/cgf.13951) if wanted. If wanted means whenever
-`field.d(x)`, `field.d(y)` etc. are accessed.
-- Good library support to build Vola AST at runtime within a (Rust) program. Since you might want to build a non-language based frontend (aka a 3D-modeller).
+### Non-Goals
+
+- General purpose language
+- Support for custom data-types / higher-order types etc.
+  - We have a simple, domain specific type-system. This makes the implementation of complex features such as [AutoDiff](automatic-differentiation.md) easy.

@@ -12,6 +12,9 @@ use rvsdg::{region::RegionLocation, SmallColl};
 impl Optimizer {
     ///Recursively inlines any apply-node thats _within_ a field_export.
     pub fn inline_field_exports(&mut self) -> Result<(), OptError> {
+        #[cfg(feature = "log")]
+        log::info!("Inline field exports");
+
         let mut errs = SmallColl::new();
         for exp in self.exported_functions() {
             self.inline_region(exp)?;
@@ -81,6 +84,9 @@ impl Optimizer {
                 })?;
                 //ninline += 1;
                 //now inline ourselfs
+                #[cfg(feature = "log")]
+                log::trace!("Inlining {node}");
+
                 let paths = self.graph.inline_apply_node(node).unwrap();
                 for p in paths {
                     if let Err(e) = self.type_path(&p) {

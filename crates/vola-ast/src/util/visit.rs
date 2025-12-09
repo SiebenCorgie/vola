@@ -13,7 +13,7 @@ use crate::{
 };
 
 ///Allows an implementor to traverse the AST, which calls the respective methode on each node.
-///If you want to mutate the AST, see [AstTransformer].
+///If you want to mutate the AST, see [crate::util::AstTransformer].
 #[allow(unused_variables)]
 pub trait AstVisitor {
     fn root(&mut self, root: &VolaAst) {}
@@ -204,6 +204,10 @@ impl Expr {
             }
             ExprTy::FieldAccess { .. } | ExprTy::Ident(_) | ExprTy::Literal(_) => {}
             ExprTy::Cast { expr, .. } => expr.traverse_visit(visitor),
+            ExprTy::Interval { lower, upper, .. } => {
+                lower.traverse_visit(visitor);
+                upper.traverse_visit(visitor);
+            }
         }
     }
 }

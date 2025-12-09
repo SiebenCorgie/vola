@@ -112,14 +112,12 @@ impl Optimizer {
             self.push_debug_state(&format!("fw-autodiff-{entrypoint}-canonicalized"));
         }
 
-        //do type derive and dead-node elemination in order to have
+        //do dead-node elemination in order to have
         // a) clean DAG (faster / easier transformation)
-        // b) type information to emit correct zero-nodes
         self.graph
             .dne_region(region)
             .map_err(|e| VolaError::new(e.into()))?;
-        let span = self.find_span(region.into()).unwrap_or(Span::empty());
-        self.derive_region(region, span.clone(), true)?;
+        let span = self.find_span(region).unwrap_or(Span::empty());
 
         //All entrypoints are with respect to a single scalar at this point,
         //and hooked up to the vector-value_creator already (if-needed).
@@ -215,7 +213,7 @@ impl Optimizer {
         // Therfore we only need to build this node's derivative, and possibly hook-up chain rule sub expressions
         for node in ordered_dependencies {
             self.build_derivative(region, node, ctx).map_err(|e| {
-                if let Some(span) = self.find_span(node.into()) {
+                if let Some(span) = self.find_span(node) {
                     VolaError::error_here(
                         e.clone(),
                         span,
@@ -245,14 +243,6 @@ impl Optimizer {
             .expr_cache
             .get(&expr_src)
             .expect("Expected derivative for output!");
-
-        //Before ending, always do a final type derive though
-        let span = self.find_span(region.into()).unwrap_or(Span::empty());
-        self.derive_region(region, span, true).map_err(|e| {
-            //report error immediatly, since we'll discard the context
-            e.report();
-            e.error
-        })?;
 
         Ok(derivative_src)
     }
@@ -367,7 +357,7 @@ impl Optimizer {
                 }
 
                 //build a new call node that is connected to the lmd copy
-                let (in_region_cpy_src, _) = self.graph.import_context(
+                let in_region_cpy_src = self.import_context(
                     lmd_cpy.as_outport_location(OutputType::LambdaDeclaration),
                     region,
                 )?;
@@ -412,16 +402,6 @@ impl Optimizer {
                             .connect(output, result_port, OptEdge::value_edge_unset())?;
                     }
                 }
-                //Post derive region after AD
-                self.derive_region(
-                    RegionLocation {
-                        node: lmd_cpy,
-                        region_index: 0,
-                    },
-                    Span::empty(),
-                    true,
-                )
-                .unwrap();
 
                 self.names
                     .set(lmd_cpy.into(), format!("λ derivative of {}", callsrc.node));
@@ -565,7 +545,7 @@ impl Optimizer {
         let response = match self.build_diff_value(region, node, &mut ctx.activity) {
             Ok(t) => t,
             Err(e) => {
-                if let Some(span) = self.find_span(node.into()) {
+                if let Some(span) = self.find_span(node) {
                     //TODO: at some point, propagate this upwards
                     {
                         let verror = VolaError::error_here(e.clone(), span, "On this operation");
@@ -630,7 +610,7 @@ impl Optimizer {
                     if let Some(diffed_port) = ctx.expr_cache.get(&port) {
                         Ok(*diffed_port)
                     } else {
-                        Err(AutoDiffError::FwPortUnhandeled(port))
+                        Err(AutoDiffError::FwPortUnhandled(port))
                     }
                 }
             }

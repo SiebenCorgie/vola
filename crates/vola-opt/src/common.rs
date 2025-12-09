@@ -9,7 +9,7 @@
 use rvsdg::smallvec::SmallVec;
 use std::fmt::Display;
 
-use crate::error::OptError;
+use crate::passes::lazy_type::TypeError;
 
 ///All data-types we might encounter in the optimizer
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
@@ -54,7 +54,6 @@ impl Display for DataType {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Shape {
     Scalar,
-    Interval,
     Vec { width: usize },
     Matrix { width: usize, height: usize },
     Tensor { sizes: SmallVec<[usize; 8]> },
@@ -62,22 +61,13 @@ pub enum Shape {
 
 impl Shape {
     ///Tries to build the new shape, based on the given index
-    pub(crate) fn try_derive_access_index(&self, index: usize) -> Result<Shape, OptError> {
+    pub(crate) fn try_derive_access_index(&self, index: usize) -> Result<Shape, TypeError> {
         match self {
-            Self::Interval => {
-                if index <= 1 {
-                    Ok(Self::Scalar)
-                } else {
-                    Err(OptError::Any {
-                    text: format!("Interval cannot be indexed with {}, only 0 for the lower bound, and 1 for the upper bound are valid", index),
-                    })
-                }
-            }
             Self::Vec { width } => {
                 if index >= *width {
-                    Err(OptError::Any {
-                        text: format!("Vector of width {width} cannot be indexed with {index}"),
-                    })
+                    Err(TypeError::ShapeError(format!(
+                        "Vector of width {width} cannot be indexed with {index}"
+                    )))
                 } else {
                     //Otherwise always resolves to an scalar
                     Ok(Self::Scalar)
@@ -85,17 +75,17 @@ impl Shape {
             }
             Self::Matrix { width, height } => {
                 if index >= *width {
-                    Err(OptError::Any {
-                        text: format!("Matrix {width}x{height} cannot be indexed with {index}"),
-                    })
+                    Err(TypeError::ShapeError(format!(
+                        "Matrix {width}x{height} cannot be indexed with {index}"
+                    )))
                 } else {
                     Ok(Self::Vec { width: *height })
                 }
             }
             Self::Tensor { sizes } => match sizes.len() {
-                0 => Err(OptError::Any {
-                    text: "Encountered zero dimensional tensor!".to_owned(),
-                }),
+                0 => Err(TypeError::ShapeError(
+                    "Encountered zero dimensional tensor!".to_owned(),
+                )),
                 1 => Self::Vec { width: sizes[0] }.try_derive_access_index(index),
                 2 => Self::Matrix {
                     width: sizes[1],
@@ -104,21 +94,33 @@ impl Shape {
                 .try_derive_access_index(index),
                 _any => {
                     if index >= sizes[0] {
-                        Err(OptError::Any {
-                            text: format!(
-                                "Cannot index tensor dimension of width={} with {index}",
-                                sizes[0]
-                            ),
-                        })
+                        Err(TypeError::ShapeError(format!(
+                            "Cannot index tensor dimension of width={} with {index}",
+                            sizes[0]
+                        )))
                     } else {
                         let new_dim = sizes[1..].iter().map(|d| *d).collect();
                         Ok(Self::Tensor { sizes: new_dim })
                     }
                 }
             },
-            other_ty => Err(OptError::Any {
-                text: format!("Cannot index into {:?}", other_ty),
-            }),
+            other_ty => Err(TypeError::ShapeError(format!(
+                "Cannot index into {:?}",
+                other_ty
+            ))),
+        }
+    }
+
+    ///Returns how many components this shape has. I.e. the
+    /// valid index range.
+    ///
+    /// Example: `vec3` has a component count of 3. `mat4x3` has a component count of 4. Scalar has a component count of 1.
+    pub fn component_count(&self) -> usize {
+        match self {
+            Self::Matrix { width, .. } => *width,
+            Self::Scalar => 1,
+            Self::Tensor { sizes } => sizes[0],
+            Self::Vec { width } => *width,
         }
     }
 }
@@ -126,7 +128,6 @@ impl Shape {
 impl From<vola_ast::common::Shape> for Shape {
     fn from(value: vola_ast::common::Shape) -> Self {
         match value {
-            vola_ast::common::Shape::Interval => Self::Interval,
             vola_ast::common::Shape::Vec { width } => Self::Vec { width },
             vola_ast::common::Shape::Matrix { width, height } => Self::Matrix { width, height },
             vola_ast::common::Shape::Tensor { sizes } => Self::Tensor { sizes },
@@ -138,7 +139,6 @@ impl Display for Shape {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Scalar => write!(f, "scalar"),
-            Self::Interval => write!(f, "interval"),
             Self::Vec { width } => write!(f, "vec{width}"),
             Self::Matrix { width, height } => {
                 if width == height {
@@ -171,6 +171,7 @@ pub enum Ty {
         ty: DataType,
         shape: Shape,
     },
+    Interval(Box<Self>),
     ///Aggregate type in the form of a tuple
     Tuple(Vec<Self>),
 }
@@ -186,6 +187,7 @@ impl From<vola_ast::common::Ty> for Ty {
                 ty: ty.into(),
                 shape: Shape::Scalar,
             },
+            vola_ast::common::Ty::Interval(ty) => Self::Interval(Box::new((*ty).into())),
             vola_ast::common::Ty::Tuple(tys) => {
                 Self::Tuple(tys.into_iter().map(|t| t.into()).collect())
             }
@@ -200,6 +202,7 @@ impl Display for Ty {
             Self::Shaped { ty, shape } => {
                 write!(f, "{shape}<{ty}>")
             }
+            Self::Interval(it) => write!(f, "Interval<{it}>"),
             Self::Tuple(ts) => {
                 write!(f, "(")?;
                 let mut is_first = true;
@@ -234,6 +237,18 @@ impl Ty {
     pub const CSG: Self = Self::Shaped {
         ty: DataType::Csg,
         shape: Shape::Scalar,
+    };
+    pub const VEC2: Self = Self::Shaped {
+        ty: DataType::Real,
+        shape: Shape::Vec { width: 2 },
+    };
+    pub const VEC3: Self = Self::Shaped {
+        ty: DataType::Real,
+        shape: Shape::Vec { width: 3 },
+    };
+    pub const VEC4: Self = Self::Shaped {
+        ty: DataType::Real,
+        shape: Shape::Vec { width: 4 },
     };
 
     pub const fn shaped(data_ty: DataType, shape: Shape) -> Self {
@@ -280,8 +295,9 @@ impl Ty {
     pub fn is_bool(&self) -> bool {
         self.data_type() == Some(DataType::Bool)
     }
+
     ///Returns true for real, integer, quaternion and complex data-types
-    pub fn is_algebraic(&self) -> bool {
+    pub fn is_scalar_arithmetic(&self) -> bool {
         if let Some(ty) = self.data_type() {
             match ty {
                 DataType::Real | DataType::Integer | DataType::Quaternion | DataType::Complex => {
@@ -331,6 +347,31 @@ impl Ty {
         }
     }
 
+    ///Returns true for any shaped type (including scalar types). Does not return true for `csg`, tuple, lists and callables
+    pub fn is_shaped(&self) -> bool {
+        if let Self::Shaped { .. } = self {
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn is_interval(&self) -> bool {
+        if let Self::Interval { .. } = self {
+            true
+        } else {
+            false
+        }
+    }
+
+    ///Tests whether `self` is an interval of a type that passes `test`.
+    pub fn is_interval_of(&self, test: impl Fn(&Ty) -> bool) -> bool {
+        match self {
+            Self::Interval(t) => test(t),
+            _ => false,
+        }
+    }
+
     ///If the type has a width, returns it. This is either the vector's or matrix's width,
     ///or the tensors first dimension.
     pub fn width(&self) -> Option<usize> {
@@ -361,7 +402,7 @@ impl Ty {
     }
 
     ///Tries to derive a type that would be produced by indexing with `index` into the `Ty`.
-    pub(crate) fn try_derive_access_index(&self, index: usize) -> Result<Ty, OptError> {
+    pub(crate) fn try_derive_access_index(&self, index: usize) -> Result<Ty, TypeError> {
         match self {
             //Basically a scalar at this point, so we can't index
             Self::Shaped { ty, shape } => {
@@ -371,18 +412,28 @@ impl Ty {
                     shape: sub_shape,
                 })
             }
+            Self::Interval(inner) => {
+                if index <= 1 {
+                    Ok(inner.as_ref().clone())
+                } else {
+                    Err(TypeError::Other(format!("Interval cannot be indexed with {}, only 0 for the lower bound, and 1 for the upper bound are valid", index),
+                    ))
+                }
+            }
             Self::Tuple(t) => {
                 if let Some(inner) = t.get(index) {
                     Ok(inner.clone())
                 } else {
-                    Err(OptError::Any {
-                        text: format!("Tuple of size {} has no element at index {index}", t.len()),
-                    })
+                    Err(TypeError::Other(format!(
+                        "Tuple of size {} has no element at index {index}",
+                        t.len()
+                    )))
                 }
             }
-            other_ty => Err(OptError::Any {
-                text: format!("Cannot index into {:?}", other_ty),
-            }),
+            other_ty => Err(TypeError::Other(format!(
+                "Cannot index into {:?}",
+                other_ty
+            ))),
         }
     }
 }

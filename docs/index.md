@@ -3,14 +3,15 @@
 
 ## Content
 
-- [Ideas](ideas.md) (outdated)
-- [Goals](goals.md) (outdated)
+- [Goals](goals.md)
+- [Ideas](ideas.md)
+- [Reserved](reserved.md)
 - [Automatic Differentiation](automatic-differentiation.md)
-
+- [Interval Arithmetic](interval_arithmetic.md)
 
 # Intro
 
-Vola is an experimental languages and compiler. Its goal is to find a pleasant way to work with distance functions. It tries to expose a human understandable model of the way distance functions work and can be combined. This model is then translated by the compiler into machine-executable code. The advantage being, that the distance function never has to be discretized into resolution-dependent approximations like voxels or triangles.
+Vola is an experimental languages and compiler. Its goal is to find a pleasant way to work with distance functions and related conepts. It tries to expose a human understandable model of the way distance functions work and can be combined. This model is then translated by the compiler into machine-executable code. The advantage being, that the distance function never has to be discretized into resolution-dependent approximations like voxels or triangles.
 
 
 # Trying it out

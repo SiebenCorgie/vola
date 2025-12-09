@@ -28,7 +28,7 @@ use vola_ast::VolaAst;
 mod error;
 pub use error::PipelineError;
 use vola_common::{reset_file_cache, VolaError};
-use vola_opt::Optimizer;
+use vola_opt::{passes::TypeEdges, Optimizer};
 
 pub mod backends;
 
@@ -124,8 +124,9 @@ impl Target {
 ///     3.7 (optional) optimize specialized eval-λs
 ///     3.8 (optional) inline eval-λs
 ///     3.9 (optional) iff 3.8 happened, do cross-λ-optimizations
-/// 4. Automatic differentiation
-/// 5. Emit some format based on a configured backend.
+/// 4. Interval extension and lowering
+/// 5. Automatic differentiation
+/// 6. Emit some format based on a configured backend.
 pub struct Pipeline {
     pub backend: BoxedBackend,
 
@@ -252,13 +253,29 @@ impl Pipeline {
                 .map_err(|e| vec![VolaError::new(PipelineError::CneError(e))])?;
         }
 
-        //dispatch autodiff nodes
-        opt.dispatch_autodiff().map_err(|e| vec![e.to_error()])?;
+        //dispatch interval-extension if any where seen.
+        if opt.config.seen_pass_nodes.interval {
+            opt.interval_extension().map_err(|e| vec![e.to_error()])?;
+        }
+        //now flatten intervals into tuple with "normal" operations
+        opt.interval_to_tuple().map_err(|e| vec![e.to_error()])?;
+
+        //dispatch autodiff nodes if any where seen. Note that this works only
+        // for scalar/vector/matrix ops, which is why we have to expand the interval-ops beforehand.
+        if opt.config.seen_pass_nodes.autodiff {
+            opt.dispatch_autodiff().map_err(|e| vec![e.to_error()])?;
+        }
 
         //Call _before-finalize-hook_.
         self.backend.opt_pre_finalize(&mut opt)?;
 
         opt.cleanup_export_lmd();
+
+        //now type-derive all live results in order for the backends to have all
+        // type information available
+        TypeEdges::setup(&mut opt)
+            .execute()
+            .map_err(|e| vec![e.to_error()])?;
 
         if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("VOLA_OPT_FINAL").is_ok() {
             opt.push_debug_state("Final Optimizer state");

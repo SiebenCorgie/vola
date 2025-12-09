@@ -13,7 +13,6 @@
 //! TODO: At some point the dispatcher will also take care of the heuristics based on which either forward or backward
 //!       mode AD are decided. But right now that is not implemented.
 
-use ahash::AHashSet;
 use rvsdg::{region::RegionLocation, NodeRef, SmallColl};
 use vola_common::{Span, VolaError};
 
@@ -31,11 +30,8 @@ impl Optimizer {
         //First top-down exploration of AD nodes.
         self.enque_ad_nodes_region(self.graph.toplevel_region(), &mut dispatch_nodes);
 
-        //Pre explore all touced regions.
-        let touched_regions = dispatch_nodes
-            .iter()
-            .map(|n| self.graph[*n].parent.unwrap())
-            .collect::<AHashSet<_>>();
+        #[cfg(feature = "log")]
+        log::info!("Dispatch AutoDiff for {}", dispatch_nodes.len());
 
         for node in dispatch_nodes {
             //TODO: Do heuristics to decide if we want forward / backward or hybrid
@@ -51,7 +47,7 @@ impl Optimizer {
                 self.push_debug_state(&format!("pre-autodiff-{node}"));
             }
 
-            let span = self.find_span(node.into()).unwrap_or(Span::empty());
+            let span = self.find_span(node).unwrap_or(Span::empty());
             if let Err(e) = self.forward_ad(node) {
                 return Err(e.with_label(span, "While forward differentiation of this"));
             }
@@ -60,29 +56,6 @@ impl Optimizer {
                 self.push_debug_state(&format!("post-autodiff-{node}"));
             }
         }
-
-        //before returning, re-derive types of all regions that we (might) have touched.
-        //
-        //This has two purposes:
-        // 1. All following passes have access to the post-ad code's type info
-        // 2. We'd catch any type-erros in the ad's pass
-
-        for region in touched_regions {
-            let span = self.find_span(region.into()).unwrap_or(Span::empty());
-            if let Err(e) = self.derive_region(region, span.clone(), true) {
-                return Err(e.with_label(
-                    span,
-                    "Failed to type-derive region after auto-differentiation",
-                ));
-            }
-        }
-
-        if std::env::var("VOLA_DUMP_ALL").is_ok()
-            || std::env::var("DUMP_POST_AD_TYPE_DERIVE").is_ok()
-        {
-            self.push_debug_state(&format!("post-autodiff-type-derive"));
-        }
-
         Ok(())
     }
 

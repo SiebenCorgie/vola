@@ -1,0 +1,23 @@
+//BEGIN-CONFIG
+//EXEC-FN:call
+//EXEC-ARGS:0.0
+//EXEC-EPS:0.0
+//EXEC-RES:-2.0,-1.0,-1.0,1.0,1.0,1.0
+//END-CONFIG
+///NOTE: This is the unwraped case of a union of box and sphere, there the sphere moved on the x-axis one unit into negative space
+
+fn union(a: interval<vec3>, b: interval<vec3>) -> interval<vec3>{
+    [min(a.start, b.start) .. max(a.end, b.end)]
+}
+
+export fn call(p: real) -> (vec3, vec3){
+
+    let box_bound = [[-1.0; 3] .. [1.0; 3]];
+    let sphere_bound = [[-1.0; 3] .. [1.0; 3]];
+    let offseted_sphere = sphere_bound + [[-1.0, 0.0, 0.0] .. [0.0, 0.0, 0.0]];
+
+    let whole_bound = union(box_bound, offseted_sphere);
+
+
+    (whole_bound.start, whole_bound.end)
+}

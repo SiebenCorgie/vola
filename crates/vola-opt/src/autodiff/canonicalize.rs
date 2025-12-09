@@ -48,7 +48,7 @@ impl Optimizer {
         region: &RegionLocation,
         node: NodeRef,
     ) -> Result<(), OptError> {
-        let span = self.find_span(node.into()).unwrap_or(Span::empty());
+        let span = self.find_span(node).unwrap_or(Span::empty());
         if let Some(unary_node) = self.try_unwrap_node::<UnaryArith>(node) {
             match &unary_node.op {
                 UnaryArithOp::Abs => {
@@ -59,7 +59,7 @@ impl Optimizer {
                     //transform into a smooth abs function
                     // as |f(x)| => sqrt(f(x)^2 + 0.001 )
                     let f_src = self.graph.inport_src(node.input(0)).unwrap();
-                    let ty = self.find_type(&f_src.into()).unwrap();
+                    let ty = self.get_out_type_mut(f_src).unwrap();
                     let c_splat = self.splat_scalar(
                         *region,
                         ImmScalar::new(self.config.autodiff.smooth_abs_c),
@@ -113,7 +113,7 @@ impl Optimizer {
         region: &RegionLocation,
         node: NodeRef,
     ) -> Result<(), OptError> {
-        let span = self.find_span(node.into()).unwrap_or(Span::empty());
+        let span = self.find_span(node).unwrap_or(Span::empty());
         if let Some(buildin_node) = self.try_unwrap_node::<Buildin>(node) {
             match &buildin_node.op {
                 //Transform the buildin op to a square-root and multiplied parts
@@ -244,14 +244,14 @@ impl Optimizer {
                     };
 
                     let ty = self
-                        .find_type(&node.output(0).into())
+                        .get_out_type_mut(node.output(0))
                         .expect("Expected type to be set!");
                     let imm_two = self.splat_scalar(*region, ImmScalar::new(2.0), ty.clone());
 
                     let x_src = self.graph.inport_src(node.input(0)).unwrap();
                     let y_src = self.graph.inport_src(node.input(1)).unwrap();
-                    let x_ty = self.find_type(&x_src.into()).unwrap();
-                    let y_ty = self.find_type(&y_src.into()).unwrap();
+                    let x_ty = self.get_out_type_mut(x_src).unwrap();
+                    let y_ty = self.get_out_type_mut(y_src).unwrap();
                     assert!(x_ty == y_ty);
 
                     let (abs_node, output) = self
@@ -328,7 +328,7 @@ impl Optimizer {
                     let y_src = self.graph.inport_src(node.input(1)).unwrap();
                     let a_src = self.graph.inport_src(node.input(2)).unwrap();
 
-                    let a_ty = self.find_type(&a_src.into()).unwrap();
+                    let a_ty = self.get_out_type_mut(a_src).unwrap();
                     let one = self.splat_scalar(*region, ImmScalar::new(1.0), a_ty);
                     let new_result = self
                         .graph
@@ -380,14 +380,14 @@ impl Optimizer {
                 }
                 BuildinOp::Clamp => {
                     //clamp(x, minval, maxval)
-                    //canonicalize as min(max(x, minval), maxval);
+                    //canonicalize as min(max(x, ^minval), maxval);
 
                     if !self.config.autodiff.canonicalize_undiff {
                         //None AD, since a > 1 && a < 0 is undefined
                         return Ok(());
                     }
                     let x_src = self.graph.inport_src(node.input(0)).unwrap();
-                    let expr_ty = self.find_type(&x_src.into()).unwrap();
+                    let expr_ty = self.get_out_type_mut(x_src).unwrap();
                     let min_src = self.graph.inport_src(node.input(1)).unwrap();
                     let max_src = self.graph.inport_src(node.input(2)).unwrap();
 
@@ -416,10 +416,10 @@ impl Optimizer {
                         .unwrap();
 
                     //type derive the min and max nodes before canonicalizing them
-                    self.type_derive_and_propagate(max, true)?;
+                    //self.type_derive_and_propagate(max, true)?;
                     //sub_canonicalize min and max
                     self.handle_canon_node(max)?;
-                    self.type_derive_and_propagate(min, true)?;
+                    //self.type_derive_and_propagate(min, true)?;
                     self.handle_canon_node(min)?;
 
                     //if succesful, replace
@@ -471,7 +471,7 @@ impl Optimizer {
             let new_src_port_in_region = if user_region == prod_region {
                 lmd_cpy_port
             } else {
-                let (import_port, _) = self.graph.import_context(lmd_cpy_port, user_region)?;
+                let import_port = self.import_context(lmd_cpy_port, user_region)?;
                 import_port
             };
             let user_calledg_port = user.input(0);

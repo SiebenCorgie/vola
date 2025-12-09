@@ -48,7 +48,6 @@ impl From<&usize> for FormatTree {
 impl From<&Shape> for FormatTree {
     fn from(value: &Shape) -> Self {
         match value {
-            Shape::Interval => FormatTree::Token("interval)".to_owned()),
             Shape::Vec { width } => FormatTree::Token(format!("vec{}", width)),
             Shape::Matrix { width, height } => {
                 if width == height {
@@ -94,6 +93,14 @@ impl From<&Ty> for FormatTree {
                 right: ')',
                 sub: Box::new(FormatTree::seperated_list(",", tuple.iter())),
             },
+            Ty::Interval(sub) => FormatTree::Seq(vec![
+                FormatTree::Token("interval".to_owned()),
+                FormatTree::Wrapped {
+                    left: '<',
+                    right: '>',
+                    sub: Box::new(FormatTree::from(sub.as_ref())),
+                },
+            ]),
         }
     }
 }

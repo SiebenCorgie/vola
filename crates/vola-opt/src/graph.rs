@@ -12,6 +12,7 @@ use std::{any::Any, fmt::Debug};
 
 use crate::error::OptError;
 use crate::imm::ImmBool;
+use crate::passes::lazy_type::TypeError;
 use crate::{common::Ty, Optimizer};
 use ahash::AHashMap;
 use rvsdg::attrib::AttribLocation;
@@ -50,10 +51,11 @@ pub trait DialectNode: LangNode + Any + View {
         _input_types: &[Ty],
         _concepts: &AHashMap<String, CsgConcept>,
         _csg_defs: &ahash::AHashMap<String, CsgDef>,
-    ) -> Result<Ty, OptError> {
-        Err(OptError::Any {
-            text: format!("Type resolution not implemented for {}", self.name()),
-        })
+    ) -> Result<Ty, TypeError> {
+        Err(TypeError::Other(format!(
+            "Type resolution not implemented for {}",
+            self.name()
+        )))
     }
 
     ///Used to check if two nodes implement the same operation.
@@ -333,7 +335,8 @@ impl Optimizer {
     //Tries to find a span for this node or port.
     //This'll first check if a span tag is active, if not,
     //tries to use the simple-node's span, or tries one of the ports
-    pub fn find_span(&self, loc: AttribLocation) -> Option<Span> {
+    pub fn find_span(&self, loc: impl Into<AttribLocation>) -> Option<Span> {
+        let loc = loc.into();
         if let Some(s) = self.span_tags.get(&loc) {
             return Some(s.clone());
         }
@@ -345,13 +348,13 @@ impl Optimizer {
                 }
 
                 for output in self.graph.node(n).outport_types() {
-                    if let Some(s) = self.find_span(OutportLocation { node: n, output }.into()) {
+                    if let Some(s) = self.find_span(OutportLocation { node: n, output }) {
                         return Some(s);
                     }
                 }
 
                 for input in self.graph[n].inport_types() {
-                    if let Some(s) = self.find_span(input.to_location(n).into()) {
+                    if let Some(s) = self.find_span(input.to_location(n)) {
                         return Some(s);
                     }
                 }
@@ -368,8 +371,9 @@ impl Optimizer {
     }
 
     ///Utility that tries to find type information in the vicinity of `loc`
-    pub fn find_type(&self, loc: &AttribLocation) -> Option<Ty> {
-        if let Some(t) = self.typemap.get(loc) {
+    pub fn try_read_type(&self, loc: impl Into<AttribLocation>) -> Option<Ty> {
+        let loc = loc.into();
+        if let Some(t) = self.typemap.get(&loc) {
             return Some(t.clone());
         }
 
@@ -388,7 +392,7 @@ impl Optimizer {
                     if edge_type.is_some() {
                         return edge_type;
                     } else {
-                        if let Some(src) = self.graph.inport_src(*portloc) {
+                        if let Some(src) = self.graph.inport_src(portloc) {
                             //note we don't do recursion, otherwise this might end in infinite recursion
                             //with the same routine for output-ports
                             self.typemap.get(&src.into()).cloned()
@@ -430,10 +434,10 @@ impl Optimizer {
             AttribLocation::Region(_) => None,
             AttribLocation::Node(_) => None,
             AttribLocation::Edge(edg) => {
-                if let Some(t) = self.find_type(&self.graph.edge(*edg).src().into()) {
+                if let Some(t) = self.try_read_type(self.graph.edge(edg).src()) {
                     return Some(t);
                 }
-                self.find_type(&self.graph.edge(*edg).dst().into())
+                self.try_read_type(self.graph.edge(edg).dst())
             }
         }
     }
@@ -464,46 +468,52 @@ impl Optimizer {
             && !port.output.is_argument()
     }
 
-    pub fn find_path_type(&self, path: &Path) -> Result<Ty, OptError> {
-        if let Some(start_type) = self.find_type(&path.start.into()) {
-            return Ok(start_type);
-        }
-        if let Some(end_type) = self.find_type(&path.end.into()) {
-            return Ok(end_type);
-        }
-
-        for edg in &path.edges {
-            if let Some(ty) = self.find_type(&edg.into()) {
-                return Ok(ty);
-            }
-        }
-
-        //if we didn't find anything yet, try all ports instead
-        for edg in &path.edges {
-            let src = self.graph.edge(*edg).src().clone();
-            if let Some(t) = self.find_type(&src.into()) {
-                return Ok(t);
-            }
-            let dst = self.graph.edge(*edg).dst().clone();
-            if let Some(t) = self.find_type(&dst.into()) {
-                return Ok(t);
-            }
-        }
-        Err(OptError::NotTypeOnPath)
-    }
-
     ///types the `path` of edges based on any found type information it can find on that path.
     ///
     /// If successful, return the type that was set on the path.
     pub fn type_path(&mut self, path: &Path) -> Result<Ty, OptError> {
-        //We first try the start and end port. If we can't find anything on there,
-        //we walk the path and try to find anything.
-        //if that ain't working as well, we gotta return with an error
+        //Use the lazy type-resolver to find the type of the path's end
+        // then make sure its set on all edges of the path
 
-        let found_type = self.find_path_type(&path)?;
-
+        let found_type = self.get_out_type_mut(path.start).map_err(|e| {
+            e.report();
+            OptError::from(e.error)
+        })?;
         for edg in &path.edges {
+            //NOTE: To keep our key assumptions true, set the port type of any λ result or
+            // argument.
+
+            let src = *self.graph[*edg].src();
+            let dst = *self.graph[*edg].dst();
+
+            if self.graph[src.node].is_callable() {
+                let _ = self.typemap.set(src.into(), found_type.clone());
+            }
+
+            if self.graph[dst.node].is_callable() {
+                let _ = self.typemap.set(dst.into(), found_type.clone());
+            }
+
             self.graph.edge_mut(*edg).ty.set_type(found_type.clone());
+        }
+
+        //Also type path end/start if needed
+        if self.graph[path.start.node].is_callable() {
+            let _ = self.typemap.set(path.start.into(), found_type.clone());
+        }
+
+        if self.graph[path.end.node].is_callable() {
+            let _ = self.typemap.set(path.end.into(), found_type.clone());
+            //If the port can be mapped _into_ any region, type-set it too. This takes care, for instance
+            // on type-setting the output of context variables
+            for region_index in 0..self.graph[path.end.node].regions().len() {
+                if let Some(in_region) = path.end.input.map_to_in_region(region_index) {
+                    let _ = self.typemap.set(
+                        in_region.to_location(path.end.node).into(),
+                        found_type.clone(),
+                    );
+                }
+            }
         }
 
         Ok(found_type)
@@ -515,23 +525,10 @@ impl Optimizer {
         src: OutportLocation,
         target_region: RegionLocation,
     ) -> Result<OutportLocation, OptError> {
-        let (out, path) = self.graph.import_context(src, target_region)?;
+        let (out, path) = self.graph.import_context(src, target_region).unwrap();
         if let Some(p) = path {
-            match self.type_path(&p) {
-                Ok(ty) => {
-                    for edg in p.edges {
-                        self.graph.edge_mut(edg).ty.set_type(ty.clone());
-                    }
-                }
-                //Just report that one, but that can happen
-                Err(OptError::NotTypeOnPath) => {
-                    log::info!(
-                        "ContextImport {src:?} -> {target_region:?}: {}",
-                        OptError::NotTypeOnPath
-                    );
-                }
-                Err(other) => return Err(other),
-            }
+            //Extend the path's type
+            let _ty = self.type_path(&p).unwrap();
         }
         Ok(out)
     }
@@ -544,15 +541,9 @@ impl Optimizer {
     ) -> Result<OutportLocation, OptError> {
         let (out, path) = self.graph.import_argument(src, target_region)?;
         if let Some(p) = path {
-            match self.type_path(&p) {
-                Ok(_) => {}
-                //Just report that one, but that can happen
-                Err(OptError::NotTypeOnPath) => {
-                    log::warn!("{}", OptError::NotTypeOnPath);
-                }
-                Err(other) => return Err(other),
-            }
+            let _ty = self.type_path(&p)?;
         }
+
         Ok(out)
     }
 

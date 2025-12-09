@@ -41,7 +41,7 @@ impl Optimizer {
         region: RegionLocation,
         port: OutportLocation,
     ) -> OutportLocation {
-        let ty = self.get_or_derive_type(port, true);
+        let ty = self.get_out_type_mut(port).unwrap();
         self.splat_scalar(region, ImmScalar::new(0.0), ty)
     }
 
@@ -53,10 +53,10 @@ impl Optimizer {
     pub fn linearize_ad(&mut self, entrypoint: NodeRef) -> Result<SmallColl<NodeRef>, OptError> {
         let wrt_src = self.graph[entrypoint].input_src(&self.graph, 1).unwrap();
 
-        let wrt_ty = self.find_type(&wrt_src.into()).unwrap();
+        let wrt_ty = self.get_out_type_mut(wrt_src).unwrap();
         let region = self.graph[entrypoint].parent.unwrap().clone();
         let autodiff_src = self.graph[entrypoint].input_src(&self.graph, 0).unwrap();
-        let span = self.find_span(entrypoint.into()).unwrap_or(Span::empty());
+        let span = self.find_span(entrypoint).unwrap_or(Span::empty());
 
         match wrt_ty {
             //is already linear

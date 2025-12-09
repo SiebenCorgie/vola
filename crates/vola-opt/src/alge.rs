@@ -25,7 +25,10 @@ use trigonometric::{Trig, TrigOp};
 use vola_ast::csg::{CsgConcept, CsgDef};
 use vola_common::Span;
 
-use crate::{autodiff::AutoDiff, common::Ty, error::OptError, DialectNode, OptNode};
+use crate::{
+    autodiff::AutoDiff, common::Ty, interval::IntervalExtension, passes::lazy_type::TypeError,
+    DialectNode, OptNode,
+};
 
 pub mod arithmetic;
 pub mod buildin;
@@ -137,6 +140,7 @@ impl OptNode {
                 Span::empty(),
             )),
             "diff" => Some(OptNode::new(AutoDiff::default(), Span::empty())),
+            "bound" => Some(OptNode::new(IntervalExtension::default(), Span::empty())),
             _ => None,
         }
     }
@@ -263,17 +267,15 @@ impl DialectNode for EvalNode {
         input_types: &[Ty],
         concepts: &AHashMap<String, CsgConcept>,
         _csg_defs: &AHashMap<String, CsgDef>,
-    ) -> Result<Ty, OptError> {
+    ) -> Result<Ty, TypeError> {
         //For eval nodes, the first type must be a callable, and all following must addher to the called concept's definition
 
         //Make sure that the concept that is being called exists at all
         if !concepts.get(self.concept()).is_some() {
-            return Err(OptError::Any {
-                text: format!(
-                    "the concept {} which is called here is not defined!",
-                    self.concept()
-                ),
-            });
+            return Err(TypeError::Other(format!(
+                "the concept {} which is called here is not defined!",
+                self.concept()
+            )));
         }
 
         //Build the expected signature type
@@ -287,30 +289,27 @@ impl DialectNode for EvalNode {
                     concept.name.0.clone(),
                 )
             } else {
-                return Err(OptError::Any {
-                    text: format!("Expected a CSG as first input, got {:?}", input_types[0]),
-                });
+                return Err(TypeError::Other(format!(
+                    "Expected a CSG as first input, got {:?}",
+                    input_types[0]
+                )));
             };
 
         //Now check that the signature (except for the callabel, is the one we expect. If so, return the output_ty)
         let argcount = input_types.len() - 1;
         if argcount != 1 {
-            return Err(OptError::Any {
-                text: format!(
-                    "Concept {} expected 1 argument, but got {}",
-                    concept_name, argcount
-                ),
-            });
+            return Err(TypeError::Other(format!(
+                "Concept {} expected 1 argument, but got {}",
+                concept_name, argcount
+            )));
         }
 
         //NOTE shift, since the first one is the concept we are calling (by definition).
         if expected_signature != input_types[1] {
-            return Err(OptError::Any {
-                text: format!(
-                    "Concept {} expected argument to be of type {:?}, but was {:?}",
-                    concept_name, expected_signature, input_types[1]
-                ),
-            });
+            return Err(TypeError::Other(format!(
+                "Concept {} expected argument to be of type {:?}, but was {:?}",
+                concept_name, expected_signature, input_types[1]
+            )));
         }
 
         //If we made it till here, we actually passed, therfore return the right type

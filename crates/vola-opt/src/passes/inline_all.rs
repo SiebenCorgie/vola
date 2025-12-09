@@ -12,6 +12,9 @@ use rvsdg::region::RegionLocation;
 impl Optimizer {
     ///Inlines all apply nodes that are currently alive. Good if a backend doesn't implement call-def
     pub fn inline_all(&mut self) -> Result<(), OptError> {
+        #[cfg(feature = "log")]
+        log::info!("Inline all");
+
         let topo_ord = self
             .graph
             .topological_order_region(self.graph.toplevel_region());
@@ -49,6 +52,13 @@ impl Optimizer {
                 })?;
                 //ninline += 1;
                 //now inline ourselfs
+
+                if self.is_tagged_no_inline(node) {
+                    #[cfg(feature = "log")]
+                    log::warn!("Trying to inline all, but function is tagged as no_inline, not inlining this one...");
+                    continue;
+                }
+
                 let paths = self.graph.inline_apply_node(node).unwrap();
                 for p in paths {
                     if let Err(e) = self.type_path(&p) {

@@ -94,7 +94,7 @@ impl Ui {
                     return Task::done(Message::Select(Some(new_attrib_location)));
                 }
             }
-            other => println!("Unhandeled message: {other:?}"),
+            other => println!("Unhandled message: {other:?}"),
         }
 
         Task::none()

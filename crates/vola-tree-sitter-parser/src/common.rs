@@ -168,7 +168,6 @@ impl FromTreeSitter for Shape {
         ParserError::assert_node_kind(ctx, node, "shape")?;
 
         match node.child(0).unwrap().kind() {
-            "interval" => Ok(Self::Interval),
             "vec" => {
                 let width = Digit::parse(ctx, dta, node.child(1).as_ref().unwrap())?;
                 Ok(Self::Vec { width: width.0 })
@@ -268,13 +267,14 @@ impl FromTreeSitter for Ty {
     {
         ParserError::assert_node_no_error(ctx, node)?;
 
-        //we have 4 possibilities:
+        //we have 5 possibilities:
         // 1. just a data-type
         // 2. csg
         // 3. shape
         //  3.1 shape without data type, which is implicitly a shaped real
         //  3.2 shaped with data_type
         // 4. tuple with sub-types
+        // 5. interval-type with sub-types
 
         //Might have to unwrap the node, if its the _type_ kind.
         let root_node = if node.kind() == "type" {
@@ -286,6 +286,19 @@ impl FromTreeSitter for Ty {
             "data_type" => Ok(Self::Simple(DataTy::parse(ctx, dta, &root_node)?)),
             //NOTE: this way we make sure that CSGs are never shaped
             "csg" => Ok(Self::Simple(DataTy::Csg)),
+
+            "interval" => {
+                //Should be an interval
+                if let Some(subtype) = node.child_by_field_name("subtype") {
+                    Ok(Self::Interval(Box::new(Self::parse(ctx, dta, &subtype)?)))
+                } else {
+                    Err(VolaError::error_here(
+                        ParserError::Other("Malformed Interval type".to_owned()),
+                        ctx.span(&root_node),
+                        "here",
+                    ))
+                }
+            }
             "(" => {
                 //should be a tuple, use walker style
                 let mut walker = node.walk();

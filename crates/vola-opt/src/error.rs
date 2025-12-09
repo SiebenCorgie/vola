@@ -9,12 +9,14 @@ use crate::{
     //autodiff::AutoDiffError,
     autodiff::AutoDiffError,
     common::Ty,
+    interval::IntervalError,
+    passes::lazy_type::TypeError,
 };
 use rvsdg::{
     err::GraphError,
     util::{dead_node_elimination::DneError, inline::InlineError, unroll::UnrollError},
 };
-use vola_common::thiserror::{self, Error};
+use thiserror::Error;
 
 ///Runtime optimizer errors. Note that at this point errors are pretty specific and mostly can't be recovered from.
 /// So we opt to use generic descriptions, instead of specific errors.
@@ -69,7 +71,11 @@ pub enum OptError {
     AIIFailed(String),
 
     #[error(transparent)]
+    TypeError(#[from] TypeError),
+    #[error(transparent)]
     AutoDiffError(#[from] AutoDiffError),
+    #[error(transparent)]
+    Interval(#[from] IntervalError),
     #[error(transparent)]
     UnrollError(#[from] UnrollError),
 }

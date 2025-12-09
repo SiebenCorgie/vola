@@ -20,8 +20,8 @@ use vola_common::Span;
 
 use crate::{
     common::{DataType, Shape, Ty},
-    error::OptError,
     imm::{ImmBool, ImmMatrix, ImmNat, ImmScalar, ImmVector},
+    passes::lazy_type::TypeError,
     DialectNode, OptNode,
 };
 
@@ -111,25 +111,27 @@ impl DialectNode for UniformConstruct {
         input_types: &[Ty],
         _concepts: &AHashMap<String, CsgConcept>,
         _csg_defs: &AHashMap<String, CsgDef>,
-    ) -> Result<Ty, OptError> {
+    ) -> Result<Ty, TypeError> {
         //For the list constructor, we check that all inputs are of the same (algebraic) type, and then derive the
         // algebraic super(?)-type. So a list of scalars becomes a vector, a list of vectors a matrix, and a list of
         // matrices a tensor. Tensors then just grow by pushing the next dimension size.
 
         if input_types.len() == 0 {
-            return Err(OptError::Any {
-                text: format!("Cannot create an empty list (there is no void type in Vola)."),
-            });
+            return Err(TypeError::Other(format!(
+                "Cannot create an empty list (there is no void type in Vola)."
+            )));
         }
 
-        if !input_types[0].is_algebraic() {
-            return Err(OptError::Any { text: format!("List can only be created from algebraic types (scalar, vector, matrix, tensor), but first element was of type {:?}", input_types[0]) });
+        if !(input_types[0].is_scalar_arithmetic()
+            || input_types[0].is_interval_of(Ty::is_scalar_arithmetic))
+        {
+            return Err(TypeError::Other(format!("List can only be created from algebraic types (scalar, vector, matrix, tensor), but first element was of type {:?}", input_types[0]) ));
         }
 
         //Check that all have the same type
         for s in 1..input_types.len() {
             if input_types[s] != input_types[0] {
-                return Err(OptError::Any { text: format!("List must be created from equal types. But first element is of type {:?} and {}-th element is of type {:?}", input_types[0], s, input_types[s]) });
+                return Err(TypeError::Other(format!("List must be created from equal types. But first element is of type {:?} and {}-th element is of type {:?}", input_types[0], s, input_types[s]) ));
             }
         }
 
@@ -168,13 +170,26 @@ impl DialectNode for UniformConstruct {
                     dim.push(listlen);
                     Ok(Ty::shaped(DataType::Real, Shape::Tensor { sizes: dim }))
                 }
-                _ => Err(OptError::TypeDeriveError {
-                    text: format!("Cannot construct list from {} elements", input_types[0]),
-                }),
             },
-            _ => Err(OptError::TypeDeriveError {
-                text: format!("Cannot construct \"List\" from \"{}\"", input_types[0]),
-            }),
+            Ty::Interval(t) => {
+                match t.as_ref(){
+                    //The construction of multiple scalar intervals into a vector interval
+                    &Ty::Shaped { ty: DataType::Real, shape: Shape::Scalar } => {
+                        Ok(Ty::Interval(Box::new(Ty::Shaped { ty: DataType::Real, shape: Shape::Vec { width: input_types.len() } })))
+                    },
+                    other => {
+                        Err(TypeError::Other(format!(
+                                "Cannot construct \"List\" from interval<{}>. Try constructing an interval from lists",
+                                other
+                            ),
+                        ))
+                    }
+                }
+            }
+            _ => Err(TypeError::Other(format!(
+                "Cannot construct \"List\" from \"{}\"",
+                input_types[0]
+            ))),
         }
     }
 
@@ -290,31 +305,22 @@ impl DialectNode for NonUniformConstruct {
         input_types: &[Ty],
         _concepts: &AHashMap<String, CsgConcept>,
         _csg_defs: &ahash::AHashMap<String, CsgDef>,
-    ) -> Result<Ty, OptError> {
+    ) -> Result<Ty, TypeError> {
         //Tuple construct does not reall care _at-all_ what is _inside_.
         //However, we make sure that no callables and voids are supplied, which we do
         //not have the capabilities to use atm.
 
         for (idx, t) in input_types.iter().enumerate() {
             if t == &Ty::VOID || t == &Ty::Callable {
-                return Err(OptError::TypeDeriveError {
-                    text: format!(
-                        "Tuple constructor cannot take {t} as {}-th argument",
-                        idx + 1
-                    ),
-                });
+                return Err(TypeError::Other(format!(
+                    "Tuple constructor cannot take {t} as {}-th argument",
+                    idx + 1
+                )));
             }
         }
 
         let ty = Ty::Tuple(input_types.to_vec());
         Ok(ty)
-    }
-    fn try_constant_fold(
-        &self,
-        #[allow(unused_variables)] src_nodes: &[Option<&rvsdg::nodes::Node<OptNode>>],
-    ) -> Option<OptNode> {
-        //Tuple constructors cannot meaningfully be folded.
-        None
     }
     fn is_operation_equal(&self, other: &OptNode) -> bool {
         if other.try_downcast_ref::<Self>().is_some() {
@@ -359,7 +365,7 @@ impl DialectNode for ConstantIndex {
         input_types: &[Ty],
         _concepts: &AHashMap<String, CsgConcept>,
         _csg_defs: &AHashMap<String, CsgDef>,
-    ) -> Result<Ty, OptError> {
+    ) -> Result<Ty, TypeError> {
         assert_eq!(input_types.len(), 1);
         input_types[0].try_derive_access_index(self.access)
     }
@@ -457,19 +463,13 @@ impl DialectNode for TypeCast {
         input_types: &[Ty],
         _concepts: &AHashMap<String, CsgConcept>,
         _csg_defs: &AHashMap<String, CsgDef>,
-    ) -> Result<Ty, OptError> {
+    ) -> Result<Ty, TypeError> {
         assert_eq!(input_types.len(), 1);
         match (input_types[0].clone(), self.dst_ty.clone()) {
             (Ty::Tuple(_), _) => {
-                return Err(OptError::TypeDeriveError {
-                    text: "Can not cast tuple type".to_owned(),
-                })
+                return Err(TypeError::Other("Can not cast tuple type".to_owned()))
             }
-            (Ty::Callable, _) => {
-                return Err(OptError::TypeDeriveError {
-                    text: "can not cast callables".to_owned(),
-                })
-            }
+            (Ty::Callable, _) => return Err(TypeError::Other("can not cast callables".to_owned())),
             (
                 Ty::Shaped {
                     ty: tyl,
@@ -488,9 +488,9 @@ impl DialectNode for TypeCast {
                     | (DataType::Real, DataType::Integer)
                     | (DataType::Integer, DataType::Bool) => {}
                     (l, r) => {
-                        return Err(OptError::TypeDeriveError {
-                            text: format!("can not convert data-type {l} to {r}",),
-                        })
+                        return Err(TypeError::Other(format!(
+                            "can not convert data-type {l} to {r}",
+                        )))
                     }
                 };
                 //now check that the types are compatible
@@ -498,11 +498,9 @@ impl DialectNode for TypeCast {
                     //For vectors make sure they are of the same element count
                     (Shape::Vec { width: wr }, Shape::Vec { width: wl }) => {
                         if wr != wl {
-                            return Err(OptError::TypeDeriveError {
-                                text: format!(
-                                    "Can not convert vector with {wr}-elements to {wl}-elements"
-                                ),
-                            });
+                            return Err(TypeError::Other(format!(
+                                "Can not convert vector with {wr}-elements to {wl}-elements"
+                            )));
                         }
                     }
                     //Scalar types of compatible data-type always work
@@ -510,18 +508,12 @@ impl DialectNode for TypeCast {
                     //Otherwise, if the types are not the same, we can't cast.
                     (l, r) => {
                         if l != r {
-                            return Err(OptError::TypeDeriveError {
-                                text: format!("Can not cast {l} into {r}"),
-                            });
+                            return Err(TypeError::Other(format!("Can not cast {l} into {r}")));
                         }
                     }
                 }
             }
-            (l, r) => {
-                return Err(OptError::TypeDeriveError {
-                    text: format!("Can not cast {} to {}", l, r),
-                })
-            }
+            (l, r) => return Err(TypeError::Other(format!("Can not cast {} to {}", l, r))),
         }
         //Passed all checks, so matches
         Ok(self.dst_ty.clone())
@@ -617,5 +609,56 @@ impl DialectNode for TypeCast {
         }
 
         None
+    }
+}
+
+/// Constructs a Interval from the given lower and upper bound
+#[derive(LangNode, Debug, Default)]
+pub struct IntervalConstruct {
+    #[inputs]
+    pub inputs: [Input; 2],
+    #[output]
+    pub output: Output,
+}
+
+implViewTyOp!(IntervalConstruct, "IntervalConstruct");
+impl DialectNode for IntervalConstruct {
+    fn dialect(&self) -> &'static str {
+        "typelevel"
+    }
+
+    fn structural_copy(&self, span: Span) -> OptNode {
+        OptNode::new(Self::default(), span)
+    }
+    fn try_derive_type(
+        &self,
+        input_types: &[Ty],
+        _concepts: &AHashMap<String, CsgConcept>,
+        _csg_defs: &ahash::AHashMap<String, CsgDef>,
+    ) -> Result<Ty, TypeError> {
+        //Make sure both inputs are of the same type, and shaped
+        assert_eq!(input_types.len(), 2);
+        if input_types[0] != input_types[1] {
+            return Err(TypeError::Other(format!(
+                "Interval bounds types don't match: {} != {}",
+                input_types[0], input_types[1]
+            )));
+        }
+
+        if !input_types[0].is_shaped() {
+            Err(TypeError::Other(format!(
+                "Interval type must be a shaped type, was {}",
+                input_types[0]
+            )))
+        } else {
+            Ok(Ty::Interval(Box::new(input_types[0].clone())))
+        }
+    }
+    fn is_operation_equal(&self, other: &OptNode) -> bool {
+        if other.try_downcast_ref::<Self>().is_some() {
+            true
+        } else {
+            false
+        }
     }
 }

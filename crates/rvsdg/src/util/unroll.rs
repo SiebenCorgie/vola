@@ -97,7 +97,7 @@ impl<N: LangNode + StructuralClone + 'static, E: LangEdge + StructuralClone + 's
     ///
     /// Or in other terms, this unrolls the _tail_ of the loop, leaving the previouse iterations in the `theta` node.
     ///
-    /// **Caution**: make sure to update you loop criteria after unrolling. This is not handeled by the function, since it can't possibly
+    /// **Caution**: make sure to update you loop criteria after unrolling. This is not handled by the function, since it can't possibly
     /// _know_ how your loop-predicate works.
     ///
     ///
@@ -122,7 +122,7 @@ impl<N: LangNode + StructuralClone + 'static, E: LangEdge + StructuralClone + 's
     ///
     /// Or in other terms, this unrolls the _head_ of the loop, leaving the remaining iterations in the `theta` node.
     ///
-    /// **Caution**: make sure to update you loop criteria after unrolling. This is not handeled by the function, since it can't possibly
+    /// **Caution**: make sure to update you loop criteria after unrolling. This is not handled by the function, since it can't possibly
     /// _know_ how your loop-criterion works.
     ///
     ///
@@ -219,7 +219,7 @@ impl<N: LangNode + StructuralClone + 'static, E: LangEdge + StructuralClone + 's
                 let dst = self[edg].dst().clone();
 
                 if dst.node == theta {
-                    //NOTE: if we would remap a dst-input, just ignore it. That case is already handeled
+                    //NOTE: if we would remap a dst-input, just ignore it. That case is already handled
                     //      by the input-remapping above.
                     continue;
                 }

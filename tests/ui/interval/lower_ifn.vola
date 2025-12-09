@@ -1,0 +1,16 @@
+//BEGIN-CONFIG
+//EXEC-FN:call
+//EXEC-ARGS:0.0
+//EXEC-EPS:0.0
+//EXEC-RES:0.0
+//END-CONFIG
+
+#[no_inline()]
+fn my_ifn(i: interval<vec2>) -> interval<real>{
+    [min(i.start.x, i.start.y) .. max(i.end.x, i.end.y)]
+}
+
+export fn call(p: real) -> real{
+    let res = my_ifn([[p, p + 1.0] .. [-p, abs(p)]]);
+    res.start + res.end
+}

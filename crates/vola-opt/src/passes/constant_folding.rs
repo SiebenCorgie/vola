@@ -16,10 +16,13 @@ impl Optimizer {
             self.push_debug_state("before CNF");
         }
 
+        #[cfg(feature = "log")]
+        log::info!("Full Graph CNF");
+
         let folded = self.graph.constant_fold()?;
 
         #[cfg(feature = "log")]
-        log::info!("folded {} nodes", folded.len());
+        log::trace!("folded {} nodes", folded.len());
 
         if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("DUMP_AFTER_CNF").is_ok() {
             self.push_debug_state("after CNF");

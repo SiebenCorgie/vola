@@ -28,8 +28,8 @@ impl Optimizer {
         let left_src = self.graph.inport_src(node.input(0)).unwrap();
         let right_src = self.graph.inport_src(node.input(1)).unwrap();
 
-        let left_type = self.get_or_derive_type(left_src, true);
-        let right_type = self.get_or_derive_type(right_src, true);
+        let left_type = self.get_out_type_mut(left_src).unwrap();
+        let right_type = self.get_out_type_mut(right_src).unwrap();
 
         match (left_type.clone(), right_type.clone()) {
             (
@@ -101,7 +101,7 @@ impl Optimizer {
 
         assert!(matrix_ty.height().unwrap() == vector_ty.width().unwrap());
 
-        let span = self.find_span(mul_node.into()).unwrap_or(Span::empty());
+        let span = self.find_span(mul_node).unwrap_or(Span::empty());
 
         let new_result = self
             .graph
@@ -164,7 +164,7 @@ impl Optimizer {
     ) -> NodeRef {
         assert!(left_ty.width().unwrap() == right_ty.width().unwrap());
 
-        let span = self.find_span(mul_node.into()).unwrap_or(Span::empty());
+        let span = self.find_span(mul_node).unwrap_or(Span::empty());
 
         let new_result = self
             .graph
@@ -259,7 +259,7 @@ impl Optimizer {
     ) -> NodeRef {
         assert!(left_ty.width().unwrap() == right_ty.height().unwrap());
 
-        let span = self.find_span(mul_node.into()).unwrap_or(Span::empty());
+        let span = self.find_span(mul_node).unwrap_or(Span::empty());
 
         let new_result = self
             .graph

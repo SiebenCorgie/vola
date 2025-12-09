@@ -13,7 +13,7 @@ In that case, we the `cube` won't be hooked up to the CSG tree properly atm.
 
 # Test
 - Test that we tranform the [Scope of variables](https://en.wikibooks.org/wiki/OpenSCAD_User_Manual/General#Scope_of_variables) correctly
-  - Are we handeling Anonymous scopes correctly (i.e ignore the scope)
+  - Are we handling Anonymous scopes correctly (i.e ignore the scope)
   - Not sure how the assignment works actually given. I _think_ its is supposed to be `last-write-in-(not-anonymous)-scope` but it is actually not.
   ```openscad
   b = a;

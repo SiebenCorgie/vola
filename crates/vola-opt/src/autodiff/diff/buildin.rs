@@ -36,7 +36,7 @@ impl Optimizer {
         node: NodeRef,
         activity: &mut Activity,
     ) -> Result<AdResponse, AutoDiffError> {
-        let span = self.find_span(node.into()).unwrap_or(Span::empty());
+        let span = self.find_span(node).unwrap_or(Span::empty());
         let op = self.graph[node]
             .node_type
             .unwrap_simple_ref()
@@ -96,7 +96,7 @@ impl Optimizer {
                 //apply chain rule:
                 // sqrt(f(x)) = [1.0 / (2.0 * sqrt(f(x)))] * f'(x)
                 let f_src = self.graph.inport_src(node.input(0)).unwrap();
-                let ty = self.get_or_derive_type(f_src, false);
+                let ty = self.get_out_type_mut(f_src).unwrap();
                 let imm_one = self.splat_scalar(region, ImmScalar::new(1.0), ty.clone());
                 let imm_two = self.splat_scalar(region, ImmScalar::new(2.0), ty);
 
@@ -298,7 +298,7 @@ impl Optimizer {
                     )));
                 } else {
                     //the x^n case
-                    let nty = self.get_or_derive_type(n_src, false);
+                    let nty = self.get_out_type_mut(n_src).unwrap();
                     let one = self.splat_scalar(region, ImmScalar::new(1.0), nty);
                     let diffed_output = self
                         .graph

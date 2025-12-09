@@ -14,24 +14,29 @@
 //! code.
 //!
 //! ## Dialects
-//! ### [CSG](csg)
+//! ### [CSG](crate::csg)
 //!
 //! Models the CSG Trees that are defined in the language and ultimately exported. Takes care
 //! of building the final tree, by resolving sub trees, and uses the access descriptors to build the
 //! tree's data flow.
 //!
-//! ### [AutoDiff](autodiff)
+//! ### [AutoDiff](crate::autodiff)
 //!
 //! Represents differentiation in the graph. Lowering performs auto-differentiation of the input expression with respect to any other expression(s).
 //! Is only defined on algebraic expressions.
 //!
-//! ### [Alge](alge)
+//! ### [Interval](crate::interval)
+//!
+//! Represents the entrypoint for interval-analysis in the graph.
+//! Lowering performs the analysis on the arithmetic layer and replaces the result value with the given interval.
+//!
+//! ### [Alge](crate::alge)
 //!
 //! Used to represent algebraic, logic and boolean expressions.
 //!
-//! ### [Imm](imm)
+//! ### [Imm](mod@crate::imm)
 //!
-//! Immediate, so usually constant values in the graph. Also forms the basis for many static code optimizations.
+//! Immediate, so usually constant values in the graph. Also forms the basis for many constant code optimizations.
 //!
 //! ### [TypeLevel](typelevel)
 //!
@@ -43,6 +48,7 @@
 
 //NOTE: We need that trait for the OptNode, so we can Upcast `DialectNode: Any` to `Any`.
 #![doc(html_logo_url = "https://gitlab.com/tendsinmende/vola/-/raw/main/resources/vola_icon.svg")]
+#![feature(deque_extend_front)]
 
 use ahash::AHashMap;
 use common::Ty;
@@ -65,6 +71,7 @@ pub mod autodiff;
 pub mod config;
 pub mod graph;
 pub mod imm;
+pub mod interval;
 pub mod passes;
 pub mod typelevel;
 pub mod util;
@@ -164,7 +171,7 @@ impl Optimizer {
         }
 
         let layout_config = LayoutConfig {
-            ignore_dead_node: false,
+            ignore_dead_node: true,
             ..Default::default()
         };
 

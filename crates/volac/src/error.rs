@@ -2,7 +2,7 @@ use rvsdg::{
     err::GraphError,
     util::{cne::CneError, cnf::CnfError},
 };
-use vola_common::thiserror::{self, Error};
+use thiserror::Error;
 use vola_opt::OptError;
 
 ///Error type collection that can happen at compile-time.
