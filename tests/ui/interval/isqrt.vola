@@ -1,0 +1,13 @@
+//BEGIN-CONFIG
+//EXEC-FN:call
+//EXEC-ARGS:-2.0,9.0
+//EXEC-EPS:0.001
+//EXEC-RES:NaN,0.0,1.0,3.0
+//END-CONFIG
+
+export fn call(a: real, b: real) -> (vec2, vec2){
+    let start = [a, 0.0];
+    let end = [1.0, b];
+    let c = sqrt([start .. end]);
+    (c.start, c.end)
+}
