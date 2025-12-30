@@ -37,7 +37,7 @@ pub trait AstVisitor {
 
 impl VolaAst {
     pub fn traverse_visit<V: AstVisitor>(&self, visitor: &mut V) {
-        visitor.root(&self);
+        visitor.root(self);
         for inner in &self.entries {
             inner.traverse_visit(visitor);
         }
@@ -46,14 +46,14 @@ impl VolaAst {
 
 impl TopLevelNode {
     pub fn traverse_visit<V: AstVisitor>(&self, visitor: &mut V) {
-        visitor.toplevel(&self);
+        visitor.toplevel(self);
         self.entry.traverse_visit(visitor);
     }
 }
 
 impl AstEntry {
     pub fn traverse_visit<V: AstVisitor>(&self, visitor: &mut V) {
-        visitor.entry(&self);
+        visitor.entry(self);
         match self {
             Self::Comment(c) => c.traverse_visit(visitor),
             Self::Concept(concept) => concept.traverse_visit(visitor),
@@ -67,40 +67,40 @@ impl AstEntry {
 
 impl Module {
     pub fn traverse_visit<V: AstVisitor>(&self, visitor: &mut V) {
-        visitor.module(&self)
+        visitor.module(self)
     }
 }
 
 impl Comment {
     pub fn traverse_visit<V: AstVisitor>(&self, visitor: &mut V) {
-        visitor.comment(&self)
+        visitor.comment(self)
     }
 }
 impl CsgConcept {
     pub fn traverse_visit<V: AstVisitor>(&self, visitor: &mut V) {
-        visitor.concept(&self)
+        visitor.concept(self)
     }
 }
 impl CsgDef {
     pub fn traverse_visit<V: AstVisitor>(&self, visitor: &mut V) {
-        visitor.csg_def(&self);
+        visitor.csg_def(self);
     }
 }
 impl ImplBlock {
     pub fn traverse_visit<V: AstVisitor>(&self, visitor: &mut V) {
-        visitor.implblock(&self);
+        visitor.implblock(self);
         self.block.traverse_visit(visitor)
     }
 }
 impl Func {
     pub fn traverse_visit<V: AstVisitor>(&self, visitor: &mut V) {
-        visitor.func(&self);
+        visitor.func(self);
         self.block.traverse_visit(visitor)
     }
 }
 impl Block {
     pub fn traverse_visit<V: AstVisitor>(&self, visitor: &mut V) {
-        visitor.block(&self);
+        visitor.block(self);
         for stmt in &self.stmts {
             stmt.traverse_visit(visitor);
         }
@@ -111,7 +111,7 @@ impl Block {
 }
 impl Stmt {
     pub fn traverse_visit<V: AstVisitor>(&self, visitor: &mut V) {
-        visitor.stmt(&self);
+        visitor.stmt(self);
         match self {
             Stmt::Assign(assign) => assign.traverse_visit(visitor),
             Stmt::Let(l) => l.traverse_visit(visitor),
@@ -126,26 +126,26 @@ impl Stmt {
 
 impl AssignStmt {
     pub fn traverse_visit<V: AstVisitor>(&self, visitor: &mut V) {
-        visitor.assign_stmt(&self);
+        visitor.assign_stmt(self);
         self.expr.traverse_visit(visitor)
     }
 }
 impl LetStmt {
     pub fn traverse_visit<V: AstVisitor>(&self, visitor: &mut V) {
-        visitor.let_stmt(&self);
+        visitor.let_stmt(self);
         self.expr.traverse_visit(visitor)
     }
 }
 impl CsgStmt {
     pub fn traverse_visit<V: AstVisitor>(&self, visitor: &mut V) {
-        visitor.csg_stmt(&self);
+        visitor.csg_stmt(self);
         self.expr.traverse_visit(visitor)
     }
 }
 
 impl Branch {
     pub fn traverse_visit<V: AstVisitor>(&self, visitor: &mut V) {
-        visitor.branch(&self);
+        visitor.branch(self);
         self.conditional.0.traverse_visit(visitor);
         self.conditional.1.traverse_visit(visitor);
         if let Some(uncond) = &self.unconditional {
@@ -156,7 +156,7 @@ impl Branch {
 
 impl Loop {
     pub fn traverse_visit<V: AstVisitor>(&self, visitor: &mut V) {
-        visitor.loop_stmt(&self);
+        visitor.loop_stmt(self);
         self.bound_lower.traverse_visit(visitor);
         self.bound_upper.traverse_visit(visitor);
         self.body.traverse_visit(visitor);
@@ -165,7 +165,7 @@ impl Loop {
 
 impl Expr {
     pub fn traverse_visit<V: AstVisitor>(&self, visitor: &mut V) {
-        visitor.expr(&self);
+        visitor.expr(self);
         match &self.expr_ty {
             ExprTy::Unary { operand, .. } => operand.traverse_visit(visitor),
             ExprTy::Binary { left, right, .. } => {

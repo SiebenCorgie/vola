@@ -159,12 +159,12 @@ impl Optimizer {
         let result = self
             .graph
             .on_region(&region, |g| {
-                let index_diff = g.insert_node(OptNode::new(
+                
+
+                g.insert_node(OptNode::new(
                     UniformConstruct::new().with_inputs(const_width),
                     span,
-                ));
-
-                index_diff
+                ))
             })
             .unwrap();
 
@@ -190,7 +190,6 @@ impl Optimizer {
             .try_downcast_ref::<UnaryArith>()
             .unwrap()
             .op
-            .clone()
         {
             UnaryArithOp::Abs => {
                 //Abs can not be diffed for f(x) == 0, however, for all others
@@ -198,10 +197,7 @@ impl Optimizer {
                 //
                 // for x == 0 this will naturally be Nan, since |f(x)| == 0 -> f(x) / 0.0 == Nan.
                 if self.config.autodiff.abort_on_undiff {
-                    return Err(AutoDiffError::UndiffNode(format!(
-                        "{}",
-                        self.graph[node].name()
-                    )));
+                    return Err(AutoDiffError::UndiffNode(self.graph[node].name().to_string()));
                 }
 
                 let (subdiff_dst, output) = self
@@ -252,10 +248,7 @@ impl Optimizer {
                 //
                 //Abort if the exact thing is needed
                 if self.config.autodiff.abort_on_undiff {
-                    return Err(AutoDiffError::UndiffNode(format!(
-                        "{}",
-                        self.graph[node].name()
-                    )));
+                    return Err(AutoDiffError::UndiffNode(self.graph[node].name().to_string()));
                 }
 
                 let x_src = self.graph.inport_src(node.input(0)).unwrap();
@@ -318,8 +311,7 @@ impl Optimizer {
             .unwrap_simple_ref()
             .try_downcast_ref::<Trig>()
             .unwrap()
-            .op
-            .clone();
+            .op;
         match trigop {
             TrigOp::Sin => {
                 //sin' = cos

@@ -57,7 +57,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> RegionBuilder<'a, N, E> {
     }
 
     pub fn ctx(&self) -> &Rvsdg<N, E> {
-        &self.ctx
+        self.ctx
     }
 
     pub fn ctx_mut(&mut self) -> &mut Rvsdg<N, E> {
@@ -115,7 +115,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> RegionBuilder<'a, N, E> {
         let mut edges = SmallColl::default();
         for (dst_idx, src_port) in src.into_iter().enumerate() {
             edges.push(self.ctx_mut().connect(
-                src_port.clone(),
+                src_port,
                 InportLocation {
                     node: created_node,
                     input: InputType::Input(dst_idx),
@@ -138,7 +138,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> RegionBuilder<'a, N, E> {
         let mut edges = SmallColl::default();
         for (dst_idx, (src_port, edge_type)) in src.into_iter().enumerate() {
             edges.push(self.ctx_mut().connect(
-                src_port.clone(),
+                src_port,
                 InportLocation {
                     node: created_node,
                     input: InputType::Input(dst_idx),
@@ -267,7 +267,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> RegionBuilder<'a, N, E> {
         arguments: &[OutportLocation],
     ) -> Result<(NodeRef, SmallColl<EdgeRef>), GraphError> {
         let (apply_node, is_defined) =
-            if let Some(funct_def) = self.ctx.find_callabel_def(callable_src.clone()) {
+            if let Some(funct_def) = self.ctx.find_callabel_def(callable_src) {
                 if let NodeType::Lambda(l) = &self.ctx.node(funct_def.node).node_type {
                     (ApplyNode::new_for_lambda(l), true)
                 } else {
@@ -313,7 +313,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> RegionBuilder<'a, N, E> {
             }
 
             let edg = self.ctx_mut().connect(
-                arg_src.clone(),
+                *arg_src,
                 InportLocation {
                     node: apply_node_ref,
                     input: InputType::Input(1 + idx),

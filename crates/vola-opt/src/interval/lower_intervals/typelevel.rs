@@ -90,7 +90,7 @@ impl<'opt> LowerIntervals<'opt> {
                 //If the src is an interval, map it once to lower and upper bound, otherwise just pass through
                 if self.optimizer.get_out_type_mut(src).unwrap().is_interval() {
                     //Note: Must exist, since we assume a TopoOrd traversal
-                    self.mapping.get(&src).unwrap().clone()
+                    *self.mapping.get(&src).unwrap()
                 } else {
                     (src, src)
                 }

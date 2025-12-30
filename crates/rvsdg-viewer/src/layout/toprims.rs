@@ -69,7 +69,7 @@ impl<'a, N: LangNode + View + 'static, E: LangEdge + View + 'static> Layout<'a, 
         //add the text depending on the number of sub regions. If we have no sub_regions,
         // we add it at the center, otherwise top-left
 
-        if node.sub_regions.len() == 0 {
+        if node.sub_regions.is_empty() {
             let center = node.extent / 2.0;
             let node_name = self.src_graph.node(node.src).name().to_owned();
             let text_width = Text::width_for_string_size(&node_name, config.font_size);
@@ -118,7 +118,7 @@ impl<'a, N: LangNode + View + 'static, E: LangEdge + View + 'static> Layout<'a, 
         //Now add the ports to the sub regions
         for port in node.inports.iter().chain(node.outports.iter()) {
             pt_wrap.children.push(PrimTree {
-                id: port.1.clone(),
+                id: port.1,
                 prim: Prim::Box(Rect {
                     from: port.0,
                     to: port.0 + Point::new(config.port_width as f32, config.port_height as f32),
@@ -156,7 +156,7 @@ impl<'a, N: LangNode + View + 'static, E: LangEdge + View + 'static> Layout<'a, 
         let port_ext = Point::new(config.port_width as f32, config.port_height as f32);
         for port in reg.arg_ports.iter().chain(reg.res_ports.iter()) {
             tree_node.children.push(PrimTree {
-                id: port.1.clone(),
+                id: port.1,
                 prim: Prim::Box(Rect {
                     from: port.0,
                     to: port.0 + port_ext,

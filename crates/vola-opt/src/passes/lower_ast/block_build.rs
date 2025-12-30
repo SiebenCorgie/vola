@@ -143,7 +143,7 @@ impl BlockCtx {
                     name
                 ),
             };
-            return Err(VolaError::new(err));
+            Err(VolaError::new(err))
         }
     }
 
@@ -259,15 +259,15 @@ impl BlockCtx {
                         "In this region",
                     ));
                 }
-                let port = optimizer
+                
+                optimizer
                     .import_context(port, self.active_scope.region)
-                    .map_err(|e| VolaError::new(e.into()))?;
-                port
+                    .map_err(VolaError::new)?
             } else {
-                let port = optimizer
+                
+                optimizer
                     .import_argument(port, self.active_scope.region)
-                    .map_err(|e| VolaError::new(e.into()))?;
-                port
+                    .map_err(VolaError::new)?
             }
         };
 
@@ -383,7 +383,7 @@ impl Optimizer {
                     Ok(())
                 }
                 Err(err) => {
-                    return Err(err.with_label(assign.span.clone(), "here"));
+                    Err(err.with_label(assign.span.clone(), "here"))
                 }
             },
             Stmt::Csg(csg_binding) => {
@@ -797,14 +797,14 @@ impl Optimizer {
 
         if !lower_ty_is_nat {
             return Err(VolaError::error_here(
-                TypeError::Other(format!("Loop's lower bound needs to be integer typed")).into(),
+                TypeError::Other("Loop's lower bound needs to be integer typed".to_string()).into(),
                 lowerspan,
                 "here",
             ));
         }
         if !upper_ty_is_nat {
             return Err(VolaError::error_here(
-                TypeError::Other(format!("Loop's upper bound needs to be integer typed")).into(),
+                TypeError::Other("Loop's upper bound needs to be integer typed".to_string()).into(),
                 upperspan,
                 "here",
             ));
@@ -1018,7 +1018,7 @@ impl Optimizer {
                 };
 
                 //NOTE: if a import-routine has alread pulled a edge to the result, disconnect it
-                if let Some(edg) = self.graph[result_lv].edge.clone() {
+                if let Some(edg) = self.graph[result_lv].edge {
                     let _ = self.graph.disconnect(edg).unwrap();
                 }
 

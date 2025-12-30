@@ -289,7 +289,7 @@ impl Optimizer {
                     let new_src = self
                         .graph
                         .on_region(&region, |reg| {
-                            let (opnode, _) = reg.connect_node(cinode, [src.clone()]).unwrap();
+                            let (opnode, _) = reg.connect_node(cinode, [src]).unwrap();
                             opnode.output(0)
                         })
                         .unwrap();
@@ -389,7 +389,7 @@ impl Optimizer {
             ExprTy::ScopedCall(sc) => {
                 if let Some(operation) = self.csg_node_defs.get(&sc.call.ident.0) {
                     if operation.ty == CsgTy::Entity {
-                        let err = OptError::Any { text: format!("Using Entity with sub-trees. Only CSG-Operations can use subtrees!") };
+                        let err = OptError::Any { text: "Using Entity with sub-trees. Only CSG-Operations can use subtrees!".to_string() };
                         return Err(VolaError::error_here(err, sc.call.span, "called here")
                             .with_label(operation.span.clone(), "Entity defined here"));
                     }
@@ -428,7 +428,7 @@ impl Optimizer {
                     } else {
                         //No such entity or operation
                         let err = OptError::Any {
-                            text: format!("The call's subtree must have a (csg) result"),
+                            text: "The call's subtree must have a (csg) result".to_string(),
                         };
                         return Err(VolaError::error_here(
                             err,
@@ -466,7 +466,7 @@ impl Optimizer {
 
                 if count < 2 {
                     let err = OptError::Any {
-                        text: format!("Splat expression's count cannot be less than 2"),
+                        text: "Splat expression's count cannot be less than 2".to_string(),
                     };
                     return Err(VolaError::error_here(
                         err,
@@ -555,7 +555,7 @@ impl Optimizer {
             }
             Err(_e) => {
                 return Err(VolaError::error_here(
-                    TypeError::Other(format!("Could not derive a valid type for this condition!"))
+                    TypeError::Other("Could not derive a valid type for this condition!".to_string())
                         .into(),
                     condition_span,
                     "here",
@@ -647,7 +647,7 @@ impl Optimizer {
                     .unwrap();
             } else {
                 let err = OptError::Any {
-                    text: format!("All branches must have an result if used as an expression!"),
+                    text: "All branches must have an result if used as an expression!".to_string(),
                 };
                 return Err(VolaError::error_here(
                     err,

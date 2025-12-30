@@ -100,7 +100,7 @@ impl DialectNode for ImmScalar {
         OptNode {
             span,
             node: Box::new(ImmScalar {
-                lit: self.lit.clone(),
+                lit: self.lit,
                 out: Output::default(),
             }),
         }
@@ -287,7 +287,7 @@ impl DialectNode for ImmNat {
         OptNode {
             span,
             node: Box::new(ImmNat {
-                lit: self.lit.clone(),
+                lit: self.lit,
                 out: Output::default(),
             }),
         }
@@ -341,7 +341,7 @@ impl DialectNode for ImmBool {
         OptNode {
             span,
             node: Box::new(ImmBool {
-                lit: self.lit.clone(),
+                lit: self.lit,
                 out: Output::default(),
             }),
         }

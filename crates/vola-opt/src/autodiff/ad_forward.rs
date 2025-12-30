@@ -78,16 +78,14 @@ impl Optimizer {
     /// with the differentiated value(s) after this pass (successfuly) ends.
     pub fn forward_ad(&mut self, entrypoint: NodeRef) -> Result<(), VolaError<OptError>> {
         if !self.is_node_type::<AutoDiff>(entrypoint) {
-            return Err(VolaError::new(OptError::Internal(format!(
-                "AD Entrypoint was not of type AutoDiff"
-            ))));
+            return Err(VolaError::new(OptError::Internal("AD Entrypoint was not of type AutoDiff".to_string())));
         }
 
         //If the wrt-arg is a constructor, linearize the ad-entrypoint into
         // multiple AD-Nodes with a single (scalar) WRT-Arg.
         let entrypoints = self
             .linearize_ad(entrypoint)
-            .map_err(|e| VolaError::new(e))?;
+            .map_err(VolaError::new)?;
 
         let region = self.graph[entrypoint].parent.unwrap();
         //TODO: Can speed up thing, or make them slower, do heuristically
@@ -103,7 +101,7 @@ impl Optimizer {
 
         for entrypoint in &entrypoints {
             self.canonicalize_for_ad(*entrypoint)
-                .map_err(|e| VolaError::new(e))?;
+                .map_err(VolaError::new)?;
         }
 
         if std::env::var("VOLA_DUMP_ALL").is_ok()
@@ -212,7 +210,7 @@ impl Optimizer {
         //
         // Therfore we only need to build this node's derivative, and possibly hook-up chain rule sub expressions
         for node in ordered_dependencies {
-            self.build_derivative(region, node, ctx).map_err(|e| {
+            self.build_derivative(region, node, ctx).inspect_err(|e| {
                 if let Some(span) = self.find_span(node) {
                     VolaError::error_here(
                         e.clone(),
@@ -221,7 +219,6 @@ impl Optimizer {
                     )
                     .report();
                 }
-                e
             })?;
         }
 
@@ -255,7 +252,7 @@ impl Optimizer {
         ctx: &mut ForwardADCtx,
     ) -> Result<(), OptError> {
         //Bail none active nodes
-        if !ctx.activity.is_node_active(&self, node) {
+        if !ctx.activity.is_node_active(self, node) {
             return Ok(());
         }
 
@@ -296,7 +293,7 @@ impl Optimizer {
     ) -> Result<AdResponse, OptError> {
         //we should end up here only for active nodes, otherwise the value would be zero already
         // (by the port handler)
-        assert!(ctx.activity.is_node_active(&self, node));
+        assert!(ctx.activity.is_node_active(self, node));
 
         match self.graph[node].into_abstract() {
             AbstractNodeType::Simple => {
@@ -315,7 +312,7 @@ impl Optimizer {
                         .fwd_handle_alge_node(region, node, ctx)
                         .map_err(|e| e.into()),
                     "autodiff" => {
-                        return Err(AutoDiffError::UnexpectedAutoDiffNode.into());
+                        Err(AutoDiffError::UnexpectedAutoDiffNode.into())
                     }
                     "imm" => {
                         //an active immediate value will be splat to zero, since this will always
@@ -352,7 +349,7 @@ impl Optimizer {
                 self.copy_input_connections(callsrc.node, lmd_cpy);
                 self.copy_node_attributes(callsrc.node, lmd_cpy);
                 for attrib in self.graph.iter_node_attribs(callsrc.node) {
-                    let dst_attrib_loc = attrib.clone().change_node(lmd_cpy);
+                    let dst_attrib_loc = attrib.change_node(lmd_cpy);
                     let _ = ctx.activity.active.copy(&attrib, dst_attrib_loc);
                 }
 
@@ -372,7 +369,7 @@ impl Optimizer {
 
                 for inty in self.graph[node].inport_types().into_iter().skip(1) {
                     if let Some(src_edg) = self.graph[node.as_inport_location(inty)].edge {
-                        let src = self.graph[src_edg].src().clone();
+                        let src = *self.graph[src_edg].src();
                         let ty = self.graph[src_edg].ty.clone();
                         self.graph
                             .connect(src, apply_copy.as_inport_location(inty), ty)
@@ -422,7 +419,7 @@ impl Optimizer {
                 self.copy_input_connections(node, gamma_cpy);
                 //copy over activity attributes
                 for attrib in self.graph.iter_node_attribs(node) {
-                    let dst_attrib_loc = attrib.clone().change_node(gamma_cpy);
+                    let dst_attrib_loc = attrib.change_node(gamma_cpy);
                     let _ = ctx.activity.active.copy(&attrib, dst_attrib_loc);
                 }
                 //let it trace the activity.
@@ -525,7 +522,7 @@ impl Optimizer {
 
                 Ok(AdResponse::with_pairs(diff_pairs))
             }
-            other => return Err(AutoDiffError::FwadUnexpectedNodeType(other).into()),
+            other => Err(AutoDiffError::FwadUnexpectedNodeType(other).into()),
         }
     }
 
@@ -551,9 +548,9 @@ impl Optimizer {
                         let verror = VolaError::error_here(e.clone(), span, "On this operation");
                         verror.report();
                     }
-                    return Err(e.into());
+                    return Err(e);
                 } else {
-                    return Err(e.into());
+                    return Err(e);
                 }
             }
         };
@@ -587,31 +584,29 @@ impl Optimizer {
             Ok(ctx
                 .activity
                 .build_diff_init_value_for_wrt(self, region, port))
-        } else {
-            if port.output.is_argument() {
-                //If the outport is active and an argument, but not a wrt-producer, this means that
-                //we get _supplied_ the diffed_value here, so just use that
-                //
-                //if however the port is not active, replace it with an apropriate zero
-                if ctx.activity.is_active_port(self, port) {
-                    Ok(port)
-                } else {
-                    Ok(self.emit_zero_for_port(region, port))
-                }
+        } else if port.output.is_argument() {
+            //If the outport is active and an argument, but not a wrt-producer, this means that
+            //we get _supplied_ the diffed_value here, so just use that
+            //
+            //if however the port is not active, replace it with an apropriate zero
+            if ctx.activity.is_active_port(self, port) {
+                Ok(port)
             } else {
-                //if is no argument, and no wrt producer, check if the port is active, if not
-                //it can be considered a _constant_
-                //therfore the derivative is always zero.
-                if !ctx.activity.is_active_port(&self, port) {
-                    let zero_node = self.emit_zero_for_port(region, port);
-                    Ok(zero_node)
+                Ok(self.emit_zero_for_port(region, port))
+            }
+        } else {
+            //if is no argument, and no wrt producer, check if the port is active, if not
+            //it can be considered a _constant_
+            //therfore the derivative is always zero.
+            if !ctx.activity.is_active_port(self, port) {
+                let zero_node = self.emit_zero_for_port(region, port);
+                Ok(zero_node)
+            } else {
+                //The last case is active, non-wrt port that is no argument. In that case there should already be the value in our cache
+                if let Some(diffed_port) = ctx.expr_cache.get(&port) {
+                    Ok(*diffed_port)
                 } else {
-                    //The last case is active, non-wrt port that is no argument. In that case there should already be the value in our cache
-                    if let Some(diffed_port) = ctx.expr_cache.get(&port) {
-                        Ok(*diffed_port)
-                    } else {
-                        Err(AutoDiffError::FwPortUnhandled(port))
-                    }
+                    Err(AutoDiffError::FwPortUnhandled(port))
                 }
             }
         }

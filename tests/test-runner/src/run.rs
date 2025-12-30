@@ -110,9 +110,9 @@ fn pipeline_res_to_testrun(
 
                 let test_run_result = match backend {
                     Backend::Wasm => {
-                        let result = crate::wasm_executor::try_execute(t, config);
+                        
                         //blindly overwrite the test result
-                        result
+                        crate::wasm_executor::try_execute(t, config)
                     }
                     //for all others, don't run and keep it at
                     //success
@@ -131,7 +131,7 @@ fn pipeline_res_to_testrun(
                 TestRun {
                     backend,
                     time,
-                    state: TestState::Error(format!("Expected Error, but was success")),
+                    state: TestState::Error("Expected Error, but was success".to_string()),
                     path: path.clone(),
                 }
             }
@@ -179,7 +179,7 @@ fn pipeline_res_to_testrun(
                     TestRun {
                         backend,
                         time,
-                        state: TestState::Error(format!("Expected success, but was error")),
+                        state: TestState::Error("Expected success, but was error".to_string()),
                         path: path.clone(),
                     }
                 }
@@ -253,7 +253,7 @@ pub fn run_file(path: PathBuf) -> Result<JoinHandle<TestResult>, Box<dyn Error>>
                         TestRun {
                             backend,
                             time,
-                            state: TestState::Error(format!("Paniced")),
+                            state: TestState::Error("Paniced".to_string()),
                             path: path.clone(),
                         }
                     }

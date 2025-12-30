@@ -16,7 +16,7 @@ pub struct Module {
 
 impl Module {
     pub fn is_stdlib(&self) -> bool {
-        if self.path.len() > 0 {
+        if !self.path.is_empty() {
             &self.path[0].0 == "std"
         } else {
             false

@@ -107,7 +107,7 @@ impl<'opt> LowerIntervals<'opt> {
 
         //register with the mapping
         assert!(self.mapping.insert(node.output(0), (start, end)).is_none());
-        return Ok(());
+        Ok(())
     }
 
     pub(crate) fn lower_unary_arith(

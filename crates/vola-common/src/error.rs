@@ -36,7 +36,7 @@ pub fn warning_reporter<'a>(err: impl ToString, span: Span) -> ReportBuilder<'a,
 /// It also allows you to covert any `VolaError<A>` to `VolaError<B>`, if `A` implements `Into<B>`.
 /// You are encouraged to use [thiserror] to derive your `E` type, and use [VolaError] only to embedded your error.
 pub struct VolaError<E: Error> {
-    pub error: E,
+    pub error: Box<E>,
     pub source_span: Option<Span>,
     ///All labels that might be attached to the error.
     pub labels: SmallVec<[Label<Span>; 4]>,
@@ -52,7 +52,7 @@ impl<E: Error> VolaError<E> {
         };
 
         VolaError {
-            error,
+            error: Box::new(error),
             source_span: None,
             labels: SmallVec::new(),
             backtrace,
@@ -68,7 +68,7 @@ impl<E: Error> VolaError<E> {
         };
 
         Self {
-            error,
+            error: Box::new(error),
             source_span: Some(span.clone()),
             labels: smallvec![Label::new(span).with_message(message)],
             backtrace,
@@ -109,7 +109,7 @@ impl<E: Error> VolaError<E> {
     ///Converts `VolaError<E>` into `VolaError<Error>`, where `E` can be converted into `Err`.
     pub fn to_error<Err: From<E> + Error>(self) -> VolaError<Err> {
         VolaError {
-            error: self.error.into(),
+            error: Box::new(Err::from(*self.error)),
             source_span: self.source_span,
             labels: self.labels,
             backtrace: self.backtrace,

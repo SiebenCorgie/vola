@@ -41,7 +41,7 @@ impl Optimizer {
         }
 
         //early return if we already found something
-        if errors.len() > 0 {
+        if !errors.is_empty() {
             return Err(errors);
         }
 
@@ -61,8 +61,8 @@ impl Optimizer {
             }
         }
 
-        if errors.len() > 0 {
-            return Err(errors);
+        if !errors.is_empty() {
+            Err(errors)
         } else {
             Ok(())
         }
@@ -218,13 +218,13 @@ impl Optimizer {
                             }
                         })
                 } else {
-                    return Err(VolaError::error_here(
+                    Err(VolaError::error_here(
                         OptError::CsgStructureIssue(
                             "CSG-Function-call has no definition".to_owned(),
                         ),
                         span.expect("Expected span for call"),
                         "for this call",
-                    ));
+                    ))
                 }
             }
             AbstractNodeType::Simple => {

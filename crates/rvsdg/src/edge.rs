@@ -56,7 +56,8 @@ impl InputType {
         use crate::util::parse::{enum_with_usize, usize_parser};
         use chumsky::prelude::*;
         //Our parser just accepts exactly what we produce via display
-        let parser = choice((
+
+        choice((
             just("GammaPred").map(|_| Self::GammaPredicate),
             just("ThetaPred").map(|_| Self::ThetaPredicate),
             just("EVRes")
@@ -71,8 +72,7 @@ impl InputType {
             enum_with_usize("EVIn", Self::EntryVariableInput),
             enum_with_usize("RVRes", Self::RecursionVariableResult),
             enum_with_usize("CVIn", Self::ContextVariableInput),
-        ));
-        parser
+        ))
     }
 }
 
@@ -131,22 +131,18 @@ impl InputType {
     /// - RecursionVariableResult
     /// - LoopVariableResult
     pub fn is_result(&self) -> bool {
-        match self {
+        matches!(
+            self,
             InputType::Result(_)
-            | InputType::ThetaPredicate
-            | InputType::RecursionVariableResult(_)
-            | InputType::ExitVariableResult { .. } => true,
-            _ => false,
-        }
+                | InputType::ThetaPredicate
+                | InputType::RecursionVariableResult(_)
+                | InputType::ExitVariableResult { .. }
+        )
     }
 
     ///Returns true for GammaPredicate and ThetaPredicate
     pub fn is_predicate(&self) -> bool {
-        if let Self::GammaPredicate | Self::ThetaPredicate = self {
-            true
-        } else {
-            false
-        }
+        matches!(self, Self::GammaPredicate | Self::ThetaPredicate)
     }
 
     //If possible, tries to map this input to its equivalent port within a region.
@@ -244,7 +240,8 @@ impl OutputType {
         use crate::util::parse::{enum_with_usize, usize_parser};
         use chumsky::prelude::*;
         //Our parser just accepts exactly what we produce via display
-        let parser = choice((
+
+        choice((
             just("LambdaDecl").map(|_| Self::LambdaDeclaration),
             just("DeltaDecl").map(|_| Self::DeltaDeclaration),
             just("EVArg")
@@ -262,8 +259,7 @@ impl OutputType {
             enum_with_usize("RVArg", Self::RecursionVariableArgument),
             enum_with_usize("EVOut", Self::ExitVariableOutput),
             enum_with_usize("CVArg", Self::ContextVariableArgument),
-        ));
-        parser
+        ))
     }
 }
 
@@ -324,13 +320,13 @@ impl OutputType {
     /// - RecursionVariableArgument
     /// - EntryVariableArgument
     pub fn is_argument(&self) -> bool {
-        match self {
+        matches!(
+            self,
             OutputType::Argument(_)
-            | OutputType::ContextVariableArgument(_)
-            | OutputType::RecursionVariableArgument(_)
-            | OutputType::EntryVariableArgument { .. } => true,
-            _ => false,
-        }
+                | OutputType::ContextVariableArgument(_)
+                | OutputType::RecursionVariableArgument(_)
+                | OutputType::EntryVariableArgument { .. }
+        )
     }
 
     //If possible, maps the output-like type to an region-local result.

@@ -26,9 +26,9 @@ pub enum AstError {
 
 impl AstError {
     pub fn from_parser_error<E: Error>(error: VolaError<E>) -> VolaError<Self> {
-        let internal = Self::ParsingError(format!("{}", error.error.to_string()));
+        let internal = Self::ParsingError(format!("{}", error.error));
         VolaError {
-            error: internal,
+            error: Box::new(internal),
             source_span: error.source_span,
             labels: error.labels,
             backtrace: error.backtrace,

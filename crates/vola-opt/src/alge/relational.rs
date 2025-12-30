@@ -101,7 +101,7 @@ impl DialectNode for BinaryRel {
             node: Box::new(BinaryRel {
                 inputs: [Input::default(), Input::default()],
                 output: Output::default(),
-                op: self.op.clone(),
+                op: self.op,
             }),
         }
     }

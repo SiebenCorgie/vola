@@ -152,7 +152,7 @@ impl DialectNode for Trig {
             node: Box::new(Trig {
                 inputs: smallvec![Input::default(); self.inputs.len()],
                 output: Output::default(),
-                op: self.op.clone(),
+                op: self.op,
             }),
         }
     }
@@ -170,13 +170,11 @@ impl DialectNode for Trig {
         src_nodes: &[Option<&rvsdg::nodes::Node<OptNode>>],
     ) -> Option<OptNode> {
         //defined on singular scalar or vector
-        if src_nodes.len() == 0 {
+        if src_nodes.is_empty() {
             return None;
         }
 
-        if src_nodes[0].is_none() {
-            return None;
-        }
+        src_nodes[0]?;
 
         if !src_nodes[0].as_ref().unwrap().node_type.is_simple() {
             return None;

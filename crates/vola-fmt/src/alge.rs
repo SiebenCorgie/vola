@@ -131,7 +131,7 @@ impl From<&ImplBlock> for FormatTree {
             FormatTree::from(&value.dst),
         ];
 
-        if value.operands.len() > 0 {
+        if !value.operands.is_empty() {
             header_builder.push(FormatTree::Wrapped {
                 left: '<',
                 right: '>',

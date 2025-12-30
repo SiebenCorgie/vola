@@ -74,20 +74,20 @@ impl Stroke {
 impl View for rvsdg::common::VSEdge {
     fn name(&self) -> String {
         match self {
-            VSEdge::State { .. } => "StateEdge".to_owned(),
-            VSEdge::Value { .. } => "ValueEdge".to_owned(),
+            VSEdge::State => "StateEdge".to_owned(),
+            VSEdge::Value => "ValueEdge".to_owned(),
         }
     }
     fn color(&self) -> Color {
         match self {
-            VSEdge::State { .. } => Color::RED,
-            VSEdge::Value { .. } => Color::BLACK,
+            VSEdge::State => Color::RED,
+            VSEdge::Value => Color::BLACK,
         }
     }
     fn stroke(&self) -> Stroke {
         match self {
-            VSEdge::State { .. } => Stroke::Dots,
-            VSEdge::Value { .. } => Stroke::Line,
+            VSEdge::State => Stroke::Dots,
+            VSEdge::Value => Stroke::Line,
         }
     }
 }

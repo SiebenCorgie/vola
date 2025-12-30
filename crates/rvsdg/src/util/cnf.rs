@@ -102,7 +102,7 @@ impl<N: LangNode + StructuralClone + 'static> CnfCtx<N> {
                     if let Some(new_node) = new_node {
                         //if it worked, disconnect all inputs, and replace the node with the just created one.
                         assert!(
-                            new_node.inputs().len() == 0,
+                            new_node.inputs().is_empty(),
                             "Expected a constant value to be emitted, got one with {} inputs",
                             new_node.inputs().len()
                         );
@@ -117,7 +117,7 @@ impl<N: LangNode + StructuralClone + 'static> CnfCtx<N> {
                             .node(node)
                             .inputs()
                             .iter()
-                            .filter_map(|inp| inp.edge.clone())
+                            .filter_map(|inp| inp.edge)
                             .collect();
 
                         for edge in input_edges {
@@ -131,8 +131,7 @@ impl<N: LangNode + StructuralClone + 'static> CnfCtx<N> {
                         //Now add the just created node to the topological-sort, since we have to visit that one immeditatly
 
                         topord.push_front(replace_id);
-                    } else {
-                    }
+                    } 
                 }
                 AbstractNodeType::Gamma => {
                     //Check if we can specialize the gamma-node for a constant predicate, if not just cnf all sub-regions

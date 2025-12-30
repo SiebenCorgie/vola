@@ -7,17 +7,17 @@ use crate::{ParserCtx, error::ParserError};
 pub fn comment(ctx: &mut ParserCtx, data: &[u8], node: &Node) -> Comment {
     match node.utf8_text(data) {
         Ok(t) => Comment {
-            span: ctx.span(&node),
+            span: ctx.span(node),
             content: t.trim_start_matches("//").to_owned(),
         },
         Err(_e) => {
             ctx.deep_errors.push(VolaError::error_here(
                 ParserError::MalformedNode("Could not parse comment".to_owned()),
-                ctx.span(&node),
+                ctx.span(node),
                 "here",
             ));
             Comment {
-                span: ctx.span(&node),
+                span: ctx.span(node),
                 content: "Could not parse comment".to_owned(),
             }
         }

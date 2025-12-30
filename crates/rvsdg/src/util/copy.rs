@@ -130,10 +130,10 @@ impl<N: LangNode + StructuralClone + 'static, E: LangEdge + StructuralClone + 's
     pub fn shallow_copy_node(&mut self, src_node: NodeRef, dst_region: RegionLocation) -> NodeRef {
         let new_node = self.node(src_node).structural_copy();
         //now unwrap the inner type, and add that to a new registered node in dst_region
-        let node = self
+        
+        self
             .on_region(&dst_region, |reg| reg.add_node_type(new_node.node_type))
-            .unwrap();
-        node
+            .unwrap()
     }
 
     ///_Deep copies_ `node` to `dst_region`.

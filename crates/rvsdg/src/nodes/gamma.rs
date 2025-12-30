@@ -157,6 +157,12 @@ impl StructuralNode for GammaNode {
     }
 }
 
+impl Default for GammaNode {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl GammaNode {
     pub fn new() -> Self {
         let mut inputs = SmallColl::default();

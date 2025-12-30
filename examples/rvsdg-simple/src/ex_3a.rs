@@ -60,7 +60,7 @@ pub fn emit() -> Rvsdg<LNode, VSEdge> {
 
             func.on_region(|reg| {
                 let (gt_node, _edges) = reg
-                    .connect_node(LNode::new(MyNodes::Gt), [arg_x.clone(), arg_y.clone()])
+                    .connect_node(LNode::new(MyNodes::Gt), [arg_x, arg_y])
                     .unwrap();
 
                 //setup the max_gamma branches and connect gt on them

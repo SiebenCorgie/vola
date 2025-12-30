@@ -28,7 +28,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> Iterator for PredIter<'a,
             let this_edg = self.idx;
             self.idx += 1;
             if let Some(edg) = self.inputs[this_edg].edge {
-                return Some(self.ctx.edge(edg).src.clone());
+                return Some(self.ctx.edge(edg).src);
             }
         }
 
@@ -49,7 +49,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> Iterator for SuccIter<'a,
         while self.out_idx < self.outputs.len() {
             if let Some(edg) = self.outputs[self.out_idx].edges.get(self.sub_idx) {
                 self.sub_idx += 1;
-                return Some(self.ctx.edge(*edg).dst.clone());
+                return Some(self.ctx.edge(*edg).dst);
             } else {
                 //No edge in output collection left, go to the next output.
                 self.sub_idx = 0;

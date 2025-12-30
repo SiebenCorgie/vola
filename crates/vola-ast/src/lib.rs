@@ -137,7 +137,7 @@ impl VolaAst {
             })?;
 
         //now resolve relative to the ast all submodules
-        let _ = root_ast.resolve_modules(file, parser)?;
+        root_ast.resolve_modules(file, parser)?;
 
         Ok(root_ast)
     }
@@ -153,13 +153,13 @@ impl VolaAst {
         let root_file: FileString = pseudo_file.as_path().to_str().unwrap().into();
 
         let mut root_ast = parser
-            .parse_from_byte(Some(root_file), &bytes)
+            .parse_from_byte(Some(root_file), bytes)
             .map_err(|errs| {
                 errs.into_iter()
                     .map(|e| AstError::from_parser_error(e))
                     .collect::<Vec<_>>()
             })?;
-        let _ = root_ast.resolve_modules(&pseudo_file, parser)?;
+        root_ast.resolve_modules(&pseudo_file, parser)?;
         Ok(root_ast)
     }
 
@@ -170,7 +170,7 @@ impl VolaAst {
         bytes: &[u8],
         parser: &dyn VolaParser<Error = E>,
     ) -> Result<Self, Vec<VolaError<AstError>>> {
-        parser.parse_from_byte(None, &bytes).map_err(|errs| {
+        parser.parse_from_byte(None, bytes).map_err(|errs| {
             errs.into_iter()
                 .map(|e| AstError::from_parser_error(e))
                 .collect::<Vec<_>>()
@@ -297,7 +297,7 @@ impl VolaAst {
             break 'module_resolver;
         }
 
-        if errors.len() > 0 {
+        if !errors.is_empty() {
             Err(errors)
         } else {
             Ok(())

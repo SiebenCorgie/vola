@@ -62,11 +62,7 @@ impl Target {
         }
     }
     pub fn is_file(&self) -> bool {
-        if let Self::File(_) = self {
-            true
-        } else {
-            false
-        }
+        matches!(self, Self::File(_))
     }
 
     pub fn file(file: &dyn AsRef<Path>) -> Self {
@@ -115,15 +111,15 @@ impl Target {
 /// 1. _somehow_ get an AST,
 /// 2. parse `Optimizer` from an AST,
 /// 3. optimize based on arguments
-///     3.1 Apply High-Level CSG-Optimizations,
-///     3.2 Specialize exports
-///     3.3 (optional) optimize specialized exports
-///     3.4 Specialize field accesses
-///     3.5 (optional) optimize specialized field access λs
-///     3.6 dispatch csg-trees
-///     3.7 (optional) optimize specialized eval-λs
-///     3.8 (optional) inline eval-λs
-///     3.9 (optional) iff 3.8 happened, do cross-λ-optimizations
+///    3.1 Apply High-Level CSG-Optimizations,
+///    3.2 Specialize exports
+///    3.3 (optional) optimize specialized exports
+///    3.4 Specialize field accesses
+///    3.5 (optional) optimize specialized field access λs
+///    3.6 dispatch csg-trees
+///    3.7 (optional) optimize specialized eval-λs
+///    3.8 (optional) inline eval-λs
+///    3.9 (optional) iff 3.8 happened, do cross-λ-optimizations
 /// 4. Interval extension and lowering
 /// 5. Automatic differentiation
 /// 6. Emit some format based on a configured backend.
@@ -141,10 +137,16 @@ pub struct Pipeline {
     pub validate_output: bool,
 }
 
+impl Default for Pipeline {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Pipeline {
     pub fn new() -> Self {
         Pipeline {
-            backend: Box::new(StubBackend::default()),
+            backend: Box::new(StubBackend),
 
             early_cnf: true,
             late_cnf: true,
@@ -282,7 +284,7 @@ impl Pipeline {
         }
 
         if std::env::var("VOLA_DUMP_VIEWER").is_ok() {
-            opt.dump_debug_state(&"OptState.bin");
+            opt.dump_debug_state("OptState.bin");
         }
 
         let result = self.backend.execute(opt)?;
@@ -305,8 +307,8 @@ impl Pipeline {
     ) -> Result<Target, Vec<VolaError<PipelineError>>> {
         //NOTE: Always reset file cache, since the files we are reporting on might have changed.
         reset_file_cache();
-        let mut parser = vola_tree_sitter_parser::VolaTreeSitterParser;
-        let ast = VolaAst::new_from_bytes(data, &mut parser, workspace).map_err(|errors| {
+        let parser = vola_tree_sitter_parser::VolaTreeSitterParser;
+        let ast = VolaAst::new_from_bytes(data, &parser, workspace).map_err(|errors| {
             errors
                 .into_iter()
                 .map(|err| err.to_error::<PipelineError>())
@@ -327,8 +329,8 @@ impl Pipeline {
     ) -> Result<Target, Vec<VolaError<PipelineError>>> {
         //NOTE: Always reset file cache, since the files we are reporting on might have changed.
         reset_file_cache();
-        let mut parser = vola_tree_sitter_parser::VolaTreeSitterParser;
-        let ast = VolaAst::new_from_file(file, &mut parser).map_err(|errors| {
+        let parser = vola_tree_sitter_parser::VolaTreeSitterParser;
+        let ast = VolaAst::new_from_file(file, &parser).map_err(|errors| {
             errors
                 .into_iter()
                 .map(|err| err.to_error())

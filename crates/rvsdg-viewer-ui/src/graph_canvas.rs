@@ -89,8 +89,8 @@ impl CanvasDrawState {
     fn graph_local_offset(&self, mouse: Point, bounds: &iced::Rectangle) -> Vec2 {
         let mouse_in_frame = Vec2::from_array(mouse.into()) - Vec2::new(bounds.x, bounds.y);
         let zoom_local_mouse = mouse_in_frame * (1.0 / self.graph_zoom);
-        let mouse_offset_local = zoom_local_mouse - Vec2::from_array(self.graph_offset.into());
-        mouse_offset_local
+        
+        zoom_local_mouse - Vec2::from_array(self.graph_offset.into())
     }
 }
 
@@ -172,13 +172,13 @@ impl<'a> canvas::Program<GraphCanvasMessage> for GraphDrawer<'a> {
             }
             canvas::Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)) => {
                 if let Some(hoverin) = &state.hovering {
-                    state.selected = Some(hoverin.clone());
+                    state.selected = Some(*hoverin);
                 } else {
                     state.selected = None;
                 }
                 (
                     event::Status::Captured,
-                    Some(GraphCanvasMessage::Select(state.selected.clone())),
+                    Some(GraphCanvasMessage::Select(state.selected)),
                 )
             }
             _ => (event::Status::Captured, None),
@@ -212,7 +212,7 @@ fn draw_tree(
     hovering: &Option<AttribLocation>,
     selected: &Option<AttribLocation>,
 ) {
-    let _ = draw_tree_inner(frame, tree, hovering, selected);
+    draw_tree_inner(frame, tree, hovering, selected);
 }
 
 fn draw_tree_inner(

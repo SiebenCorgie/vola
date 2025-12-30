@@ -251,7 +251,7 @@ impl Optimizer {
                                 ));
                             }
                             //update the index and shortcut the loop
-                            qidx = qidx + 1;
+                            qidx += 1;
                             continue 'explore;
                         }
                         _ => panic!("Unexpected output type: {}", port.output),
@@ -259,7 +259,7 @@ impl Optimizer {
                 };
                 //Use the type info and skip to next port
                 local_type_lookup.insert(port, Some(ty.clone()));
-                qidx = qidx + 1;
+                qidx += 1;
                 continue 'explore;
             }
 
@@ -269,7 +269,7 @@ impl Optimizer {
                     if let Some(actual_type) = ty.get_type() {
                         //The port is indeed typed, therefore we can bail
                         local_type_lookup.insert(port, Some(actual_type));
-                        qidx = qidx + 1;
+                        qidx += 1;
                         continue;
                     }
                     //NOTE: we consider value-edges without a type _untyped_... duh
@@ -447,7 +447,7 @@ impl Optimizer {
                 }
             }
             //Finally goto next exploration port
-            qidx = qidx + 1;
+            qidx += 1;
         }
 
         Ok((lookat_queue, local_type_lookup))

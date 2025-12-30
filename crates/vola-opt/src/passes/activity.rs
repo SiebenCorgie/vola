@@ -104,7 +104,7 @@ impl<'opt> ActivityAnalysis<'opt> {
             .walk_predecessors_in_region(expr_src.node)
             .chain([expr_src].into_iter())
         {
-            let _val = activity.is_active_port(&self.optimizer, pred);
+            let _val = activity.is_active_port(self.optimizer, pred);
         }
 
         Ok(activity)

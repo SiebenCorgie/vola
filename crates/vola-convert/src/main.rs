@@ -20,7 +20,7 @@ fn main() {
     pretty_env_logger::init();
     let args = Args::parse();
 
-    if args.src_file.extension() != Some(&OsStr::new("scad")) {
+    if args.src_file.extension() != Some(OsStr::new("scad")) {
         log::warn!("'{:?}' might no be a OpenScad-file", args.src_file);
     }
 

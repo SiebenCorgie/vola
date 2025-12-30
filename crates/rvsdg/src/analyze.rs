@@ -206,7 +206,7 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
                         .inport(&InputType::ContextVariableInput(cv))
                     {
                         if let Some(edg) = cv_inp.edge {
-                            next_port = self.edge(edg).src.clone();
+                            next_port = self.edge(edg).src;
                             if visited.contains(&next_port.node) {
                                 panic!("detected graph loop in producer chain, which is invalid");
                             }
@@ -233,7 +233,7 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
                         .inport(&InputType::EntryVariableInput(entry_variable))
                     {
                         if let Some(edg) = ev_inp.edge {
-                            next_port = self.edge(edg).src.clone();
+                            next_port = self.edge(edg).src;
                             if visited.contains(&next_port.node) {
                                 panic!("detected graph loop in producer chain, which is invalid");
                             }
@@ -250,7 +250,7 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
                     //Traverse _outside_ the theta node, if this is a theta-node argument
                     if self.node(next_port.node).node_type.is_theta() {
                         //check that the related input is used as well.
-                        if let Some(src) = self.node(next_port.node).input_src(&self, i) {
+                        if let Some(src) = self.node(next_port.node).input_src(self, i) {
                             //have a valid src, set this up as the next port, and push our selfs
                             //into the visited list
                             next_port = src;
@@ -276,7 +276,7 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
     ///See [Self::find_producer_out] for a detailed explaination on what this does.
     pub fn find_producer_inp(&self, input: InportLocation) -> Option<OutportLocation> {
         let start_out = if let Some(start_edge) = self.node(input.node).inport(&input.input)?.edge {
-            self.edge(start_edge).src.clone()
+            self.edge(start_edge).src
         } else {
             return None;
         };
@@ -292,7 +292,7 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
         //FIXME: The union_set is kinda dirty atm.
         let mut union_set = AHashSet::new();
         for connected in &self.node(src.node).outport(&src.output).unwrap().edges {
-            let dst = self.edge(*connected).dst().clone();
+            let dst = *self.edge(*connected).dst();
             let consumers = self.find_consumer_in(dst);
             for found in consumers {
                 union_set.insert(found);
@@ -334,7 +334,7 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
                             .unwrap()
                             .edges
                         {
-                            let dst = self.edge(*connected).dst().clone();
+                            let dst = *self.edge(*connected).dst();
                             waiting.push(dst);
                         }
                     } else {
@@ -555,7 +555,7 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
         let mut checked = AHashSet::new();
 
         let take_next = |map: &mut AHashSet<NodeRef>| -> Option<NodeRef> {
-            let next = if let Some(next) = map.iter().next().clone() {
+            let next = if let Some(next) = map.iter().next() {
                 *next
             } else {
                 return None;
@@ -629,7 +629,7 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
             let mut dependencies = AHashSet::new();
             let inputcount = self.node(*node).inputs().len();
             for input in 0..inputcount {
-                if let Some(src) = self.node(*node).input_src(&self, input) {
+                if let Some(src) = self.node(*node).input_src(self, input) {
                     assert!(dependencies.insert(src.node));
                 }
             }
@@ -659,24 +659,19 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
         };
 
         //now append path-parts till we reached an end
-        loop {
-            if let Some(mapped_out) = path.start.output.map_out_of_region() {
-                match self.node(path.start.node).inport(&mapped_out) {
-                    Some(next_dst_port) => {
-                        //was able to map last start _out of region_ so there could be _something_ connected
-                        if let Some(edg) = next_dst_port.edge {
-                            path.edges.push(edg);
-                            path.start = self.edge(edg).src;
-                        }
-                    }
-                    None => {
-                        //The mapping works, but the port does in fact not exist, break as well
-                        break;
+        while let Some(mapped_out) = path.start.output.map_out_of_region() {
+            match self.node(path.start.node).inport(&mapped_out) {
+                Some(next_dst_port) => {
+                    //was able to map last start _out of region_ so there could be _something_ connected
+                    if let Some(edg) = next_dst_port.edge {
+                        path.edges.push(edg);
+                        path.start = self.edge(edg).src;
                     }
                 }
-            } else {
-                //cannot map out of region, so end
-                break;
+                None => {
+                    //The mapping works, but the port does in fact not exist, break as well
+                    break;
+                }
             }
         }
 

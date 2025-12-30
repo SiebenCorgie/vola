@@ -80,26 +80,18 @@ impl BuildinOp {
             }
             Self::SquareRoot => {
                 //only defined on Scalar
-                if let Some(scalar) = input.try_downcast_ref::<ImmScalar>() {
-                    Some(OptNode::new(
+                input.try_downcast_ref::<ImmScalar>().map(|scalar| OptNode::new(
                         ImmScalar::new(scalar.lit.sqrt()),
                         Span::empty(),
                     ))
-                } else {
-                    None
-                }
             }
 
             Self::Exp => {
                 //only defined on Scalar
-                if let Some(scalar) = input.try_downcast_ref::<ImmScalar>() {
-                    Some(OptNode::new(
+                input.try_downcast_ref::<ImmScalar>().map(|scalar| OptNode::new(
                         ImmScalar::new(scalar.lit.exp()),
                         Span::empty(),
                     ))
-                } else {
-                    None
-                }
             }
 
             //All others are undefined / unfoldable
@@ -555,7 +547,7 @@ impl DialectNode for Buildin {
             node: Box::new(Buildin {
                 inputs: smallvec![Input::default(); self.inputs.len()],
                 output: Output::default(),
-                op: self.op.clone(),
+                op: self.op,
             }),
         }
     }
@@ -567,12 +559,10 @@ impl DialectNode for Buildin {
         match self.op {
             BuildinOp::Length | BuildinOp::SquareRoot | BuildinOp::Exp => {
                 //unary case
-                if src_nodes.len() == 0 {
+                if src_nodes.is_empty() {
                     return None;
                 }
-                if src_nodes[0].is_none() {
-                    return None;
-                }
+                src_nodes[0]?;
                 if !src_nodes[0].as_ref().unwrap().node_type.is_simple() {
                     return None;
                 }

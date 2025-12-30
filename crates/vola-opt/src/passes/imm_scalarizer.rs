@@ -72,14 +72,12 @@ impl Optimizer {
         let immval = if let NodeType::Simple(s) = &self.graph.node(node).node_type {
             if let Some(imm) = s.try_downcast_ref::<ImmVector>() {
                 ImmTy::Vec(imm.lit.clone())
+            } else if let Some(imm) = s.try_downcast_ref::<ImmMatrix>() {
+                ImmTy::Matrix(imm.lit.clone())
             } else {
-                if let Some(imm) = s.try_downcast_ref::<ImmMatrix>() {
-                    ImmTy::Matrix(imm.lit.clone())
-                } else {
-                    return Err(OptError::Internal(format!(
-                        "Scalarizing {node} failed, was no ImmVector nor ImmMatrix!"
-                    )));
-                }
+                return Err(OptError::Internal(format!(
+                    "Scalarizing {node} failed, was no ImmVector nor ImmMatrix!"
+                )));
             }
         } else {
             return Err(OptError::Internal(format!(
@@ -92,7 +90,7 @@ impl Optimizer {
             .graph
             .node(node)
             .parent
-            .ok_or(OptError::Internal(format!("Node was in parenless region!")))?;
+            .ok_or(OptError::Internal("Node was in parenless region!".to_string()))?;
 
         //NOTE: we don't need to type the edges, since replace_node_uses takes care of copying over the actual type.
         let replacement_node = match immval {

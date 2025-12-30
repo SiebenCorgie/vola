@@ -118,10 +118,10 @@ pub fn try_execute(target: Target, config: &Config) -> TestState {
     }
 
     if any_wrong {
-        return TestState::Error(format!(
+        TestState::Error(format!(
             "Unexpected result {:?} != {:?}: (Diff: {:?})",
             results, wasm_f32_results, diffs
-        ));
+        ))
     } else {
         TestState::Success
     }

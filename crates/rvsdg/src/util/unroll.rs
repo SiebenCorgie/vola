@@ -69,7 +69,7 @@ impl<N: LangNode + StructuralClone + 'static, E: LangEdge + StructuralClone + 's
                 src
             } else {
                 //if the input is not connected, make sure that there are also no result users
-                if self[theta.output(lv)].edges.len() > 0 {
+                if !self[theta.output(lv)].edges.is_empty() {
                     return Err(UnrollError::LvInOutConnectionError(lv));
                 } else {
                     //otherwise, all is fine continue with next port.
@@ -78,7 +78,7 @@ impl<N: LangNode + StructuralClone + 'static, E: LangEdge + StructuralClone + 's
             };
 
             for edg in self[theta.output(lv)].edges.clone() {
-                let dst = self[edg].dst().clone();
+                let dst = *self[edg].dst();
                 let disconnected = self.disconnect(edg)?;
                 //now reconnect for the just found src
                 self.connect(lvin_src, dst, disconnected)?;
@@ -164,22 +164,22 @@ impl<N: LangNode + StructuralClone + 'static, E: LangEdge + StructuralClone + 's
             };
 
             //translate the result edge into a (new_src, edgetype) pair.
-            let edg_src = self[result_edg].src().clone();
+            let edg_src = *self[result_edg].src();
             let edg_ty = self[result_edg].ty.structural_copy();
 
             let new_src = if edg_src.node == theta {
                 //if the src is the theta node itself, then the new input src must be the currently
                 //connected value from outside the theta-node
                 let input = edg_src.output.map_out_of_region().unwrap();
-                let src = if let Some(src) = self.inport_src(InportLocation { node: theta, input })
+                
+                if let Some(src) = self.inport_src(InportLocation { node: theta, input })
                 {
                     src
                 } else {
                     //if that input is unconnected, then the currently checked result will be unconnected after unrolling
                     input_remapping.push(None);
                     continue;
-                };
-                src
+                }
             } else {
                 //is not theta, so find remapped _unrolled_ node
                 let remap_node = *pull_out_map
@@ -206,7 +206,7 @@ impl<N: LangNode + StructuralClone + 'static, E: LangEdge + StructuralClone + 's
                 src
             } else {
                 //if input is not set, make sure the argument is also not in use
-                if self[lvarg].edges.len() > 0 {
+                if !self[lvarg].edges.is_empty() {
                     return Err(UnrollError::LvInOutConnectionError(lv));
                 } else {
                     //otherwise its fine to ignore that lv
@@ -216,7 +216,7 @@ impl<N: LangNode + StructuralClone + 'static, E: LangEdge + StructuralClone + 's
             };
             for edg in self[lvarg].edges.clone() {
                 let ty = self[edg].ty.structural_copy();
-                let dst = self[edg].dst().clone();
+                let dst = *self[edg].dst();
 
                 if dst.node == theta {
                     //NOTE: if we would remap a dst-input, just ignore it. That case is already handled
@@ -248,7 +248,7 @@ impl<N: LangNode + StructuralClone + 'static, E: LangEdge + StructuralClone + 's
             if let Some((new_src, edgty)) = mapping {
                 //disconnect that lv-input, if it is connected, then connect with the remapping
                 let lvinput = theta.input(lv);
-                if let Some(edg) = self[lvinput].edge.clone() {
+                if let Some(edg) = self[lvinput].edge {
                     let _ = self.disconnect(edg);
                 }
 

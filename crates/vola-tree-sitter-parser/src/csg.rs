@@ -64,11 +64,11 @@ impl FromTreeSitter for ScopedCall {
         let call = Call::parse(ctx, dta, &children.next().unwrap())?;
 
         let mut blocks = Vec::with_capacity(2);
-        while let Some(next_node) = children.next() {
+        for next_node in children.by_ref() {
             blocks.push(Block::parse(ctx, dta, &next_node)?);
         }
 
-        if blocks.len() == 0 {
+        if blocks.is_empty() {
             let err = ParserError::NoChildAvailable;
             return Err(VolaError::error_here(
                 err,

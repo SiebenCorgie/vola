@@ -153,7 +153,7 @@ impl FromTreeSitter for Expr {
                     }
                 }
 
-                if accessors.len() == 0 {
+                if accessors.is_empty() {
                     return Err(VolaError::error_here(
                         ParserError::NoAccessedField,
                         ctx.span(&child_node),
@@ -244,7 +244,7 @@ impl FromTreeSitter for Expr {
                     i
                 } else {
                     let err =
-                        ParserError::Other(format!("Expected integer as second splat argument"));
+                        ParserError::Other("Expected integer as second splat argument".to_string());
                     return Err(VolaError::error_here(
                         err,
                         ctx.span(&child_node),
@@ -275,7 +275,7 @@ impl FromTreeSitter for Expr {
                 } else {
                     return Err(VolaError::error_here(
                         ParserError::Other("Expected Type".to_owned()),
-                        ctx.span(&node),
+                        ctx.span(node),
                         "'as' should be followed by a type",
                     ));
                 };
@@ -352,7 +352,7 @@ impl FromTreeSitter for FieldAccessor {
                     kind: node.kind().to_owned(),
                     expected: "digit | identifier".to_owned(),
                 };
-                Err(VolaError::error_here(err, ctx.span(&node), "here"))
+                Err(VolaError::error_here(err, ctx.span(node), "here"))
             }
         }
     }

@@ -150,7 +150,7 @@ impl FromTreeSitter for DataTy {
                     kind: other.to_owned(),
                     expected: "data type".to_owned(),
                 };
-                return Err(VolaError::error_here(err, ctx.span(node), "here"));
+                Err(VolaError::error_here(err, ctx.span(node), "here"))
             }
         }
     }
@@ -278,9 +278,9 @@ impl FromTreeSitter for Ty {
 
         //Might have to unwrap the node, if its the _type_ kind.
         let root_node = if node.kind() == "type" {
-            node.child(0).unwrap().clone()
+            node.child(0).unwrap()
         } else {
-            node.clone()
+            *node
         };
         match root_node.kind() {
             "data_type" => Ok(Self::Simple(DataTy::parse(ctx, dta, &root_node)?)),
@@ -305,7 +305,7 @@ impl FromTreeSitter for Ty {
                 let mut children = node.children(&mut walker);
                 ParserError::consume_expected_node_string(ctx, dta, children.next(), "(")?;
                 let mut args = Vec::with_capacity(8);
-                while let Some(next_node) = children.next() {
+                for next_node in children.by_ref() {
                     match next_node.kind() {
                         ")" => {
                             ParserError::consume_expected_node_string(
@@ -351,7 +351,7 @@ impl FromTreeSitter for Ty {
                     kind: root_node.kind().to_string(),
                     expected: "data_type | shape | csg | (".to_owned(),
                 };
-                return Err(VolaError::error_here(err, ctx.span(&root_node), "here"));
+                Err(VolaError::error_here(err, ctx.span(&root_node), "here"))
             }
         }
     }
@@ -375,7 +375,7 @@ impl FromTreeSitter for Literal {
                 let node_text = match node.utf8_text(dta) {
                     Err(e) => {
                         let err = ParserError::Utf8ParseError(e);
-                        return Err(VolaError::error_here(err, ctx.span(&node), "here"));
+                        return Err(VolaError::error_here(err, ctx.span(node), "here"));
                     }
                     Ok(s) => s.to_owned(),
                 };
@@ -409,11 +409,11 @@ impl FromTreeSitter for Literal {
                 "false" => Ok(Literal::BoolLiteral(false)),
                 _other => {
                     let err = ParserError::ParseBoolFailed;
-                    return Err(VolaError::error_here(
+                    Err(VolaError::error_here(
                         err,
                         ctx.span(node),
                         "should be 'true' or 'false'",
-                    ));
+                    ))
                 }
             },
             "const_literal" => match node.child(0).unwrap().kind() {
@@ -422,11 +422,11 @@ impl FromTreeSitter for Literal {
                 "PI" => Ok(Literal::FloatLiteral(std::f64::consts::PI)),
                 other => {
                     let err = ParserError::Other(format!("Unknown constant '{other}'"));
-                    return Err(VolaError::error_here(
+                    Err(VolaError::error_here(
                         err,
                         ctx.span(node),
                         "this is unrecognized",
-                    ));
+                    ))
                 }
             },
             _ => {
@@ -480,7 +480,7 @@ impl FromTreeSitter for Call {
 
         let mut args = SmallVec::new();
 
-        while let Some(next_node) = children.next() {
+        for next_node in children.by_ref() {
             match next_node.kind() {
                 ")" => {
                     ParserError::consume_expected_node_string(ctx, dta, Some(next_node), ")")?;
@@ -542,7 +542,7 @@ impl FromTreeSitter for Module {
                 n
             } else {
                 let err = ParserError::NoChildAvailable;
-                return Err(VolaError::error_here(err, ctx.span(&node), "here"));
+                return Err(VolaError::error_here(err, ctx.span(node), "here"));
             };
             match next_node.kind() {
                 //can end

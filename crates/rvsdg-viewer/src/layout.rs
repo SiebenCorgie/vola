@@ -120,7 +120,7 @@ impl RegionLayout {
             let result_count = rvsdg.region(&region).unwrap().results.len();
             for residx in 0..result_count {
                 if let Some(connected_result) =
-                    &rvsdg.region(&region).unwrap().result_src(&rvsdg, residx)
+                    &rvsdg.region(&region).unwrap().result_src(rvsdg, residx)
                 {
                     result_connected_nodes.insert(connected_result.node);
                 }
@@ -143,10 +143,10 @@ impl RegionLayout {
             .unwrap()
             .nodes
             .iter()
-            .filter(|node| node_pass_list.contains(&node))
+            .filter(|node| node_pass_list.contains(node))
             .filter_map(|nref| {
                 let node = rvsdg.node(*nref);
-                let sub_regions = if node.regions().len() > 0 {
+                let sub_regions = if !node.regions().is_empty() {
                     let mut sub_regions = Vec::with_capacity(node.regions().len());
                     for subidx in 0..node.regions().len() {
                         sub_regions.push(RegionLayout::build_for_region(
@@ -297,14 +297,14 @@ impl<'a, N: LangNode + View + 'static, E: LangEdge + View + 'static> Layout<'a, 
     }
     pub fn for_rvsdg(rvsdg: &'a Rvsdg<N, E>, config: &LayoutConfig) -> Self {
         let tlregion = rvsdg.toplevel_region();
-        let mut region_tree = RegionLayout::build_for_region(rvsdg, tlregion, &config);
+        let mut region_tree = RegionLayout::build_for_region(rvsdg, tlregion, config);
 
         region_tree.initial_layouting(rvsdg, config.ignore_dead_node);
 
-        region_tree.bottom_up_transfer_grid(rvsdg, &config);
+        region_tree.bottom_up_transfer_grid(rvsdg, config);
 
         let regheight = region_tree.extent.y;
-        region_tree.set_height(regheight, &config);
+        region_tree.set_height(regheight, config);
 
         let mut layout = Layout {
             src_graph: rvsdg,

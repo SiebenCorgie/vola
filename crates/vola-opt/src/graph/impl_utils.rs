@@ -146,7 +146,7 @@ impl Optimizer {
             node: lmd,
             output: OutputType::Argument(argidx),
         };
-        self.typemap.set(port.clone().into(), src_ty.clone().into());
+        self.typemap.set(port.into(), src_ty.clone().into());
         eval_arg_ports.push((port, src_ty.clone().into()));
 
         //add the result port
@@ -254,9 +254,9 @@ impl Optimizer {
         assert!(self.graph[src].into_abstract() == self.graph[dst].into_abstract());
 
         for input in self.graph[src].inport_types() {
-            if let Some(edg) = self.graph[InportLocation { node: src, input }].edge.clone() {
+            if let Some(edg) = self.graph[InportLocation { node: src, input }].edge {
                 let ty = self.graph[edg].ty.clone();
-                let src = self.graph[edg].src().clone();
+                let src = *self.graph[edg].src();
 
                 self.graph
                     .connect(src, InportLocation { node: dst, input }, ty)
@@ -278,11 +278,7 @@ impl Optimizer {
                 .find_producer_inp(InputType::Input(0).to_location(node))
             {
                 //try recursion
-                if let Some(integer) = self.as_integer(src.node) {
-                    integer
-                } else {
-                    return None;
-                }
+                self.as_integer(src.node)?
             } else {
                 return None;
             };

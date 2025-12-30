@@ -123,6 +123,12 @@ pub struct Optimizer {
     pub config: Config,
 }
 
+impl Default for Optimizer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Optimizer {
     pub fn new() -> Self {
         Optimizer {
@@ -166,7 +172,7 @@ impl Optimizer {
         let mut typemap = self.typemap.clone();
         for edge in self.graph.edges() {
             if let Some(ty) = self.graph.edge(edge).ty.get_type() {
-                typemap.set(rvsdg::attrib::AttribLocation::Edge(edge).into(), ty.clone());
+                typemap.set(rvsdg::attrib::AttribLocation::Edge(edge), ty.clone());
             }
         }
 
@@ -187,7 +193,7 @@ impl Optimizer {
             with(builder).build();
         }
         if std::env::var("VOLA_ALWAYS_WRITE_DUMP").is_ok() {
-            self.dump_debug_state(&format!("{name}.bin"));
+            self.dump_debug_state(format!("{name}.bin"));
         }
     }
 
@@ -202,7 +208,7 @@ impl Optimizer {
         let mut typemap = self.typemap.clone();
         for edge in self.graph.edges() {
             if let Some(ty) = self.graph.edge(edge).ty.get_type() {
-                typemap.set(rvsdg::attrib::AttribLocation::Edge(edge).into(), ty.clone());
+                typemap.set(rvsdg::attrib::AttribLocation::Edge(edge), ty.clone());
             }
         }
 

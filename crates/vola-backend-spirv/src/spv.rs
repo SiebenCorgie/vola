@@ -49,7 +49,7 @@ fn type_pattern_check_core_op(
     let opcode = *coreop as u32;
 
     if let Some(instruction_rules) = crules.lookup_opcode(opcode) {
-        if instruction_rules.rules.len() == 0 {
+        if instruction_rules.rules.is_empty() {
             #[cfg(feature = "log")]
             log::error!("{:?} had no rules associated in grammar-rules!", coreop);
         }
@@ -97,7 +97,7 @@ fn type_pattern_check_gl_op(
     let opcode = *glop as u32;
 
     if let Some(instruction_rules) = grules.lookup_opcode(opcode) {
-        if instruction_rules.rules.len() == 0 {
+        if instruction_rules.rules.is_empty() {
             #[cfg(feature = "log")]
             log::error!("{:?} had no rules associated in grammar-rules!", glop);
         }
@@ -132,8 +132,8 @@ fn type_pattern_check_gl_op(
 }
 
 ///Tests the `rule` for a given operand_mapping on `input_types` and `output`.
-fn test_rule<'a>(
-    operand_mapping: &AHashMap<&'a str, OperatorSrc>,
+fn test_rule(
+    operand_mapping: &AHashMap<&str, OperatorSrc>,
     input_types: &[SpvType],
     output: &SpvType,
     rule: &Rule,
@@ -438,12 +438,12 @@ impl Display for ArithBaseTy {
 impl ArithBaseTy {
     #[allow(unused)]
     fn is_of_typestring(&self, string: &str) -> bool {
-        match (self, string) {
-            (Self::Integer { .. }, "Integer") => true,
-            (Self::Float, "FloatingPoint") => true,
-            (Self::Bool, "Bool") => true,
-            _ => false,
-        }
+        matches!(
+            (self, string),
+            (Self::Integer { .. }, "Integer")
+                | (Self::Float, "FloatingPoint")
+                | (Self::Bool, "Bool")
+        )
     }
 }
 
@@ -479,27 +479,15 @@ impl TyShape {
     }
 
     pub fn is_scalar(&self) -> bool {
-        if let Self::Scalar = self {
-            true
-        } else {
-            false
-        }
+        matches!(self, Self::Scalar)
     }
 
     pub fn is_vector(&self) -> bool {
-        if let Self::Vector { .. } = self {
-            true
-        } else {
-            false
-        }
+        matches!(self, Self::Vector { .. })
     }
 
     pub fn is_matrix(&self) -> bool {
-        if let Self::Matrix { .. } = self {
-            true
-        } else {
-            false
-        }
+        matches!(self, Self::Matrix { .. })
     }
 }
 
@@ -558,11 +546,7 @@ impl SpvType {
 
     pub fn is_int_base(&self) -> bool {
         if let Self::Arith(a) = self {
-            if let ArithBaseTy::Integer { .. } = a.base {
-                true
-            } else {
-                false
-            }
+            matches!(a.base, ArithBaseTy::Integer { .. })
         } else {
             false
         }
@@ -635,8 +619,7 @@ impl TryFrom<vola_opt::common::Ty> for SpvType {
 
             vola_opt::common::Ty::Tuple(t) => {
                 //collect all subtypes
-                let subtypes: Result<Vec<_>, _> =
-                    t.into_iter().map(|t| Self::try_from(t)).collect();
+                let subtypes: Result<Vec<_>, _> = t.into_iter().map(Self::try_from).collect();
                 Self::Tuple(subtypes?)
             }
             vola_opt::common::Ty::Callable => Self::Callable,
@@ -699,10 +682,10 @@ pub enum SpvOp {
 impl SpvOp {
     pub fn name(&self) -> String {
         match &self {
-            SpvOp::CoreOp(op) => rspirv::grammar::CoreInstructionTable::get(op.clone())
+            SpvOp::CoreOp(op) => rspirv::grammar::CoreInstructionTable::get(*op)
                 .opname
                 .to_owned(),
-            SpvOp::GlslOp(op) => rspirv::grammar::GlslStd450InstructionTable::get(op.clone())
+            SpvOp::GlslOp(op) => rspirv::grammar::GlslStd450InstructionTable::get(*op)
                 .opname
                 .to_owned(),
             SpvOp::ConstantFloat { resolution, bits } => {
@@ -861,12 +844,10 @@ impl SpvOp {
             SpvOp::ConstantFloat { resolution, bits } | SpvOp::ConstantInt { resolution, bits } => {
                 let operand = if *resolution <= 32 {
                     Operand::LiteralBit32(*bits)
+                } else if *resolution <= 64 {
+                    Operand::LiteralBit64((*bits).into())
                 } else {
-                    if *resolution <= 64 {
-                        Operand::LiteralBit64((*bits).into())
-                    } else {
-                        panic!("Can only create constants up to 64bit, but got {resolution}");
-                    }
+                    panic!("Can only create constants up to 64bit, but got {resolution}");
                 };
 
                 Instruction::new(

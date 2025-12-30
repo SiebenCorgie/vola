@@ -41,7 +41,7 @@ impl<'opt> TypeEdges<'opt> {
         }
 
         if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("DUMP_TYPE_EDGES").is_ok() {
-            self.optimizer.push_debug_state(&format!("type-edges"));
+            self.optimizer.push_debug_state("type-edges");
         }
 
         Ok(())

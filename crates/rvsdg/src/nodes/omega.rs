@@ -72,13 +72,13 @@ impl StructuralNode for OmegaNode {
 
     fn outport_types(&self) -> SmallVec<[OutputType; 3]> {
         //ω never has outputs
-        let outs = SmallVec::new();
-        outs
+        
+        SmallVec::new()
     }
     fn input_types(&self) -> SmallVec<[InputType; 3]> {
         //also no inputs
-        let inputs = SmallVec::default();
-        inputs
+        
+        SmallVec::default()
     }
     fn argument_types(&self, region_index: usize) -> SmallVec<[OutputType; 3]> {
         if region_index > 0 {
@@ -103,6 +103,12 @@ impl StructuralNode for OmegaNode {
         }
 
         res
+    }
+}
+
+impl Default for OmegaNode {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

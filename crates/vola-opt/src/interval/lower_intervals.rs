@@ -82,7 +82,7 @@ impl<'opt> LowerIntervals<'opt> {
             || std::env::var("DUMP_PRE_INTERVAL_LOWER").is_ok()
         {
             self.optimizer
-                .push_debug_state(&format!("pre-interval-lower"));
+                .push_debug_state("pre-interval-lower");
         }
 
         //Execution of this lowering simply iterates the live-code
@@ -175,13 +175,13 @@ impl<'opt> LowerIntervals<'opt> {
         }
 
         //TODO: don't do that once a fix for #41 lands.
-        self.optimizer.inline_all().map_err(|e| VolaError::new(e))?;
+        self.optimizer.inline_all().map_err(VolaError::new)?;
 
         if std::env::var("VOLA_DUMP_ALL").is_ok()
             || std::env::var("DUMP_POST_INTERVAL_LOWER").is_ok()
         {
             self.optimizer
-                .push_debug_state(&format!("post-interval-lower"));
+                .push_debug_state("post-interval-lower");
         }
 
         Ok(())
@@ -263,7 +263,7 @@ impl<'opt> LowerIntervals<'opt> {
         }
 
         if let Some(buildin) = self.optimizer.try_unwrap_node::<Buildin>(value.node) {
-            let op = buildin.op.clone();
+            let op = buildin.op;
             return self.lower_buildin(region, span.clone(), value.node, op);
         }
 
@@ -302,7 +302,7 @@ impl<'opt> LowerIntervals<'opt> {
         value: OutportLocation,
     ) -> (OutportLocation, OutportLocation) {
         if let Some(cached) = self.mapping.get(&value) {
-            cached.clone()
+            *cached
         } else {
             //not yet cached, assuming that this ain't no interval
             // build a trivial [a, a] interval for a value a.

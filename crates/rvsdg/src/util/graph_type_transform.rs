@@ -186,8 +186,8 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
             //now hook-up all edges via the transformator
             for edg in self.region(&regloc).unwrap().edges.iter() {
                 let tbi = transformer.transform_edge(&self.edge(*edg).ty);
-                let mut new_src = self.edge(*edg).src().clone();
-                let mut new_dst = self.edge(*edg).dst().clone();
+                let mut new_src = *self.edge(*edg).src();
+                let mut new_dst = *self.edge(*edg).dst();
 
                 new_src.node = *node_remapping.get(&new_src.node).unwrap();
                 new_dst.node = *node_remapping.get(&new_dst.node).unwrap();

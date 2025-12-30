@@ -168,7 +168,7 @@ impl MemoryHandler {
                     for output_ty in backend.graph[*src_node].outport_types() {
                         let outport = src_node.as_outport_location(output_ty);
                         //ignore unused branches
-                        if backend.graph[outport].edges.len() == 0 {
+                        if backend.graph[outport].edges.is_empty() {
                             continue;
                         }
                         if let Some(outty) = backend.outport_type(outport) {
@@ -193,9 +193,7 @@ impl MemoryHandler {
                             //make sure the inner-region doesn't use that
                             assert!(
                                 backend.graph[src_node.as_outport_location(in_region)]
-                                    .edges
-                                    .len()
-                                    == 0
+                                    .edges.is_empty()
                             );
                             continue;
                         };
@@ -209,7 +207,7 @@ impl MemoryHandler {
                     //So far, only allocate a port where we can write back the final output to.
                     for output in backend.graph[*src_node].outport_types() {
                         let outport = src_node.as_outport_location(output);
-                        if backend.graph[outport].edges.len() == 0 {
+                        if backend.graph[outport].edges.is_empty() {
                             continue;
                         }
                         let ty = backend.outport_type(outport).unwrap();

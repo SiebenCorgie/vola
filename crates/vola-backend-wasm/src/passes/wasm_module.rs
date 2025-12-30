@@ -100,7 +100,8 @@ impl WasmLambdaBuilder {
 
         let stackptr = Self::find_stack_pointer(module);
 
-        let sm = WasmLambdaBuilder {
+        
+        WasmLambdaBuilder {
             mem: MemoryHandler::empty(memid, &mut module.locals),
             ctx,
             fn_local_stack_pointer,
@@ -108,8 +109,7 @@ impl WasmLambdaBuilder {
             global_stack_pointer: stackptr,
             name: symbol_name,
             touched_export_functions: AHashSet::default(),
-        };
-        sm
+        }
     }
 }
 

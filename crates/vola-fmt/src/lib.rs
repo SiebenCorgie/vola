@@ -149,7 +149,7 @@ impl From<&TopLevelNode> for FormatTree {
     fn from(value: &TopLevelNode) -> Self {
         //if there are ct-args, wrap into another block, otherwise just emit the
         // entrypoint
-        if value.ct_args.len() > 0 {
+        if !value.ct_args.is_empty() {
             let mut block = Vec::with_capacity(value.ct_args.len() + 1);
 
             for ct in value.ct_args.iter() {
@@ -250,13 +250,13 @@ impl FormatTree {
                 //blocks are just serialized by setting up a new line for each, and pre-prending
                 //the identation
                 for item in lines {
-                    write!(f, "\n")?;
+                    writeln!(f)?;
                     new_state.ident_on(f)?;
                     item.format(f, &new_state)?
                 }
 
                 if *braced {
-                    write!(f, "\n")?;
+                    writeln!(f)?;
                     //ident the closing brace based on the old
                     //level
                     state.ident_on(f)?;
@@ -304,20 +304,17 @@ impl FormatTree {
             FormatTree::Keyword(keyword) => write!(f, "{keyword}"),
             FormatTree::Space => {
                 state.ident_on(f)?;
-                write!(f, "\n")
+                writeln!(f)
             }
         }
     }
 
     fn has_space_before(&self) -> bool {
         match self {
-            Self::Keyword(k) => match k {
-                Keyword::Equal => true,
-                Keyword::ResultArrow => true,
-                Keyword::For => true,
-                Keyword::LoopIn => true,
-                _ => false,
-            },
+            Self::Keyword(k) => matches!(
+                k,
+                Keyword::Equal | Keyword::ResultArrow | Keyword::For | Keyword::LoopIn
+            ),
             _ => false,
         }
     }
@@ -333,10 +330,7 @@ impl FormatTree {
                 _ => true,
             },
             Self::TypeEnd => true,
-            Self::Token(t) => match t.as_str() {
-                "," => true,
-                _ => false,
-            },
+            Self::Token(t) => matches!(t.as_str(), ","),
             _ => false,
         }
     }

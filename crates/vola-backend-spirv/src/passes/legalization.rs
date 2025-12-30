@@ -115,8 +115,8 @@ impl SpirvBackend {
                     (TyShape::Vector { width }, TyShape::Scalar, TyShape::Vector { width: res_width }) => {
                         if width != res_width{
                             return Err(BackendSpirvError::SpvLegalizationMalformed {
-                                inst: "VectorTimesScalar".to_owned(), 
-                                text: format!("input/output vector width doesn't match: {width} != {res_width}") 
+                                inst: "VectorTimesScalar".to_owned(),
+                                text: format!("input/output vector width doesn't match: {width} != {res_width}")
                             });
                         }
                         self.graph.node_mut(node).node_type.unwrap_simple_mut().op = BackendOp::SpirvOp(SpvOp::CoreOp(CoreOp::VectorTimesScalar));
@@ -147,7 +147,7 @@ impl SpirvBackend {
                         }
                         if width != res_width{
                             return Err(BackendSpirvError::SpvLegalizationMalformed {
-                                inst: "VectorTimesMatrix".to_owned(), 
+                                inst: "VectorTimesMatrix".to_owned(),
                                 text: format!("input/output vector width doesn't match: {width} != {res_width}")
                             });
                         }
@@ -204,7 +204,7 @@ impl SpirvBackend {
             }
             _ => Err(BackendSpirvError::SpvLegalizationMalformed {
                 inst: "FMul".to_owned(),
-                text: format!("Mul had none aritmethic operands."),
+                text: "Mul had none aritmethic operands.".to_string(),
             }),
         }
     }
@@ -246,23 +246,21 @@ impl SpirvBackend {
             }
 
             assert!(self.graph.node(node).outputs().len() == 1);
-            let mut output = if self.graph.node(node).outputs()[0].edges.len() == 0 {
+            let output = if self.graph.node(node).outputs()[0].edges.is_empty() {
                 SpvType::undefined()
+            } else if let BackendEdge::Value(t) = &self
+                .graph
+                .edge(self.graph.node(node).outputs()[0].edges[0])
+                .ty
+            {
+                t.clone()
             } else {
-                if let BackendEdge::Value(t) = &self
-                    .graph
-                    .edge(self.graph.node(node).outputs()[0].edges[0])
-                    .ty
-                {
-                    t.clone()
-                } else {
-                    SpvType::State
-                }
+                SpvType::State
             };
 
             //Apply all rewrites we know of
             if self.is_core_op(node, CoreOp::FMul) {
-                self.transmute_multiply(node, &inputs, &mut output)?;
+                self.transmute_multiply(node, &inputs, &output)?;
             }
 
             //now call the legalizer for the spv op

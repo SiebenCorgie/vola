@@ -62,13 +62,9 @@ impl Optimizer {
     //Recursive exploration of all sub region AD nodes.
     fn enque_ad_nodes_region(&self, region: RegionLocation, list: &mut SmallColl<NodeRef>) {
         for node in self.graph.topological_order_region(region) {
-            let is_add = if self.is_node_type::<AutoDiff>(node) {
-                true
-            } else {
-                false
-            };
+            let is_add = self.is_node_type::<AutoDiff>(node);
 
-            if self.graph[node].regions().len() > 0 {
+            if !self.graph[node].regions().is_empty() {
                 for region in 0..self.graph[node].regions().len() {
                     self.enque_ad_nodes_region(
                         RegionLocation {

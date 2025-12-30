@@ -541,7 +541,7 @@ impl ScadBlock {
 
         //now prepend all _kept_ assigns
         assigns.append(&mut self.stmts);
-        assert!(self.stmts.len() == 0);
+        assert!(self.stmts.is_empty());
         self.stmts = assigns;
 
         //finally recurse on any block_carrying stmt
@@ -567,20 +567,20 @@ impl ScadStmt {
             Self::Overwrite {
                 overwrites: _,
                 block,
-            } => block.normalize().map_err(|e| e.error),
+            } => block.normalize().map_err(|e| *e.error),
             Self::IfBlock {
                 head_span: _,
                 condition: _,
                 consequence,
                 alternative,
             } => {
-                consequence.normalize().map_err(|e| e.error)?;
+                consequence.normalize().map_err(|e| *e.error)?;
                 if let Some(alt) = alternative {
-                    alt.normalize().map_err(|e| e.error)?
+                    alt.normalize().map_err(|e| *e.error)?
                 }
                 Ok(())
             }
-            Self::ForBlock { block, .. } => block.normalize().map_err(|e| e.error),
+            Self::ForBlock { block, .. } => block.normalize().map_err(|e| *e.error),
 
             Self::Comment(comment) => {
                 comment.content = format!("//{}", comment.content);
@@ -590,7 +590,7 @@ impl ScadStmt {
                 for element in chain {
                     match element {
                         crate::scad_ast::ChainElement::Block(b) => {
-                            b.normalize().map_err(|e| e.error)?
+                            b.normalize().map_err(|e| *e.error)?
                         }
                         crate::scad_ast::ChainElement::Call(c) => c.normalize()?,
                     }

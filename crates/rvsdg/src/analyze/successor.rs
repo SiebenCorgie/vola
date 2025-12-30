@@ -49,7 +49,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> Iterator for SuccWalker<'
             //collect this nodes predecessors
             for succ in self.ctx.node(n.node).succ(self.ctx) {
                 if !self.walked.contains(&succ) {
-                    self.walker_stack.push_front(succ.clone());
+                    self.walker_stack.push_front(succ);
                     self.walked.insert(succ);
                 }
             }
@@ -100,7 +100,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> Iterator for SuccWalkerRe
                     continue;
                 }
                 if !self.walked.contains(&succ) {
-                    self.walker_stack.push_front(succ.clone());
+                    self.walker_stack.push_front(succ);
                     self.walked.insert(succ);
                 }
             }

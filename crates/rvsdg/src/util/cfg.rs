@@ -159,6 +159,12 @@ pub struct Cfg {
     pub root: CfgRef,
 }
 
+impl Default for Cfg {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Cfg {
     pub fn new() -> Self {
         let mut nodes = SlotMap::with_key();
@@ -203,7 +209,7 @@ impl Cfg {
         }
 
         if seen.len() != self.nodes.len() {
-            return Err(ScfrError::TopoOrdNotAllNodesTraversed(l));
+            Err(ScfrError::TopoOrdNotAllNodesTraversed(l))
         } else {
             Ok(l)
         }

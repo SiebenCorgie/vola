@@ -96,7 +96,7 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
             //find the src of that port, if there is any.
             let src_port = if let Some(src) = self.node(next_port.node).inport(&next_port.input) {
                 if let Some(edg) = src.edge {
-                    self.edge(edg).src().clone()
+                    *self.edge(edg).src()
                 } else {
                     //mark as dead, since the port exists, but is unconnected
                     flags.set(next_port.into(), false);
@@ -109,7 +109,7 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
             };
 
             //mark the src_port
-            flags.set(src_port.clone().into(), true);
+            flags.set(src_port.into(), true);
             //and the source node
             flags.set(src_port.node.into(), true);
 
@@ -150,7 +150,7 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
                                 input: carried_over_port,
                             };
                             //mark and push back.
-                            flags.set(new_inport.clone().into(), true);
+                            flags.set(new_inport.into(), true);
                             waiting_ports.push_back(new_inport);
                         }
                     }
@@ -177,7 +177,7 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
                                     node: src_port.node,
                                     input: resport,
                                 };
-                                flags.set(new_inport.clone().into(), true);
+                                flags.set(new_inport.into(), true);
                                 waiting_ports.push_back(new_inport);
                             }
                         }
@@ -190,7 +190,7 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
                                 node: src_port.node,
                                 input: InputType::GammaPredicate,
                             };
-                            flags.set(gamma_pred.clone().into(), true);
+                            flags.set(gamma_pred.into(), true);
                             waiting_ports.push_back(gamma_pred);
                         }
                     }
@@ -201,7 +201,7 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
                                 node: src_port.node,
                                 input: InputType::ThetaPredicate,
                             };
-                            flags.set(theta_pred.clone().into(), true);
+                            flags.set(theta_pred.into(), true);
                             waiting_ports.push_back(theta_pred);
                             //mark all somehow connected lv-results and lv-outputs
                             //Since Theta loops, a output might not be connected, but the
@@ -234,7 +234,7 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
                                     .unwrap_or(false);
                                 let is_output_in_use = t
                                     .lv_output(lvidx)
-                                    .map(|port| port.edges.len() > 0)
+                                    .map(|port| !port.edges.is_empty())
                                     .unwrap_or(false);
                                 //if either is in use, mark output as live
                                 if is_result_in_use || is_output_in_use {
@@ -260,7 +260,7 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
                                 node: src_port.node,
                                 input: InputType::RecursionVariableResult(i),
                             };
-                            flags.set(new_inport.clone().into(), true);
+                            flags.set(new_inport.into(), true);
                             waiting_ports.push_back(new_inport);
                         }
                     }
@@ -280,25 +280,23 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
                             input: carried_over_port,
                         };
                         //mark and push back.
-                        flags.set(new_inport.clone().into(), true);
+                        flags.set(new_inport.into(), true);
                         waiting_ports.push_back(new_inport);
                     }
                 }
 
                 //add it to seen nodes regardless
                 seen_nodes.insert(src_port.node);
-            } else {
-                if !seen_nodes.contains(&src_port.node) {
-                    seen_nodes.insert(src_port.node);
-                    for inty in self.node(src_port.node).inport_types() {
-                        let new_inport = InportLocation {
-                            node: src_port.node,
-                            input: inty,
-                        };
-                        //mark the port alive
-                        flags.set(new_inport.clone().into(), true);
-                        waiting_ports.push_back(new_inport);
-                    }
+            } else if !seen_nodes.contains(&src_port.node) {
+                seen_nodes.insert(src_port.node);
+                for inty in self.node(src_port.node).inport_types() {
+                    let new_inport = InportLocation {
+                        node: src_port.node,
+                        input: inty,
+                    };
+                    //mark the port alive
+                    flags.set(new_inport.into(), true);
+                    waiting_ports.push_back(new_inport);
                 }
             }
         }

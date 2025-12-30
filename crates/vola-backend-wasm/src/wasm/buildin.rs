@@ -117,8 +117,8 @@ impl ExternOp {
         //NOTE: all external functions are suffixed by the first args's type.
         //      the only outlier is Mul (so far), which is also defined for vecn_scalar. This i caught early
 
-        if self == &Self::MulVec {
-            if input_types[0].is_vector() && input_types[1].is_scalar() {
+        if self == &Self::MulVec
+            && input_types[0].is_vector() && input_types[1].is_scalar() {
                 match &input_types[0] {
                     WasmTy::Defined {
                         shape: TyShape::Vector { width },
@@ -142,7 +142,6 @@ impl ExternOp {
                     }
                 }
             }
-        }
 
         if self == &Self::MulMat {
             let a = if let WasmTy::Defined { shape, ty } = &input_types[0] {

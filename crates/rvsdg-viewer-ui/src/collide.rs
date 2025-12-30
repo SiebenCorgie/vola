@@ -39,11 +39,7 @@ pub fn find_collision(tree: &PrimTree, mut at: Vec2) -> Option<AttribLocation> {
             let a = local_at.dot(lnorm);
             //if at projected on lvec is < llen (is within line bound) && the distance of at to the lvec is < COLLISION_LINE_WIDTH
             // then we declare it as _intersecting_.
-            if a < llen && a > 0.0 && (a * lnorm - local_at).length() < COLLISION_LINE_WIDTH {
-                true
-            } else {
-                false
-            }
+            a < llen && a > 0.0 && (a * lnorm - local_at).length() < COLLISION_LINE_WIDTH
         }
         Prim::Path(p) => {
             //This is the same as the line code, but for each segment
@@ -75,7 +71,7 @@ pub fn find_collision(tree: &PrimTree, mut at: Vec2) -> Option<AttribLocation> {
 
     //in case of path/line do not search further
     if let Prim::Path(_) | Prim::Line(_) = tree.prim {
-        return Some(tree.id.clone());
+        return Some(tree.id);
     }
 
     //does overlab, depending on the node kind, choose what to do next.
@@ -94,7 +90,7 @@ pub fn find_collision(tree: &PrimTree, mut at: Vec2) -> Option<AttribLocation> {
     }
 
     match tree.prim {
-        Prim::Box(_) => Some(tree.id.clone()),
+        Prim::Box(_) => Some(tree.id),
         _ => None,
     }
 }

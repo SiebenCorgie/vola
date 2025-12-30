@@ -133,6 +133,12 @@ impl StructuralNode for ThetaNode {
     }
 }
 
+impl Default for ThetaNode {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ThetaNode {
     pub fn new() -> Self {
         let mut loop_body = Region::new();

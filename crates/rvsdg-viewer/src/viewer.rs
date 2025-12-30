@@ -48,7 +48,7 @@ impl<'a> GraphStateBuilder<'a> {
             let mut store = AHashMap::default();
             store.insert(attrib_name.to_owned(), smallvec![attrib]);
 
-            self.inner.auxilary_data.insert(loc.clone(), store);
+            self.inner.auxilary_data.insert(*loc, store);
         }
     }
 
@@ -80,6 +80,12 @@ impl<'a> GraphStateBuilder<'a> {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ViewerState {
     pub states: Vec<GraphState>,
+}
+
+impl Default for ViewerState {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ViewerState {
@@ -119,11 +125,7 @@ impl ViewerState {
 
     pub fn read_from_file(path: &dyn AsRef<Path>) -> Option<Self> {
         if let Ok(code) = std::fs::read(path) {
-            if let Ok(s) = bincode::deserialize(&code) {
-                Some(s)
-            } else {
-                None
-            }
+            bincode::deserialize(&code).ok()
         } else {
             None
         }

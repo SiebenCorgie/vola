@@ -54,7 +54,7 @@ impl Optimizer {
         let wrt_src = self.graph[entrypoint].input_src(&self.graph, 1).unwrap();
 
         let wrt_ty = self.get_out_type_mut(wrt_src).unwrap();
-        let region = self.graph[entrypoint].parent.unwrap().clone();
+        let region = self.graph[entrypoint].parent.unwrap();
         let autodiff_src = self.graph[entrypoint].input_src(&self.graph, 0).unwrap();
         let span = self.find_span(entrypoint).unwrap_or(Span::empty());
 
@@ -68,12 +68,10 @@ impl Optimizer {
                 let autodiff_constructor = self
                     .graph
                     .on_region(&region, |g| {
-                        let constr = g.insert_node(OptNode::new(
+                        g.insert_node(OptNode::new(
                             UniformConstruct::new().with_inputs(width),
                             Span::empty(),
-                        ));
-
-                        constr
+                        ))
                     })
                     .unwrap();
 
@@ -131,19 +129,19 @@ impl Optimizer {
             } => {
                 todo!("Implement matrix-diff linearization!")
             }
-            _ => return Err(AutoDiffError::LinearizeAdFailed.into()),
+            _ => Err(AutoDiffError::LinearizeAdFailed.into()),
         }
     }
 
     ///Tries to canonicalize the AD `entrypoint` into only nodes that are differentiatable.
     pub fn canonicalize_for_ad(&mut self, entrypoint: NodeRef) -> Result<(), OptError> {
         if !self.is_node_type::<AutoDiff>(entrypoint) {
-            return Err(OptError::Internal(format!(
-                "AD Entrypoint was not of type AutoDiff"
-            )));
+            return Err(OptError::Internal(
+                "AD Entrypoint was not of type AutoDiff".to_string(),
+            ));
         }
 
-        let region = self.graph[entrypoint].parent.clone().unwrap();
+        let region = self.graph[entrypoint].parent.unwrap();
         let expr_src = self.graph.inport_src(entrypoint.input(0)).unwrap();
         let mut preds = self
             .graph
@@ -171,7 +169,7 @@ impl Optimizer {
     /// - Guarantees that the replaced node binds to all _formerly_ connected nodes
     /// - Does not delete other nodes (but might add / remove connections)
     pub(crate) fn handle_canon_node(&mut self, node: NodeRef) -> Result<(), OptError> {
-        let target_region = self.graph[node].parent.unwrap().clone();
+        let target_region = self.graph[node].parent.unwrap();
         //if the node has sub regions, do whole-graph canonicalization on all of those
         for reg in 0..self.graph[node].regions().len() {
             let region = RegionLocation {
@@ -223,11 +221,7 @@ impl Optimizer {
         gamma_node: NodeRef,
         exit_variable: OutputType,
     ) -> Result<bool, ()> {
-        assert!(if let OutputType::ExitVariableOutput(_) = exit_variable {
-            true
-        } else {
-            false
-        });
+        assert!(matches!(exit_variable, OutputType::ExitVariableOutput(_)));
         assert!(self.graph[gamma_node].node_type.is_gamma());
 
         let branch_count = self.graph[gamma_node].regions().len();

@@ -70,7 +70,7 @@ macro_rules! implViewInterval {
 }
 
 ///The `interval-extension` entry-point node
-#[derive(LangNode, Debug)]
+#[derive(LangNode, Debug, Default)]
 pub struct IntervalExtension {
     ///By Definition the first is the `expr` that is being analysed, the second input is the dynamic value, and the last is the interval, in which the expression is analysed.
     #[inputs]
@@ -90,15 +90,6 @@ impl IntervalExtension {
 
     pub fn interval() -> InputType {
         InputType::Input(2)
-    }
-}
-
-impl Default for IntervalExtension {
-    fn default() -> Self {
-        IntervalExtension {
-            inputs: [Input::default(), Input::default(), Input::default()],
-            output: Output::default(),
-        }
     }
 }
 
@@ -139,18 +130,14 @@ impl DialectNode for IntervalExtension {
                 Ok(Ty::Interval(Box::new(input_types[0].clone())))
             }
         } else {
-            Err(TypeError::Other(format!(
-                "Third parameter must be interval"
-            )))
+            Err(TypeError::Other(
+                "Third parameter must be interval".to_string(),
+            ))
         }
     }
 
     fn is_operation_equal(&self, other: &crate::OptNode) -> bool {
-        if let Some(_other_op) = other.try_downcast_ref::<IntervalExtension>() {
-            true
-        } else {
-            false
-        }
+        other.try_downcast_ref::<IntervalExtension>().is_some()
     }
 
     fn structural_copy(&self, span: vola_common::Span) -> crate::OptNode {

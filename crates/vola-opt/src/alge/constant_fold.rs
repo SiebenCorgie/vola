@@ -63,7 +63,7 @@ pub(crate) fn handle_matrix_matrix_multiplication(
     //NOTE we implement the _standard_ matrix multiplication.
     //     So mata must be as _wide_ as matb is _deep_
 
-    if a.len() == 0 || b.len() == 0 {
+    if a.is_empty() || b.is_empty() {
         return None;
     }
 
@@ -111,7 +111,7 @@ pub(crate) fn handle_constant_mul(a: &OptNode, b: &OptNode) -> Option<OptNode> {
         let scalar = b.lit;
         let mut new = a.lit.clone();
         for ele in new.iter_mut() {
-            *ele = *ele * scalar;
+            *ele *= scalar;
         }
 
         return Some(OptNode::new(ImmVector::new(&new), Span::empty()));
@@ -127,7 +127,7 @@ pub(crate) fn handle_constant_mul(a: &OptNode, b: &OptNode) -> Option<OptNode> {
 
         for col in new.iter_mut() {
             for ele in col {
-                *ele = *ele * scalar;
+                *ele *= scalar;
             }
         }
 
@@ -155,7 +155,7 @@ pub(crate) fn handle_constant_mul(a: &OptNode, b: &OptNode) -> Option<OptNode> {
             return None;
         }
 
-        if b.lit[0].len() == 0 {
+        if b.lit[0].is_empty() {
             return None;
         }
 

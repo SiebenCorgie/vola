@@ -47,7 +47,7 @@ impl Default for Ui {
     fn default() -> Self {
         //read states from command line this is some strange text.
 
-        let path = if let Some(p) = std::env::args().skip(1).next() {
+        let path = if let Some(p) = std::env::args().nth(1) {
             p
         } else {
             panic!("expected file argument!");
@@ -89,7 +89,7 @@ impl Ui {
                 if let Ok(new_attrib_location) = self.selection_string.parse::<AttribLocation>() {
                     //update internal graph
                     *self.graph_canvas.selection.lock().unwrap() =
-                        Some(new_attrib_location.clone());
+                        Some(new_attrib_location);
                     self.graph_canvas.reques_redraw();
                     return Task::done(Message::Select(Some(new_attrib_location)));
                 }
@@ -159,14 +159,12 @@ impl Ui {
             let mut default_style = iced::widget::text_input::default(t, s);
             if is_empty {
                 default_style
+            } else if is_parsing {
+                default_style.border.color = t.extended_palette().success.strong.color;
+                default_style
             } else {
-                if is_parsing {
-                    default_style.border.color = t.extended_palette().success.strong.color;
-                    default_style
-                } else {
-                    default_style.border.color = t.extended_palette().danger.strong.color;
-                    default_style
-                }
+                default_style.border.color = t.extended_palette().danger.strong.color;
+                default_style
             }
         };
 
@@ -184,7 +182,7 @@ impl Ui {
                         .on_toggle(Message::ToggleTheme),
                     iced::widget::text_input("TypeSelection", &self.selection_string)
                         .style(selection_string_styling)
-                        .on_input(|input| Message::SelectionStringChanged(input))
+                        .on_input(Message::SelectionStringChanged)
                 ]
                 .spacing(20.0),
             ]

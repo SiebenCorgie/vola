@@ -38,7 +38,7 @@ pub fn emit() -> Rvsdg<LNode, VSEdge> {
                         .connect_node(
                             LNode::new(MyNodes::Add),
                             [
-                                lv0_arg.clone(),
+                                lv0_arg,
                                 litone.as_outport_location(OutputType::Output(0)),
                             ],
                         )

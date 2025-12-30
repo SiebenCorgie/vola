@@ -43,7 +43,7 @@ impl ScadTopLevel {
             errors.push(e)
         }
 
-        if errors.len() > 0 {
+        if !errors.is_empty() {
             Err(errors)
         } else {
             Ok(())
@@ -100,7 +100,7 @@ impl ScadTopLevel {
             }),
         }
 
-        if errors.len() > 0 {
+        if !errors.is_empty() {
             Err(errors)
         } else {
             Ok(ast)
@@ -192,8 +192,8 @@ impl ScadStmt {
                     .map(|f| f.span.from)
                     .unwrap_or(block.span.from),
 
-                byte_end: block.span.byte_end.clone(),
-                to: block.span.to.clone(),
+                byte_end: block.span.byte_end,
+                to: block.span.to,
             }),
             Self::Comment(c) => Some(c.span.clone()),
             Self::IncludeStmt(_) | Self::Assert | Self::None => None,

@@ -45,11 +45,7 @@ impl WasmLambdaBuilder {
             //As an optimization for code size, do not allocat a port (and therfore memory)
             //for unused args. However, still keep the local-id, since those are needed to build the
             //function signature.
-            let is_dead_arg = if backend.graph[arg.port].edges.len() == 0 {
-                true
-            } else {
-                false
-            };
+            let is_dead_arg = backend.graph[arg.port].edges.is_empty();
 
             let mut local_ids = SmallColl::new();
             //allocate such a memory element
@@ -235,7 +231,7 @@ impl WasmLambdaBuilder {
         for node in list {
             match &cfg.nodes[*node] {
                 CfgNode::BasicBlock(bb) => {
-                    if bb.nodes.len() == 0 {
+                    if bb.nodes.is_empty() {
                         continue;
                     }
 
@@ -295,7 +291,7 @@ impl WasmLambdaBuilder {
             region_index: 0,
         };
         self.label
-            .set(lmd_region.clone().into(), fn_builder.func_body_id());
+            .set(lmd_region.into(), fn_builder.func_body_id());
 
         {
             let mut builder = fn_builder.func_body();
@@ -339,7 +335,7 @@ impl WasmLambdaBuilder {
                 CfgNode::Root(_) => {}
                 CfgNode::BasicBlock(bb) => {
                     //ignore empty blocks
-                    if bb.nodes.len() == 0 {
+                    if bb.nodes.is_empty() {
                         continue;
                     }
 
@@ -422,7 +418,7 @@ impl WasmLambdaBuilder {
                                     node: *src_node,
                                     output: out_of_region,
                                 };
-                                if backend.graph[outregion_port].edges.len() == 0 {
+                                if backend.graph[outregion_port].edges.is_empty() {
                                     continue;
                                 }
 
@@ -542,7 +538,7 @@ impl WasmLambdaBuilder {
                                 //while doing so, store the result to the port's outputs
                                 for output in backend.graph[*src_node].outport_types() {
                                     let outport = src_node.as_outport_location(output);
-                                    if backend.graph[outport].edges.len() == 0 {
+                                    if backend.graph[outport].edges.is_empty() {
                                         continue;
                                     }
 
@@ -591,7 +587,7 @@ impl WasmLambdaBuilder {
         //Now finish the walrus builder, and put the function into the actual module
         let mut args = Vec::new();
         for arg in self.ctx.arguments.iter() {
-            args.extend_from_slice(&arg.local_id.as_ref().unwrap().as_slice());
+            args.extend_from_slice(arg.local_id.as_ref().unwrap().as_slice());
         }
         let fnid = fn_builder.finish(args, &mut module.funcs);
 
@@ -654,7 +650,7 @@ impl WasmLambdaBuilder {
             WasmNode::Unary(u) => {
                 assert!(input_src_ports.len() == 1);
                 self.load_port_elements(input_src_ports[0], builder);
-                builder.unop(u.op.clone());
+                builder.unop(u.op);
                 assert!(output_ports.len() == 1);
                 self.store_values_to_port(output_ports[0], builder);
             }
@@ -662,12 +658,12 @@ impl WasmLambdaBuilder {
                 assert!(input_src_ports.len() == 2);
                 self.load_port_elements(input_src_ports[0], builder);
                 self.load_port_elements(input_src_ports[1], builder);
-                builder.binop(b.op.clone());
+                builder.binop(b.op);
                 assert!(output_ports.len() == 1);
                 self.store_values_to_port(output_ports[0], builder);
             }
             WasmNode::Value(v) => {
-                builder.const_(v.op.clone());
+                builder.const_(v.op);
                 assert!(output_ports.len() == 1);
                 self.store_values_to_port(output_ports[0], builder);
             }

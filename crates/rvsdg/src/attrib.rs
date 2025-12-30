@@ -50,7 +50,7 @@ impl From<RegionLocation> for AttribLocation {
 }
 impl From<&RegionLocation> for AttribLocation {
     fn from(value: &RegionLocation) -> Self {
-        AttribLocation::Region(value.clone())
+        AttribLocation::Region(*value)
     }
 }
 
@@ -61,7 +61,7 @@ impl From<InportLocation> for AttribLocation {
 }
 impl From<&InportLocation> for AttribLocation {
     fn from(value: &InportLocation) -> Self {
-        AttribLocation::InPort(value.clone())
+        AttribLocation::InPort(*value)
     }
 }
 
@@ -72,7 +72,7 @@ impl From<OutportLocation> for AttribLocation {
 }
 impl From<&OutportLocation> for AttribLocation {
     fn from(value: &OutportLocation) -> Self {
-        AttribLocation::OutPort(value.clone())
+        AttribLocation::OutPort(*value)
     }
 }
 
@@ -83,7 +83,7 @@ impl From<NodeRef> for AttribLocation {
 }
 impl From<&NodeRef> for AttribLocation {
     fn from(value: &NodeRef) -> Self {
-        AttribLocation::Node(value.clone())
+        AttribLocation::Node(*value)
     }
 }
 
@@ -94,7 +94,7 @@ impl From<EdgeRef> for AttribLocation {
 }
 impl From<&EdgeRef> for AttribLocation {
     fn from(value: &EdgeRef) -> Self {
-        AttribLocation::Edge(value.clone())
+        AttribLocation::Edge(*value)
     }
 }
 
@@ -143,7 +143,7 @@ impl Iterator for AttribLocIter {
         if self.idx >= self.attribs.len() {
             None
         } else {
-            let element = Some(self.attribs[self.idx].clone());
+            let element = Some(self.attribs[self.idx]);
             self.idx += 1;
             element
         }
@@ -220,6 +220,12 @@ pub struct AttribStore<ATTRIB: 'static> {
     pub attribs: AHashMap<AttribLocation, Vec<ATTRIB>>,
 }
 
+impl<ATTRIB: 'static> Default for AttribStore<ATTRIB> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<ATTRIB: 'static> AttribStore<ATTRIB> {
     pub fn new() -> Self {
         AttribStore {
@@ -234,10 +240,10 @@ impl<ATTRIB: 'static> AttribStore<ATTRIB> {
     }
 
     pub fn push_attrib(&mut self, location: &AttribLocation, attrib: ATTRIB) {
-        if let Some(coll) = self.attribs.get_mut(&location) {
+        if let Some(coll) = self.attribs.get_mut(location) {
             coll.push(attrib);
         } else {
-            self.attribs.insert(location.clone(), vec![attrib]);
+            self.attribs.insert(*location, vec![attrib]);
         }
     }
 }
@@ -246,6 +252,12 @@ impl<ATTRIB: 'static> AttribStore<ATTRIB> {
 #[derive(Clone, Debug)]
 pub struct FlagStore<F: 'static> {
     pub flags: AHashMap<AttribLocation, F>,
+}
+
+impl<F: 'static> Default for FlagStore<F> {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl<F: 'static> FlagStore<F> {

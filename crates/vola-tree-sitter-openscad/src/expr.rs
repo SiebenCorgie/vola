@@ -101,7 +101,7 @@ pub fn parenthesized_expression(
             _other => match expr(ctx, data, &next) {
                 Ok(expr) => expressions.push(expr),
                 Err(e) => {
-                    report_here(format!("expected ')' or expression"), ctx.span(&next));
+                    report_here("expected ')' or expression".to_string(), ctx.span(&next));
                     return Err(e);
                 }
             },

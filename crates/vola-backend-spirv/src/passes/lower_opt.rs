@@ -136,9 +136,7 @@ impl SpirvBackend {
             opt.graph
                 .region(&opt.graph.toplevel_region())
                 .unwrap()
-                .arguments
-                .len()
-                == 0,
+                .arguments.is_empty(),
             "Unexpected import on optimizer graph!"
         );
 
@@ -150,13 +148,11 @@ impl SpirvBackend {
         {
             //emit error if the current graph is not empty
             //TODO: implement graph merging instead, which should append the exports.
-            if self
+            if !self
                 .graph
                 .region(&self.graph.toplevel_region())
                 .unwrap()
-                .nodes
-                .len()
-                > 0
+                .nodes.is_empty()
             {
                 log::error!("Merging of backend-graphs not yet supported, overwriting!")
             }
@@ -181,7 +177,7 @@ impl SpirvBackend {
         for (location, ty) in opt.typemap.flags.iter() {
             let remapped_attrib_location = match location {
                 AttribLocation::InPort(port) => {
-                    let mut remapped_port = port.clone();
+                    let mut remapped_port = *port;
                     if let Some(remapped_node) = remapping.node_mapping.get(&port.node) {
                         remapped_port.node = *remapped_node;
                         AttribLocation::InPort(remapped_port)
@@ -191,7 +187,7 @@ impl SpirvBackend {
                     }
                 }
                 AttribLocation::OutPort(port) => {
-                    let mut remapped_port = port.clone();
+                    let mut remapped_port = *port;
                     if let Some(remapped_node) = remapping.node_mapping.get(&port.node) {
                         remapped_port.node = *remapped_node;
                         AttribLocation::OutPort(remapped_port)
@@ -202,7 +198,7 @@ impl SpirvBackend {
                 }
                 AttribLocation::Region(reg) => {
                     if let Some(remapped_reg_node) = remapping.node_mapping.get(&reg.node) {
-                        let mut regloc = reg.clone();
+                        let mut regloc = *reg;
                         regloc.node = *remapped_reg_node;
                         AttribLocation::Region(regloc)
                     } else {

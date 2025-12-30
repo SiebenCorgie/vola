@@ -45,7 +45,7 @@ pub fn emit() -> Rvsdg<LNode, VSEdge> {
                             lambda_reg
                                 .ctx_mut()
                                 .connect(
-                                    arg_x.clone(),
+                                    arg_x,
                                     uneq.as_inport_location(InputType::Input(1)),
                                     VSEdge::Value,
                                 )

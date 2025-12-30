@@ -31,7 +31,6 @@ pub struct Ident(pub String);
 ///All types that can be represented in the DSL.
 /// By definition the scalar type (and elements of Vec/Mat/Tensor) are always
 /// _floats_. Their resolution can be decided at code-generation time.
-
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum DataTy {

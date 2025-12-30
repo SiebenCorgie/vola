@@ -66,7 +66,7 @@ impl<'opt> Simplify<'opt> {
 
     pub fn execute(self) -> Option<Vec<NodeRef>> {
         if let Some(buildin) = self.opt.try_unwrap_node::<Buildin>(self.node) {
-            match buildin.op.clone() {
+            match buildin.op {
                 BuildinOp::Length => return self.lower_length(),
                 BuildinOp::Mix => return self.lower_mix(),
                 BuildinOp::Clamp => return self.lower_clamp(),
@@ -380,7 +380,7 @@ impl<'opt> Simplify<'opt> {
         let min_src = self.opt.graph.inport_src(self.node.input(1)).unwrap();
         let max_src = self.opt.graph.inport_src(self.node.input(2)).unwrap();
 
-        let region = self.opt.graph[self.node].parent.clone().unwrap();
+        let region = self.opt.graph[self.node].parent.unwrap();
         let span = self.opt.find_span(self.node).unwrap_or(Span::empty());
         let mut node_collector = Vec::with_capacity(2);
 
@@ -625,7 +625,7 @@ impl<'opt> Simplify<'opt> {
                 },
             ) => {
                 //this is canonicalized into a unrolled multiplication
-                return self.unroll_matrix_vector(left_type, right_type, left_src, right_src);
+                self.unroll_matrix_vector(left_type, right_type, left_src, right_src)
             }
             (
                 Ty::Shaped {
@@ -638,7 +638,7 @@ impl<'opt> Simplify<'opt> {
                 },
             ) => {
                 //this is canonicalized into a unrolled multiplication
-                return self.unroll_vector_matrix(left_type, right_type, left_src, right_src);
+                self.unroll_vector_matrix(left_type, right_type, left_src, right_src)
             }
             (
                 Ty::Shaped {
@@ -650,7 +650,7 @@ impl<'opt> Simplify<'opt> {
                     ty: DataType::Real,
                 },
             ) => {
-                return self.unroll_matrix_matrix(left_type, right_type, left_src, right_src);
+                self.unroll_matrix_matrix(left_type, right_type, left_src, right_src)
             }
             //All other multiplications can't be unrolled
             _ => None,

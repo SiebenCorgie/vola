@@ -18,7 +18,7 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
         let mut found_error = false;
         for (noderef, node) in self.nodes.iter() {
             if let Some(parent) = &node.parent {
-                if let Some(parent_region) = self.region(&parent) {
+                if let Some(parent_region) = self.region(parent) {
                     if !parent_region.nodes.contains(&noderef) {
                         println!(
                             "Node {} has parent {:?}, but parent does not know node",

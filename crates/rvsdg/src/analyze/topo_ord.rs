@@ -62,7 +62,7 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
             .node(node)
             .inputs()
             .iter()
-            .filter_map(|port| port.edge.clone())
+            .filter_map(|port| port.edge)
         {
             let src = self.edge(edge).src();
             if !known.contains(&src.node) {
@@ -80,7 +80,7 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
             .node(node)
             .inputs()
             .iter()
-            .filter_map(|port| port.edge.clone())
+            .filter_map(|port| port.edge)
         {
             let src = self.edge(edge).src();
             if !known.contains(src) {
@@ -98,8 +98,7 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
             .node(node)
             .outputs()
             .iter()
-            .map(|port| port.edges.iter())
-            .flatten()
+            .flat_map(|port| port.edges.iter())
         {
             let dst = self.edge(*edge).dst();
             if !known.contains(&dst.node) {
@@ -117,8 +116,7 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
             .node(node)
             .outputs()
             .iter()
-            .map(|port| port.edges.iter())
-            .flatten()
+            .flat_map(|port| port.edges.iter())
         {
             let dst = self.edge(*edge).dst();
             if !known.contains(dst) {
@@ -159,7 +157,7 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
                 .filter(|n| *n != parent_region.node)
                 .collect::<SmallColl<_>>();
 
-            if filtered_srcs.len() == 0 {
+            if filtered_srcs.is_empty() {
                 let follower = self
                     .unique_dst_nodes(node)
                     .into_iter()
@@ -196,14 +194,14 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
                 let must_be_enqued = if let Some(ne) = node_edges.get_mut(&f) {
                     ne.retain(|n| *n != popped);
 
-                    ne.len() == 0
+                    ne.is_empty()
                 } else {
                     panic!("Should not happen on {} in region {parent_region:?}!", f);
                 };
                 //if f has no incoming edges left, add to stack
                 if must_be_enqued {
                     let preds = node_edges.remove(&f).unwrap();
-                    assert!(preds.len() == 0);
+                    assert!(preds.is_empty());
                     let follower: SmallColl<_> = self
                         .unique_dst_nodes(f)
                         .into_iter()

@@ -19,18 +19,10 @@ pub enum VSEdge {
 
 impl LangEdge for VSEdge {
     fn is_state_edge(&self) -> bool {
-        if let VSEdge::State { .. } = &self {
-            true
-        } else {
-            false
-        }
+        matches!(self, VSEdge::State)
     }
     fn is_value_edge(&self) -> bool {
-        if let VSEdge::Value { .. } = &self {
-            true
-        } else {
-            false
-        }
+        matches!(self, VSEdge::Value)
     }
 
     fn state_edge() -> Self {
@@ -44,7 +36,7 @@ impl LangEdge for VSEdge {
 
 impl StructuralClone for VSEdge {
     fn structural_copy(&self) -> Self {
-        self.clone()
+        *self
     }
 }
 

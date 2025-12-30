@@ -78,13 +78,13 @@ impl WasmNode {
     ) -> Result<Self, WasmError> {
         //Our wasm backend supports the whole alge dialect, and all immediate values.
         if let Some(imm) = value.try_downcast_ref::<ImmNat>() {
-            assert!(input_sig.len() == 0);
+            assert!(input_sig.is_empty());
             assert!(output_sig.len() == 1);
             assert!(output_sig[0] == Some(vola_opt::common::Ty::SCALAR_INT));
             return Ok(WasmNode::from(imm));
         }
         if let Some(imm) = value.try_downcast_ref::<ImmScalar>() {
-            assert!(input_sig.len() == 0);
+            assert!(input_sig.is_empty());
             assert!(output_sig.len() == 1);
             assert!(output_sig[0] == Some(vola_opt::common::Ty::SCALAR_REAL));
             return Ok(WasmNode::from(imm));
@@ -199,11 +199,11 @@ impl WasmNode {
 
         if let Some(bi) = value.try_downcast_ref::<Buildin>() {
             let inputs = input_sig
-                .into_iter()
+                .iter()
                 .map(|i| i.clone().unwrap_or(vola_opt::common::Ty::VOID))
                 .collect::<SmallColl<_>>();
             let outputs = output_sig
-                .into_iter()
+                .iter()
                 .map(|o| o.clone().unwrap_or(vola_opt::common::Ty::VOID))
                 .collect::<SmallColl<_>>();
             return WasmNode::try_from_opt_buildin(bi, &inputs, &outputs);
@@ -288,9 +288,9 @@ impl View for WasmNode {
             Self::Runtime(r) => format!("{:?}", r.op),
             Self::Value(v) => format!("{:?}", v.op),
             Self::Index(i) => format!("Index<{}>", i.index),
-            Self::UniformConstruct(_) => format!("UniformConstruct"),
-            Self::NonUniformConstruct(_) => format!("NonUniformConstruct"),
-            Self::Error { .. } => format!("Error"),
+            Self::UniformConstruct(_) => "UniformConstruct".to_string(),
+            Self::NonUniformConstruct(_) => "NonUniformConstruct".to_string(),
+            Self::Error { .. } => "Error".to_string(),
         }
     }
 
@@ -345,8 +345,7 @@ impl TryFrom<vola_opt::common::Ty> for WasmTy {
                 walrus::ValType::F32,
             ),
             vola_opt::common::Ty::Tuple(t) => {
-                let subtypes: Result<Vec<Self>, _> =
-                    t.into_iter().map(|t| Self::try_from(t)).collect();
+                let subtypes: Result<Vec<Self>, _> = t.into_iter().map(Self::try_from).collect();
                 return Ok(Self::Tuple(subtypes?));
             }
             vola_opt::common::Ty::Callable => return Ok(WasmTy::Callabale),
@@ -444,24 +443,18 @@ impl WasmTy {
     }
 
     pub fn is_vector(&self) -> bool {
-        if let Self::Defined {
-            shape: TyShape::Vector { .. },
-            ..
-        } = self
-        {
-            true
-        } else {
-            false
-        }
+        matches!(
+            self,
+            Self::Defined {
+                shape: TyShape::Vector { .. },
+                ..
+            }
+        )
     }
 
     pub fn is_scalar(&self) -> bool {
         if let Self::Defined { shape, .. } = self {
-            if let TyShape::Scalar = shape {
-                true
-            } else {
-                false
-            }
+            matches!(shape, TyShape::Scalar)
         } else {
             false
         }
@@ -539,7 +532,7 @@ impl WasmTy {
         match self {
             Self::Defined { shape, ty } => {
                 assert!(shape.element_count() > index);
-                ty.clone()
+                *ty
             }
             Self::Tuple(t) => {
                 let overall_count = self.element_count();
@@ -583,7 +576,7 @@ impl WasmTy {
             }
             Self::Defined { shape, ty } => {
                 for _ in 0..shape.element_count() {
-                    signature.push(ty.clone());
+                    signature.push(*ty);
                 }
             }
         }
@@ -652,7 +645,7 @@ impl TyShape {
             Self::Scalar => 1,
             Self::Vector { width } => *width,
             Self::Matrix { width, height } => width * height,
-            Self::Tensor { dim } => dim.iter().fold(1, |x, y| x * y),
+            Self::Tensor { dim } => dim.iter().product::<usize>(),
         }
     }
 }
@@ -693,19 +686,11 @@ impl LangEdge for WasmEdge {
     }
 
     fn is_state_edge(&self) -> bool {
-        if let Self::State = self {
-            true
-        } else {
-            false
-        }
+        matches!(self, Self::State)
     }
 
     fn is_value_edge(&self) -> bool {
-        if let Self::Value { .. } = self {
-            true
-        } else {
-            false
-        }
+        matches!(self, Self::Value { .. })
     }
 }
 
@@ -713,10 +698,10 @@ impl LangEdge for WasmEdge {
 impl View for WasmEdge {
     fn name(&self) -> String {
         match self {
-            Self::State => format!("State"),
+            Self::State => "State".to_string(),
             Self::Value(WasmTy::Defined { shape, ty }) => format!("{shape}<{ty:?}>"),
-            Self::Value(WasmTy::Undefined) => format!("Undefined"),
-            Self::Value(WasmTy::Callabale) => format!("Callable"),
+            Self::Value(WasmTy::Undefined) => "Undefined".to_string(),
+            Self::Value(WasmTy::Callabale) => "Callable".to_string(),
             Self::Value(WasmTy::Tuple(t)) => format!("Tuple({t:?}"),
         }
     }

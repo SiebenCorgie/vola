@@ -69,6 +69,12 @@ pub struct UniformConstruct {
     pub output: Output,
 }
 
+impl Default for UniformConstruct {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl UniformConstruct {
     pub fn new() -> Self {
         UniformConstruct {
@@ -100,11 +106,7 @@ impl DialectNode for UniformConstruct {
 
     fn is_operation_equal(&self, other: &OptNode) -> bool {
         //NOTE: Two construct nodes are always equal
-        if let Some(_other_cop) = other.try_downcast_ref::<UniformConstruct>() {
-            true
-        } else {
-            false
-        }
+        other.try_downcast_ref::<UniformConstruct>().is_some()
     }
     fn try_derive_type(
         &self,
@@ -116,10 +118,10 @@ impl DialectNode for UniformConstruct {
         // algebraic super(?)-type. So a list of scalars becomes a vector, a list of vectors a matrix, and a list of
         // matrices a tensor. Tensors then just grow by pushing the next dimension size.
 
-        if input_types.len() == 0 {
-            return Err(TypeError::Other(format!(
-                "Cannot create an empty list (there is no void type in Vola)."
-            )));
+        if input_types.is_empty() {
+            return Err(TypeError::Other(
+                "Cannot create an empty list (there is no void type in Vola).".to_string(),
+            ));
         }
 
         if !(input_types[0].is_scalar_arithmetic()
@@ -197,12 +199,10 @@ impl DialectNode for UniformConstruct {
         &self,
         src_nodes: &[Option<&rvsdg::nodes::Node<OptNode>>],
     ) -> Option<OptNode> {
-        if src_nodes.len() == 0 {
+        if src_nodes.is_empty() {
             return None;
         }
-        if src_nodes[0].is_none() {
-            return None;
-        }
+        src_nodes[0]?;
 
         //We can constant fold a set of scalars into a vector, and a set of
         //equal width vectors into a matrix.
@@ -323,11 +323,7 @@ impl DialectNode for NonUniformConstruct {
         Ok(ty)
     }
     fn is_operation_equal(&self, other: &OptNode) -> bool {
-        if other.try_downcast_ref::<Self>().is_some() {
-            true
-        } else {
-            false
-        }
+        other.try_downcast_ref::<Self>().is_some()
     }
 }
 
@@ -655,10 +651,6 @@ impl DialectNode for IntervalConstruct {
         }
     }
     fn is_operation_equal(&self, other: &OptNode) -> bool {
-        if other.try_downcast_ref::<Self>().is_some() {
-            true
-        } else {
-            false
-        }
+        other.try_downcast_ref::<Self>().is_some()
     }
 }

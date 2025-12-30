@@ -319,7 +319,7 @@ impl View for OptEdge {
             Self::Value { ty } => match ty {
                 TypeState::Derived(t) => format!("Value(derived {:?})", t),
                 TypeState::Set(t) => format!("Value(set {:?})", t),
-                TypeState::Unset => format!("Value(unset)"),
+                TypeState::Unset => "Value(unset)".to_string(),
             },
         }
     }
@@ -390,15 +390,13 @@ impl Optimizer {
                     let edge_type = self.graph.edge(edg).ty.get_type().cloned();
                     //if edge has a type, use that, otherwise try at the source port
                     if edge_type.is_some() {
-                        return edge_type;
+                        edge_type
+                    } else if let Some(src) = self.graph.inport_src(portloc) {
+                        //note we don't do recursion, otherwise this might end in infinite recursion
+                        //with the same routine for output-ports
+                        self.typemap.get(&src.into()).cloned()
                     } else {
-                        if let Some(src) = self.graph.inport_src(portloc) {
-                            //note we don't do recursion, otherwise this might end in infinite recursion
-                            //with the same routine for output-ports
-                            self.typemap.get(&src.into()).cloned()
-                        } else {
-                            None
-                        }
+                        None
                     }
                 } else {
                     //If this port is unset, and has no edge, we can also not check the source
@@ -416,17 +414,14 @@ impl Optimizer {
                     .unwrap()
                     .edges
                 {
-                    match self.graph.edge(*edg).ty.get_type() {
-                        Some(new_ty) => {
-                            if let Some(set_ty) = &unified_type {
-                                if new_ty != set_ty {
-                                    panic!("Found edge inconsistensy on edge {edg}. There are two edge types on the same port: {new_ty:?} & {set_ty:?}" )
-                                }
-                            } else {
-                                unified_type = Some(new_ty.clone());
+                    if let Some(new_ty) = self.graph.edge(*edg).ty.get_type() {
+                        if let Some(set_ty) = &unified_type {
+                            if new_ty != set_ty {
+                                panic!("Found edge inconsistensy on edge {edg}. There are two edge types on the same port: {new_ty:?} & {set_ty:?}" )
                             }
+                        } else {
+                            unified_type = Some(new_ty.clone());
                         }
-                        None => {}
                     }
                 }
                 unified_type
@@ -477,7 +472,7 @@ impl Optimizer {
 
         let found_type = self.get_out_type_mut(path.start).map_err(|e| {
             e.report();
-            OptError::from(e.error)
+            OptError::from(*e.error)
         })?;
         for edg in &path.edges {
             //NOTE: To keep our key assumptions true, set the port type of any λ result or

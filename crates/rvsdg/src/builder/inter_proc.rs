@@ -317,23 +317,23 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> OmegaBuilder<'a, N, E> {
     /// Returns the argument_index of the port allocated.
     pub fn import(&mut self) -> OutportLocation {
         let idx = self.node_mut().add_import();
-        let portloc = OutportLocation {
+        
+        OutportLocation {
             node: self.node_ref,
             output: OutputType::Argument(idx),
-        };
-        portloc
+        }
     }
 
     ///Adds an export port.
     /// Returns the argument_index of the port allocated.
     pub fn export(&mut self) -> InportLocation {
         let idx = self.node_mut().add_export();
-        let portloc = InportLocation {
+        
+        //annotate the port with the given label
+        InportLocation {
             node: self.node_ref,
             input: InputType::Result(idx),
-        };
-        //annotate the port with the given label
-        portloc
+        }
     }
 
     ///Points to the ω-nodes's inner region.

@@ -175,7 +175,7 @@ fn parse_data(
 
     //recursively parse all nodes
     let mut parser = parser();
-    let syn_tree = match parser.parse(&data, None) {
+    let syn_tree = match parser.parse(data, None) {
         None => {
             return Err((ast, vec![VolaError::new(ParserError::TreeSitterFailed)]));
         }
@@ -227,7 +227,7 @@ fn parse_data(
         }
     }
 
-    if ctx.deep_errors.len() > 0 {
+    if !ctx.deep_errors.is_empty() {
         Err((ast, ctx.deep_errors))
     } else {
         Ok(ast)
@@ -243,23 +243,23 @@ mod test {
     #[test]
     fn parse_literal_int() {
         let s = "1";
-        let _e = parse_element::<Expr>(&s).unwrap();
+        let _e = parse_element::<Expr>(s).unwrap();
     }
     #[test]
     fn parse_literal_real() {
         let s = "1.0";
-        let _e = parse_element::<Expr>(&s).unwrap();
+        let _e = parse_element::<Expr>(s).unwrap();
     }
 
     #[test]
     fn parse_binary_expr() {
         let s = "1 + 1";
-        let _e = parse_element::<Expr>(&s).unwrap();
+        let _e = parse_element::<Expr>(s).unwrap();
     }
 
     #[test]
     fn parse_stmt_expr() {
         let s = "let a = 1 + 1;";
-        let _e = parse_element::<Stmt>(&s).unwrap();
+        let _e = parse_element::<Stmt>(s).unwrap();
     }
 }

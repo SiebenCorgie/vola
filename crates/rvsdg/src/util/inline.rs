@@ -64,7 +64,7 @@ impl<
             let callport = a.get_callabel_decl();
             let call_src = {
                 if let Some(calledge) = callport.edge {
-                    self.edge(calledge).src().clone()
+                    *self.edge(calledge).src()
                 } else {
                     return Err(InlineError::CallPortNotConnected);
                 }
@@ -82,7 +82,7 @@ impl<
             let mut res_dsts: SmallVec<[SmallVec<[(InportLocation, E); 3]>; 3]> = SmallVec::new();
             for i in 0..a.get_call_arg_count() {
                 if let Some(src) = a.argument_input(i).unwrap().edge {
-                    let srcport = self.edge(src).src().clone();
+                    let srcport = *self.edge(src).src();
                     let ty = self.edge(src).ty.structural_copy();
                     arg_srcs.push(Some((srcport, ty)));
                 } else {
@@ -95,7 +95,7 @@ impl<
                 for dstedg in &a.outputs[i].edges {
                     let edg = self.edge(*dstedg);
 
-                    dsts.push((edg.dst().clone(), edg.ty.structural_copy()));
+                    dsts.push((*edg.dst(), edg.ty.structural_copy()));
                 }
                 res_dsts.push(dsts);
             }
@@ -224,8 +224,8 @@ impl<
             let (mut src, mut dst, ty) = {
                 let edg = self.edge(srcedg);
                 (
-                    edg.src().clone(),
-                    edg.dst().clone(),
+                    *edg.src(),
+                    *edg.dst(),
                     edg.ty.structural_copy(),
                 )
             };
@@ -237,7 +237,7 @@ impl<
             //if it ain't that, its some kind of _normal_ region-internal source port, so we use that.
             if let OutputType::ContextVariableArgument(_) = src.output {
                 let new_src_port = cv_remapping.get(&src).unwrap();
-                src = new_src_port.clone();
+                src = *new_src_port;
             } else if src.output.is_argument() {
                 //use the argument remapping
                 if let Some((remap_port, remap_ty)) = argument_remapping.get(&src).unwrap() {
@@ -261,7 +261,7 @@ impl<
                             remap_port
                         );
                     }
-                    src = remap_port.clone();
+                    src = *remap_port;
                 } else {
                     //no remapping needed, since the arg was not connected initially
                     continue;
@@ -293,7 +293,7 @@ impl<
                             remapped_edg
                         );
                     }
-                    self.connect(src.clone(), remapped_edg.clone(), ty.structural_copy())
+                    self.connect(src, *remapped_edg, ty.structural_copy())
                         .unwrap();
                 }
             } else {

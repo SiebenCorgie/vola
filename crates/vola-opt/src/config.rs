@@ -38,19 +38,12 @@ impl Default for ConfigAutoDiff {
 ///
 /// This allows us to omit those passes if not a single node of this type has been seen.
 #[derive(Debug, Clone)]
+#[derive(Default)]
 pub struct SeenPassNodes {
     pub autodiff: bool,
     pub interval: bool,
 }
 
-impl Default for SeenPassNodes {
-    fn default() -> Self {
-        SeenPassNodes {
-            autodiff: false,
-            interval: false,
-        }
-    }
-}
 
 #[derive(Debug, Clone, Default)]
 pub struct Config {

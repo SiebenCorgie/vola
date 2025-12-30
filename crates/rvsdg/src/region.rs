@@ -18,32 +18,22 @@ use crate::{
 
 ///A Outport allows us to define multiple destination edges. It is the base type for [Output] and [Argument].
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Default)]
 pub struct Outport {
     pub edges: SmallColl<EdgeRef>,
 }
 
-impl Default for Outport {
-    fn default() -> Self {
-        Outport {
-            edges: SmallColl::default(),
-        }
-    }
-}
 
 pub type Output = Outport;
 pub type Argument = Outport;
 
 ///A in port allows us to define at most a single src edge. It is the base type for [Input] and [RegResult].
 #[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Default)]
 pub struct Inport {
     pub edge: Option<EdgeRef>,
 }
 
-impl Default for Inport {
-    fn default() -> Self {
-        Inport { edge: None }
-    }
-}
 pub type Input = Inport;
 pub type RegResult = Inport;
 
@@ -75,11 +65,7 @@ impl Region {
         result_index: usize,
     ) -> Option<OutportLocation> {
         if let Some(port) = self.results.get(result_index) {
-            if let Some(edg) = port.edge {
-                Some(ctx.edge(edg).src)
-            } else {
-                None
-            }
+            port.edge.map(|edg| ctx.edge(edg).src)
         } else {
             None
         }

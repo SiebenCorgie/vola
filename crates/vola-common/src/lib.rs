@@ -96,9 +96,9 @@ impl ariadne::Span for Span {
     type SourceId = std::path::Path;
     fn source(&self) -> &Self::SourceId {
         if self.file.is_empty() {
-            &std::path::Path::new(Self::FALLBACK_FILE)
+            std::path::Path::new(Self::FALLBACK_FILE)
         } else {
-            &std::path::Path::new(self.file.as_str())
+            std::path::Path::new(self.file.as_str())
         }
     }
     fn start(&self) -> usize {

@@ -193,8 +193,7 @@ impl RegionEqNodeTracker {
                             false
                         }
                     })
-                    .map(|(k, v)| (k.clone(), v.bucket_index.clone()))
-                    .clone();
+                    .map(|(k, v)| (*k, v.bucket_index));
                 if let Some((_candidate_id, bucket_index)) = found {
                     let map_entry = EqMapEntry {
                         bucket_index,

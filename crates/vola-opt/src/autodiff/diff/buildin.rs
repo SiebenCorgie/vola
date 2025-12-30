@@ -42,8 +42,7 @@ impl Optimizer {
             .unwrap_simple_ref()
             .try_downcast_ref::<Buildin>()
             .unwrap()
-            .op
-            .clone();
+            .op;
         match op {
             BuildinOp::Dot | BuildinOp::Cross => {
                 //Both can be diffed according to the product rule
@@ -55,7 +54,7 @@ impl Optimizer {
                     .on_region(&region, |g| {
                         //NOTE is not commutative, so we have to pay attention to the order here
                         let udiff_op_v =
-                            g.insert_node(OptNode::new(Buildin::new(op.clone()), span.clone()));
+                            g.insert_node(OptNode::new(Buildin::new(op), span.clone()));
                         //preconnect u to v` x u
                         g.ctx_mut()
                             .connect(v_src, udiff_op_v.input(1), OptEdge::value_edge_unset())
@@ -63,7 +62,7 @@ impl Optimizer {
                         let u_diff_dst = udiff_op_v.input(0);
 
                         let u_op_diffv =
-                            g.insert_node(OptNode::new(Buildin::new(op.clone()), span.clone()));
+                            g.insert_node(OptNode::new(Buildin::new(op), span.clone()));
                         //preconnect v to v x u'
                         g.ctx_mut()
                             .connect(u_src, u_op_diffv.input(0), OptEdge::value_edge_unset())
@@ -135,10 +134,7 @@ impl Optimizer {
             }
             BuildinOp::Min | BuildinOp::Max => {
                 if self.config.autodiff.abort_on_undiff {
-                    return Err(AutoDiffError::UndiffNode(format!(
-                        "{}",
-                        self.graph[node].name()
-                    )));
+                    return Err(AutoDiffError::UndiffNode(self.graph[node].name().to_string()));
                 }
 
                 //NOTE: not really diff-abel, but we use
@@ -293,9 +289,7 @@ impl Optimizer {
 
                 if activity.is_active_port(self, n_src) {
                     //the x^x case
-                    return Err(AutoDiffError::NoAdImpl(format!(
-                        "No AD impl for x^x (where the exponent is part of the derivative)"
-                    )));
+                    Err(AutoDiffError::NoAdImpl("No AD impl for x^x (where the exponent is part of the derivative)".to_string()))
                 } else {
                     //the x^n case
                     let nty = self.get_out_type_mut(n_src).unwrap();

@@ -111,7 +111,7 @@ impl RegionLayout {
             for w in waiting_ping_pong {
                 let mut all_succ_layouted = true;
                 for s in &w.successors {
-                    if !layouted.contains(&s) {
+                    if !layouted.contains(s) {
                         all_succ_layouted = false;
                         break;
                     }

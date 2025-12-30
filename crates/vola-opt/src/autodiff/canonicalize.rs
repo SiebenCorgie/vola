@@ -68,7 +68,7 @@ impl Optimizer {
 
                     let new_result = self
                         .graph
-                        .on_region(&region, |g| {
+                        .on_region(region, |g| {
                             let (fx_square, _) = g
                                 .connect_node(
                                     OptNode::new(
@@ -332,7 +332,7 @@ impl Optimizer {
                     let one = self.splat_scalar(*region, ImmScalar::new(1.0), a_ty);
                     let new_result = self
                         .graph
-                        .on_region(&region, |g| {
+                        .on_region(region, |g| {
                             let (one_minus, _) = g
                                 .connect_node(
                                     OptNode::new(
@@ -471,8 +471,8 @@ impl Optimizer {
             let new_src_port_in_region = if user_region == prod_region {
                 lmd_cpy_port
             } else {
-                let import_port = self.import_context(lmd_cpy_port, user_region)?;
-                import_port
+                
+                self.import_context(lmd_cpy_port, user_region)?
             };
             let user_calledg_port = user.input(0);
             let old_edg = self.graph[user_calledg_port].edge.unwrap();

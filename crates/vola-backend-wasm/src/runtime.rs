@@ -13,7 +13,7 @@ use walrus::{FunctionId, FunctionKind, LocalId, ModuleFunctions, ModuleLocals, V
 
 use crate::error::WasmError;
 
-const RUNTIME_CODE: &'static [u8] = include_bytes!(env!("RUNTIME_DIR"));
+const RUNTIME_CODE: &[u8] = include_bytes!(env!("RUNTIME_DIR"));
 
 pub fn load_runtime_module() -> Result<walrus::Module, WasmError> {
     let module = walrus::Module::from_buffer(RUNTIME_CODE).map_err(|e| WasmError::Any(e.into()))?;
@@ -33,14 +33,14 @@ pub fn lookup_function_symbol(
 ) -> FnSymbol {
     let symbol = function_tabel
         .by_name(name)
-        .expect(&format!("Expected function {} to be known!", name));
+        .unwrap_or_else(|| panic!("Expected function {} to be known!", name));
 
     match &function_tabel.get(symbol).kind {
         FunctionKind::Local(l) => {
             let mut args = SmallColl::new();
             for arg in l.args.iter() {
                 let local = local_tabel.get(*arg);
-                let ty = local.ty().clone();
+                let ty = local.ty();
                 args.push((*arg, ty));
             }
 

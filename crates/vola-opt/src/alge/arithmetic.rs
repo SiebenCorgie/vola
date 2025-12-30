@@ -260,7 +260,7 @@ impl DialectNode for BinaryArith {
             node: Box::new(BinaryArith {
                 inputs: [Input::default(), Input::default()],
                 output: Output::default(),
-                op: self.op.clone(),
+                op: self.op,
             }),
         }
     }
@@ -417,7 +417,7 @@ impl DialectNode for UnaryArith {
             node: Box::new(UnaryArith {
                 inputs: Input::default(),
                 output: Output::default(),
-                op: self.op.clone(),
+                op: self.op,
             }),
         }
     }
@@ -437,9 +437,7 @@ impl DialectNode for UnaryArith {
         if src_nodes.len() != 1 {
             return None;
         }
-        if src_nodes[0].is_none() {
-            return None;
-        }
+        src_nodes[0]?;
 
         //Try to cast the first src node into any of the known imm values, if successfull, try to apply the operation
         //to the value, and build a new, constant immediate node

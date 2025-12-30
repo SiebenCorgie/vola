@@ -135,6 +135,7 @@ fn impl_lang_node(ast: &syn::DeriveInput) -> TokenStream {
         return TokenStream::new();
     }
 
+    #[allow(clippy::single_match)]
     match (&inputs_field, &outputs_field) {
         (Some((inp, _is_multiple)), None) => {
             inp.span().unwrap().error("Input is defined here, but no #[outputs] field was declared. Consider adding one!").emit();

@@ -132,7 +132,7 @@ impl SpirvBackend {
     pub fn intern_module(&mut self, opt: &Optimizer) -> Result<(), BackendSpirvError> {
         let res = self
             .lower_opt_graph(opt)
-            .map_err(|e| BackendSpirvError::LoweringError(e));
+            .map_err(BackendSpirvError::LoweringError);
 
         if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("VOLA_DUMP_SPV_LOWERED").is_ok()
         {

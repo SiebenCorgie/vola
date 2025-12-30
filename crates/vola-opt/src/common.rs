@@ -99,7 +99,7 @@ impl Shape {
                             sizes[0]
                         )))
                     } else {
-                        let new_dim = sizes[1..].iter().map(|d| *d).collect();
+                        let new_dim = sizes[1..].iter().copied().collect();
                         Ok(Self::Tensor { sizes: new_dim })
                     }
                 }
@@ -379,7 +379,7 @@ impl Ty {
             match shape {
                 Shape::Vec { width } => Some(*width),
                 Shape::Matrix { width, .. } => Some(*width),
-                Shape::Tensor { sizes } => sizes.get(0).cloned(),
+                Shape::Tensor { sizes } => sizes.first().cloned(),
                 _ => None,
             }
         } else {
@@ -408,7 +408,7 @@ impl Ty {
             Self::Shaped { ty, shape } => {
                 let sub_shape = shape.try_derive_access_index(index)?;
                 Ok(Self::Shaped {
-                    ty: ty.clone(),
+                    ty: *ty,
                     shape: sub_shape,
                 })
             }

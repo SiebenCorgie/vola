@@ -49,7 +49,7 @@ fn convert_literal(lit: ScadLiteral, span: Span) -> Result<ConvertedLiteral, Par
                         operand: Box::new(Expr {
                             span,
                             expr_ty: vola_ast::alge::ExprTy::Literal(
-                                vola_ast::common::Literal::IntegerLiteral(i.abs() as usize),
+                                vola_ast::common::Literal::IntegerLiteral(i.unsigned_abs() as usize),
                             ),
                         }),
                     },
@@ -58,7 +58,7 @@ fn convert_literal(lit: ScadLiteral, span: Span) -> Result<ConvertedLiteral, Par
                 Ok(ConvertedLiteral::Expr(Expr {
                     span,
                     expr_ty: vola_ast::alge::ExprTy::Literal(
-                        vola_ast::common::Literal::IntegerLiteral(i.abs() as usize),
+                        vola_ast::common::Literal::IntegerLiteral(i.unsigned_abs() as usize),
                     ),
                 }))
             }
@@ -74,7 +74,7 @@ fn convert_literal(lit: ScadLiteral, span: Span) -> Result<ConvertedLiteral, Par
         crate::util::ScadLiteral::List(l) => {
             let elements = l
                 .into_iter()
-                .map(|ele| convert_expr(ele))
+                .map(convert_expr)
                 .collect::<Result<_, ParserError>>()?;
             Ok(ConvertedLiteral::Expr(Expr {
                 span: Span::empty(),
@@ -301,7 +301,7 @@ fn convert_call(call: ScadCall) -> Result<vola_ast::common::Call, ParserError> {
                     "assignment argument should have been normalized before!",
                     assign.span,
                 );
-                return Err(ParserError::Unexpected("assignment argument".to_owned()));
+                Err(ParserError::Unexpected("assignment argument".to_owned()))
             }
         })
         .collect::<Result<_, ParserError>>()?;
@@ -630,7 +630,9 @@ fn convert_block(block: ScadBlock) -> Result<Block, ParserError> {
             ConvertedStatement::Stmt(stmt) => vblock.stmts.push(stmt),
             ConvertedStatement::CsgChain(scope_call) => {
                 let unioned_expr = if let Some(resting_expr) = vblock.retexpr.take() {
-                    let union = Expr {
+                    
+
+                    Expr {
                         span: Span::empty(),
                         expr_ty: vola_ast::alge::ExprTy::ScopedCall(Box::new(ScopedCall {
                             span: Span::empty(),
@@ -649,9 +651,7 @@ fn convert_block(block: ScadBlock) -> Result<Block, ParserError> {
                                 }),
                             ],
                         })),
-                    };
-
-                    union
+                    }
                 } else {
                     Expr {
                         span: scope_call.span.clone(),

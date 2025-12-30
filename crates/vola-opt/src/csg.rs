@@ -127,8 +127,7 @@ impl DialectNode for CsgOp {
             .map(|arg| {
                 arg.ty
                     .clone()
-                    .try_into()
-                    .expect("Could not convert ty opt-type")
+                    .into()
             })
             .collect::<SmallVec<[Ty; 3]>>();
 

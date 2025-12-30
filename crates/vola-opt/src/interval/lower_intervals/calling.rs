@@ -30,7 +30,7 @@ impl<'opt> LowerIntervals<'opt> {
         let has_any_interval_ports = self.has_interval_in_or_out(node);
 
         if has_any_interval_ports {
-            Err(VolaError::new(OptError::Internal(format!("There is a bug in the interval lowering, the function-call still operates on intervals!"))))
+            Err(VolaError::new(OptError::Internal("There is a bug in the interval lowering, the function-call still operates on intervals!".to_string())))
         } else {
             Ok(())
         }
@@ -46,7 +46,7 @@ impl<'opt> LowerIntervals<'opt> {
                 if self
                     .optimizer
                     .get_in_type(port)
-                    .map_or(false, |t| t.is_interval())
+                    .is_ok_and(|t| t.is_interval())
                 {
                     Some(())
                 } else {
@@ -62,7 +62,7 @@ impl<'opt> LowerIntervals<'opt> {
                         if self
                             .optimizer
                             .get_out_type(port)
-                            .map_or(false, |t| t.is_interval())
+                            .is_ok_and(|t| t.is_interval())
                         {
                             Some(())
                         } else {
@@ -86,7 +86,7 @@ impl<'opt> LowerIntervals<'opt> {
                 if self
                     .optimizer
                     .get_in_type(port)
-                    .map_or(false, |t| t.is_interval())
+                    .is_ok_and(|t| t.is_interval())
                 {
                     Some(())
                 } else {
@@ -103,7 +103,7 @@ impl<'opt> LowerIntervals<'opt> {
                         if self
                             .optimizer
                             .get_out_type(port)
-                            .map_or(false, |t| t.is_interval())
+                            .is_ok_and(|t| t.is_interval())
                         {
                             Some(())
                         } else {
@@ -127,10 +127,7 @@ impl<'opt> LowerIntervals<'opt> {
         let is_exported = self
             .optimizer
             .exported_functions()
-            .into_iter()
-            .filter(|reg| reg.node == node)
-            .next()
-            .is_some();
+            .into_iter().any(|reg| reg.node == node);
         let has_interval_in_interface = self.has_interval_in_region_interface(RegionLocation {
             node,
             region_index: 0,
@@ -259,7 +256,7 @@ impl<'opt> LowerIntervals<'opt> {
                     .unwrap();
                 //now disconnecy all arg-connected _things_, and connect them to the interval
                 for dst in reg.ctx().outport_dsts(port) {
-                    let Some(edg) = reg.ctx()[dst].edge.clone() else {
+                    let Some(edg) = reg.ctx()[dst].edge else {
                         continue;
                     };
 

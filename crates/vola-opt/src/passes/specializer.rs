@@ -87,9 +87,9 @@ impl Optimizer {
         }
 
         if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("DUMP_POST_SPECIALIZE").is_ok() {
-            self.push_debug_state(&format!("post specialize"));
+            self.push_debug_state("post specialize");
         }
-        if errors.len() > 0 {
+        if !errors.is_empty() {
             Err(errors)
         } else {
             Ok(())
@@ -353,9 +353,8 @@ impl Optimizer {
                     .inport(&InputType::Input(subtree_idx))
                     .unwrap()
                     .edge
-                    .expect("Expected subtree to be connected!")
-                    .clone();
-                let subtree_src = self.graph.edge(edg).src().clone();
+                    .expect("Expected subtree to be connected!");
+                let subtree_src = *self.graph.edge(edg).src();
                 let opt_edge = self.graph.edge(edg).ty.clone();
                 assert!(opt_edge.get_type() == Some(&Ty::CSG));
 
@@ -406,7 +405,9 @@ impl Optimizer {
                         .with_error(span, "expected this eval to be typed")
                 })?;
             let call_src = if eval_region != csg_region {
-                let src = self
+                
+
+                self
                     .import_context(
                         OutportLocation {
                             node: csg_impl_lambda,
@@ -414,9 +415,7 @@ impl Optimizer {
                         },
                         eval_region,
                     )
-                    .unwrap();
-
-                src
+                    .unwrap()
             } else {
                 //If the eval is in the host region, we can use the call-source as is
                 OutportLocation {
@@ -433,7 +432,7 @@ impl Optimizer {
                     .unwrap()
                     .edge
                 {
-                    let src = self.graph.edge(connected_edge).src().clone();
+                    let src = *self.graph.edge(connected_edge).src();
                     let ty = self.graph.edge(connected_edge).ty.clone();
                     //NOTE: We possibly need to import the `src` for the csg-args,
                     //      since they might be defined in the _outer_ region of this λ
@@ -458,7 +457,7 @@ impl Optimizer {
             //now append the eval args as well
             for input in self.graph.node(spec_ctx.eval_node).inputs().iter().skip(1) {
                 if let Some(connected_edge) = input.edge {
-                    let src = self.graph.edge(connected_edge).src().clone();
+                    let src = *self.graph.edge(connected_edge).src();
                     let ty = self.graph.edge(connected_edge).ty.clone();
 
                     args.push((src, ty));
@@ -602,7 +601,7 @@ impl Optimizer {
             if let Some(producer) = self.graph.find_producer_inp(old_dst) {
                 let in_context_port = self.import_context(producer, region)?;
                 //Set type for import path
-                let ty = if let Ok(ty) = self.get_out_type_mut(in_context_port.clone()) {
+                let ty = if let Ok(ty) = self.get_out_type_mut(in_context_port) {
                     OptEdge::value_edge().with_type(ty)
                 } else {
                     log::warn!("Could not find type for imported prototype, using none");
@@ -908,7 +907,7 @@ impl Optimizer {
 
         let mut collected = SmallColl::new();
         //Tracks the
-        let mut most_outer_region = eval_parent.clone();
+        let mut most_outer_region = eval_parent;
         for branch in 0..self.graph[gamma_prod.node].regions().len() {
             //find the actual source of the exit_variables's result
             let src = self
@@ -940,15 +939,14 @@ impl Optimizer {
                             //CVs can just be traced and imported. Find the actual producer...
                             let producer = self.graph.find_producer_out(*src).unwrap();
                             //... and import it into our branch
-                            let import_cv =
-                                self.import_argument(producer, branch_region).map_err(|e| {
+                            
+                            self.import_argument(producer, branch_region).map_err(|e| {
                                     VolaError::error_here(
                                         e,
                                         evalspan.clone(),
                                         "while trying to specialize this eval for branch",
                                     )
-                                })?;
-                            import_cv
+                                })?
                         }
                         OutputType::Argument(argidx) => {
                             //for arguments its a little harder, we might have to find the argument
@@ -959,15 +957,14 @@ impl Optimizer {
                             //Hovere, there is a shortcut: If the argument is already in a parent-region, we can just import it as-is.
                             if self.graph.is_in_parent(branch_region.node, src.node) {
                                 //The data source is already in a parent, so we can _just_ import it.
-                                let import_cv =
-                                    self.import_context(*src, branch_region).map_err(|e| {
+                                
+                                self.import_context(*src, branch_region).map_err(|e| {
                                         VolaError::error_here(
                                             e,
                                             evalspan.clone(),
                                             "while trying to specialize this eval for branch",
                                         )
-                                    })?;
-                                import_cv
+                                    })?
                             } else {
                                 //data source is not in parent, try to find the specialized call-source, and
                                 //try to import it. That can fail though.
@@ -1010,12 +1007,12 @@ impl Optimizer {
                                             most_outer_region = self.graph.toplevel_region();
                                         }
 
-                                        let import_cv = self.import_context(argument_src, branch_region)
+                                        
+
+                                        self.import_context(argument_src, branch_region)
                                             .map_err(|e| {
                                                 VolaError::error_here(e,evalspan.clone(),"while trying to specialize this eval for branch")
-                                            })?;
-
-                                        import_cv
+                                            })?
                                     } else {
                                         return Err(VolaError::error_here(
                                             OptError::Internal(
@@ -1065,7 +1062,7 @@ impl Optimizer {
                 .on_region(&branch_region, |reg| {
                     let (node, _edges) = reg
                         .connect_node(
-                            eval_node_template.structural_copy().into(),
+                            eval_node_template.structural_copy(),
                             local_context_ports,
                         )
                         .unwrap();

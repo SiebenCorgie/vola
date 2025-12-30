@@ -34,8 +34,7 @@ impl Optimizer {
             .unwrap_simple_ref()
             .try_downcast_ref::<BinaryArith>()
             .unwrap()
-            .op
-            .clone();
+            .op;
         let span = self.find_span(node).unwrap_or(Span::empty());
         //NOTE: Safe, since this _must_ be a binary op
         let left_src = self.graph.inport_src(node.input(0)).unwrap();
@@ -187,55 +186,42 @@ impl Optimizer {
                             })
                             .unwrap();
 
-                        return Ok(AdResponse::new(node.output(0), result)
-                            .with_chained_derivatives(subdiff));
+                        Ok(AdResponse::new(node.output(0), result)
+                            .with_chained_derivatives(subdiff))
                     }
                     (false, false) => panic!("{node:?} should not be active"),
                     (is_left_diff, is_right_diff) => {
                         assert!(is_left_diff != is_right_diff);
 
                         //pick out special implementations
-                        match (left_type, right_type) {
-                            /*
-                            (Ty::Matrix { .. }, Ty::Vector { .. }) => {
-                                assert!(!left_active && right_active);
-                                self.build_matrix_active_vector_diff(region, node, activity)
-                            }
-                            (Ty::Vector { .. }, Ty::Matrix { .. }) => {
-                                assert!(!right_active && left_active);
-                                self.build_active_vector_matrix_diff(region, node, activity)
-                            }
-                            */
-                            //standard implementations
-                            _ => {
-                                //constant-factor-rule (only one is active).
-                                let diff_defered_src =
-                                    if is_left_diff { left_src } else { right_src };
-                                let constant_src = if is_left_diff { right_src } else { left_src };
+                        {
+                            //constant-factor-rule (only one is active).
+                            let diff_defered_src =
+                                if is_left_diff { left_src } else { right_src };
+                            let constant_src = if is_left_diff { right_src } else { left_src };
 
-                                let result = self
-                                    .graph
-                                    .on_region(&region, |g| {
-                                        let (node, _edg) = g
-                                            .connect_node(
-                                                OptNode::new(
-                                                    BinaryArith::new(BinaryArithOp::Mul),
-                                                    span,
-                                                ),
-                                                [constant_src],
-                                            )
-                                            .unwrap();
+                            let result = self
+                                .graph
+                                .on_region(&region, |g| {
+                                    let (node, _edg) = g
+                                        .connect_node(
+                                            OptNode::new(
+                                                BinaryArith::new(BinaryArithOp::Mul),
+                                                span,
+                                            ),
+                                            [constant_src],
+                                        )
+                                        .unwrap();
 
-                                        subdiff.push((diff_defered_src, smallvec![node.input(1)]));
+                                    subdiff.push((diff_defered_src, smallvec![node.input(1)]));
 
-                                        self.names
-                                            .set(node.into(), "ConstantFactorRule".to_string());
-                                        node.output(0)
-                                    })
-                                    .unwrap();
-                                Ok(AdResponse::new(node.output(0), result)
-                                    .with_chained_derivatives(subdiff))
-                            }
+                                    self.names
+                                        .set(node.into(), "ConstantFactorRule".to_string());
+                                    node.output(0)
+                                })
+                                .unwrap();
+                            Ok(AdResponse::new(node.output(0), result)
+                                .with_chained_derivatives(subdiff))
                         }
                     }
                 }
@@ -301,10 +287,7 @@ impl Optimizer {
                 //If allowed diff |x| => |x| / x => 1
                 //NOTE that this is undefined on x == 0
                 if self.config.autodiff.abort_on_undiff {
-                    return Err(AutoDiffError::UndiffNode(format!(
-                        "{}",
-                        self.graph[node].name()
-                    )));
+                    return Err(AutoDiffError::UndiffNode(self.graph[node].name().to_string()));
                 }
 
                 let x_src = self.graph.inport_src(node.input(0)).unwrap();

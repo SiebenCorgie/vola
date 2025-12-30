@@ -25,7 +25,7 @@ enum Format {
     ///The platform native format. For instance x86 for your Linux flavour.
     Native,
     ///Emits a web-assembly module
-    WASM,
+    Wasm,
     ///Stops after optimizing the code, does-not emit anything
     Stub,
 }
@@ -105,8 +105,8 @@ fn main() {
             Box::new(Native::new(Target::file(&args.output_name))),
             "bin",
         ),
-        Format::WASM => (Box::new(Wasm::new(Target::file(&args.output_name))), "wasm"),
-        Format::Stub => (Box::new(StubBackend::default()), "stub"),
+        Format::Wasm => (Box::new(Wasm::new(Target::file(&args.output_name))), "wasm"),
+        Format::Stub => (Box::new(StubBackend), "stub"),
     };
 
     if args.output_name.extension().is_none() {
@@ -128,12 +128,9 @@ fn main() {
         pipeline = pipeline.write_on_error();
     }
 
-    match pipeline.execute_on_file(&args.src_file) {
-        Err(errors) => {
-            for error in errors {
-                error.report();
-            }
+    if let Err(errors) = pipeline.execute_on_file(&args.src_file) {
+        for error in errors {
+            error.report();
         }
-        Ok(_) => {}
     }
 }

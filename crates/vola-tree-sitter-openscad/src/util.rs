@@ -14,7 +14,7 @@ pub fn identifier(ctx: &mut ParserCtx, data: &[u8], node: &Node) -> Result<Ident
         )));
     }
 
-    let ident = node.utf8_text(data).map_err(|e| ParserError::from(e))?;
+    let ident = node.utf8_text(data).map_err(ParserError::from)?;
     Ok(Ident(ident.to_owned()))
 }
 
@@ -55,7 +55,7 @@ impl ScadLiteral {
 
 pub fn list(ctx: &mut ParserCtx, data: &[u8], node: &Node) -> Result<Vec<ScadExpr>, ParserError> {
     if node.kind() != "list" {
-        return Err(ParserError::MalformedNode(format!("expected list")));
+        return Err(ParserError::MalformedNode("expected list".to_string()));
     }
 
     let mut walker = node.walk();
@@ -136,7 +136,7 @@ pub fn literal(ctx: &mut ParserCtx, data: &[u8], node: &Node) -> Result<ScadLite
             Ok(ScadLiteral::Range {
                 start: Box::new(start),
                 end: Box::new(end),
-                increment: increment.map(|f| Box::new(f)),
+                increment: increment.map(Box::new),
             })
         }
         "list" => Ok(ScadLiteral::List(list(ctx, data, node)?)),
@@ -162,17 +162,17 @@ pub fn number(ctx: &mut ParserCtx, data: &[u8], node: &Node) -> Result<ScadLiter
             //try to parse the decimal as int
             let int: i32 = node
                 .utf8_text(data)
-                .map_err(|e| ParserError::Utf8ParseError(e))?
+                .map_err(ParserError::Utf8ParseError)?
                 .parse()
-                .map_err(|e| ParserError::from(e))?;
+                .map_err(ParserError::from)?;
             Ok(ScadLiteral::Decimal(int))
         }
         "float" => {
             let float: f64 = node
                 .utf8_text(data)
-                .map_err(|e| ParserError::Utf8ParseError(e))?
+                .map_err(ParserError::Utf8ParseError)?
                 .parse()
-                .map_err(|e| ParserError::from(e))?;
+                .map_err(ParserError::from)?;
             Ok(ScadLiteral::Float(float))
         }
         other => Err(ParserError::Unexpected(format!(

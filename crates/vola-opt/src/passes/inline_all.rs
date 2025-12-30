@@ -20,7 +20,7 @@ impl Optimizer {
             .topological_order_region(self.graph.toplevel_region());
         for node in topo_ord {
             assert!(!self.graph[node].node_type.is_apply());
-            if self.graph[node].regions().len() > 0 {
+            if !self.graph[node].regions().is_empty() {
                 for region_index in 0..self.graph[node].regions().len() {
                     self.inline_all_region(RegionLocation { node, region_index })?;
                 }
@@ -34,7 +34,7 @@ impl Optimizer {
     pub fn inline_all_region(&mut self, region: RegionLocation) -> Result<(), OptError> {
         for node in self.graph.topological_order_region(region) {
             //Inline all sub regions
-            if self.graph[node].regions().len() > 0 {
+            if !self.graph[node].regions().is_empty() {
                 for region_index in 0..self.graph[node].regions().len() {
                     self.inline_all_region(RegionLocation { node, region_index })?;
                 }

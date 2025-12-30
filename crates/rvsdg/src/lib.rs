@@ -145,6 +145,12 @@ pub struct Rvsdg<N: LangNode + 'static, E: LangEdge + 'static> {
     pub(crate) omega: NodeRef,
 }
 
+impl<N: LangNode + 'static, E: LangEdge + 'static> Default for Rvsdg<N, E> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
     pub fn new() -> Self {
         //Pre-create the omega node we use to track imports/exports
@@ -306,8 +312,8 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
             }
 
             let parent_region = match (
-                self.node(src.node).parent.clone(),
-                self.node(dst.node).parent.clone(),
+                self.node(src.node).parent,
+                self.node(dst.node).parent,
             ) {
                 (Some(reg_src), Some(reg_dst)) => {
                     //Check that, either one is the parent of the other node,
@@ -390,8 +396,7 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
             .node(node)
             .outputs()
             .iter()
-            .map(|out| out.edges.iter().map(|edg| *edg))
-            .flatten()
+            .flat_map(|out| out.edges.iter().copied())
             .collect();
 
         let mut any_error = None;
@@ -442,7 +447,6 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
         } else {
             self.node(src.node)
                 .parent
-                .clone()
                 .expect("Expected src node to have a parent")
         };
 
@@ -455,7 +459,6 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
         } else {
             self.node(dst.node)
                 .parent
-                .clone()
                 .expect("Expected dst to have a src node")
         };
 
@@ -482,8 +485,8 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
 
         //are in same region, so we can safely connect
         let edge = self.new_edge(Edge {
-            src: src.clone(),
-            dst: dst.clone(),
+            src,
+            dst,
             ty,
         });
 
@@ -526,11 +529,7 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
     /// Panics if either the referenced node, or the safed edge are non-existent.
     pub fn inport_src(&self, inport: InportLocation) -> Option<OutportLocation> {
         if let Some(port) = self.node(inport.node).inport(&inport.input) {
-            if let Some(edg) = port.edge {
-                Some(self.edge(edg).src().clone())
-            } else {
-                None
-            }
+            port.edge.map(|edg| *self.edge(edg).src())
         } else {
             None
         }

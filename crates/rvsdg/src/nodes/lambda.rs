@@ -24,6 +24,12 @@ pub struct ApplyNode {
     pub(crate) outputs: SmallColl<Output>,
 }
 
+impl Default for ApplyNode {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ApplyNode {
     pub fn new() -> Self {
         let mut inputs = SmallColl::default();
@@ -230,6 +236,12 @@ impl StructuralNode for LambdaNode {
         }
 
         res
+    }
+}
+
+impl Default for LambdaNode {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

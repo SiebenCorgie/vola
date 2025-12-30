@@ -148,12 +148,10 @@ impl StructuralNode for PhiNode {
         for i in 0..self.body.arguments.len() {
             if i < self.cv_count {
                 args.push(OutputType::ContextVariableArgument(i));
+            } else if i < (self.cv_count + self.rv_count) {
+                args.push(OutputType::RecursionVariableArgument(i - self.cv_count));
             } else {
-                if i < (self.cv_count + self.rv_count) {
-                    args.push(OutputType::RecursionVariableArgument(i - self.cv_count));
-                } else {
-                    args.push(OutputType::Argument(i - self.cv_count - self.rv_count));
-                }
+                args.push(OutputType::Argument(i - self.cv_count - self.rv_count));
             }
         }
         args
@@ -174,6 +172,12 @@ impl StructuralNode for PhiNode {
         }
 
         res
+    }
+}
+
+impl Default for PhiNode {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

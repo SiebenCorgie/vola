@@ -60,7 +60,7 @@ impl WasmBackend {
         lambda: NodeRef,
     ) -> Result<SmallColl<Option<WasmTy>>, WasmError> {
         if !self.graph[lambda].node_type.is_lambda() {
-            return Err(WasmError::UnsupportedNode(format!("expected λ")));
+            return Err(WasmError::UnsupportedNode("expected λ".to_string()));
         }
 
         let result_count = self.graph[lambda]
@@ -72,14 +72,9 @@ impl WasmBackend {
             .map(|residx| {
                 self.graph[lambda.as_inport_location(InputType::Result(residx))]
                     .edge
-                    .clone()
             })
             .map(|edg| {
-                if let Some(edg) = edg {
-                    Some(self.graph[edg].ty.type_or_undefined())
-                } else {
-                    None
-                }
+                edg.map(|edg| self.graph[edg].ty.type_or_undefined())
             })
             .collect::<SmallColl<_>>();
 
@@ -91,7 +86,7 @@ impl WasmBackend {
     /// If there are multiple, differently typed edges, `Undefined` is used as well.
     pub fn input_signature(&self, lambda: NodeRef) -> Result<SmallColl<Option<WasmTy>>, WasmError> {
         if !self.graph[lambda].node_type.is_lambda() {
-            return Err(WasmError::UnsupportedNode(format!("expected λ")));
+            return Err(WasmError::UnsupportedNode("expected λ".to_string()));
         }
 
         let arg_count = self.graph[lambda]
@@ -118,12 +113,10 @@ impl WasmBackend {
             //if none is yet found, try to read port's type
             if unified_type.is_some() {
                 signature.push(unified_type);
+            } else if let Some(port_ty) = self.types.get(&argrport.into()) {
+                signature.push(Some(port_ty.clone()));
             } else {
-                if let Some(port_ty) = self.types.get(&argrport.into()) {
-                    signature.push(Some(port_ty.clone()));
-                } else {
-                    signature.push(None)
-                }
+                signature.push(None)
             }
         }
 

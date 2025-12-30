@@ -20,11 +20,11 @@
 macro_rules! route_new {
     //Catch Binary operations with exactly two inputs
     ($builder:expr, BinaryArithOp::$binarith:tt, $span:expr, [$a:expr, $b:expr]) =>{
-        route_new!($builder, crate::alge::arithmetic::BinaryArith::new(crate::alge::arithmetic::BinaryArithOp::$binarith), $span, [$a, $b])
+        route_new!($builder, $crate::alge::arithmetic::BinaryArith::new($crate::alge::arithmetic::BinaryArithOp::$binarith), $span, [$a, $b])
     };
     //Unary ops with exactly one input
     ($builder:expr, UnaryArithOp::$unarith:tt, $span:expr, $a:expr) =>{
-        route_new!($builder, crate::alge::arithmetic::UnaryArith::new(crate::alge::arithmetic::UnaryArithOp::$unarith), $span, [$a])
+        route_new!($builder, $crate::alge::arithmetic::UnaryArith::new(crate::alge::arithmetic::UnaryArithOp::$unarith), $span, [$a])
     };
 
     ($builder:expr, TrigOp::$unarith:tt, $span:expr, [$a:expr, $b:expr]) =>{
@@ -71,14 +71,14 @@ macro_rules! route_new {
 #[macro_export]
 macro_rules! imm {
     ($builder:expr, Real, $scalar:expr, $span:expr) => {
-        imm!($builder, crate::imm::ImmScalar::new($scalar), $span)
+        imm!($builder, $crate::imm::ImmScalar::new($scalar), $span)
     };
     ($builder:expr, Real, $scalar:expr) => {
-        imm!($builder, crate::imm::ImmScalar::new($scalar))
+        imm!($builder, $crate::imm::ImmScalar::new($scalar))
     };
 
     ($builder:expr, Real, [$($scalar:expr),*], $span:expr) => {
-        imm!($builder, crate::imm::ImmVector::new(&[$($scalar),*], $span))
+        imm!($builder, $crate::imm::ImmVector::new(&[$($scalar),*], $span))
     };
     ($builder:expr, Real, [$($scalar:expr),*]) => {
         imm!($builder, crate::imm::ImmVector::new(&[$($scalar),*]))

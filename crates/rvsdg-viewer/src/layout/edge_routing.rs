@@ -159,7 +159,7 @@ impl AStarSearch {
     ) -> Option<Vec<GridCoord>> {
         ///Neighbor offsets in the A* search. We _preffer_ short vertical over long horizontal
         /// movement.
-        const OFFSETS: &'static [(isize, isize)] = &[
+        const OFFSETS: &[(isize, isize)] = &[
             (0, 1),
             (0, -1),
             //(1, -1),
@@ -180,7 +180,7 @@ impl AStarSearch {
         while !self.openset.is_empty() {
             let (current, _fscore) = self.openset.pop_min().unwrap();
             if current == end {
-                return Some(self.reconstruct_path(current.clone()));
+                return Some(self.reconstruct_path(current));
             }
 
             //Iterate all neighbors for seeding a search
@@ -329,7 +329,7 @@ impl EdgeLayoutGrid {
                     print!(" ");
                 }
             }
-            print!("\n");
+            println!();
         }
     }
 
@@ -348,7 +348,7 @@ impl EdgeLayoutGrid {
                     print!(" ")
                 }
             }
-            println!("");
+            println!();
         }
     }
 
@@ -381,8 +381,8 @@ impl EdgeLayoutGrid {
         if start_coord.1 > end_coord.1 {
             std::mem::swap(&mut start_coord.1, &mut end_coord.1);
         }
-        start_coord.0 = start_coord.0.checked_sub(1).unwrap_or(0);
-        start_coord.1 = start_coord.1.checked_sub(1).unwrap_or(0);
+        start_coord.0 = start_coord.0.saturating_sub(1);
+        start_coord.1 = start_coord.1.saturating_sub(1);
         end_coord.0 += 1;
         end_coord.1 += 1;
 
@@ -422,7 +422,7 @@ impl EdgeLayoutGrid {
     ///Finds a unused location _around_ `loc`. y_mul and from_right are used to weight the search to the left/right and
     /// clamp to +y or -y from `loc`.
     fn find_valid_around(&self, loc: Vec2, y_mul: isize, from_right: isize) -> Option<Vec2> {
-        const SEARCH_OFFSETS: &'static [(isize, isize)] = &[
+        const SEARCH_OFFSETS: &[(isize, isize)] = &[
             //directly on port
             (0, 0),
             //1 below port
@@ -604,7 +604,7 @@ impl RegionLayout {
                 1
             };
             let route_start_pos = grid.find_valid_around(offseted_start_pos, -1, start_to_right);
-            let route_end_pos = grid.find_valid_around(offseted_end_pos, 1, -1 * start_to_right);
+            let route_end_pos = grid.find_valid_around(offseted_end_pos, 1, -start_to_right);
 
             let edge = if let (Some(start), Some(end)) = (route_start_pos, route_end_pos) {
                 if let Some(mut edge) =
@@ -650,6 +650,6 @@ impl RegionLayout {
 
 impl<'a, N: LangNode + View + 'static, E: LangEdge + View + 'static> Layout<'a, N, E> {
     pub fn route_edges(&mut self) {
-        self.region_tree.route_region(&self.src_graph, &self.config)
+        self.region_tree.route_region(self.src_graph, &self.config)
     }
 }

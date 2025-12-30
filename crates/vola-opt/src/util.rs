@@ -6,7 +6,6 @@
  * 2025 Tendsin Mende
  */
 
-///! Smaller utility analyzers/passes that don't make sense on their own.
 use rvsdg::{
     edge::{InportLocation, OutportLocation, OutputType},
     smallvec::SmallVec,
@@ -32,11 +31,7 @@ impl Optimizer {
         }
 
         //edge seems to have no type, so try to use the port tag
-        if let Some(ty) = self.typemap.get(&port.into()) {
-            Some(ty.clone())
-        } else {
-            None
-        }
+        self.typemap.get(&port.into()).cloned()
     }
 
     ///Builds the type signature for a lambda node, based on either the port's type tag, or the type of an connected edge.

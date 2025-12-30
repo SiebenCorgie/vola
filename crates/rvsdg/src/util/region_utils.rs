@@ -60,7 +60,7 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
             } else {
                 panic!("Malformed theta node");
             };
-            let result_in_use = self[port.node.output(index)].edges.len() > 0;
+            let result_in_use = !self[port.node.output(index)].edges.is_empty();
             if !result_in_use && !in_use_in_theta {
                 return false;
             }
@@ -71,13 +71,12 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
 
         for regixd in 0..self[port.node].regions().len() {
             if let Some(mapped_into) = port.input.map_to_in_region(regixd) {
-                if self[OutportLocation {
+                if !self[OutportLocation {
                     node: port.node,
                     output: mapped_into,
                 }]
                 .edges
-                .len()
-                    > 0
+                .is_empty()
                 {
                     return true;
                 }
@@ -184,7 +183,7 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
                 .node(node)
                 .outport(&OutputType::ContextVariableArgument(cvidx))
             {
-                cv.edges.len() > 0
+                !cv.edges.is_empty()
             } else {
                 #[cfg(feature = "log")]
                 log::warn!("Found invalid cv_idx {cvidx}, ignoring");
@@ -195,19 +194,17 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
             if is_connected {
                 remapping_table.insert(cvidx, next_unused_cv_idx);
                 next_unused_cv_idx += 1;
-            } else {
-                if let Some(inport) = self
-                    .node(node)
-                    .inport(&InputType::ContextVariableInput(cvidx))
-                {
-                    if let Some(edg) = inport.edge {
-                        self.disconnect(edg).unwrap();
-                    }
-                } else {
-                    #[cfg(feature = "log")]
-                    log::warn!("Encountered invalid cv-port");
-                    continue;
+            } else if let Some(inport) = self
+                .node(node)
+                .inport(&InputType::ContextVariableInput(cvidx))
+            {
+                if let Some(edg) = inport.edge {
+                    self.disconnect(edg).unwrap();
                 }
+            } else {
+                #[cfg(feature = "log")]
+                log::warn!("Encountered invalid cv-port");
+                continue;
             }
         }
 
@@ -229,7 +226,7 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
                 .unwrap()
                 .edge
             {
-                let original_src = self.edge(edgref).src().clone();
+                let original_src = *self.edge(edgref).src();
                 let ty = self.disconnect(edgref).unwrap();
 
                 let remapped_cv = remapping_table.get(src_cv_idx).unwrap();
@@ -252,7 +249,7 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
                 .edges
                 .clone()
             {
-                let original_dst = self.edge(edgref).dst().clone();
+                let original_dst = *self.edge(edgref).dst();
                 let ty = self.disconnect(edgref).unwrap();
 
                 let remapped_cv = remapping_table.get(src_cv_idx).unwrap();
@@ -302,7 +299,7 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
     /// Replaces `to_be_replaced` with `replacee` and returns `replacee`'s NodeRef.
     ///
     /// - Assumes that `replacee` has at least the input and output
-    /// amount as `to_be_replaced` has.
+    /// - Amount as `to_be_replaced` has.
     /// - Assumes `to_be_replaced` to be a `SimpleNode`.
     /// - Assumes `to_be_replaced` to have a parent region.
     ///
@@ -325,21 +322,24 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
 
         //collect all connected edges, then iterate them, disconnect the node,
         //recover its value, and reconnect in on `replacee`
-        for input in self.node(to_be_replaced).input_edges() {
-            if let Some(input_edge) = input {
-                //disconnect, and reconnect
-                let src = self.edge(input_edge).src().clone();
-                let mut dst = self.edge(input_edge).dst().clone();
-                dst.node = replacee_ref;
-                let ty = self.disconnect(input_edge)?;
-                self.connect(src, dst, ty)?;
-            }
+        for input in self
+            .node(to_be_replaced)
+            .input_edges()
+            .into_iter()
+            .flatten()
+        {
+            //disconnect, and reconnect
+            let src = *self.edge(input).src();
+            let mut dst = *self.edge(input).dst();
+            dst.node = replacee_ref;
+            let ty = self.disconnect(input)?;
+            self.connect(src, dst, ty)?;
         }
         //similarly reconnect all outputs
         for output in self.node(to_be_replaced).output_edges() {
             for outedge in output {
-                let mut src = self.edge(outedge).src().clone();
-                let dst = self.edge(outedge).dst().clone();
+                let mut src = *self.edge(outedge).src();
+                let dst = *self.edge(outedge).dst();
                 src.node = replacee_ref;
                 let ty = self.disconnect(outedge)?;
                 self.connect(src, dst, ty)?;
@@ -392,8 +392,8 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
             ));
         }
 
-        let reg_a = self.node(replaced).parent.clone();
-        let reg_b = self.node(replacee).parent.clone();
+        let reg_a = self.node(replaced).parent;
+        let reg_b = self.node(replacee).parent;
         if reg_a != reg_b {
             return Err(GraphError::NodesNotInSameRegion {
                 src: reg_a.expect("Cannot replace in toplevel region and fail"),
@@ -497,21 +497,12 @@ mod test {
         Rvsdg,
     };
 
-    #[derive(LangNode)]
+    #[derive(LangNode, Default)]
     struct TestNode {
         #[input]
         inp: Input,
         #[output]
         out: Output,
-    }
-
-    impl Default for TestNode {
-        fn default() -> Self {
-            TestNode {
-                inp: Input::default(),
-                out: Output::default(),
-            }
-        }
     }
 
     fn setup_test_rvsdg() -> (Rvsdg<TestNode, VSEdge>, NodeRef, EdgeRef) {

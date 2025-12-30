@@ -148,14 +148,14 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
             created_edges.push(edg);
             //advance region and port
             next_out_port = new_out_port;
-            current_region = reg.clone();
+            current_region = *reg;
         }
 
         //reverse the edge-order, since we are going from _inside_ to outside
-        let path = if created_edges.len() > 0 {
+        let path = if !created_edges.is_empty() {
             created_edges.reverse();
-            let start = self.edge(*created_edges.first().unwrap()).src().clone();
-            let end = self.edge(*created_edges.last().unwrap()).dst().clone();
+            let start = *self.edge(*created_edges.first().unwrap()).src();
+            let end = *self.edge(*created_edges.last().unwrap()).dst();
             let path = Path {
                 start,
                 end,
@@ -267,14 +267,14 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
             };
             //advance region and port
             next_out_port = new_out_port;
-            current_region = reg.clone();
+            current_region = *reg;
         }
 
         //reverse the edge-order, since we are going from _inside_ to outside
-        let path = if used_edges.len() > 0 {
+        let path = if !used_edges.is_empty() {
             used_edges.reverse();
-            let start = self.edge(*used_edges.first().unwrap()).src().clone();
-            let end = self.edge(*used_edges.last().unwrap()).dst().clone();
+            let start = *self.edge(*used_edges.first().unwrap()).src();
+            let end = *self.edge(*used_edges.last().unwrap()).dst();
             let path = Path {
                 start,
                 end,
@@ -309,7 +309,7 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
 
         // there is one edgecase, which is when src is within dst's region. So src.parent == dst.parent. In that case we
         // can immediately return the src.
-        if self.node(src.node).parent == Some(dst.clone()) {
+        if self.node(src.node).parent == Some(dst) {
             return Ok((src, None));
         }
 
@@ -322,7 +322,7 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
                 region_index: reg_idx,
             }
         } else {
-            self.node(src.node).parent.as_ref().unwrap().clone()
+            *self.node(src.node).parent.as_ref().unwrap()
         };
 
         let parent_stack = self.build_region_path(src, dst, searched_for_region)?;
@@ -353,7 +353,7 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
     ) -> Result<(OutportLocation, Option<Path>), GraphError> {
         // there is one edgecase, which is when src is within dst's region. So src.parent == dst.parent. In that case we
         // can immediately return the src.
-        if self.node(src.node).parent == Some(dst.clone()) {
+        if self.node(src.node).parent == Some(dst) {
             return Ok((src, None));
         }
 
@@ -366,7 +366,7 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
                 region_index: reg_idx,
             }
         } else {
-            self.node(src.node).parent.as_ref().unwrap().clone()
+            *self.node(src.node).parent.as_ref().unwrap()
         };
 
         let parent_stack = self.build_region_path(src, dst, searched_for_region)?;
@@ -386,7 +386,7 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
         // to get _free_ routing to dst, once we've found src.
         let mut parent_stack: VecDeque<RegionLocation> = VecDeque::new();
 
-        let mut parent = Some(dst.clone());
+        let mut parent = Some(dst);
         let mut found_region = false;
         while let Some(regloc) = parent.take() {
             if regloc == searched_for_region {
@@ -395,14 +395,14 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
                 break;
             } else {
                 //push regloc on stack and go to parent
-                parent_stack.push_front(regloc.clone());
-                parent = self.node(regloc.node).parent.clone();
+                parent_stack.push_front(regloc);
+                parent = self.node(regloc.node).parent;
             }
         }
 
         //Check if we've found the parent region.
         if !found_region {
-            return Err(GraphError::NodeNotInParentRegion(src.node, dst));
+            Err(GraphError::NodeNotInParentRegion(src.node, dst))
         } else {
             Ok(parent_stack.into_iter().collect())
         }
@@ -410,14 +410,14 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
 
     ///Tries to find the closest lambda or phi node that is _around_ `node`.
     pub fn find_parent_lambda_or_phi(&self, node: NodeRef) -> Option<NodeRef> {
-        let mut parent = self.node(node).parent.clone();
+        let mut parent = self.node(node).parent;
 
         while let Some(p) = parent.take() {
             if self.node(p.node).node_type.is_lambda() || self.node(p.node).node_type.is_phi() {
                 return Some(p.node);
             } else {
                 //move to next parent
-                parent = self.node(p.node).parent.clone();
+                parent = self.node(p.node).parent;
             }
         }
 

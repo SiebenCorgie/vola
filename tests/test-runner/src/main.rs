@@ -59,12 +59,10 @@ impl Display for LaunchState {
             Self::Ended(result) => {
                 if result.only_successes() {
                     writeln!(f, "{}", "All Passed".bold().green())?
+                } else if result.partial_success() {
+                    writeln!(f, "{}", "Partially passed".bold().yellow())?
                 } else {
-                    if result.partial_success() {
-                        writeln!(f, "{}", "Partially passed".bold().yellow())?
-                    } else {
-                        writeln!(f, "{}", "None passed".bold().red())?
-                    }
+                    writeln!(f, "{}", "None passed".bold().red())?
                 }
                 for r in &result.runs {
                     writeln!(f, "    {}", r)?;

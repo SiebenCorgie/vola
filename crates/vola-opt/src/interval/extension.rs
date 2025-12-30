@@ -158,7 +158,7 @@ impl<'opt> IntervalExtensionPass<'opt> {
 
         self.optimizer
             .names
-            .set(rewritten_value.into(), format!("Extended interval"));
+            .set(rewritten_value.into(), "Extended interval".to_string());
 
         Ok(rewritten_value)
     }
@@ -210,7 +210,7 @@ impl<'opt> IntervalExtensionPass<'opt> {
             } else {
                 //no cached found. Next check whether its active. If so we copy the node
                 // and setup / enque the caching process. Otherwise we build the minimum interval and return that.
-                if activity.is_active_port(&self.optimizer, next) {
+                if activity.is_active_port(self.optimizer, next) {
                     if activity.is_wrt_producer(&next) {
                         //Is equivalent to the wrt port, use the interval
                         assert!(self
@@ -336,12 +336,12 @@ impl<'opt> IntervalExtensionPass<'opt> {
                         "Src region must be same or parent to dst-region"
                     );
                     //import src into dst
-                    let imported_at = self
+                    
+
+                    self
                         .optimizer
                         .import_argument(mapped_src, dst_region)
-                        .map_err(|e| VolaError::new(e.into()))?;
-
-                    imported_at
+                        .map_err(VolaError::new)?
                 } else {
                     mapped_src
                 };
@@ -481,7 +481,7 @@ impl<'opt> IntervalExtensionPass<'opt> {
         {
             let ex_output = OutputType::ExitVariableOutput(ex).to_location(node);
             //ignore inactive exit-variables
-            if !activity.is_active_port(&self.optimizer, ex_output) {
+            if !activity.is_active_port(self.optimizer, ex_output) {
                 continue;
             }
 
@@ -537,7 +537,7 @@ impl<'opt> IntervalExtensionPass<'opt> {
         {
             //for each loop variable, if its active add a interval-typed version
             let loop_out = OutputType::Output(lv).to_location(node);
-            if !activity.is_active_port(&self.optimizer, loop_out) {
+            if !activity.is_active_port(self.optimizer, loop_out) {
                 continue;
             }
 

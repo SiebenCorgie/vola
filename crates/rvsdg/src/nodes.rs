@@ -59,6 +59,7 @@ pub trait LangNode {
 ///Different node types as outlined in section 4. of the RVSDG paper. The
 /// _Simple_ node represent your IR's instruction. All other nodes are RVSDG
 /// specific architectural nodes.
+//TODO: once we have a benchmark, check out whether boxing gamma/theta would be a good idea
 #[derive(Debug, Clone)]
 pub enum NodeType<N: LangNode + 'static> {
     ///Simple input/output sequential node
@@ -83,18 +84,15 @@ pub enum NodeType<N: LangNode + 'static> {
 impl<N: LangNode + 'static> NodeType<N> {
     ///True for Lambda, Delta, Phi and Omega nodes
     pub fn is_inter_procedural(&self) -> bool {
-        match self {
-            Self::Lambda(_) | Self::Delta(_) | Self::Phi(_) | Self::Omega(_) => true,
-            _ => false,
-        }
+        matches!(
+            self,
+            Self::Lambda(_) | Self::Delta(_) | Self::Phi(_) | Self::Omega(_)
+        )
     }
 
     ///True for Gamma and Theta nodes
     pub fn is_intra_procedural(&self) -> bool {
-        match self {
-            Self::Gamma(_) | Self::Theta(_) => true,
-            _ => false,
-        }
+        matches!(self, Self::Gamma(_) | Self::Theta(_))
     }
 }
 
@@ -213,12 +211,12 @@ impl<N: LangNode + 'static> Node<N> {
         match &self.node_type {
             NodeType::Simple(node) => node.inputs(),
             NodeType::Gamma(g) => g.inputs(),
-            NodeType::Theta(g) => &g.inputs(),
-            NodeType::Lambda(g) => &g.inputs(),
+            NodeType::Theta(g) => g.inputs(),
+            NodeType::Lambda(g) => g.inputs(),
             NodeType::Apply(g) => &g.inputs,
-            NodeType::Delta(g) => &g.inputs(),
-            NodeType::Phi(g) => &g.inputs(),
-            NodeType::Omega(g) => &g.inputs(),
+            NodeType::Delta(g) => g.inputs(),
+            NodeType::Phi(g) => g.inputs(),
+            NodeType::Omega(g) => g.inputs(),
         }
     }
 
@@ -449,11 +447,7 @@ impl<N: LangNode + 'static> Node<N> {
 
     ///Returns true if this is either a lambda, or phi node
     pub fn is_callable(&self) -> bool {
-        if let NodeType::Lambda(_) | NodeType::Phi(_) = self.node_type {
-            true
-        } else {
-            false
-        }
+        matches!(self.node_type, NodeType::Lambda(_) | NodeType::Phi(_))
     }
 
     ///Returns true, if any input or output port has a connection
@@ -479,11 +473,7 @@ impl<N: LangNode + 'static> Node<N> {
         input: usize,
     ) -> Option<OutportLocation> {
         if let Some(port) = self.inputs().get(input) {
-            if let Some(edg) = port.edge {
-                Some(ctx.edge(edg).src.clone())
-            } else {
-                None
-            }
+            port.edge.map(|edg| ctx.edge(edg).src)
         } else {
             None
         }
@@ -513,7 +503,7 @@ impl<N: LangNode + 'static> Node<N> {
         let mut retcoll = SmallColl::default();
         if let Some(output) = self.outputs().get(output) {
             for edg in output.edges.iter() {
-                retcoll.push(ctx.edge(*edg).dst.clone());
+                retcoll.push(ctx.edge(*edg).dst);
             }
 
             Some(retcoll)
@@ -539,7 +529,7 @@ impl<N: LangNode + 'static> Node<N> {
     ///Returns the input port's connected edges. This is guranteed to have the length
     /// (and order) of [Self::inputs].
     pub fn input_edges(&self) -> SmallColl<Option<EdgeRef>> {
-        self.inputs().iter().map(|inp| inp.edge.clone()).collect()
+        self.inputs().iter().map(|inp| inp.edge).collect()
     }
 
     pub fn output_edges(&self) -> SmallColl<SmallColl<EdgeRef>> {

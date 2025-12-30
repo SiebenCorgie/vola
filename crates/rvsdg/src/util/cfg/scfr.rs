@@ -40,7 +40,7 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
         let mut cfg = Cfg::new();
 
         let first_block_id = cfg.nodes.insert(CfgNode::Null);
-        let root_id = cfg.root.clone();
+        let root_id = cfg.root;
         let (entry, _exit) = self.scfr_region(region, &mut cfg, first_block_id, root_id)?;
         //Update the root node to point to the first of the region's exit nodes
         *cfg.nodes.get_mut(cfg.root).unwrap() = CfgNode::Root(entry);
@@ -100,9 +100,9 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
         //pre-insert the bb and overwrite it later
         let mut bb_id = entry_id;
 
-        while unresolved.len() > 0 {
+        while !unresolved.is_empty() {
             let mut resolved_any = false;
-            let worklist: Vec<NodeRef> = unresolved.keys().map(|n| *n).collect();
+            let worklist: Vec<NodeRef> = unresolved.keys().copied().collect();
             //Iterate over all _not-yet-resolved_ nodes, and
             for node in worklist {
                 //check if all dependencies are NOT in the unresolved map (so are resoleved).
@@ -171,12 +171,11 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
                                 return Err(ScfrError::NoneBinaryGamma(g.regions().len()));
                             }
 
-                            let condition_srcport = self
+                            let condition_srcport = *self
                                 .edge(g.predicate().edge.expect(
                                     "Expected gamma node to have its predicate-port connected",
                                 ))
-                                .src()
-                                .clone();
+                                .src();
                             //setup the conditional branch for both pre allocated branch
                             //entry points
                             let merge_node_id = cfg.nodes.insert(CfgNode::Null);
@@ -223,7 +222,7 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
                 }
             }
 
-            if !resolved_any && unresolved.len() > 0 {
+            if !resolved_any && !unresolved.is_empty() {
                 return Err(ScfrError::ResolverStuck(unresolved.len()));
             }
         }
@@ -235,6 +234,7 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
 
     ///Handles the theta body construction. Branches to `merge_id` whenever the loop stops.
     ///Returns the id of the node that branches to the merge_id
+    #[allow(clippy::too_many_arguments)]
     fn scfr_handle_theta(
         &self,
         cfg: &mut Cfg,
@@ -260,15 +260,14 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
 
         assert!(loop_entry == entry_id);
 
-        let condition_srcport = self
+        let condition_srcport = *self
             .edge(
                 theta
                     .loop_predicate()
                     .edge
                     .expect("Expected theta node to have its predicate-port connected"),
             )
-            .src()
-            .clone();
+            .src();
         //the conditional_branch
         *cfg.nodes.get_mut(ctrl_tail_id).unwrap() = CfgNode::LoopCtrlTail {
             src_node: theta_node,
@@ -291,6 +290,7 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
 
     ///Handles the setup of both branch regions. Returns the id of both
     ///nodes that branch _to_ the merge_id
+    #[allow(clippy::too_many_arguments)]
     fn scfr_handle_gamma(
         &self,
         cfg: &mut Cfg,

@@ -33,9 +33,8 @@ impl<'opt> LowerIntervals<'opt> {
         assert_eq!(in_low_ty, in_up_ty);
 
         //For non-real values we bail atm.
-        if !in_low_ty
-            .data_type()
-            .map_or(false, |dt| dt == DataType::Real)
+        if !(in_low_ty
+            .data_type() == Some(DataType::Real))
         {
             return Err(VolaError::error_here(
                 IntervalError::UnsupportedOp(format!("{op:?}")).into(),

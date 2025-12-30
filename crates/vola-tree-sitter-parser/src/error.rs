@@ -134,7 +134,7 @@ impl ParserError {
         match node {
             None => {
                 //report(error_reporter(Self::NoChildAvailable, Span::empty()).with_message(&format!("tried to consume node with string {string}, but there was no node at all")).finish());
-                return Err(VolaError::new(Self::NoChildAvailable));
+                Err(VolaError::new(Self::NoChildAvailable))
             }
             Some(node) => Self::assert_node_string(ctx, dta, &node, string),
         }

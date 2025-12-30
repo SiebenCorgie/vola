@@ -108,7 +108,7 @@ impl Expr {
                 span
             }
             ExprTy::Call(c) => {
-                if c.args.len() > 0 {
+                if !c.args.is_empty() {
                     let mut span = c.span.clone();
                     span.byte_end = c.args[0].span.byte_start;
                     span.to = c.args[0].span.from;

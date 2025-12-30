@@ -23,13 +23,11 @@ pub fn file_use_stmt(
         if node.kind() != "use_statement" || node.child(0).as_ref().unwrap().kind() != "use" {
             return Err(ParserError::Unexpected("expected use statement".to_owned()));
         }
-    } else {
-        if node.kind() != "include_statement" || node.child(0).as_ref().unwrap().kind() != "include"
-        {
-            return Err(ParserError::Unexpected(
-                "expected include statement".to_owned(),
-            ));
-        }
+    } else if node.kind() != "include_statement" || node.child(0).as_ref().unwrap().kind() != "include"
+    {
+        return Err(ParserError::Unexpected(
+            "expected include statement".to_owned(),
+        ));
     }
 
     let path_string = node
@@ -37,7 +35,7 @@ pub fn file_use_stmt(
         .as_ref()
         .unwrap()
         .utf8_text(data)
-        .map_err(|e| ParserError::from(e))?;
+        .map_err(ParserError::from)?;
     let path = PathBuf::from(path_string);
     //try to build the _actual_ path.
     //if its absolute, that already done, otherwise try to resolve locally to the context,
@@ -48,23 +46,21 @@ pub fn file_use_stmt(
         let ctx_local = Path::new(ctx.src_file.as_str()).join(path.clone());
         if ctx_local.exists() {
             ctx_local
-        } else {
-            if let Ok(var) = std::env::var("OPENSCADPATH") {
-                let var_local = Path::new(&var).join(path.clone());
-                if var_local.exists() {
-                    var_local
-                } else {
-                    return Err(ParserError::FSError(format!(
-                        "Could not find file {path:?}, not relative to the source file ({}) nor relative to 'OPENSCADPATH'",
-                        ctx.src_file
-                    )));
-                }
+        } else if let Ok(var) = std::env::var("OPENSCADPATH") {
+            let var_local = Path::new(&var).join(path.clone());
+            if var_local.exists() {
+                var_local
             } else {
                 return Err(ParserError::FSError(format!(
                     "Could not find file {path:?}, not relative to the source file ({}) nor relative to 'OPENSCADPATH'",
                     ctx.src_file
                 )));
             }
+        } else {
+            return Err(ParserError::FSError(format!(
+                "Could not find file {path:?}, not relative to the source file ({}) nor relative to 'OPENSCADPATH'",
+                ctx.src_file
+            )));
         }
     };
     if is_use {
@@ -92,7 +88,7 @@ pub fn block(ctx: &mut ParserCtx, data: &[u8], node: &Node) -> Result<ScadBlock,
         return Err(ParserError::MalformedNode("expected '{'".to_owned()));
     }
 
-    while let Some(next) = children.next() {
+    for next in children {
         match next.kind() {
             "}" => break,
             "module_declaration" => {
@@ -136,7 +132,7 @@ pub fn argument_sequence(
     node: &Node,
 ) -> Result<Vec<ScadArg>, ParserError> {
     if node.kind() != "arguments" {
-        return Err(ParserError::MalformedNode(format!("expected arguments")));
+        return Err(ParserError::MalformedNode("expected arguments".to_string()));
     }
 
     let mut walker = node.walk();
@@ -250,7 +246,7 @@ pub fn chain(
             Ok(())
         }
         //break recursion on ;
-        ";" => return Ok(()),
+        ";" => Ok(()),
         other => Err(ParserError::Unexpected(format!(
             "Expected modifier or transform, got {other}",
         ))),

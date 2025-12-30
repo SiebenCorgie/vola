@@ -104,7 +104,7 @@ impl DialectNode for UnaryMatrix {
             node: Box::new(UnaryMatrix {
                 inputs: Input::default(),
                 output: Output::default(),
-                op: self.op.clone(),
+                op: self.op,
             }),
         }
     }

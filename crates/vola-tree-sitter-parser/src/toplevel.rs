@@ -52,7 +52,7 @@ impl FromTreeSitter for AstEntry {
                 let err = ParserError::UnknownAstNode {
                     kind: node.kind().to_owned(),
                 };
-                return Err(VolaError::error_here(err, ctx.span(node), "here"));
+                Err(VolaError::error_here(err, ctx.span(node), "here"))
             }
         }
     }
@@ -87,7 +87,7 @@ impl FromTreeSitter for Func {
 
         ParserError::consume_expected_node_kind(ctx, children.next(), "(")?;
         let mut args = SmallVec::new();
-        while let Some(next_node) = children.next() {
+        for next_node in children.by_ref() {
             match next_node.kind() {
                 //found the end
                 ")" => break,

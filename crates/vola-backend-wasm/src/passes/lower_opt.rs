@@ -51,8 +51,8 @@ impl<'a> GraphTypeTransformer for LoweringTransformer<'a> {
             .outputs()
             .iter()
             .map(|port| {
-                if let Some(first_edge) = port.edges.get(0) {
-                    let port = self.opt.graph[*first_edge].src().clone();
+                if let Some(first_edge) = port.edges.first() {
+                    let port = *self.opt.graph[*first_edge].src();
                     self.opt.get_out_type(port).ok()
                 } else {
                     //Has no connected edge, therfore no type
@@ -128,12 +128,12 @@ impl WasmBackend {
     fn transfer_debug_info(&mut self, remapping: &GraphMapping, opt: &Optimizer) {
         for (src_node, dst_node) in remapping.node_mapping.iter() {
             for attrib in opt.graph.iter_node_attribs(*src_node) {
-                let dst_attrib = attrib.clone().change_node(*dst_node);
+                let dst_attrib = attrib.change_node(*dst_node);
                 if let Some(name) = opt.names.get(&attrib) {
-                    self.names.set(dst_attrib.clone(), name.clone());
+                    self.names.set(dst_attrib, name.clone());
                 }
                 if let Some(span) = opt.span_tags.get(&attrib) {
-                    self.spans.set(dst_attrib.clone(), span.clone());
+                    self.spans.set(dst_attrib, span.clone());
                 }
                 if let Some(ty) = opt.typemap.get(&attrib) {
                     if let Ok(ty) = WasmTy::try_from(ty.clone()) {

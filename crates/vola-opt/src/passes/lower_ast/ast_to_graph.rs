@@ -149,8 +149,7 @@ impl Optimizer {
         self.span_tags.set(lambda.into(), func.head_span());
         let no_inline = ct_args
             .iter()
-            .find(|arg| arg.ident.0.as_str() == "no_inline")
-            .is_some();
+            .any(|arg| arg.ident.0.as_str() == "no_inline");
         let interned = Function {
             name: func.name.0.clone(),
             region_span,
@@ -320,7 +319,8 @@ impl Optimizer {
         let mut args = SmallColl::new();
         //setup the lambda node accordingly, as well as the block context, then launch the block builder.
         let (lambda, result_port) = self.graph.on_omega_node(|omg| {
-            let result = omg.new_function(false, |lmd| {
+            
+            omg.new_function(false, |lmd| {
                 //setup all operands as CV-Vars, and the arg as ... arg
                 for operand in &implblock.operands {
                     let (outside, within) = lmd.add_context_variable();
@@ -369,8 +369,7 @@ impl Optimizer {
                     .set(result_port.into(), return_ty.clone().into());
                 self.span_tags.set(result_port.into(), return_span.clone());
                 Ok(result_port)
-            });
-            result
+            })
         });
         //unwrap the result port... result. Since an error might happen while setting up the λ
         let result_port = result_port?;

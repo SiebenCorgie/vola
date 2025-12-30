@@ -33,7 +33,7 @@ impl<'opt> InitialTypeCheck<'opt> {
             || std::env::var("DUMP_INITIAL_TYPE_CHECK").is_ok()
         {
             self.optimizer
-                .push_debug_state(&format!("initial-type-check"));
+                .push_debug_state("initial-type-check");
         }
 
         // This is solely on the graph level, it'll check that
@@ -49,7 +49,7 @@ impl<'opt> InitialTypeCheck<'opt> {
             }
         }
 
-        if self.errors.len() > 0 {
+        if !self.errors.is_empty() {
             Err(self.errors)
         } else {
             Ok(())

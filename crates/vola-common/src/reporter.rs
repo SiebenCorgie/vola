@@ -58,7 +58,7 @@ pub fn report_to_string<'a>(err: ariadne::Report<'a, Span>) -> String {
                 Err(e) => format!("Failed to print error: {e:?}"),
             }
         }
-        Err(_) => format!("Failed to report error, could not lock source-files!"),
+        Err(_) => "Failed to report error, could not lock source-files!".to_string(),
     }
 }
 

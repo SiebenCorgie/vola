@@ -45,6 +45,12 @@ pub struct WasmBackend {
     viewer: ViewerState,
 }
 
+impl Default for WasmBackend {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl WasmBackend {
     pub fn new() -> Self {
         WasmBackend {

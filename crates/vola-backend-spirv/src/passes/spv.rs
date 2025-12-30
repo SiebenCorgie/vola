@@ -80,7 +80,7 @@ impl SpirvBackend {
 
         //overwrite all IDs
         for (port, id) in &ctx.node_mapping {
-            self.spirv_id_map.set(port.clone().into(), *id);
+            self.spirv_id_map.set((*port).into(), *id);
         }
 
         Ok(b.module())
@@ -121,14 +121,14 @@ impl SpirvBackend {
                     for cvidx in 0..lmd.context_variable_count() {
                         if let Some(cv) = tlnode.inport(&InputType::ContextVariableInput(cvidx)) {
                             if let Some(edg) = cv.edge {
-                                deps.push(self.graph.edge(edg).src().clone());
+                                deps.push(*self.graph.edge(edg).src());
                             }
                         }
                     }
                 }
                 _ => {
                     return Err(BackendSpirvError::Any {
-                        text: format!("Unexpected none-λ node in toplevel of SPIR-V graph."),
+                        text: "Unexpected none-λ node in toplevel of SPIR-V graph.".to_string(),
                     })
                 }
             }
@@ -245,7 +245,7 @@ impl SpirvBackend {
             .unwrap();
 
         if let Some(export_name) = exported {
-            let _export_id = builder.decorate(
+            builder.decorate(
                 fid,
                 rspirv::spirv::Decoration::LinkageAttributes,
                 [
@@ -253,7 +253,7 @@ impl SpirvBackend {
                     Operand::LinkageType(rspirv::spirv::LinkageType::Export),
                 ],
             );
-            let _name_id = builder.name(fid, export_name.clone());
+            builder.name(fid, export_name.clone());
         }
 
         //add all the parameters
@@ -281,7 +281,7 @@ impl SpirvBackend {
                 node: lmd,
                 output: OutputType::ContextVariableArgument(cvidx),
             };
-            let is_in_use = self.graph.find_consumer_out(port).len() > 0;
+            let is_in_use = !self.graph.find_consumer_out(port).is_empty();
 
             let def_node = match self.graph.find_callabel_def(port) {
                 Some(n) => n,
@@ -571,11 +571,11 @@ impl SpirvBackend {
             .nodes
             .iter()
             .filter_map(|(key, cfgnode)| match cfgnode {
-                CfgNode::BasicBlock(_) => Some((key.clone(), builder.id())),
+                CfgNode::BasicBlock(_) => Some((key, builder.id())),
                 //CfgNode::LoopHeader { .. } => Some((key.clone(), builder.id())),
                 //CfgNode::LoopCtrlTail { .. } => Some((key.clone(), builder.id())),
-                CfgNode::BranchHeader { .. } => Some((key.clone(), builder.id())),
-                CfgNode::BranchMerge { .. } => Some((key.clone(), builder.id())),
+                CfgNode::BranchHeader { .. } => Some((key, builder.id())),
+                CfgNode::BranchMerge { .. } => Some((key, builder.id())),
                 _ => None,
             })
             .collect::<AHashMap<_, _>>();
@@ -674,9 +674,7 @@ impl SpirvBackend {
                         .find_consumer_in(InportLocation {
                             node: *src_node,
                             input: InputType::Input(i),
-                        })
-                        .len()
-                        == 0
+                        }).is_empty()
                     {
                         continue;
                     }
@@ -727,7 +725,7 @@ impl SpirvBackend {
                 };
 
                 //let ctrl_bb_id = *bb_label.get(&ctrl_tail).unwrap();
-                let last_loop_bb_id = *bb_label.get(&last_loop_bb).unwrap();
+                let last_loop_bb_id = *bb_label.get(last_loop_bb).unwrap();
                 //let last_loop_bb_id = ctrl_bb_id;
                 for i in 0..lvcount {
                     if self
@@ -735,9 +733,7 @@ impl SpirvBackend {
                         .find_consumer_in(InportLocation {
                             node: *src_node,
                             input: InputType::Input(i),
-                        })
-                        .len()
-                        == 0
+                        }).is_empty()
                     {
                         continue;
                     }
@@ -899,7 +895,7 @@ impl SpirvBackend {
                 //setting up the branch-local context for each,
                 //as well as
                 let branch_header_id = *bb_label.get(&node).unwrap();
-                let branch_merge_id = *bb_label.get(&merge).unwrap();
+                let branch_merge_id = *bb_label.get(merge).unwrap();
                 let conditional_src_id = ctx.get_port_id(condition_src).unwrap();
                 let true_branch_id = *bb_label.get(true_branch).unwrap();
                 let false_branch_id = *bb_label.get(false_branch).unwrap();
@@ -913,7 +909,7 @@ impl SpirvBackend {
                 builder
                     .selection_merge(branch_merge_id, SelectionControl::empty())
                     .unwrap();
-                let _cond_branch = builder
+                builder
                     .branch_conditional(
                         conditional_src_id,
                         *bb_label.get(true_branch).unwrap(),
@@ -942,7 +938,7 @@ impl SpirvBackend {
                     };
 
                     //Check that there is at least one consumen
-                    if self.graph.find_consumer_in(evport).len() == 0 {
+                    if self.graph.find_consumer_in(evport).is_empty() {
                         continue;
                     }
 
@@ -1010,9 +1006,7 @@ impl SpirvBackend {
                         .node(ex_location.node)
                         .outport(&ex_location.output)
                         .unwrap()
-                        .edges
-                        .len()
-                        == 0
+                        .edges.is_empty()
                     {
                         continue;
                     }
@@ -1116,7 +1110,7 @@ impl SpirvBackend {
                 let result_id = ctx.get_port_id(&node.output(0)).unwrap();
                 let result_type_id = register_or_get_type(builder, ctx, result_type);
                 let instruction =
-                    spvop.build_instruction(&ctx, &src_ids, result_type_id, result_id);
+                    spvop.build_instruction(ctx, &src_ids, result_type_id, result_id);
 
                 //TODO: kinda hack atm.
                 if spvop.instruction_is_type_or_constant() {
@@ -1193,7 +1187,7 @@ impl SpirvBackend {
                     Some(ty.clone())
                 } else {
                     //try to get the type from a connected edge
-                    if lmd.argument(argidx).unwrap().edges.len() > 0 {
+                    if !lmd.argument(argidx).unwrap().edges.is_empty() {
                         Some(
                             self.graph
                                 .edge(lmd.argument(argidx).unwrap().edges[0])
@@ -1225,7 +1219,7 @@ impl SpirvBackend {
 
         //find the calle of lmd
         let caller = self.graph.find_caller(lmd)?;
-        if caller.len() == 0 {
+        if caller.is_empty() {
             #[cfg(feature = "log")]
             log::info!("Cannot produce signature from caller, since λ {lmd} is never called. Substituting unknown args with Void.");
 

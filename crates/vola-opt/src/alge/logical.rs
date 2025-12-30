@@ -90,7 +90,7 @@ impl DialectNode for UnaryBool {
             node: Box::new(UnaryBool {
                 inputs: Input::default(),
                 output: Output::default(),
-                op: self.op.clone(),
+                op: self.op,
             }),
         }
     }
@@ -107,20 +107,14 @@ impl DialectNode for UnaryBool {
         &self,
         #[allow(unused_variables)] src_nodes: &[Option<&rvsdg::nodes::Node<OptNode>>],
     ) -> Option<OptNode> {
-        if src_nodes.len() == 0 {
+        if src_nodes.is_empty() {
             return None;
         }
 
-        if src_nodes[0].is_none() {
-            return None;
-        }
+        src_nodes[0]?;
 
         if let NodeType::Simple(s) = &src_nodes[0].as_ref().unwrap().node_type {
-            if let Some(bool) = s.try_downcast_ref::<ImmBool>() {
-                Some(OptNode::new(ImmBool::new(!bool.lit), s.span.clone()))
-            } else {
-                None
-            }
+            s.try_downcast_ref::<ImmBool>().map(|bool| OptNode::new(ImmBool::new(!bool.lit), s.span.clone()))
         } else {
             None
         }
@@ -201,7 +195,7 @@ impl DialectNode for BinaryBool {
             node: Box::new(BinaryBool {
                 inputs: [Input::default(), Input::default()],
                 output: Output::default(),
-                op: self.op.clone(),
+                op: self.op,
             }),
         }
     }

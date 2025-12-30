@@ -207,7 +207,7 @@ fn parse_data_scad(
 
     //recursively parse all nodes
     let mut parser = parser();
-    let syn_tree = match parser.parse(&data, None) {
+    let syn_tree = match parser.parse(data, None) {
         None => {
             let err = ParserError::TreeSitterFailed;
             return Err(vec![VolaError::new(err)]);
@@ -338,7 +338,7 @@ fn parse_data_scad(
         );
     }
 
-    if ctx.deep_errors.len() > 0 {
+    if !ctx.deep_errors.is_empty() {
         Err(ctx.deep_errors)
     } else {
         Ok(tl)

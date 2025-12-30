@@ -230,9 +230,7 @@ impl WasmNode {
                         WasmNode::Binary(WasmBinaryOp::new(walrus::ir::BinaryOp::I32DivU))
                     }
                     BinaryArithOp::Mod => {
-                        return Err(WasmError::UnsupportedNode(format!(
-                            "Mod is unsupported for Nat"
-                        )))
+                        return Err(WasmError::UnsupportedNode("Mod is unsupported for Nat".to_string()))
                     }
                 },
                 _ => {
@@ -282,8 +280,8 @@ impl WasmNode {
                     return Err(WasmError::UnsupportedNode(format!("Matrix-Matrix multiplication exepects square matrix, but had shape Mat<{}, {}>", width, height)));
                 }
                 match width{
-                    1 => return Err(WasmError::UnsupportedNode(format!("Encountered Mat<1,1>"))),
-                    2 | 3 | 4 =>
+                    1 => return Err(WasmError::UnsupportedNode("Encountered Mat<1,1>".to_string())),
+                    2..=4 =>
                     return Ok(WasmNode::Runtime(WasmRuntimeOp::new_with_signature(
                             2,
                             ExternOp::MulMat,

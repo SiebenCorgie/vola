@@ -24,18 +24,13 @@ impl SpirvBackend {
             .nodes()
             .filter(|n| {
                 if self.graph.node(*n).node_type.is_simple() {
-                    if self
+                    self
                         .graph
                         .node(*n)
                         .node_type
                         .unwrap_simple_ref()
                         .op
                         .is_hlop()
-                    {
-                        true
-                    } else {
-                        false
-                    }
                 } else {
                     false
                 }
@@ -70,7 +65,7 @@ impl BackendOp {
             hl.clone()
         } else {
             return Err(BackendSpirvError::Any {
-                text: format!("non-high-level op found while dispatching!"),
+                text: "non-high-level op found while dispatching!".to_string(),
             });
         };
 

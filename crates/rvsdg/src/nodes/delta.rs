@@ -142,6 +142,12 @@ impl StructuralNode for DeltaNode {
     }
 }
 
+impl Default for DeltaNode {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl DeltaNode {
     pub fn new() -> Self {
         let mut region = Region::new();

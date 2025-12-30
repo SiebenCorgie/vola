@@ -271,7 +271,7 @@ impl DialectNode for EvalNode {
         //For eval nodes, the first type must be a callable, and all following must addher to the called concept's definition
 
         //Make sure that the concept that is being called exists at all
-        if !concepts.get(self.concept()).is_some() {
+        if concepts.get(self.concept()).is_none() {
             return Err(TypeError::Other(format!(
                 "the concept {} which is called here is not defined!",
                 self.concept()

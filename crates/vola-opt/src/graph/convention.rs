@@ -62,10 +62,6 @@ impl Optimizer {
         let is_no_inline = self.is_tagged_no_inline(calldef.node);
 
         //Heuristic currently fires at > 1. So basically, if there is only one user, it won't inline, if there are several, it will
-        if users.len() > 1 || is_no_inline {
-            false
-        } else {
-            true
-        }
+        !(users.len() > 1 || is_no_inline)
     }
 }

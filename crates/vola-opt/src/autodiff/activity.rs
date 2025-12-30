@@ -60,7 +60,7 @@ impl Activity {
     ) -> OutportLocation {
         let wrt_to_scalar_chain = self
             .wrt_producer
-            .get(&port.into())
+            .get(&port)
             .expect("Expected scalar chain");
         let ty = opt
             .get_out_type_mut(port)
@@ -68,7 +68,7 @@ impl Activity {
 
         match ty {
             Ty::SCALAR_REAL => {
-                assert!(wrt_to_scalar_chain.len() == 0);
+                assert!(wrt_to_scalar_chain.is_empty());
                 opt.graph
                     .on_region(&region, |g| {
                         g.insert_node(OptNode::new(ImmScalar::new(1.0), Span::empty()))
@@ -173,7 +173,7 @@ impl Activity {
                 //after that, recurse.
                 for input in opt.graph[node].inport_types() {
                     let src = if let Some(src) =
-                        opt.graph.inport_src(InportLocation { node, input }.into())
+                        opt.graph.inport_src(InportLocation { node, input })
                     {
                         src
                     } else {
@@ -287,7 +287,7 @@ impl Activity {
                     //if that port hat a wrt_index chain, push that forward into the region
                     if let Some(wrt_indices) = wrt_index_chain.clone() {
                         let (seeds, new_prod_map) =
-                            opt.explore_producer_trace(arg.into(), wrt_indices);
+                            opt.explore_producer_trace(arg, wrt_indices);
                         //and appply to this activity map
                         for (k, v) in seeds.flags {
                             self.active.flags.insert(k, v);
@@ -421,7 +421,7 @@ impl Optimizer {
         //Pop the last element, which is the actual producer at  this point
         let start = path.pop().unwrap();
 
-        let access_index_list = if path.len() > 0 {
+        let access_index_list = if !path.is_empty() {
             //If there ist still a rest, unify that to indices
             path.reverse();
             self.unify_index_path(path)
@@ -444,7 +444,7 @@ impl Optimizer {
                 if n == 0 {
                     return Some(idx.access);
                 } else {
-                    n = n - 1;
+                    n -= 1;
                 }
             }
         }
@@ -462,7 +462,6 @@ impl Optimizer {
         path.push(port);
         //Break on argument-port, or value producer.
         if port.output.is_argument() || self.is_value_producer(port.node) {
-            return;
         } else {
             //if this is a consruction node, take the last known index
             //else just recurse the producer
@@ -472,25 +471,23 @@ impl Optimizer {
                 self.build_prime_path(
                     src,
                     path,
-                    consecutive_construct_chain.checked_sub(1).unwrap_or(0),
+                    consecutive_construct_chain.saturating_sub(1),
                 )
+            } else if self.is_node_type::<UniformConstruct>(port.node) {
+                //Find the n-last-index-element...
+                //NOTE: lets say we have a chain `START->UniformConstruct[A]-UniformConstruct[B]-Index[C]-Index[D]`
+                //      then CONSTRUCT[A] is indexed by Index[D], and UniformConstruct[B] is indexed by Index[C].
+                //      so we keep track of _how-far-back_ we'd need to go for our index
+                let last_index = self
+                    .last_n_index_on_path(path, consecutive_construct_chain)
+                    .expect("Expected any index on path!");
+                //... so we know which construct to follow
+                let index_src = self.graph.inport_src(port.node.input(last_index)).unwrap();
+                self.build_prime_path(index_src, path, consecutive_construct_chain + 1)
             } else {
-                if self.is_node_type::<UniformConstruct>(port.node) {
-                    //Find the n-last-index-element...
-                    //NOTE: lets say we have a chain `START->UniformConstruct[A]-UniformConstruct[B]-Index[C]-Index[D]`
-                    //      then CONSTRUCT[A] is indexed by Index[D], and UniformConstruct[B] is indexed by Index[C].
-                    //      so we keep track of _how-far-back_ we'd need to go for our index
-                    let last_index = self
-                        .last_n_index_on_path(path, consecutive_construct_chain)
-                        .expect("Expected any index on path!");
-                    //... so we know which construct to follow
-                    let index_src = self.graph.inport_src(port.node.input(last_index)).unwrap();
-                    self.build_prime_path(index_src, path, consecutive_construct_chain + 1)
-                } else {
-                    //Note should not happen, since self.is_value_producer() should be mutual
-                    //exclusive to the else branch...
-                    panic!("Unreachable reached!");
-                }
+                //Note should not happen, since self.is_value_producer() should be mutual
+                //exclusive to the else branch...
+                panic!("Unreachable reached!");
             }
         }
     }
@@ -569,7 +566,7 @@ impl Optimizer {
 
             if let Some(constant_index) = self.try_unwrap_node::<ConstantIndex>(port.node) {
                 assert!(
-                    index_path.len() > 0,
+                    !index_path.is_empty(),
                     "Expected non empty index path at ConstantIndex, this is probably a bug!"
                 );
                 let expected = index_path.remove(0);
@@ -586,28 +583,25 @@ impl Optimizer {
                     activity.set(port.node.into(), false);
                     activity.set(port.node.output(0).into(), false);
                     //is not the correct index, break recursion
-                    return;
                 }
-            } else {
-                if self.is_node_type::<UniformConstruct>(port.node) {
-                    let const_index = if let InputType::Input(n) = port.input {
-                        n
-                    } else {
-                        panic!("Unexpected inport-type on construct: {:?}", port);
-                    };
-                    //Push to front, since we need to index that, to arrive back at the old path
-                    index_path.insert(0, const_index);
+            } else if self.is_node_type::<UniformConstruct>(port.node) {
+                let const_index = if let InputType::Input(n) = port.input {
+                    n
+                } else {
+                    panic!("Unexpected inport-type on construct: {:?}", port);
+                };
+                //Push to front, since we need to index that, to arrive back at the old path
+                index_path.insert(0, const_index);
 
-                    //add node to active and producer list
-                    activity.set(port.node.into(), true);
-                    activity.set(port.node.output(0).into(), true);
-                    //NOTE: Add to prod map with _new_ index_path
-                    prodmap.insert(port.node.output(0), index_path.clone());
+                //add node to active and producer list
+                activity.set(port.node.into(), true);
+                activity.set(port.node.output(0).into(), true);
+                //NOTE: Add to prod map with _new_ index_path
+                prodmap.insert(port.node.output(0), index_path.clone());
 
-                    //now recurs
-                    for dst in self.graph.outport_dsts(port.node.output(0)) {
-                        self.explore_inport(activity, prodmap, dst, index_path.clone());
-                    }
+                //now recurs
+                for dst in self.graph.outport_dsts(port.node.output(0)) {
+                    self.explore_inport(activity, prodmap, dst, index_path.clone());
                 }
             }
         } else {
@@ -703,10 +697,6 @@ impl Optimizer {
 
     fn is_value_producer(&self, node: NodeRef) -> bool {
         //FIXME: While currently correct, this is a _really_ bad way of finding that out :((
-        if self.is_node_type::<ConstantIndex>(node) || self.is_node_type::<UniformConstruct>(node) {
-            false
-        } else {
-            true
-        }
+        !(self.is_node_type::<ConstantIndex>(node) || self.is_node_type::<UniformConstruct>(node))
     }
 }

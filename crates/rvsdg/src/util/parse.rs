@@ -164,11 +164,11 @@ impl std::str::FromStr for RegionLocation {
 impl AttribLocation {
     pub fn parser() -> impl Parser<char, Self, Error = chumsky::prelude::Simple<char>> {
         choice((
-            InportLocation::parser().map(|i| AttribLocation::from(i)),
-            OutportLocation::parser().map(|i| AttribLocation::from(i)),
-            NodeRef::parser().map(|i| AttribLocation::from(i)),
-            EdgeRef::parser().map(|i| AttribLocation::from(i)),
-            RegionLocation::parser().map(|i| AttribLocation::from(i)),
+            InportLocation::parser().map(AttribLocation::from),
+            OutportLocation::parser().map(AttribLocation::from),
+            NodeRef::parser().map(AttribLocation::from),
+            EdgeRef::parser().map(AttribLocation::from),
+            RegionLocation::parser().map(AttribLocation::from),
         ))
     }
 }

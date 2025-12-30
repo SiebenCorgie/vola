@@ -55,7 +55,7 @@ impl Optimizer {
 
         //if we already had an error, we can-not continue, since
         //nothing is valid anyways
-        if errors.len() > 0 {
+        if !errors.is_empty() {
             return Err(errors);
         }
 
@@ -68,9 +68,7 @@ impl Optimizer {
             let result = match entry {
                 AstEntry::Func(f) => self.build_func_block(span, ct_args, f),
                 AstEntry::ImplBlock(implblock) => self.add_implblock(span, ct_args, implblock),
-                AstEntry::Module(_m) => Err(VolaError::new(OptError::Internal(format!(
-                    "Found module, those should be resolved already!"
-                )))),
+                AstEntry::Module(_m) => Err(VolaError::new(OptError::Internal("Found module, those should be resolved already!".to_string()))),
                 _ => Ok(()),
             };
 
@@ -83,7 +81,7 @@ impl Optimizer {
             self.push_debug_state("AST Lowering");
         }
 
-        if errors.len() > 0 {
+        if !errors.is_empty() {
             return Err(errors);
         }
 
@@ -105,7 +103,7 @@ impl Optimizer {
             self.push_debug_state("AST to Opt");
         }
 
-        if errors.len() > 0 {
+        if !errors.is_empty() {
             Err(errors)
         } else {
             Ok(())

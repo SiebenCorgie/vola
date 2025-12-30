@@ -35,11 +35,7 @@ pub enum BackendOp {
 
 impl BackendOp {
     pub fn is_hlop(&self) -> bool {
-        if let Self::HlOp(_) = self {
-            true
-        } else {
-            false
-        }
+        matches!(self, Self::HlOp(_))
     }
 
     pub fn unwrap_spv_ref(&self) -> &SpvOp {
@@ -146,18 +142,10 @@ impl LangEdge for BackendEdge {
     }
 
     fn is_value_edge(&self) -> bool {
-        if let Self::Value(_) = self {
-            true
-        } else {
-            false
-        }
+        matches!(self, Self::Value(_))
     }
     fn is_state_edge(&self) -> bool {
-        if let Self::State = self {
-            true
-        } else {
-            false
-        }
+        matches!(self, Self::State)
     }
 }
 
@@ -230,11 +218,7 @@ impl SpirvBackend {
     pub fn is_core_op(&self, node: NodeRef, op: CoreOp) -> bool {
         if let NodeType::Simple(s) = &self.graph.node(node).node_type {
             if let BackendOp::SpirvOp(SpvOp::CoreOp(c)) = s.op {
-                if c == op {
-                    true
-                } else {
-                    false
-                }
+                c == op
             } else {
                 false
             }

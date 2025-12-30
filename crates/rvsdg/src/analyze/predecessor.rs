@@ -50,8 +50,8 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> Iterator for PredWalker<'
             //collect this nodes predecessors
             for pred in self.ctx.node(n.node).pred(self.ctx) {
                 if !self.walked.contains(&pred) {
-                    self.walker_stack.push_front(pred.clone());
-                    self.walked.insert(pred.clone());
+                    self.walker_stack.push_front(pred);
+                    self.walked.insert(pred);
                 }
             }
 
@@ -98,8 +98,8 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> Iterator for PredWalkerRe
             if n.node != self.region_boundary_node {
                 for pred in self.ctx.node(n.node).pred(self.ctx) {
                     if !self.walked.contains(&pred) {
-                        self.walker_stack.push_front(pred.clone());
-                        self.walked.insert(pred.clone());
+                        self.walker_stack.push_front(pred);
+                        self.walked.insert(pred);
                     }
                 }
             }
@@ -140,7 +140,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> Iterator for PredWalkerNo
     type Item = NodeRef;
     fn next(&mut self) -> Option<Self::Item> {
         //shortcut for empty stack
-        if self.walker_stack.len() > 0 {
+        if !self.walker_stack.is_empty() {
             //now pop stack values till we find an unseen node
             while let Some(next) = self.walker_stack.pop_front() {
                 if self.walked.contains(&next) {
@@ -204,7 +204,7 @@ impl<'a, N: LangNode + 'static, E: LangEdge + 'static> Iterator
     type Item = NodeRef;
     fn next(&mut self) -> Option<Self::Item> {
         //shortcut for empty stack
-        if self.walker_stack.len() > 0 {
+        if !self.walker_stack.is_empty() {
             //now pop stack values till we find an unseen node
             while let Some(next) = self.walker_stack.pop_front() {
                 if self.walked.contains(&next) {
