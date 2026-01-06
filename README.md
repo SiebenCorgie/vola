@@ -123,8 +123,9 @@ to execute them.
 There is a repository that implements a renderer over at [vola-sdf-renderer](https://gitlab.com/tendsinmende/vola-sdf-renderer). It is not included here, since it has some heavy dependencies and is not compiler related.
 
 ### Debugging
-You can set `VOLA_BACKTRACE=1` to print a backtrace whenever an error is reported. There are `cargo test` units in place, as well as tree-sitter tests. Those should always
-work.
+You can set `VOLA_BACKTRACE=1` to print a backtrace whenever an error is reported. There are `cargo test` units in place, as well as tree-sitter tests. Those should always work.
+
+Set `RUST_LOG=info` (or `warning` etc.) to enable logging when using `vola-cli`.
 
 Some packages have a `dot` feature. This lets you create [DOT](https://en.wikipedia.org/wiki/DOT_%28graph_description_language%29) graphs that can then be rendered into SVGs or similar formats. This really helps debugging graph/tree related problems.
 

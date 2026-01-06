@@ -32,6 +32,7 @@ mod inline_all;
 mod interval_dispatch;
 pub mod lazy_type;
 mod lower_ast;
+mod pattern_rewrite;
 mod recursion_detection;
 mod specializer;
 mod type_edges;

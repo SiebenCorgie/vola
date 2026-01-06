@@ -1,0 +1,19 @@
+//BEGIN-CONFIG
+//EXEC-FN:myfield
+//EXEC-ARGS:0.0,0.0,4.0
+//EXEC-EPS:0.1
+//EXEC-RES:3
+//END-CONFIG
+
+module super::std;
+
+//NOTE: In this case we know, that the cylinder lies on the z axis, and is 3 _away_ form z=4.
+export fn myfield(at: vec3) -> real{
+    let t = true;
+    csg s = if t {
+        Cylinder(1.0 + 5.0, 1.0)
+    }else{
+        Box([1.0; 3])
+    };
+    eval s.SDF3D(at)
+}

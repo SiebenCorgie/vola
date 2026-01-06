@@ -8,9 +8,10 @@
 
 //! General purpose pattern rewrite passes.
 
-use rvsdg::region::RegionLocation;
+use rvsdg::{edge::LangEdge, nodes::LangNode, region::RegionLocation};
+use rvsdg_pattern_rewrite::{Speed, TopoGreedyRewriter};
 
-use crate::Optimizer;
+use crate::{OptEdge, OptNode, Optimizer};
 
 mod arith;
 mod branch;
@@ -32,6 +33,22 @@ impl Optimizer {
         }
     }
 
+    fn add_fold_pattern(
+        mut rewriter: TopoGreedyRewriter<OptNode, OptEdge, Speed>,
+    ) -> TopoGreedyRewriter<OptNode, OptEdge, Speed> {
+        rewriter.register(arith::FoldBinary);
+
+        rewriter
+    }
+
+    fn add_cf_pattern(
+        mut rewriter: TopoGreedyRewriter<OptNode, OptEdge, Speed>,
+    ) -> TopoGreedyRewriter<OptNode, OptEdge, Speed> {
+        rewriter.register(branch::SpecializeStaticBranch);
+
+        rewriter
+    }
+
     ///Applies the bespoke set of patterns (see [pattern_rewrite_all]) to `region` and any contained sub-regions.
     pub fn rewrite_region(&mut self, region: RegionLocation) {
         let mut rewriter = rvsdg_pattern_rewrite::TopoGreedyRewriter::default()
@@ -40,8 +57,8 @@ impl Optimizer {
                 Self::RESTARTS,
             ));
 
-        rewriter.register(branch::SpecializeStaticBranch);
-        rewriter.register(arith::FoldBinary);
+        rewriter = Self::add_cf_pattern(rewriter);
+        rewriter = Self::add_fold_pattern(rewriter);
 
         rewriter.run(&mut self.graph, region);
     }
