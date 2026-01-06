@@ -8,7 +8,7 @@
 
 //! General purpose pattern rewrite passes.
 
-use rvsdg::{edge::LangEdge, nodes::LangNode, region::RegionLocation};
+use rvsdg::region::RegionLocation;
 use rvsdg_pattern_rewrite::{Speed, TopoGreedyRewriter};
 
 use crate::{OptEdge, OptNode, Optimizer};
@@ -36,8 +36,8 @@ impl Optimizer {
     fn add_fold_pattern(
         mut rewriter: TopoGreedyRewriter<OptNode, OptEdge, Speed>,
     ) -> TopoGreedyRewriter<OptNode, OptEdge, Speed> {
-        rewriter.register(arith::FoldBinary);
-
+        rewriter.register(arith::FoldBinarySimple);
+        rewriter.register(arith::FoldMuliplication);
         rewriter
     }
 
