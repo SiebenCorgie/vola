@@ -9,7 +9,7 @@
 use std::{io::Write, process::Stdio};
 
 use vola_common::VolaError;
-use vola_opt::passes::ImmScalarize;
+use vola_opt::passes::{Cleanup, ImmScalarize};
 
 use crate::Target;
 
@@ -36,9 +36,10 @@ impl PipelineBackend for Wasm {
         ImmScalarize::setup(opt)
             .scalarize_all()
             .map_err(|e| vec![VolaError::new(e.into())])?;
-        opt.remove_unused_edges()
-            .map_err(|e| vec![VolaError::new(e.into())])?;
-        opt.cleanup_export_lmd();
+        Cleanup::setup(opt)
+            .remove_unused_edges()
+            .map_err(|e| vec![VolaError::new(e.into())])?
+            .cleanup_export_lmd();
         Ok(())
     }
 

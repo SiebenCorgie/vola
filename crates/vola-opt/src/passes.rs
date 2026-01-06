@@ -23,7 +23,8 @@
 
 pub mod activity;
 mod autodiff_dispatch;
-mod cleanup_backend;
+mod cleanup;
+pub use cleanup::Cleanup;
 mod constant_folding;
 mod field_inliner;
 mod imm_scalarizer;

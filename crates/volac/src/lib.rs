@@ -28,7 +28,10 @@ use vola_ast::VolaAst;
 mod error;
 pub use error::PipelineError;
 use vola_common::{reset_file_cache, VolaError};
-use vola_opt::{passes::TypeEdges, Optimizer};
+use vola_opt::{
+    passes::{Cleanup, TypeEdges},
+    Optimizer,
+};
 
 pub mod backends;
 
@@ -246,14 +249,17 @@ impl Pipeline {
             })?;
         }
         //NOTE: Inliner can be buggy on undefined edges, clean those up.
-        opt.remove_unused_edges()
+        //
+        Cleanup::setup(&mut opt)
+            .remove_unused_edges()
             .map_err(|e| vec![VolaError::new(PipelineError::from(e))])?;
         opt.inline_field_exports()
             .map_err(|e| vec![VolaError::new(PipelineError::from(e))])?;
 
         //do some _post_everyting_ cleanup
         if self.late_cne {
-            opt.cne_exports()
+            Cleanup::setup(&mut opt)
+                .cne_exports()
                 .map_err(|e| vec![VolaError::new(PipelineError::CneError(e))])?;
         }
 
@@ -273,7 +279,7 @@ impl Pipeline {
         //Call _before-finalize-hook_.
         self.backend.opt_pre_finalize(&mut opt)?;
 
-        opt.cleanup_export_lmd();
+        Cleanup::setup(&mut opt).cleanup_export_lmd();
 
         //now type-derive all live results in order for the backends to have all
         // type information available

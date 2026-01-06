@@ -91,14 +91,13 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
     ///
     /// So for instance a gamma node with an entry variable `e`, where none of the branches uses `e`.
     ///
-    /// # Note
-    /// `disconnected` can be used to store all disconnected edge-values. If `None` is supplied, disconected
-    /// edges are just dropped.
+    /// # Performance
+    ///
+    /// This operates on all nodes (including unreachable nodes) in `region` and any sub-region.
     pub fn remove_unused_edges_in_region(
         &mut self,
         region: RegionLocation,
         recursive: bool,
-        //mut disconnected: Option<&mut Vec<E>>,
     ) -> Result<(), GraphError> {
         for node in self[region].nodes.clone() {
             //note: only work on node with sub regions
