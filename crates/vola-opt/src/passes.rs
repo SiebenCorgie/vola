@@ -27,6 +27,7 @@ mod cleanup_backend;
 mod constant_folding;
 mod field_inliner;
 mod imm_scalarizer;
+pub use imm_scalarizer::ImmScalarize;
 mod initial_type_check;
 mod inline_all;
 mod interval_dispatch;

@@ -9,6 +9,7 @@
 use std::{io::Write, process::Stdio};
 
 use vola_common::VolaError;
+use vola_opt::passes::ImmScalarize;
 
 use crate::Target;
 
@@ -32,7 +33,8 @@ impl PipelineBackend for Wasm {
         //NOTE: Our WASM backend currently does not support calls, so we gotta inline all :/
         opt.inline_all()
             .map_err(|e| vec![VolaError::new(e.into())])?;
-        opt.imm_scalarize()
+        ImmScalarize::setup(opt)
+            .scalarize_all()
             .map_err(|e| vec![VolaError::new(e.into())])?;
         opt.remove_unused_edges()
             .map_err(|e| vec![VolaError::new(e.into())])?;
