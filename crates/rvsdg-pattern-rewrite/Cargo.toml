@@ -1,0 +1,8 @@
+[package]
+name = "rvsdg-pattern-rewrite"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+rvsdg.workspace = true
+log.workspace = true

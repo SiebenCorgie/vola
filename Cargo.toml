@@ -18,6 +18,7 @@ members = [
     "crates/vola-fmt",
     "crates/vola-tree-sitter-openscad",
     "crates/vola-convert",
+    "crates/rvsdg-pattern-rewrite",
 ]
 
 resolver = "2"
@@ -26,6 +27,7 @@ resolver = "2"
 #re-export all our own crates
 rvsdg = { path = "crates/rvsdg" }
 rvsdg-derive-lang = { path = "crates/rvsdg-derive-lang" }
+rvsdg-pattern-rewrite = { path = "crates/rvsdg-pattern-rewrite" }
 rvsdg-viewer = { path = "crates/rvsdg-viewer" }
 vola-ast = { path = "crates/vola-ast" }
 vola-backend-wasm = { path = "crates/vola-backend-wasm" }

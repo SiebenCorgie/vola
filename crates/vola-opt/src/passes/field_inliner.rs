@@ -36,6 +36,7 @@ impl Optimizer {
     //Recursive helper that explores all Apply nodes, and inlines their call-defs base on our [convention](Optimizer::should_inline_apply), before
     //inlining itself.
     fn inline_region(&mut self, region: RegionLocation) -> Result<(), OptError> {
+        log::info!("inlining everything in {region}");
         //recursively go through all sub regions (that are no λs, so gamma and theta for now)
         //and call the inliner in there as well
         for node in self.graph.live_nodes_in_region(region) {

@@ -206,6 +206,8 @@ impl Pipeline {
                 .collect::<Vec<_>>()
         })?;
 
+        opt.pattern_rewrite_all();
+
         if self.early_cnf {
             opt.full_graph_cnf().map_err(|e| {
                 if self.write_state_on_error {

@@ -16,6 +16,7 @@ log = ["dep:log"]
 [dependencies]
 rvsdg.workspace = true
 rvsdg-viewer = { workspace = true, optional = true }
+rvsdg-pattern-rewrite.workspace = true
 vola-ast.workspace = true
 vola-common.workspace = true
 ahash.workspace = true
