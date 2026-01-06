@@ -11,7 +11,7 @@ use std::{io::Write, process::Stdio};
 use vola_backend_spirv::rspirv::binary::Assemble;
 pub use vola_backend_spirv::SpirvConfig;
 use vola_common::VolaError;
-use vola_opt::passes::{Cleanup, ImmScalarize};
+use vola_opt::passes::{Cleanup, ImmScalarize, TypeEdges};
 
 use crate::{PipelineError, Target};
 
@@ -36,6 +36,9 @@ impl PipelineBackend for Spirv {
         &self,
         opt: &mut vola_opt::Optimizer,
     ) -> Result<(), Vec<VolaError<PipelineError>>> {
+        TypeEdges::setup(opt)
+            .execute()
+            .map_err(|e| vec![e.to_error()])?;
         ImmScalarize::setup(opt)
             .scalarize_all()
             .map_err(|e| vec![VolaError::new(e.into())])?;

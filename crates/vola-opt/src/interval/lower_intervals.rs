@@ -81,8 +81,7 @@ impl<'opt> LowerIntervals<'opt> {
         if std::env::var("VOLA_DUMP_ALL").is_ok()
             || std::env::var("DUMP_PRE_INTERVAL_LOWER").is_ok()
         {
-            self.optimizer
-                .push_debug_state("pre-interval-lower");
+            self.optimizer.push_debug_state("pre-interval-lower");
         }
 
         //Execution of this lowering simply iterates the live-code
@@ -175,13 +174,12 @@ impl<'opt> LowerIntervals<'opt> {
         }
 
         //TODO: don't do that once a fix for #41 lands.
-        self.optimizer.inline_all().map_err(VolaError::new)?;
+        //self.optimizer.inline_all().map_err(VolaError::new)?;
 
         if std::env::var("VOLA_DUMP_ALL").is_ok()
             || std::env::var("DUMP_POST_INTERVAL_LOWER").is_ok()
         {
-            self.optimizer
-                .push_debug_state("post-interval-lower");
+            self.optimizer.push_debug_state("post-interval-lower");
         }
 
         Ok(())

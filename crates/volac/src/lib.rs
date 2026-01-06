@@ -29,7 +29,7 @@ mod error;
 pub use error::PipelineError;
 use vola_common::{reset_file_cache, VolaError};
 use vola_opt::{
-    passes::{Cleanup, TypeEdges},
+    passes::{Cleanup, InlineExports, TypeEdges},
     Optimizer,
 };
 
@@ -253,8 +253,9 @@ impl Pipeline {
         Cleanup::setup(&mut opt)
             .remove_unused_edges()
             .map_err(|e| vec![VolaError::new(PipelineError::from(e))])?;
-        opt.inline_field_exports()
-            .map_err(|e| vec![VolaError::new(PipelineError::from(e))])?;
+        InlineExports::setup(&mut opt)
+            .execute()
+            .map_err(|e| vec![VolaError::new(PipelineError::from(*e.error))])?;
 
         //do some _post_everyting_ cleanup
         if self.late_cne {

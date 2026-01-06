@@ -1,6 +1,6 @@
 use rvsdg::{
     err::GraphError,
-    util::{cne::CneError, cnf::CnfError},
+    util::{cne::CneError, cnf::CnfError, inline::InlineError},
 };
 use thiserror::Error;
 use vola_opt::OptError;
@@ -31,6 +31,8 @@ pub enum PipelineError {
     CnfError(#[from] CnfError),
     #[error(transparent)]
     CneError(#[from] CneError),
+    #[error(transparent)]
+    Inline(#[from] InlineError),
     #[error("Failed to validate: {0}")]
     ValidationFailed(String),
     #[error("No backend configured!")]

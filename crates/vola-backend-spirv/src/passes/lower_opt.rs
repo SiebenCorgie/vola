@@ -46,7 +46,6 @@ impl GraphTypeTransformer for LoweringTransformer {
     type DstEdge = BackendEdge;
 
     fn transform_edge(&mut self, src_edge: &Self::SrcEdge) -> Self::DstEdge {
-        //This basically just erases the type information atm.
         match src_edge {
             OptEdge::State => BackendEdge::State,
             OptEdge::Value { ty } => BackendEdge::Value(
@@ -136,7 +135,8 @@ impl SpirvBackend {
             opt.graph
                 .region(&opt.graph.toplevel_region())
                 .unwrap()
-                .arguments.is_empty(),
+                .arguments
+                .is_empty(),
             "Unexpected import on optimizer graph!"
         );
 
@@ -152,7 +152,8 @@ impl SpirvBackend {
                 .graph
                 .region(&self.graph.toplevel_region())
                 .unwrap()
-                .nodes.is_empty()
+                .nodes
+                .is_empty()
             {
                 log::error!("Merging of backend-graphs not yet supported, overwriting!")
             }

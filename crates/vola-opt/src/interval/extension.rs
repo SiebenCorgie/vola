@@ -20,7 +20,10 @@ use vola_common::{Span, VolaError};
 use crate::{
     common::Ty,
     interval::{IntervalError, IntervalExtension},
-    passes::activity::{Activity, ActivityAnalysis},
+    passes::{
+        activity::{Activity, ActivityAnalysis},
+        Inliner,
+    },
     typelevel::IntervalConstruct,
     OptEdge, OptError, OptNode, Optimizer, TypeState,
 };
@@ -336,10 +339,8 @@ impl<'opt> IntervalExtensionPass<'opt> {
                         "Src region must be same or parent to dst-region"
                     );
                     //import src into dst
-                    
 
-                    self
-                        .optimizer
+                    self.optimizer
                         .import_argument(mapped_src, dst_region)
                         .map_err(VolaError::new)?
                 } else {
@@ -611,7 +612,9 @@ impl<'opt> IntervalExtensionPass<'opt> {
 
         assert_eq!(self.optimizer.graph[node].outputs().len(), 1);
         let original_dsts = self.optimizer.graph.unique_dst_ports(node);
-        self.optimizer.graph.inline_apply_node(node).unwrap();
+        Inliner::setup(self.optimizer)
+            .inline_apply_node(node, false)
+            .expect("Could not inline apply-node in interval extension");
         for dst in original_dsts {
             self.register_inport_queue(dst);
         }

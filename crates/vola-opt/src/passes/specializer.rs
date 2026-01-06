@@ -17,8 +17,8 @@ use rvsdg::{
 use vola_common::{ariadne::Label, report, warning_reporter, Span, VolaError};
 
 use crate::{
-    alge::EvalNode, common::Ty, csg::CsgOp, graph::auxiliary::ImplKey, DialectNode, OptEdge,
-    OptError, Optimizer,
+    alge::EvalNode, common::Ty, csg::CsgOp, graph::auxiliary::ImplKey, passes::Inliner,
+    DialectNode, OptEdge, OptError, Optimizer,
 };
 
 struct SpecCtx {
@@ -160,8 +160,13 @@ impl Optimizer {
         //NOTE inline takes care of bringing all CSG nodes into the same region
         //TODO: Don't inline all, use heuristic instead.
         let region_span = self.find_span(region).unwrap_or(Span::empty());
-        self.inline_all_region(region)
-            .map_err(|e| VolaError::error_here(e, region_span.clone(), "in this region"))?;
+        {
+            let _ = Inliner::setup(self)
+                .inline_region(region, true, false)
+                .map_err(|e| e.to_error())?;
+        }
+        //self.inline_all_region(region)
+        //    .map_err(|e| VolaError::error_here(e, region_span.clone(), "in this region"))?;
 
         //Try specializing reverse-topo-ord eval nodes, till we don't have any left
         'restart: loop {
@@ -405,17 +410,14 @@ impl Optimizer {
                         .with_error(span, "expected this eval to be typed")
                 })?;
             let call_src = if eval_region != csg_region {
-                
-
-                self
-                    .import_context(
-                        OutportLocation {
-                            node: csg_impl_lambda,
-                            output: OutputType::LambdaDeclaration,
-                        },
-                        eval_region,
-                    )
-                    .unwrap()
+                self.import_context(
+                    OutportLocation {
+                        node: csg_impl_lambda,
+                        output: OutputType::LambdaDeclaration,
+                    },
+                    eval_region,
+                )
+                .unwrap()
             } else {
                 //If the eval is in the host region, we can use the call-source as is
                 OutportLocation {
@@ -736,7 +738,9 @@ impl Optimizer {
         //
         //NOTE: we'd have to build a specialized λ-regardless, so we can also just inline it at this point.
         if self.graph[prod.node].node_type.is_apply() {
-            self.graph.inline_apply_node(prod.node).unwrap();
+            Inliner::setup(self)
+                .inline_apply_node(prod.node, false)
+                .expect("Could not inline call");
             //update the producer afterwards
             prod = self
                 .graph
@@ -939,14 +943,14 @@ impl Optimizer {
                             //CVs can just be traced and imported. Find the actual producer...
                             let producer = self.graph.find_producer_out(*src).unwrap();
                             //... and import it into our branch
-                            
+
                             self.import_argument(producer, branch_region).map_err(|e| {
-                                    VolaError::error_here(
-                                        e,
-                                        evalspan.clone(),
-                                        "while trying to specialize this eval for branch",
-                                    )
-                                })?
+                                VolaError::error_here(
+                                    e,
+                                    evalspan.clone(),
+                                    "while trying to specialize this eval for branch",
+                                )
+                            })?
                         }
                         OutputType::Argument(argidx) => {
                             //for arguments its a little harder, we might have to find the argument
@@ -957,14 +961,14 @@ impl Optimizer {
                             //Hovere, there is a shortcut: If the argument is already in a parent-region, we can just import it as-is.
                             if self.graph.is_in_parent(branch_region.node, src.node) {
                                 //The data source is already in a parent, so we can _just_ import it.
-                                
+
                                 self.import_context(*src, branch_region).map_err(|e| {
-                                        VolaError::error_here(
-                                            e,
-                                            evalspan.clone(),
-                                            "while trying to specialize this eval for branch",
-                                        )
-                                    })?
+                                    VolaError::error_here(
+                                        e,
+                                        evalspan.clone(),
+                                        "while trying to specialize this eval for branch",
+                                    )
+                                })?
                             } else {
                                 //data source is not in parent, try to find the specialized call-source, and
                                 //try to import it. That can fail though.
@@ -1006,8 +1010,6 @@ impl Optimizer {
                                             //fallback to omega region.
                                             most_outer_region = self.graph.toplevel_region();
                                         }
-
-                                        
 
                                         self.import_context(argument_src, branch_region)
                                             .map_err(|e| {
@@ -1061,10 +1063,7 @@ impl Optimizer {
                 .graph
                 .on_region(&branch_region, |reg| {
                     let (node, _edges) = reg
-                        .connect_node(
-                            eval_node_template.structural_copy(),
-                            local_context_ports,
-                        )
+                        .connect_node(eval_node_template.structural_copy(), local_context_ports)
                         .unwrap();
                     //hookup the new _produced_ value to the prepared exit variable
                     reg.ctx_mut()
