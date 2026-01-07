@@ -240,7 +240,6 @@ impl<'opt> LowerAst<'opt> {
             }
             ExprTy::Eval(evalexpr) => {
                 //for eval, hookup the operand, then all arguments, to a unresolved eval node
-
                 let mut args = SmallColl::new();
                 //first arg is, by definition the _hopefull_ defined var
                 let operand = ctx

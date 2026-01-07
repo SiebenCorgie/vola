@@ -122,6 +122,13 @@ impl<'opt> LowerAst<'opt> {
         let region_span = func.span.clone();
         let def_span = func.head_span();
         let return_type: Ty = func.return_type.clone().into();
+        //Use the return-expression span for the result, if there is one.
+        let return_span = func
+            .block
+            .retexpr
+            .as_ref()
+            .map(|retexpr| retexpr.span.clone())
+            .unwrap_or(region_span.clone());
 
         //setup the lambda node accordingly, as well as the block context, then launch the block builder.
         let lambda = self.opt.graph.on_omega_node(|omg| {
@@ -138,9 +145,7 @@ impl<'opt> LowerAst<'opt> {
                 self.opt
                     .typemap
                     .set(result_port.into(), return_type.clone());
-                self.opt
-                    .span_tags
-                    .set(result_port.into(), region_span.clone());
+                self.opt.span_tags.set(result_port.into(), return_span);
             });
             self.opt.typemap.set(
                 OutputType::LambdaDeclaration.to_location(lmd).into(),
