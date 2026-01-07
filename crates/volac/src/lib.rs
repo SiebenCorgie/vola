@@ -29,7 +29,7 @@ mod error;
 pub use error::PipelineError;
 use vola_common::{reset_file_cache, VolaError};
 use vola_opt::{
-    passes::{Cleanup, InlineExports, TypeEdges},
+    passes::{Cleanup, InlineExports, LowerAst, TypeEdges},
     Optimizer,
 };
 
@@ -197,17 +197,20 @@ impl Pipeline {
 
         //TODO: add all the _standard_library_stuff_. Would be nice if we'd had them
         //      serialized somewhere.
-        opt.add_ast(ast).map_err(|errors| {
-            if self.write_state_on_error {
-                opt.push_debug_state("intern-ast");
-                opt.dump_debug_state("intern-ast.bin");
-            }
+        LowerAst::setup(&mut opt)
+            .add_ast(ast)
+            .finish()
+            .map_err(|errors| {
+                if self.write_state_on_error {
+                    opt.push_debug_state("intern-ast");
+                    opt.dump_debug_state("intern-ast.bin");
+                }
 
-            errors
-                .into_iter()
-                .map(|e| e.to_error::<PipelineError>())
-                .collect::<Vec<_>>()
-        })?;
+                errors
+                    .into_iter()
+                    .map(|e| e.to_error::<PipelineError>())
+                    .collect::<Vec<_>>()
+            })?;
 
         opt.pattern_rewrite_all();
 

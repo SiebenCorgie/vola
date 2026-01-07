@@ -12,7 +12,7 @@ use crate::{
     },
     common::Ty,
     imm::ImmNat,
-    passes::lazy_type::TypeError,
+    passes::{lazy_type::TypeError, lower_ast::LowerAst},
     OptEdge, OptError, OptNode, Optimizer,
 };
 use ahash::AHashMap;
@@ -259,12 +259,11 @@ impl BlockCtx {
                         "In this region",
                     ));
                 }
-                
+
                 optimizer
                     .import_context(port, self.active_scope.region)
                     .map_err(VolaError::new)?
             } else {
-                
                 optimizer
                     .import_argument(port, self.active_scope.region)
                     .map_err(VolaError::new)?
@@ -322,7 +321,7 @@ impl BlockCtx {
     }
 }
 
-impl Optimizer {
+impl<'opt> LowerAst<'opt> {
     pub fn build_block(
         &mut self,
         region: RegionLocation,
@@ -336,7 +335,7 @@ impl Optimizer {
         // if any parse _does this righ_, it shouldn't happen anyways.
 
         //always mark the region's span
-        self.span_tags.set(region.into(), block.span);
+        self.opt.span_tags.set(region.into(), block.span);
 
         if block.retexpr.is_none() {
             if let Some(Stmt::Branch(b)) = block.stmts.last().cloned() {
@@ -371,10 +370,11 @@ impl Optimizer {
         ctx: &mut BlockCtx,
     ) -> Result<(), VolaError<OptError>> {
         match stmt {
-            Stmt::Assign(assign) => match ctx.find_variable(self, &assign.dst.0) {
+            Stmt::Assign(assign) => match ctx.find_variable(self.opt, &assign.dst.0) {
                 Ok(_old_src) => {
                     let expr_src = self.build_expr(assign.expr, region, ctx)?;
-                    self.names
+                    self.opt
+                        .names
                         .set(expr_src.into(), format!("assign {} = ", assign.dst.0));
                     //Rewrite expression-src to new assignment
                     if let Err(err) = ctx.write_var(&assign.dst.0, expr_src) {
@@ -382,25 +382,23 @@ impl Optimizer {
                     }
                     Ok(())
                 }
-                Err(err) => {
-                    Err(err.with_label(assign.span.clone(), "here"))
-                }
+                Err(err) => Err(err.with_label(assign.span.clone(), "here")),
             },
             Stmt::Csg(csg_binding) => {
                 let expr_src = self.build_expr(csg_binding.expr, region, ctx)?;
-                self.names.set(
+                self.opt.names.set(
                     expr_src.into(),
                     format!("csg {} = ", csg_binding.decl_name.0),
                 );
                 //NOTE: We make sure that the produced value's src is a CSG node, otherwise we fail, because thats
                 //the semantic of the node
-                let producer = self.graph.find_producer_simple(expr_src);
+                let producer = self.opt.graph.find_producer_simple(expr_src);
                 for prod in producer {
-                    let node_name = self.graph[prod.node].name();
-                    let node_span = self.find_span(prod.node);
-                    match self.graph[prod.node].into_abstract() {
+                    let node_name = self.opt.graph[prod.node].name();
+                    let node_span = self.opt.find_span(prod.node);
+                    match self.opt.graph[prod.node].into_abstract() {
                         AbstractNodeType::Simple => {
-                            if self.graph[prod.node]
+                            if self.opt.graph[prod.node]
                                 .node_type
                                 .unwrap_simple_ref()
                                 .node
@@ -429,7 +427,7 @@ impl Optimizer {
                         AbstractNodeType::Apply => {
                             //if this is a apply node, make sure it does _not_ return a csg-type.
                             //try to deduce the type of this node
-                            let ty = self.get_out_type_mut(prod).unwrap();
+                            let ty = self.opt.get_out_type_mut(prod).unwrap();
                             if ty != Ty::CSG {
                                 let err = OptError::Any {
                                     text: format!(
@@ -458,7 +456,7 @@ impl Optimizer {
                     }
 
                     //can only test for simple-node producers, otherwise the type-derive will catch it later on.
-                    if self.graph[prod.node].node_type.is_simple() {}
+                    if self.opt.graph[prod.node].node_type.is_simple() {}
                 }
 
                 if let Err(error) = ctx.define_var(csg_binding.decl_name.0, expr_src) {
@@ -468,18 +466,18 @@ impl Optimizer {
             }
             Stmt::Let(let_binding) => {
                 let expr_src = self.build_expr(let_binding.expr, region, ctx)?;
-                let producer = self.graph.find_producer_simple(expr_src);
-                self.names.set(
+                let producer = self.opt.graph.find_producer_simple(expr_src);
+                self.opt.names.set(
                     expr_src.into(),
                     format!("let {} = ", let_binding.decl_name.0),
                 );
                 for prod in producer {
                     //note we can only check nodes that are created _here_.
-                    let node_name = self.graph[prod.node].name();
-                    let node_span = self.find_span(prod.node);
-                    match self.graph[prod.node].into_abstract() {
+                    let node_name = self.opt.graph[prod.node].name();
+                    let node_span = self.opt.find_span(prod.node);
+                    match self.opt.graph[prod.node].into_abstract() {
                         AbstractNodeType::Simple => {
-                            if self.graph[prod.node]
+                            if self.opt.graph[prod.node]
                                 .node_type
                                 .unwrap_simple_ref()
                                 .node
@@ -513,7 +511,7 @@ impl Optimizer {
                         AbstractNodeType::Apply => {
                             //if this is a apply node, make sure it does _not_ return a csg-type.
                             //try to deduce the type of this node
-                            let ty = self.get_out_type_mut(prod).map_err(|e| e.to_error())?;
+                            let ty = self.opt.get_out_type_mut(prod).map_err(|e| e.to_error())?;
                             if ty == Ty::CSG {
                                 let err = OptError::Any {
                                     text: format!(
@@ -564,7 +562,7 @@ impl Optimizer {
                         OptError::Any {
                             text: "block has unexpected result".to_owned(),
                         },
-                        self.find_span(return_value).unwrap_or(Span::empty()),
+                        self.opt.find_span(return_value).unwrap_or(Span::empty()),
                         "Block statement should not have a return-value, consider binding the value to a result",
                     ));
                 }
@@ -619,6 +617,7 @@ impl Optimizer {
 
         let condition_src = self.build_expr(branch.conditional.0, region, ctx)?;
         let (gamma, if_index, else_index) = self
+            .opt
             .graph
             .on_region(&region, |reg| {
                 let (g, (if_bidx, else_bidx)) = reg.new_decission(|g| {
@@ -719,7 +718,7 @@ impl Optimizer {
         //otherwise we don't have to export it, since the old _out-of-gamma_ value is still valid.
         for (used_var, _ev) in used_vars_import {
             if Self::is_read_write_branch(&post_if_scope, &post_else_block, used_var.as_str()) {
-                let exit_var_idx = self.graph[gamma]
+                let exit_var_idx = self.opt.graph[gamma]
                     .node_type
                     .unwrap_gamma_mut()
                     .add_exit_var();
@@ -733,7 +732,8 @@ impl Optimizer {
                             branch: reg_idx,
                             exit_variable: exit_var_idx,
                         });
-                    self.graph
+                    self.opt
+                        .graph
                         .connect(src, in_region_result, OptEdge::value_edge_unset())
                         .unwrap();
                 }
@@ -787,10 +787,12 @@ impl Optimizer {
 
         //Make sure both bounds are nat
         let lower_ty_is_nat = self
+            .opt
             .get_out_type_mut(lower_bound)
             .map(|t| t.is_scalar() && t.is_integer())
             .map_err(|e| e.to_error())?;
         let upper_ty_is_nat = self
+            .opt
             .get_out_type_mut(upper_bound)
             .map(|t| t.is_scalar() && t.is_integer())
             .map_err(|e| e.to_error())?;
@@ -811,6 +813,7 @@ impl Optimizer {
         }
 
         let run_condition = self
+            .opt
             .graph
             .on_region(&region, |reg| {
                 let condition = OptNode::new(BinaryRel::new(BinaryRelOp::Lt), Span::empty());
@@ -818,12 +821,13 @@ impl Optimizer {
                     .connect_node(condition, [lower_bound, upper_bound])
                     .unwrap();
 
-                self.span_tags.set(node.into(), rangespan.clone());
+                self.opt.span_tags.set(node.into(), rangespan.clone());
                 node
             })
             .unwrap();
 
         let (gamma, (loop_branch, norun_branch)) = self
+            .opt
             .graph
             .on_region(&region, |reg| {
                 reg.new_decission(|g| {
@@ -836,7 +840,8 @@ impl Optimizer {
             .unwrap();
 
         //connect gamma-condition to should-run-or-not gamma
-        self.graph
+        self.opt
+            .graph
             .connect(
                 run_condition.output(0),
                 gamma.as_inport_location(InputType::GammaPredicate),
@@ -855,6 +860,7 @@ impl Optimizer {
             region_index: loop_branch,
         };
         let (theta, lower, upper) = self
+            .opt
             .graph
             .on_region(&loop_region, |reg| {
                 let (theta_node, (lower, upper)) = reg.new_loop(|t| {
@@ -886,7 +892,7 @@ impl Optimizer {
                                 [added.output(0), upper_arg],
                             )
                             .unwrap();
-                        self.span_tags.set(condition.into(), rangespan.clone());
+                        self.opt.span_tags.set(condition.into(), rangespan.clone());
                         //connect the condition to the theta's condition port
                         reg.connect_to_result(condition.output(0), InputType::ThetaPredicate)
                             .unwrap();
@@ -905,23 +911,25 @@ impl Optimizer {
             .unwrap();
 
         //anonyme-connect the lower and upper bounds in the loop-branch
-        let anonym_lower = self.graph[gamma]
+        let anonym_lower = self.opt.graph[gamma]
             .node_type
             .unwrap_gamma_mut()
             .add_entry_var();
-        let anonym_upper = self.graph[gamma]
+        let anonym_upper = self.opt.graph[gamma]
             .node_type
             .unwrap_gamma_mut()
             .add_entry_var();
         //connect bound-expr to the anony-import
-        self.graph
+        self.opt
+            .graph
             .connect(
                 lower_bound,
                 gamma.as_inport_location(InputType::EntryVariableInput(anonym_lower)),
                 OptEdge::value_edge_unset(),
             )
             .unwrap();
-        self.graph
+        self.opt
+            .graph
             .connect(
                 upper_bound,
                 gamma.as_inport_location(InputType::EntryVariableInput(anonym_upper)),
@@ -929,7 +937,8 @@ impl Optimizer {
             )
             .unwrap();
         //connect bound-expr in loop-branch to bound-loop-variables
-        self.graph
+        self.opt
+            .graph
             .connect(
                 gamma.as_outport_location(OutputType::EntryVariableArgument {
                     branch: loop_branch,
@@ -939,7 +948,8 @@ impl Optimizer {
                 OptEdge::value_edge_unset(),
             )
             .unwrap();
-        self.graph
+        self.opt
+            .graph
             .connect(
                 gamma.as_outport_location(OutputType::EntryVariableArgument {
                     branch: loop_branch,
@@ -961,16 +971,16 @@ impl Optimizer {
         ctx.open_new_scope(loop_body, true);
         //define the lower_anonym loop bound as the loop-variable that is referenced by the ident
         let loop_variable_port = theta.as_outport_location(OutputType::Argument(anonym_lower));
-        self.names.set(
+        self.opt.names.set(
             loop_variable_port.into(),
             loopstmt.iteration_variable_ident.0.clone(),
         );
-        self.names.set(lower.0.into(), "lower-bound".to_owned());
-        self.names.set(lower.1.into(), "lower-bound".to_owned());
-        self.names.set(upper.0.into(), "upper-bound".to_owned());
-        self.names.set(upper.1.into(), "upper-bound".to_owned());
-        self.span_tags.set(theta.into(), loopstmt.span.clone());
-        self.span_tags.set(gamma.into(), loopstmt.span.clone());
+        self.opt.names.set(lower.0.into(), "lower-bound".to_owned());
+        self.opt.names.set(lower.1.into(), "lower-bound".to_owned());
+        self.opt.names.set(upper.0.into(), "upper-bound".to_owned());
+        self.opt.names.set(upper.1.into(), "upper-bound".to_owned());
+        self.opt.span_tags.set(theta.into(), loopstmt.span.clone());
+        self.opt.span_tags.set(gamma.into(), loopstmt.span.clone());
         let old = ctx.active_scope.vars.insert(
             loopstmt.iteration_variable_ident.0,
             VarDef::FirstDef {
@@ -1018,19 +1028,21 @@ impl Optimizer {
                 };
 
                 //NOTE: if a import-routine has alread pulled a edge to the result, disconnect it
-                if let Some(edg) = self.graph[result_lv].edge {
-                    let _ = self.graph.disconnect(edg).unwrap();
+                if let Some(edg) = self.opt.graph[result_lv].edge {
+                    let _ = self.opt.graph.disconnect(edg).unwrap();
                 }
 
                 if import_port == last_use {
                     //is used, but not redefined, map back to its own lv
 
-                    self.graph
+                    self.opt
+                        .graph
                         .connect(*import_port, result_lv, OptEdge::value_edge_unset())
                         .unwrap();
                 } else {
                     //is read-write, register, and map last-use
-                    self.graph
+                    self.opt
+                        .graph
                         .connect(*last_use, result_lv, OptEdge::value_edge_unset())
                         .unwrap();
                     readwrite_vars.insert(
@@ -1050,7 +1062,7 @@ impl Optimizer {
         // then find the entry-variable we got that variable from in the first place (in the loop-case), and route that straight through in the
         // no-loop branch.
         for (ident, var) in readwrite_vars {
-            let export_ex = self.graph[gamma]
+            let export_ex = self.opt.graph[gamma]
                 .node_type
                 .unwrap_gamma_mut()
                 .add_exit_var();
@@ -1059,7 +1071,8 @@ impl Optimizer {
                 .node
                 .as_outport_location(var.result_connection.input.map_out_of_region().unwrap());
             //connect var_src to the just created exit-var
-            self.graph
+            self.opt
+                .graph
                 .connect(
                     var_output,
                     gamma.as_inport_location(InputType::ExitVariableResult {
@@ -1077,14 +1090,15 @@ impl Optimizer {
                     .node
                     .as_inport_location(var.import_argument.output.map_out_of_region().unwrap());
                 //now find the connected EV, which _should_ be directly connected (by the import).
-                let mut ev_arg = self.graph.inport_src(theta_input).unwrap();
+                let mut ev_arg = self.opt.graph.inport_src(theta_input).unwrap();
                 assert_eq!(ev_arg.node, gamma);
                 //is gamma-ev, so we can _just_ change the region to the
                 //no-run branch
                 let _ = ev_arg.output.change_region_index(norun_branch);
                 ev_arg
             };
-            self.graph
+            self.opt
+                .graph
                 .connect(
                     no_run_src,
                     gamma.as_inport_location(InputType::ExitVariableResult {
@@ -1095,14 +1109,16 @@ impl Optimizer {
                 )
                 .unwrap();
 
-            self.names
+            self.opt
+                .names
                 .set(var.import_argument.into(), format!("Run value: {ident}"));
-            self.names
+            self.opt
+                .names
                 .set(no_run_src.into(), format!("No-Run value: {ident}"));
 
             //finally redefine the variable in the theta-parent (AST) scope
             ctx.write_or_define_var(
-                self,
+                self.opt,
                 &ident,
                 gamma.as_outport_location(OutputType::ExitVariableOutput(export_ex)),
             )
@@ -1111,16 +1127,17 @@ impl Optimizer {
 
         //fix up all loop-variables that where imported read-only.
         //This can happen if an nested expression/stmt _imports_ somehing, but doesn't overwrite it.
-        for lv in 0..self.graph[theta]
+        for lv in 0..self.opt.graph[theta]
             .node_type
             .unwrap_theta_ref()
             .loop_variable_count()
         {
             let lv_result = InputType::Result(lv).to_location(theta);
-            if self.graph[lv_result].edge.is_none() {
+            if self.opt.graph[lv_result].edge.is_none() {
                 //map as loop-invariant value
                 let lv_argument = OutputType::Argument(lv).to_location(theta);
-                self.graph
+                self.opt
+                    .graph
                     .connect(lv_argument, lv_result, OptEdge::value_edge_unset())
                     .unwrap();
             }

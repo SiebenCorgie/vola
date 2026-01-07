@@ -16,9 +16,12 @@ use crate::{
     csg::CsgOp,
     imm::ImmBool,
     interval::IntervalExtension,
-    passes::{lazy_type::TypeError, lower_ast::block_build::VarDef},
+    passes::{
+        lazy_type::TypeError,
+        lower_ast::{block_build::VarDef, LowerAst},
+    },
     typelevel::{IntervalConstruct, NonUniformConstruct, TypeCast},
-    OptEdge, Optimizer,
+    OptEdge,
 };
 
 use super::block_build::BlockCtx;
@@ -38,7 +41,7 @@ use crate::{
     OptError, OptNode,
 };
 
-impl Optimizer {
+impl<'opt> LowerAst<'opt> {
     //Sets up the alge expression, and if successful, return the output port that defines the final value.
     // TODO: Right now we don't have anything stateful, so a simple Outport location is enough. Hover, this might change whenever we introduce
     // buffer and image reads at a later stage.
@@ -54,6 +57,7 @@ impl Optimizer {
                 //setup the unary node, than recurse, setup the subexpression and hook it up to our unary expression
                 let sub_output = self.build_expr(*operand, region, ctx)?;
                 let opnode = self
+                    .opt
                     .graph
                     .on_region(&region, |regbuilder| {
                         let (opnode, _) = regbuilder
@@ -73,6 +77,7 @@ impl Optimizer {
                 let right_out = self.build_expr(*right, region, ctx)?;
 
                 let opnode = self
+                    .opt
                     .graph
                     .on_region(&region, |regbuilder| {
                         let (opnode, _) = regbuilder
@@ -102,7 +107,7 @@ impl Optimizer {
                     .map(|arg| self.build_expr(arg, region, ctx))
                     .collect::<Result<SmallColl<_>, VolaError<OptError>>>()?;
 
-                let res = if let Some(ooe) = self.csg_node_defs.get(&c.ident.0) {
+                let res = if let Some(ooe) = self.opt.csg_node_defs.get(&c.ident.0) {
                     //found one, use that as a CSG op
                     let node =
                         OptNode::new(CsgOp::new(ooe.name.clone(), 0, args.len()), c.span.clone());
@@ -114,28 +119,28 @@ impl Optimizer {
                         //Notify the compiler if this is one of the pass nodes.
                         if intr.try_downcast_ref::<AutoDiff>().is_some() {
                             #[cfg(feature = "log")]
-                            if !self.config.seen_pass_nodes.autodiff {
+                            if !self.opt.config.seen_pass_nodes.autodiff {
                                 log::info!("Registering first AutoDiff");
                             }
 
-                            self.config.seen_pass_nodes.autodiff = true;
+                            self.opt.config.seen_pass_nodes.autodiff = true;
                         }
                         if intr.try_downcast_ref::<IntervalExtension>().is_some() {
                             #[cfg(feature = "log")]
-                            if !self.config.seen_pass_nodes.interval {
+                            if !self.opt.config.seen_pass_nodes.interval {
                                 log::info!("Registering first IntervalExtension");
                             }
-                            self.config.seen_pass_nodes.interval = true;
+                            self.opt.config.seen_pass_nodes.interval = true;
                         }
 
                         CallResult::Node(intr.with_span(expr_span.clone()))
                     } else {
                         //must be some kind of function, try to import it, and place a call
                         let call_output = ctx
-                            .find_variable(self, &c.ident.0)
+                            .find_variable(self.opt, &c.ident.0)
                             .map_err(|e| e.with_label(expr_span.clone(), "here"))?;
                         //make sure this is actually a callable
-                        if let Some(callable) = self.graph.find_callabel_def(call_output) {
+                        if let Some(callable) = self.opt.graph.find_callabel_def(call_output) {
                             CallResult::Call {
                                 import: call_output,
                                 lambda: callable,
@@ -151,7 +156,7 @@ impl Optimizer {
                                 expr_span,
                                 "trying to call this",
                             );
-                            if let Some(outspan) = self.find_span(call_output) {
+                            if let Some(outspan) = self.opt.find_span(call_output) {
                                 return Err(err.with_label(outspan, "found this"));
                             } else {
                                 return Err(err);
@@ -180,7 +185,8 @@ impl Optimizer {
                             return Err(err);
                         }
 
-                        self.graph
+                        self.opt
+                            .graph
                             .on_region(&region, |reg| {
                                 let (result, _) = reg.connect_node(n, args).unwrap();
                                 result.output(0)
@@ -190,13 +196,13 @@ impl Optimizer {
                     //As apply node
                     CallResult::Call { import, lambda } => {
                         //check that the arg-count matches
-                        let argcount = self.graph[lambda.node]
+                        let argcount = self.opt.graph[lambda.node]
                             .node_type
                             .unwrap_lambda_ref()
                             .argument_count();
                         if argcount != args.len() {
-                            let lmd_name = self.node_name(lambda.node);
-                            let lmd_span = self.find_span(lambda.node);
+                            let lmd_name = self.opt.node_name(lambda.node);
+                            let lmd_span = self.opt.find_span(lambda.node);
                             let err = VolaError::error_here(
                                 OptError::Any {
                                     text: format!(
@@ -216,7 +222,8 @@ impl Optimizer {
                             }
                         }
 
-                        self.graph
+                        self.opt
+                            .graph
                             .on_region(&region, |reg| {
                                 let (call, _edges) = reg.call(import, &args).unwrap();
                                 assert!(
@@ -237,7 +244,7 @@ impl Optimizer {
                 let mut args = SmallColl::new();
                 //first arg is, by definition the _hopefull_ defined var
                 let operand = ctx
-                    .find_variable(self, &evalexpr.evaluator.0)
+                    .find_variable(self.opt, &evalexpr.evaluator.0)
                     .map_err(|e| e.with_label(expr_span.clone(), "here"))?;
                 args.push(operand);
 
@@ -247,6 +254,7 @@ impl Optimizer {
 
                 //Now setup the eval node
                 let opnode = self
+                    .opt
                     .graph
                     .on_region(&region, |regbuilder| {
                         let (opnode, _) = regbuilder
@@ -269,7 +277,7 @@ impl Optimizer {
                 // return the value
 
                 let mut src = ctx
-                    .find_variable(self, &src.0)
+                    .find_variable(self.opt, &src.0)
                     .map_err(|e| e.with_label(expr_span.clone(), "here"))?;
 
                 //Unwrap the `accessors` list into a chain of `ConstantIndex`, each feeding into its
@@ -287,6 +295,7 @@ impl Optimizer {
                     let cinode = OptNode::new(ConstantIndex::new(idx), expr_span.clone());
                     //now connect it to the predecessor.
                     let new_src = self
+                        .opt
                         .graph
                         .on_region(&region, |reg| {
                             let (opnode, _) = reg.connect_node(cinode, [src]).unwrap();
@@ -303,7 +312,7 @@ impl Optimizer {
             ExprTy::Ident(i) => {
                 //try to resolve the ident, or throw an error if not possible
                 let ident_node = ctx
-                    .find_variable(self, &i.0)
+                    .find_variable(self.opt, &i.0)
                     .map_err(|e| e.with_label(expr_span.clone(), "here"))?;
                 Ok(ident_node)
             }
@@ -323,6 +332,7 @@ impl Optimizer {
                 node.inputs = smallvec![Input::default(); items.len()];
 
                 let opnode = self
+                    .opt
                     .graph
                     .on_region(&region, |regbuilder| {
                         let (opnode, _) = regbuilder
@@ -347,6 +357,7 @@ impl Optimizer {
                 };
 
                 let opnode = self
+                    .opt
                     .graph
                     .on_region(&region, |regbuilder| {
                         let opnode = regbuilder.insert_node(optnode);
@@ -372,6 +383,7 @@ impl Optimizer {
 
                 //For tuples we just emit a NonUniform constructor
                 let tuple_construct = self
+                    .opt
                     .graph
                     .on_region(&region, |reg| {
                         let (node, _edg) = reg
@@ -387,9 +399,13 @@ impl Optimizer {
                 Ok(tuple_construct)
             }
             ExprTy::ScopedCall(sc) => {
-                if let Some(operation) = self.csg_node_defs.get(&sc.call.ident.0) {
+                if let Some(operation) = self.opt.csg_node_defs.get(&sc.call.ident.0) {
                     if operation.ty == CsgTy::Entity {
-                        let err = OptError::Any { text: "Using Entity with sub-trees. Only CSG-Operations can use subtrees!".to_string() };
+                        let err = OptError::Any {
+                            text:
+                                "Using Entity with sub-trees. Only CSG-Operations can use subtrees!"
+                                    .to_string(),
+                        };
                         return Err(VolaError::error_here(err, sc.call.span, "called here")
                             .with_label(operation.span.clone(), "Entity defined here"));
                     }
@@ -451,6 +467,7 @@ impl Optimizer {
                 );
                 //finally setup the CSGOp
                 let output = self
+                    .opt
                     .graph
                     .on_region(&region, |reg| {
                         let (usolev, _) = reg.connect_node(n, csg_node_args).unwrap();
@@ -485,6 +502,7 @@ impl Optimizer {
                 node.inputs = smallvec![Input::default(); items.len()];
 
                 let opnode = self
+                    .opt
                     .graph
                     .on_region(&region, |regbuilder| {
                         let (opnode, _) = regbuilder
@@ -499,6 +517,7 @@ impl Optimizer {
                 let src = self.build_expr(*expr, region, ctx)?;
                 let node = TypeCast::new(ty.into());
                 let opnode = self
+                    .opt
                     .graph
                     .on_region(&region, |reg| {
                         let (opnode, _) = reg
@@ -513,6 +532,7 @@ impl Optimizer {
                 let lower = self.build_expr(*lower, region, ctx)?;
                 let upper = self.build_expr(*upper, region, ctx)?;
                 let opnode = self
+                    .opt
                     .graph
                     .on_region(&region, |reg| {
                         let (opnode, _) = reg
@@ -543,7 +563,7 @@ impl Optimizer {
         let condition = self.build_expr(condition, region, ctx)?;
 
         //Make sure the condition is actually a boolean op
-        match self.get_out_type_mut(condition) {
+        match self.opt.get_out_type_mut(condition) {
             Ok(ty) => {
                 if !(ty.is_bool() && ty.is_scalar()) {
                     return Err(VolaError::error_here(
@@ -555,8 +575,10 @@ impl Optimizer {
             }
             Err(_e) => {
                 return Err(VolaError::error_here(
-                    TypeError::Other("Could not derive a valid type for this condition!".to_string())
-                        .into(),
+                    TypeError::Other(
+                        "Could not derive a valid type for this condition!".to_string(),
+                    )
+                    .into(),
                     condition_span,
                     "here",
                 ))
@@ -565,6 +587,7 @@ impl Optimizer {
 
         //now build the condition block.
         let (gamma, if_idx, else_idx) = self
+            .opt
             .graph
             .on_region(&region, |reg| {
                 let (g, (if_idx, else_idx)) = reg.new_decission(|g| {
@@ -627,7 +650,7 @@ impl Optimizer {
         let post_else_scope = ctx.close_scope();
         //Since this is the _expr_ flavour of a branch, we only need to feed bach the results of both branches.
 
-        let result_idx = self.graph[gamma]
+        let result_idx = self.opt.graph[gamma]
             .node_type
             .unwrap_gamma_mut()
             .add_exit_var();
@@ -642,7 +665,8 @@ impl Optimizer {
             });
             if let Some(value_src) = result_port {
                 //connect the result
-                self.graph
+                self.opt
+                    .graph
                     .connect(value_src, result_ev, OptEdge::value_edge_unset())
                     .unwrap();
             } else {
@@ -657,7 +681,7 @@ impl Optimizer {
             }
         }
 
-        self.span_tags.set(gamma.into(), branch.span.clone());
+        self.opt.span_tags.set(gamma.into(), branch.span.clone());
 
         //successfully connected results, return the value_src port
         Ok(gamma.as_outport_location(OutputType::ExitVariableOutput(result_idx)))
