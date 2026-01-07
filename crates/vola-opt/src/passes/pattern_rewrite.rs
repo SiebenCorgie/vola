@@ -49,7 +49,7 @@ impl Optimizer {
         rewriter
     }
 
-    ///Applies the bespoke set of patterns (see [pattern_rewrite_all]) to `region` and any contained sub-regions.
+    ///Applies the bespoke set of patterns (see [pattern_rewrite_all](Self::pattern_rewrite_all)) to `region` and any contained sub-regions.
     pub fn rewrite_region(&mut self, region: RegionLocation) {
         let mut rewriter = rvsdg_pattern_rewrite::TopoGreedyRewriter::default()
             .with_recursion(rvsdg_pattern_rewrite::DriverRecursion::TopDown)

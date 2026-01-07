@@ -12,6 +12,10 @@ mod ast_to_graph;
 mod block_build;
 mod expr_build;
 
+///Lowers a [VolaAst] into the optimizer's graph. Takes care of the correct order, checking dependencies of calls and initial type checking.
+///
+/// Errors are defered until [finish](Self::finish), which allows it to emit multiple error. If this happens, the graph's state is considered _unstable_, since
+/// there might be broken code afterwards.
 pub struct LowerAst<'opt> {
     opt: &'opt mut Optimizer,
     ///Collects all errors that might have occured
@@ -33,7 +37,7 @@ impl<'opt> LowerAst<'opt> {
 
     ///Adds a [VolaAst] to the optimizer. Might emit errors if the
     /// semantic analysis fails immediately while adding. This doesn't mean that you have to stop adding elements
-    /// to the graph though. All occured errors, if there where any will be emitted uppon [finish].
+    /// to the graph though. All occured errors, if there where any will be emitted uppon [finish](LowerAst::finish).
     pub fn add_ast(mut self, ast: VolaAst) -> Self {
         //Lowering the ast works in three steps:
         // 1. Serialize all entry-points into the graph

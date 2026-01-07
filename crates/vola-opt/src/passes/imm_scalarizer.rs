@@ -19,7 +19,7 @@ use crate::{
     OptError, OptNode, Optimizer,
 };
 
-///Transforms any [ImmVec],[ImmMatrix], etc. into a chain of [ImmScalar]s + [UniformConstruct].
+///Transforms any [ImmVector],[ImmMatrix], etc. into a chain of [ImmScalar]s + [UniformConstruct].
 pub struct ImmScalarize<'opt> {
     opt: &'opt mut Optimizer,
 }
