@@ -11,5 +11,8 @@ pub trait PatternRewrite<N: LangNode, E: LangEdge, B: Benefit> {
 
     ///Can assume that `node` fulfills the [matches](Self::matches) criterion. `graph` is shared to this application of a rewrite _exclusively_.
     /// Generally, if `matches` returns true, this is expected to succeed. Otherwise its free to panic, which indicates a pattern bug.
+    ///
+    /// [apply] usually replace `node` fully (i.e. usually ending with [replace_node_uses](Rvsdg::replace_node_uses) or similar) once applied.
+    /// It should **not** invalidate formerly valid nodes.
     fn apply(&self, graph: &mut Rvsdg<N, E>, node: NodeRef);
 }
