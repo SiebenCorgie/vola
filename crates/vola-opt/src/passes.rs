@@ -35,7 +35,7 @@ mod interval_dispatch;
 pub mod lazy_type;
 mod lower_ast;
 pub use lower_ast::LowerAst;
-mod pattern_rewrite;
+pub mod pattern_rewrite;
 mod recursion_detection;
 mod specializer;
 mod type_edges;

@@ -15,16 +15,10 @@ use crate::{
 
 impl Optimizer {
     pub fn interval_extension(&mut self) -> Result<(), VolaError<OptError>> {
-        #[cfg(feature = "log")]
-        log::info!("interval-extension");
-
         IntervalExtensionPass::setup(self).extend_all()
     }
 
     pub fn interval_to_tuple(&mut self) -> Result<(), VolaError<OptError>> {
-        #[cfg(feature = "log")]
-        log::info!("lower interval");
-
         LowerIntervals::setup(self).execute()
     }
 }
