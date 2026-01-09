@@ -54,7 +54,10 @@
 //! graph.
 
 use super::{activity::Activity, AdResponse, AutoDiffError};
-use crate::{autodiff::AutoDiff, OptEdge, OptError, Optimizer};
+use crate::{
+    autodiff::{canonicalize::AdCanonicalizer, AutoDiff},
+    OptEdge, OptError, Optimizer,
+};
 use ahash::AHashMap;
 use rvsdg::{
     edge::{InportLocation, OutportLocation, OutputType},
@@ -78,14 +81,17 @@ impl Optimizer {
     /// with the differentiated value(s) after this pass (successfuly) ends.
     pub fn forward_ad(&mut self, entrypoint: NodeRef) -> Result<(), VolaError<OptError>> {
         if !self.is_node_type::<AutoDiff>(entrypoint) {
-            return Err(VolaError::new(OptError::Internal("AD Entrypoint was not of type AutoDiff".to_string())));
+            return Err(VolaError::new(OptError::Internal(
+                "AD Entrypoint was not of type AutoDiff".to_string(),
+            )));
         }
+
+        #[cfg(feature = "log")]
+        log::info!("Start forward AD for {entrypoint}");
 
         //If the wrt-arg is a constructor, linearize the ad-entrypoint into
         // multiple AD-Nodes with a single (scalar) WRT-Arg.
-        let entrypoints = self
-            .linearize_ad(entrypoint)
-            .map_err(VolaError::new)?;
+        let entrypoints = self.linearize_ad(entrypoint).map_err(VolaError::new)?;
 
         let region = self.graph[entrypoint].parent.unwrap();
         //TODO: Can speed up thing, or make them slower, do heuristically
@@ -99,8 +105,11 @@ impl Optimizer {
             self.push_debug_state(&format!("fw-autodiff-{entrypoint}-linearized"));
         }
 
+        let mut canonicalizer = AdCanonicalizer::setup(self);
+
         for entrypoint in &entrypoints {
-            self.canonicalize_for_ad(*entrypoint)
+            canonicalizer = canonicalizer
+                .canonicalize(*entrypoint)
                 .map_err(VolaError::new)?;
         }
 
@@ -311,9 +320,7 @@ impl Optimizer {
                     "typelevel" | "alge" => self
                         .fwd_handle_alge_node(region, node, ctx)
                         .map_err(|e| e.into()),
-                    "autodiff" => {
-                        Err(AutoDiffError::UnexpectedAutoDiffNode.into())
-                    }
+                    "autodiff" => Err(AutoDiffError::UnexpectedAutoDiffNode.into()),
                     "imm" => {
                         //an active immediate value will be splat to zero, since this will always
                         //be equivalent to a constant.

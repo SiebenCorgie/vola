@@ -10,7 +10,6 @@
 //!
 //! Implements utility passes for the auto-diff implementations
 
-use ahash::AHashSet;
 use rvsdg::{
     edge::{OutportLocation, OutputType},
     region::RegionLocation,
@@ -20,10 +19,6 @@ use rvsdg::{
 use vola_common::Span;
 
 use crate::{
-    alge::{
-        arithmetic::{BinaryArith, UnaryArith},
-        buildin::Buildin,
-    },
     autodiff::{AutoDiff, AutoDiffError},
     common::{DataType, Shape, Ty},
     imm::ImmScalar,
@@ -131,87 +126,6 @@ impl Optimizer {
             }
             _ => Err(AutoDiffError::LinearizeAdFailed.into()),
         }
-    }
-
-    ///Tries to canonicalize the AD `entrypoint` into only nodes that are differentiatable.
-    pub fn canonicalize_for_ad(&mut self, entrypoint: NodeRef) -> Result<(), OptError> {
-        if !self.is_node_type::<AutoDiff>(entrypoint) {
-            return Err(OptError::Internal(
-                "AD Entrypoint was not of type AutoDiff".to_string(),
-            ));
-        }
-
-        let region = self.graph[entrypoint].parent.unwrap();
-        let expr_src = self.graph.inport_src(entrypoint.input(0)).unwrap();
-        let mut preds = self
-            .graph
-            .walk_predecessors(expr_src.node)
-            .collect::<Vec<_>>();
-        //re-add the src, for compleatness.
-        preds.push(expr_src);
-        let mut seen = AHashSet::new();
-        for pred in preds {
-            //Note do not canonicalize our parent region!
-            if pred.node == region.node {
-                continue;
-            }
-            if !seen.contains(&pred.node) {
-                seen.insert(pred.node);
-                self.handle_canon_node(pred.node)?;
-            }
-        }
-
-        Ok(())
-    }
-
-    ///Canonicalizes `node` for ad.
-    ///
-    /// - Guarantees that the replaced node binds to all _formerly_ connected nodes
-    /// - Does not delete other nodes (but might add / remove connections)
-    pub(crate) fn handle_canon_node(&mut self, node: NodeRef) -> Result<(), OptError> {
-        let target_region = self.graph[node].parent.unwrap();
-        //if the node has sub regions, do whole-graph canonicalization on all of those
-        for reg in 0..self.graph[node].regions().len() {
-            let region = RegionLocation {
-                node,
-                region_index: reg,
-            };
-            self.canon_region(region)?;
-        }
-
-        if self.is_node_type::<Buildin>(node) {
-            return self.handle_canon_buildin(&target_region, node);
-        }
-
-        if self.is_node_type::<UnaryArith>(node) {
-            return self.handle_canon_unary(&target_region, node);
-        }
-        if self.is_node_type::<BinaryArith>(node) {
-            return self.handle_canon_binary(&target_region, node);
-        }
-
-        if self.graph[node].node_type.is_apply() {
-            return self.handle_canon_apply(node);
-        }
-
-        if self.graph[node].node_type.is_theta() {
-            let unroll_count = self.loop_count(node)?;
-            self.graph.unroll_replace_theta(node, unroll_count)?;
-        }
-
-        Ok(())
-    }
-
-    fn canon_region(&mut self, region: RegionLocation) -> Result<(), OptError> {
-        for active in self.graph.live_nodes_in_region(region).into_iter() {
-            //Ignore self
-            if active == region.node {
-                continue;
-            }
-            self.handle_canon_node(active)?;
-        }
-
-        Ok(())
     }
 
     ///Checks that all, or no edge is conneted in any branch of `gamma_node` for `exit_variable`
