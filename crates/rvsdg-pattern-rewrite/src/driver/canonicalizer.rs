@@ -299,7 +299,7 @@ where
 
     ///Runs the on `value` in `graph`. Applies the patterns to all values that contribute to `value`, i.e. all dependencies.
     ///
-    /// Depending on whether [follow_calls] and [follow_context] are set, might canonicalize called function bodies and used context as well.
+    /// Depending on whether [follow_calls](Self::follow_calls) and [follow_context](Self::follow_context) are set, might canonicalize called function bodies and used context as well.
     pub fn canonicalize_value(&mut self, ctx: &mut Ctx, value: OutportLocation) {
         log::info!("Initializing canonicalization-rewrite on {value}");
         //NOTE: mini wrapper that catches if rules changed. Afterwards we can consider the driver immutable.
@@ -311,7 +311,7 @@ where
     }
 
     ///Runs the driver on all live nodes of `region` (i.e. nodes connected to the results of the region) and, depending on
-    /// whether [follow_calls] / [follow_context] was set, possibly related regions as well.
+    /// whether [follow_calls](Self::follow_calls) / [follow_context](Self::follow_context) was set, possibly related regions as well.
     pub fn canonicalize_region(&mut self, ctx: &mut Ctx, region: RegionLocation) {
         log::info!("Initialize canonicalization-rewrite for {region}");
 

@@ -126,7 +126,7 @@ impl PatternRewrite<OptNode, OptEdge, Optimizer, CodeSize> for LowerLength {
     }
 }
 
-///Aproximates Min/Max operations inspired by this: https://auto-differentiation.github.io/ref/math/
+///Aproximates Min/Max operations inspired by this: <https://auto-differentiation.github.io/ref/math/>
 ///implement as:
 ///
 ///min: (x + y - abs(x-y)) / 2
