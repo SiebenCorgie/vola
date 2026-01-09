@@ -1,6 +1,10 @@
-use rvsdg::{Rvsdg, edge::LangEdge, nodes::LangNode, region::RegionLocation};
+use rvsdg::{edge::LangEdge, nodes::LangNode, region::RegionLocation};
 
-use crate::{DriverRecursion, PatternRewrite, benefit::Benefit, driver::DriverRestart};
+use crate::{
+    DriverRecursion, PatternRewrite,
+    benefit::Benefit,
+    driver::{DriverRestart, RewriteableGraph},
+};
 
 ///Traverses a graph in topological order, always applying the best (according to the benefits) rewrite-pattern to a node.
 ///A typical initialization would be:
@@ -13,18 +17,24 @@ use crate::{DriverRecursion, PatternRewrite, benefit::Benefit, driver::DriverRes
 ///
 /// driver.run_on(&mut myGraph, myRegion).unwrap();
 /// ```
-pub struct TopoGreedyRewriter<Node: LangNode, Edge: LangEdge, B: Benefit> {
+pub struct TopoGreedyRewriter<
+    Node: LangNode + 'static,
+    Edge: LangEdge + 'static,
+    Ctx: RewriteableGraph<Node = Node, Edge = Edge>,
+    B: Benefit,
+> {
     ///All registered rewrites
-    rewriter: Vec<Box<dyn PatternRewrite<Node, Edge, B>>>,
+    rewriter: Vec<Box<dyn PatternRewrite<Node, Edge, Ctx, B>>>,
     rules_changed: bool,
     pub recursion: DriverRecursion,
     pub restart: DriverRestart,
 }
 
-impl<Node, Edge, B> Default for TopoGreedyRewriter<Node, Edge, B>
+impl<Node, Edge, Ctx, B> Default for TopoGreedyRewriter<Node, Edge, Ctx, B>
 where
-    Node: LangNode,
-    Edge: LangEdge,
+    Node: LangNode + 'static,
+    Edge: LangEdge + 'static,
+    Ctx: RewriteableGraph<Node = Node, Edge = Edge>,
     B: Benefit,
 {
     fn default() -> Self {
@@ -37,10 +47,11 @@ where
     }
 }
 
-impl<Node, Edge, B> TopoGreedyRewriter<Node, Edge, B>
+impl<Node, Edge, Ctx, B> TopoGreedyRewriter<Node, Edge, Ctx, B>
 where
-    Node: LangNode,
-    Edge: LangEdge,
+    Node: LangNode + 'static,
+    Edge: LangEdge + 'static,
+    Ctx: RewriteableGraph<Node = Node, Edge = Edge>,
     B: Benefit,
 {
     pub fn with_recursion(mut self, recursion: DriverRecursion) -> Self {
@@ -52,7 +63,7 @@ where
         self
     }
 
-    pub fn register(&mut self, rewrite: impl PatternRewrite<Node, Edge, B> + 'static) {
+    pub fn register(&mut self, rewrite: impl PatternRewrite<Node, Edge, Ctx, B> + 'static) {
         self.rewriter.push(Box::new(rewrite));
         self.rules_changed = true;
     }
@@ -64,30 +75,31 @@ where
     }
 
     ///Runs the on `entry` in `graph`. If `recursive` is true, it'll consider sub-region (i.e. loop-bodies, etc.).
-    pub fn run(&mut self, graph: &mut Rvsdg<Node, Edge>, entry: RegionLocation) {
+    pub fn run(&mut self, ctx: &mut Ctx, entry: RegionLocation) {
         log::info!("Initializing patter-rewrite on {entry}");
         //NOTE: mini wrapper that catches if rules changed. Afterwards we can consider the driver immutable.
         if self.rules_changed {
             self.prepare_rules();
         }
 
-        self.run_on(graph, entry)
+        self.run_on(ctx, entry)
     }
     ///Runst the driver on `entry`. Returns the amount of rewrites that was applied, if successful.
-    fn run_on(&self, graph: &mut Rvsdg<Node, Edge>, entry: RegionLocation) {
-        let mut order =
-            graph.topological_order_nodes(graph.live_nodes_in_region(entry).into_iter());
+    fn run_on(&self, ctx: &mut Ctx, entry: RegionLocation) {
+        let mut order = ctx
+            .graph()
+            .topological_order_nodes(ctx.graph().live_nodes_in_region(entry).into_iter());
         //First recurse
         if self.recursion == DriverRecursion::BottomUp {
             //NOTE: the just-build order is known to only contain existing nodes, so we really can just iter it.
             for node in &order {
-                let region_count = graph[*node].regions().len();
+                let region_count = ctx.graph()[*node].regions().len();
                 if region_count == 0 {
                     continue;
                 }
                 for region_index in 0..region_count {
                     self.run_on(
-                        graph,
+                        ctx,
                         RegionLocation {
                             node: *node,
                             region_index,
@@ -97,7 +109,9 @@ where
             }
 
             //This might have disturbed the order of nodes, therfore regenerate it
-            order = graph.topological_order_nodes(graph.live_nodes_in_region(entry).into_iter());
+            order = ctx
+                .graph()
+                .topological_order_nodes(ctx.graph().live_nodes_in_region(entry).into_iter());
         }
 
         //Tracks restart state
@@ -111,9 +125,9 @@ where
             'note_iter: for node in &order {
                 for pattern in &self.rewriter {
                     //Apply..
-                    if pattern.matches(&graph, *node) {
+                    if pattern.matches(&ctx, *node) {
                         changed_any = true;
-                        pattern.apply(graph, *node);
+                        pattern.apply(ctx, *node);
                         //..and continue with next node
                         continue 'note_iter;
                     }
@@ -128,8 +142,9 @@ where
                 //check if there are any rerstarts left
                 if restart.should_restart() {
                     //if so, update the order before restarting
-                    order = graph
-                        .topological_order_nodes(graph.live_nodes_in_region(entry).into_iter());
+                    order = ctx.graph().topological_order_nodes(
+                        ctx.graph().live_nodes_in_region(entry).into_iter(),
+                    );
                     continue 'restart;
                 } else {
                     log::info!("Reached restart bound in {entry}");
@@ -143,7 +158,7 @@ where
             //NOTE: we make no gurantee in which order recursion happens, so we just recurse any existing node here.
             for node in &order {
                 //Bail on none existing nodes and nodes without a subregion
-                if let Some(node) = graph.try_node(*node) {
+                if let Some(node) = ctx.graph().try_node(*node) {
                     if node.regions().is_empty() {
                         continue;
                     }
@@ -152,9 +167,9 @@ where
                 }
 
                 //Exists and has a subregion, recurse
-                for region_index in 0..graph[*node].regions().len() {
+                for region_index in 0..ctx.graph()[*node].regions().len() {
                     self.run_on(
-                        graph,
+                        ctx,
                         RegionLocation {
                             node: *node,
                             region_index,

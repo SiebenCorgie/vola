@@ -1,4 +1,5 @@
 mod topo_greedy;
+use rvsdg::{Rvsdg, edge::LangEdge, nodes::LangNode};
 pub use topo_greedy::TopoGreedyRewriter;
 mod canonicalizer;
 pub use canonicalizer::Canonicalizer;
@@ -44,5 +45,30 @@ impl DriverRestart {
             }
             Self::SingeShot => false,
         }
+    }
+}
+
+///Allows you to use _anything_ that contains a graph
+/// to drive pattern rewrites.
+///
+/// This is useful if you need/use context in pattern matching.
+///
+/// Note that any _standard_ RVSDG is by definition rewriteable.
+pub trait RewriteableGraph {
+    type Node: LangNode;
+    type Edge: LangEdge;
+
+    fn graph(&self) -> &Rvsdg<Self::Node, Self::Edge>;
+    fn graph_mut(&mut self) -> &mut Rvsdg<Self::Node, Self::Edge>;
+}
+
+impl<N: LangNode, E: LangEdge> RewriteableGraph for Rvsdg<N, E> {
+    type Edge = E;
+    type Node = N;
+    fn graph(&self) -> &Rvsdg<Self::Node, Self::Edge> {
+        self
+    }
+    fn graph_mut(&mut self) -> &mut Rvsdg<Self::Node, Self::Edge> {
+        self
     }
 }

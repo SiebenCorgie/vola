@@ -2,27 +2,40 @@ use std::collections::VecDeque;
 
 use ahash::AHashSet;
 use rvsdg::{
-    NodeRef, Rvsdg,
+    NodeRef,
     edge::{InputType, LangEdge, OutportLocation, OutputType},
     nodes::LangNode,
     region::RegionLocation,
 };
 
-use crate::{PatternRewrite, benefit::Benefit};
+use crate::{PatternRewrite, benefit::Benefit, driver::RewriteableGraph};
 
 ///The actual canonicalization runner that reuses already allocated
 /// helpers from the base pass.
-struct CanonRunner<'a, Node: LangNode, Edge: LangEdge, B: Benefit> {
+struct CanonRunner<
+    'a,
+    N: LangNode + 'static,
+    E: LangEdge + 'static,
+    Ctx: RewriteableGraph<Node = N, Edge = E>,
+    B: Benefit,
+> {
     queue: &'a mut VecDeque<OutportLocation>,
     seen: &'a mut AHashSet<OutportLocation>,
     handeled: &'a mut AHashSet<NodeRef>,
-    rewriter: &'a Vec<Box<dyn PatternRewrite<Node, Edge, B>>>,
+    rewriter: &'a Vec<Box<dyn PatternRewrite<N, E, Ctx, B>>>,
     follow_calls: bool,
     follow_context: bool,
 }
 
-impl<'a, Node: LangNode, Edge: LangEdge, B: Benefit> CanonRunner<'a, Node, Edge, B> {
-    pub fn run(&mut self, graph: &mut Rvsdg<Node, Edge>) {
+impl<
+    'a,
+    N: LangNode + 'static,
+    E: LangEdge + 'static,
+    Ctx: RewriteableGraph<Node = N, Edge = E>,
+    B: Benefit,
+> CanonRunner<'a, N, E, Ctx, B>
+{
+    pub fn run(&mut self, graph: &mut Ctx) {
         //TODO: implement the _recursive_ predecesor following in a iterative fashion. On each node call the rewriter
         //      Then reimplement the AD canonicalizer on top of this API as a simple set of rules
 
@@ -39,13 +52,19 @@ impl<'a, Node: LangNode, Edge: LangEdge, B: Benefit> CanonRunner<'a, Node, Edge,
                 self.seen.insert(next);
             }
 
+            log::trace!(
+                "Check {next} / {:?}",
+                graph.graph()[next.node].into_abstract()
+            );
+
             if !next.output.is_argument() {
                 if let OutputType::ContextVariableArgument(_cvidx) = next.output {
                     //if this is a context variable output, check whether we actually want to follow that
                     if self.follow_context {
                         if let Some(outside) = next.output.map_out_of_region() {
-                            if let Some(src) =
-                                graph.inport_src(next.node.as_inport_location(outside))
+                            if let Some(src) = graph
+                                .graph()
+                                .inport_src(next.node.as_inport_location(outside))
                             {
                                 //valid context connected, enque
                                 self.queue.push_back(src);
@@ -59,9 +78,9 @@ impl<'a, Node: LangNode, Edge: LangEdge, B: Benefit> CanonRunner<'a, Node, Edge,
                     next.output
                 {
                     //for declerations context_following was activated, therefore enque all results of the context
-                    for region in graph.iter_regions(next.node) {
-                        for result in graph.result_ports(region) {
-                            if let Some(src) = graph.inport_src(result) {
+                    for region in graph.graph().iter_regions(next.node) {
+                        for result in graph.graph().result_ports(region) {
+                            if let Some(src) = graph.graph().inport_src(result) {
                                 self.queue.push_back(src);
                             }
                         }
@@ -69,12 +88,14 @@ impl<'a, Node: LangNode, Edge: LangEdge, B: Benefit> CanonRunner<'a, Node, Edge,
                 } else {
                     //all other outputs (which are no arguments) with regions are just mapped into the region and followed.
                     // In practice this is manly loop-variable-outputs and and exit-variables
-                    for region in graph.iter_regions(next.node) {
+                    for region in graph.graph().iter_regions(next.node) {
                         let Some(inside) = next.output.map_to_in_region(region.region_index) else {
                             continue;
                         };
 
-                        let Some(src) = graph.inport_src(next.node.as_inport_location(inside))
+                        let Some(src) = graph
+                            .graph()
+                            .inport_src(next.node.as_inport_location(inside))
                         else {
                             continue;
                         };
@@ -91,13 +112,16 @@ impl<'a, Node: LangNode, Edge: LangEdge, B: Benefit> CanonRunner<'a, Node, Edge,
 
                 //for both, map out of region, and check whether there is a value connected
                 if let Some(outside) = next.output.map_out_of_region() {
-                    if let Some(src) = graph.inport_src(next.node.as_inport_location(outside)) {
+                    if let Some(src) = graph
+                        .graph()
+                        .inport_src(next.node.as_inport_location(outside))
+                    {
                         self.queue.push_back(src);
                     }
                 }
 
                 //only for theta, enque the respective loop-result
-                if graph[next.node].node_type.is_theta() {
+                if graph.graph()[next.node].node_type.is_theta() {
                     let OutputType::Argument(index) = next.output else {
                         log::error!(
                             "Handling argument-like theta port, but it wasn't an argument, ignoring full port since its invalid ..."
@@ -106,18 +130,19 @@ impl<'a, Node: LangNode, Edge: LangEdge, B: Benefit> CanonRunner<'a, Node, Edge,
                     };
 
                     let result_port = next.node.as_inport_location(InputType::Result(index));
-                    if let Some(src) = graph.inport_src(result_port) {
+                    if let Some(src) = graph.graph().inport_src(result_port) {
                         self.queue.push_back(src);
                     }
                 }
             }
 
             //if this is a apply node, and we should follow those, find the connected lambda/phi, and enque the respective result
-            if graph[next.node].node_type.is_apply() && self.follow_calls {
+            if graph.graph()[next.node].node_type.is_apply() && self.follow_calls {
                 if let OutputType::Output(index) = next.output {
-                    if let Some(calldef) = graph.find_called(next.node) {
+                    if let Some(calldef) = graph.graph().find_called(next.node) {
                         //check whether the called node's resul is connected
                         if let Some(result_src) = graph
+                            .graph()
                             .inport_src(calldef.node.as_inport_location(InputType::Result(index)))
                         {
                             //has a result, enqueue it
@@ -133,6 +158,27 @@ impl<'a, Node: LangNode, Edge: LangEdge, B: Benefit> CanonRunner<'a, Node, Edge,
                 }
             }
 
+            //for _simple_ and apply nodes, enque all input-connected nodes
+            if graph.graph()[next.node].node_type.is_apply()
+                || graph.graph()[next.node].node_type.is_simple()
+            {
+                for input in graph.graph().inports(next.node) {
+                    if let Some(src) = graph.graph().inport_src(input) {
+                        self.queue.push_back(src);
+                    }
+                }
+            }
+
+            //for gamma-nodes, also enque the predicate produces
+            if graph.graph()[next.node].node_type.is_gamma() {
+                if let Some(src) = graph
+                    .graph()
+                    .inport_src(next.node.as_inport_location(InputType::GammaPredicate))
+                {
+                    self.queue.push_back(src);
+                }
+            }
+
             // finally handle the node itself, if it wasn't handeled
             // yet.
             // If it was handeled, just bail in order to not emit canon-nodes multiple time.
@@ -144,14 +190,31 @@ impl<'a, Node: LangNode, Edge: LangEdge, B: Benefit> CanonRunner<'a, Node, Edge,
                 for rule in self.rewriter {
                     if rule.matches(graph, next.node) {
                         log::info!("Apply rewrite to {} via {next}", next.node);
+
+                        //Safe who uses the value and re-insert it after applying the rule. This
+                        // basically allows the canonicalizer to
+                        // re-visit just inserted experssions.
+                        // This in turn allows rules to emit code, that is
+                        // further lowered by other rules
+                        let mut users = graph.graph().unique_dst_ports(next.node);
+
                         rule.apply(graph, next.node);
+
+                        //If there is a user (which we could technically assume).
+                        // enque the source, which effectively enques
+                        // the just canonicalized node
+                        if let Some(user) = users.pop() {
+                            if let Some(src) = graph.graph().inport_src(user) {
+                                //NOTE: add to the front in order to evaluate them immediately.
+                                self.queue.push_front(src);
+                            }
+                        }
+
                         break;
                     }
                 }
             }
         }
-
-        todo!()
     }
 }
 
@@ -163,9 +226,14 @@ impl<'a, Node: LangNode, Edge: LangEdge, B: Benefit> CanonRunner<'a, Node, Edge,
 ///
 /// driver.run_on(&mut my_graph, my_value).unwrap();
 /// ```
-pub struct Canonicalizer<Node: LangNode, Edge: LangEdge, B: Benefit> {
+pub struct Canonicalizer<
+    N: LangNode + 'static,
+    E: LangEdge + 'static,
+    Ctx: RewriteableGraph<Node = N, Edge = E>,
+    B: Benefit,
+> {
     ///All registered rewrites
-    rewriter: Vec<Box<dyn PatternRewrite<Node, Edge, B>>>,
+    rewriter: Vec<Box<dyn PatternRewrite<N, E, Ctx, B>>>,
     queue: VecDeque<OutportLocation>,
     seen: AHashSet<OutportLocation>,
     handeled: AHashSet<NodeRef>,
@@ -174,10 +242,11 @@ pub struct Canonicalizer<Node: LangNode, Edge: LangEdge, B: Benefit> {
     follow_context: bool,
 }
 
-impl<Node, Edge, B> Default for Canonicalizer<Node, Edge, B>
+impl<Node, Edge, Ctx, B> Default for Canonicalizer<Node, Edge, Ctx, B>
 where
-    Node: LangNode,
-    Edge: LangEdge,
+    Node: LangNode + 'static,
+    Edge: LangEdge + 'static,
+    Ctx: RewriteableGraph<Node = Node, Edge = Edge>,
     B: Benefit,
 {
     fn default() -> Self {
@@ -193,10 +262,11 @@ where
     }
 }
 
-impl<Node, Edge, B> Canonicalizer<Node, Edge, B>
+impl<Node, Edge, Ctx, B> Canonicalizer<Node, Edge, Ctx, B>
 where
-    Node: LangNode,
-    Edge: LangEdge,
+    Node: LangNode + 'static,
+    Edge: LangEdge + 'static,
+    Ctx: RewriteableGraph<Node = Node, Edge = Edge>,
     B: Benefit,
 {
     ///If set, follows apply nodes into the called node and canonicalizes the respective result-producer.
@@ -215,7 +285,8 @@ where
         self
     }
 
-    pub fn register(&mut self, rewrite: impl PatternRewrite<Node, Edge, B> + 'static) {
+    ///Registers a canonicalization pattern.
+    pub fn register(&mut self, rewrite: impl PatternRewrite<Node, Edge, Ctx, B> + 'static) {
         self.rewriter.push(Box::new(rewrite));
         self.rules_changed = true;
     }
@@ -229,30 +300,30 @@ where
     ///Runs the on `value` in `graph`. Applies the patterns to all values that contribute to `value`, i.e. all dependencies.
     ///
     /// Depending on whether [follow_calls] and [follow_context] are set, might canonicalize called function bodies and used context as well.
-    pub fn canonicalize_value(&mut self, graph: &mut Rvsdg<Node, Edge>, value: OutportLocation) {
+    pub fn canonicalize_value(&mut self, ctx: &mut Ctx, value: OutportLocation) {
         log::info!("Initializing canonicalization-rewrite on {value}");
         //NOTE: mini wrapper that catches if rules changed. Afterwards we can consider the driver immutable.
         if self.rules_changed {
             self.prepare_rules();
         }
 
-        self.on_value(graph, value)
+        self.on_value(ctx, value)
     }
 
     ///Runs the driver on all live nodes of `region` (i.e. nodes connected to the results of the region) and, depending on
     /// whether [follow_calls] / [follow_context] was set, possibly related regions as well.
-    pub fn canonicalize_region(&mut self, graph: &mut Rvsdg<Node, Edge>, region: RegionLocation) {
+    pub fn canonicalize_region(&mut self, ctx: &mut Ctx, region: RegionLocation) {
         log::info!("Initialize canonicalization-rewrite for {region}");
 
         if self.rules_changed {
             self.prepare_rules();
         }
 
-        self.on_region(graph, region);
+        self.on_region(ctx, region);
     }
 
     ///Runs the driver on `value` and its dependencies.
-    fn on_value(&mut self, graph: &mut Rvsdg<Node, Edge>, value: OutportLocation) {
+    fn on_value(&mut self, ctx: &mut Ctx, value: OutportLocation) {
         //setup the runner for this run and defer to it
         self.queue.clear();
         self.seen.clear();
@@ -270,17 +341,17 @@ where
             follow_context: self.follow_context,
         };
 
-        runner.run(graph);
+        runner.run(ctx);
     }
 
-    fn on_region(&mut self, graph: &mut Rvsdg<Node, Edge>, region: RegionLocation) {
+    fn on_region(&mut self, ctx: &mut Ctx, region: RegionLocation) {
         self.queue.clear();
         self.seen.clear();
 
         //for the region case, we enque all results and then run
 
-        for result in graph.result_ports(region) {
-            if let Some(src) = graph.inport_src(result) {
+        for result in ctx.graph().result_ports(region) {
+            if let Some(src) = ctx.graph().inport_src(result) {
                 self.queue.push_back(src);
             }
         }
@@ -295,6 +366,6 @@ where
             follow_context: self.follow_context,
         };
 
-        runner.run(graph);
+        runner.run(ctx);
     }
 }
