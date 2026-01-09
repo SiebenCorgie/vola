@@ -6,15 +6,27 @@
  * 2025 Tendsin Mende
  */
 
-//! General purpose pattern rewrite passes.
+//! General purpose pattern rewrites and passes.
 
 use rvsdg::region::RegionLocation;
-use rvsdg_pattern_rewrite::{Speed, TopoGreedyRewriter};
+use rvsdg_pattern_rewrite::{driver::RewriteableGraph, Speed, TopoGreedyRewriter};
 
 use crate::{OptEdge, OptNode, Optimizer};
 
-mod arith;
-mod branch;
+pub mod arith;
+pub mod branch;
+pub mod canonicalization;
+
+impl RewriteableGraph for Optimizer {
+    type Edge = OptEdge;
+    type Node = OptNode;
+    fn graph(&self) -> &rvsdg::Rvsdg<Self::Node, Self::Edge> {
+        &self.graph
+    }
+    fn graph_mut(&mut self) -> &mut rvsdg::Rvsdg<Self::Node, Self::Edge> {
+        &mut self.graph
+    }
+}
 
 impl Optimizer {
     ///Standard number of restarts the gp-rewrite will try for each region.
@@ -34,16 +46,16 @@ impl Optimizer {
     }
 
     fn add_fold_pattern(
-        mut rewriter: TopoGreedyRewriter<OptNode, OptEdge, Speed>,
-    ) -> TopoGreedyRewriter<OptNode, OptEdge, Speed> {
+        mut rewriter: TopoGreedyRewriter<OptNode, OptEdge, Optimizer, Speed>,
+    ) -> TopoGreedyRewriter<OptNode, OptEdge, Optimizer, Speed> {
         rewriter.register(arith::FoldBinarySimple);
         rewriter.register(arith::FoldMuliplication);
         rewriter
     }
 
     fn add_cf_pattern(
-        mut rewriter: TopoGreedyRewriter<OptNode, OptEdge, Speed>,
-    ) -> TopoGreedyRewriter<OptNode, OptEdge, Speed> {
+        mut rewriter: TopoGreedyRewriter<OptNode, OptEdge, Optimizer, Speed>,
+    ) -> TopoGreedyRewriter<OptNode, OptEdge, Optimizer, Speed> {
         rewriter.register(branch::SpecializeStaticBranch);
 
         rewriter
@@ -60,6 +72,6 @@ impl Optimizer {
         rewriter = Self::add_cf_pattern(rewriter);
         rewriter = Self::add_fold_pattern(rewriter);
 
-        rewriter.run(&mut self.graph, region);
+        rewriter.run(self, region);
     }
 }
