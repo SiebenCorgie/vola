@@ -3,33 +3,46 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  *
- * 2024 Tendsin Mende
+ * 2026 Tendsin Mende
  */
 
 //!Helper for matrix-* operations
 
 use rvsdg::{edge::OutportLocation, region::RegionLocation, NodeRef, SmallColl};
+use rvsdg_pattern_rewrite::{CodeSize, PatternRewrite};
 use vola_common::Span;
 
 use crate::{
-    alge::buildin::{Buildin, BuildinOp},
+    alge::{
+        arithmetic::{BinaryArith, BinaryArithOp},
+        buildin::{Buildin, BuildinOp},
+    },
     common::{DataType, Shape, Ty},
     typelevel::{ConstantIndex, UniformConstruct},
-    OptError, OptNode, Optimizer,
+    OptEdge, OptNode, Optimizer,
 };
 
-impl Optimizer {
-    pub(super) fn handle_canon_mul(
-        &mut self,
-        region: &RegionLocation,
-        node: NodeRef,
-    ) -> Result<(), OptError> {
-        //checkout what kind of inputs / outputs we have
-        let left_src = self.graph.inport_src(node.input(0)).unwrap();
-        let right_src = self.graph.inport_src(node.input(1)).unwrap();
+///Pattern that unrolls non trivial multiplications (i.e. vector-matrix, matrix-vector, matrix-matrix etc.)
+/// into a set of scalar multiplications and the associated destruction and construction routines to end up
+/// at the same value
+pub struct UnrollMul;
+impl PatternRewrite<OptNode, OptEdge, Optimizer, CodeSize> for UnrollMul {
+    fn matches(&self, ctx: &Optimizer, node: NodeRef) -> bool {
+        //Early bail if this is no multiplication
+        if let Some(binary) = ctx.try_unwrap_node::<BinaryArith>(node) {
+            if binary.op != BinaryArithOp::Mul {
+                return false;
+            }
+        } else {
+            return false;
+        }
 
-        let left_type = self.get_out_type_mut(left_src).unwrap();
-        let right_type = self.get_out_type_mut(right_src).unwrap();
+        //checkout what kind of inputs / outputs we have
+        let left_src = ctx.graph.inport_src(node.input(0)).unwrap();
+        let right_src = ctx.graph.inport_src(node.input(1)).unwrap();
+
+        let left_type = ctx.get_out_type(left_src).unwrap();
+        let right_type = ctx.get_out_type(right_src).unwrap();
 
         match (left_type.clone(), right_type.clone()) {
             (
@@ -41,13 +54,7 @@ impl Optimizer {
                     shape: Shape::Vec { .. },
                     ty: DataType::Real,
                 },
-            ) => {
-                //this is canonicalized into a unrolled multiplication
-                let _canon = self
-                    .unroll_matrix_vector(region, node, left_type, right_type, left_src, right_src);
-
-                Ok(())
-            }
+            ) => true,
             (
                 Ty::Shaped {
                     shape: Shape::Vec { .. },
@@ -57,13 +64,7 @@ impl Optimizer {
                     shape: Shape::Matrix { .. },
                     ty: DataType::Real,
                 },
-            ) => {
-                //this is canonicalized into a unrolled multiplication
-                let _canonicalized = self
-                    .unroll_vector_matrix(region, node, left_type, right_type, left_src, right_src);
-
-                Ok(())
-            }
+            ) => true,
             (
                 Ty::Shaped {
                     shape: Shape::Matrix { .. },
@@ -73,17 +74,53 @@ impl Optimizer {
                     shape: Shape::Matrix { .. },
                     ty: DataType::Real,
                 },
-            ) => {
-                let _canonicalized = self
-                    .unroll_matrix_matrix(region, node, left_type, right_type, left_src, right_src);
-                Ok(())
-            }
-            _ => Ok(()),
+            ) => true,
+            _ => false,
         }
     }
 
+    fn apply(&self, ctx: &mut Optimizer, node: NodeRef) {
+        #[cfg(feature = "log")]
+        log::info!("Unrolling Mul {node}");
+
+        let left_src = ctx.graph.inport_src(node.input(0)).unwrap();
+        let right_src = ctx.graph.inport_src(node.input(1)).unwrap();
+
+        let left_type = ctx.get_out_type(left_src).unwrap();
+        let right_type = ctx.get_out_type(right_src).unwrap();
+
+        let region = ctx.graph[node].parent.unwrap();
+
+        //checkout which of the three we are and apply the unroller accordingly
+        let new_node = if left_type.is_vector() && right_type.is_matrix() {
+            Self::unroll_vector_matrix(
+                ctx, &region, node, left_type, right_type, left_src, right_src,
+            )
+        } else if left_type.is_matrix() && right_type.is_vector() {
+            Self::unroll_matrix_vector(
+                ctx, &region, node, left_type, right_type, left_src, right_src,
+            )
+        } else if left_type.is_matrix() && right_type.is_matrix() {
+            Self::unroll_matrix_matrix(
+                ctx, &region, node, left_type, right_type, left_src, right_src,
+            )
+        } else {
+            panic!("Detected node combination that shouldn't trigger the rewrite")
+        };
+
+        log::info!("Unrolled multiplication {node} to {new_node}");
+
+        ctx.graph.replace_node_uses(node, new_node).unwrap();
+    }
+
+    fn benefit(&self) -> &CodeSize {
+        &CodeSize(1)
+    }
+}
+
+impl UnrollMul {
     fn unroll_vector_matrix(
-        &mut self,
+        ctx: &mut Optimizer,
         region: &RegionLocation,
         mul_node: NodeRef,
         vector_ty: Ty,
@@ -101,9 +138,9 @@ impl Optimizer {
 
         assert!(matrix_ty.height().unwrap() == vector_ty.width().unwrap());
 
-        let span = self.find_span(mul_node).unwrap_or(Span::empty());
+        let span = ctx.find_span(mul_node).unwrap_or(Span::empty());
 
-        let new_result = self
+        let new_result = ctx
             .graph
             .on_region(region, |reg| {
                 let column_sources: SmallColl<OutportLocation> = (0..matrix_ty.width().unwrap())
@@ -148,13 +185,11 @@ impl Optimizer {
             })
             .unwrap();
 
-        //now replace the uses of this mul with the newly dot-based vector
-        self.graph.replace_node_uses(mul_node, new_result).unwrap();
         new_result
     }
     ///Unrolls a matrix-vector multiplication into multiple dot product operations.
     fn unroll_matrix_vector(
-        &mut self,
+        ctx: &mut Optimizer,
         region: &RegionLocation,
         mul_node: NodeRef,
         left_ty: Ty,
@@ -164,9 +199,9 @@ impl Optimizer {
     ) -> NodeRef {
         assert!(left_ty.width().unwrap() == right_ty.width().unwrap());
 
-        let span = self.find_span(mul_node).unwrap_or(Span::empty());
+        let span = ctx.find_span(mul_node).unwrap_or(Span::empty());
 
-        let new_result = self
+        let new_result = ctx
             .graph
             .on_region(region, |reg| {
                 let column_sources: SmallColl<OutportLocation> = (0..left_ty.width().unwrap())
@@ -239,8 +274,6 @@ impl Optimizer {
             })
             .unwrap();
 
-        //now replace the uses of this mul with the newly dot-based vector
-        self.graph.replace_node_uses(mul_node, new_result).unwrap();
         new_result
     }
 
@@ -249,7 +282,7 @@ impl Optimizer {
     ///NOTE: This also works for Matrix-Vector and Vector-Matrix operations, since vectors can be treated as
     ///      single-column/single-row matrixes.
     fn unroll_matrix_matrix(
-        &mut self,
+        ctx: &mut Optimizer,
         region: &RegionLocation,
         mul_node: NodeRef,
         left_ty: Ty,
@@ -259,9 +292,9 @@ impl Optimizer {
     ) -> NodeRef {
         assert!(left_ty.width().unwrap() == right_ty.height().unwrap());
 
-        let span = self.find_span(mul_node).unwrap_or(Span::empty());
+        let span = ctx.find_span(mul_node).unwrap_or(Span::empty());
 
-        let new_result = self
+        let new_result = ctx
             .graph
             .on_region(region, |reg| {
                 let column_sources: SmallColl<OutportLocation> = (0..left_ty.width().unwrap())
@@ -358,8 +391,6 @@ impl Optimizer {
             })
             .unwrap();
 
-        //now replace the uses of this mul with the newly dot-based vector
-        self.graph.replace_node_uses(mul_node, new_result).unwrap();
         new_result
     }
 }
