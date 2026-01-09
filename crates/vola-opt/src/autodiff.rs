@@ -13,7 +13,7 @@
 //! The submodules implement the actual autodiff pass as well a specific optimizations.
 
 pub(crate) mod activity;
-mod ad_forward;
+pub(crate) mod ad_forward;
 mod ad_utils;
 mod canonicalize;
 mod diff;
@@ -137,8 +137,7 @@ macro_rules! implViewAutoDiff {
 }
 
 ///The `diff` entry-point node
-#[derive(LangNode, Debug)]
-#[derive(Default)]
+#[derive(LangNode, Debug, Default)]
 pub struct AutoDiff {
     ///By Definition the first is the `expr` that is being differentiated, and the second input is one or more
     /// _wrt_ arguments (with-respect-to).
@@ -157,7 +156,6 @@ impl AutoDiff {
         InputType::Input(1)
     }
 }
-
 
 implViewAutoDiff!(AutoDiff, "AutoDiff");
 

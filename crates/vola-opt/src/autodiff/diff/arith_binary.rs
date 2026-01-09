@@ -7,10 +7,9 @@
  */
 
 use crate::{
-    autodiff::{activity::Activity, AdResponse, AutoDiffError},
+    autodiff::{activity::Activity, ad_forward::ForwardAd, AdResponse, AutoDiffError},
     common::{DataType, Shape, Ty},
     imm::ImmScalar,
-    Optimizer,
 };
 
 use rvsdg::{region::RegionLocation, smallvec::smallvec, NodeRef, SmallColl};
@@ -22,23 +21,23 @@ use crate::{
     OptEdge, OptNode,
 };
 
-impl Optimizer {
+impl<'opt> ForwardAd<'opt> {
     pub(super) fn build_diff_binary_arith(
         &mut self,
         region: RegionLocation,
         node: NodeRef,
         activity: &mut Activity,
     ) -> Result<AdResponse, AutoDiffError> {
-        let op = self.graph[node]
+        let op = self.opt.graph[node]
             .node_type
             .unwrap_simple_ref()
             .try_downcast_ref::<BinaryArith>()
             .unwrap()
             .op;
-        let span = self.find_span(node).unwrap_or(Span::empty());
+        let span = self.opt.find_span(node).unwrap_or(Span::empty());
         //NOTE: Safe, since this _must_ be a binary op
-        let left_src = self.graph.inport_src(node.input(0)).unwrap();
-        let right_src = self.graph.inport_src(node.input(1)).unwrap();
+        let left_src = self.opt.graph.inport_src(node.input(0)).unwrap();
+        let right_src = self.opt.graph.inport_src(node.input(1)).unwrap();
 
         let mut subdiff = SmallColl::new();
 
@@ -46,6 +45,7 @@ impl Optimizer {
             BinaryArithOp::Add | BinaryArithOp::Sub => {
                 //Build new node that takes both derivatives
                 let result = self
+                    .opt
                     .graph
                     .on_region(&region, |g| {
                         let node = g.insert_node(OptNode::new(BinaryArith::new(op), span));
@@ -54,7 +54,7 @@ impl Optimizer {
                         subdiff.push((left_src, smallvec![node.input(0)]));
                         subdiff.push((right_src, smallvec![node.input(1)]));
 
-                        self.names.set(node.into(), "Sum/Diff-Rule".to_string());
+                        self.opt.names.set(node.into(), "Sum/Diff-Rule".to_string());
                         node.output(0)
                     })
                     .unwrap();
@@ -70,11 +70,11 @@ impl Optimizer {
                 //there should not be a matrix-matrix, matrix-vector or vector-matrix multiplication.
                 //Only scalar-scalar are _right now_ implemented
 
-                let left_type = self.get_out_type_mut(left_src).unwrap();
-                let right_type = self.get_out_type_mut(right_src).unwrap();
+                let left_type = self.opt.get_out_type_mut(left_src).unwrap();
+                let right_type = self.opt.get_out_type_mut(right_src).unwrap();
 
-                let left_active = activity.is_active_port(self, left_src);
-                let right_active = activity.is_active_port(self, right_src);
+                let left_active = activity.is_active_port(self.opt, left_src);
+                let right_active = activity.is_active_port(self.opt, right_src);
 
                 //We have implementations for scalar-scalar, scalar-vector, vector-scalar, vector-vector.
                 //
@@ -137,6 +137,7 @@ impl Optimizer {
                         //turns to vector-product rule for vectorns
 
                         let result = self
+                            .opt
                             .graph
                             .on_region(&region, |g| {
                                 let mul_left = g.insert_node(OptNode::new(
@@ -155,7 +156,8 @@ impl Optimizer {
                                 //defere connection of f'(x)
                                 subdiff.push((left_src, smallvec![mul_left.input(0)]));
 
-                                self.names
+                                self.opt
+                                    .names
                                     .set(mul_left.into(), "ProductRule f'(x) + g(x)".to_string());
                                 let (mul_right, _) = g
                                     .connect_node(
@@ -169,7 +171,8 @@ impl Optimizer {
                                 //defer connection of differentiated right_src
                                 subdiff.push((right_src, smallvec![mul_right.input(1)]));
 
-                                self.names
+                                self.opt
+                                    .names
                                     .set(mul_right.into(), "ProductRule f(x) + g'(x)".to_string());
 
                                 let (added, _) = g
@@ -179,7 +182,8 @@ impl Optimizer {
                                     )
                                     .unwrap();
 
-                                self.names
+                                self.opt
+                                    .names
                                     .set(added.into(), "ProductRule left + right".to_string());
 
                                 added.output(0)
@@ -196,11 +200,11 @@ impl Optimizer {
                         //pick out special implementations
                         {
                             //constant-factor-rule (only one is active).
-                            let diff_defered_src =
-                                if is_left_diff { left_src } else { right_src };
+                            let diff_defered_src = if is_left_diff { left_src } else { right_src };
                             let constant_src = if is_left_diff { right_src } else { left_src };
 
                             let result = self
+                                .opt
                                 .graph
                                 .on_region(&region, |g| {
                                     let (node, _edg) = g
@@ -215,7 +219,8 @@ impl Optimizer {
 
                                     subdiff.push((diff_defered_src, smallvec![node.input(1)]));
 
-                                    self.names
+                                    self.opt
+                                        .names
                                         .set(node.into(), "ConstantFactorRule".to_string());
                                     node.output(0)
                                 })
@@ -228,10 +233,11 @@ impl Optimizer {
             }
             BinaryArithOp::Div => {
                 //Quotient rule
-                let u_src = self.graph.inport_src(node.input(0)).unwrap();
-                let v_src = self.graph.inport_src(node.input(1)).unwrap();
+                let u_src = self.opt.graph.inport_src(node.input(0)).unwrap();
+                let v_src = self.opt.graph.inport_src(node.input(1)).unwrap();
 
                 let (pd_u, pd_v, output) = self
+                    .opt
                     .graph
                     .on_region(&region, |g| {
                         //the u' * v term, but post-diff u`
@@ -286,13 +292,15 @@ impl Optimizer {
             BinaryArithOp::Mod => {
                 //If allowed diff |x| => |x| / x => 1
                 //NOTE that this is undefined on x == 0
-                if self.config.autodiff.abort_on_undiff {
-                    return Err(AutoDiffError::UndiffNode(self.graph[node].name().to_string()));
+                if self.opt.config.autodiff.abort_on_undiff {
+                    return Err(AutoDiffError::UndiffNode(
+                        self.opt.graph[node].name().to_string(),
+                    ));
                 }
 
-                let x_src = self.graph.inport_src(node.input(0)).unwrap();
-                let x_ty = self.get_out_type_mut(x_src).unwrap();
-                let one = self.splat_scalar(region, ImmScalar::new(1.0), x_ty);
+                let x_src = self.opt.graph.inport_src(node.input(0)).unwrap();
+                let x_ty = self.opt.get_out_type_mut(x_src).unwrap();
+                let one = self.opt.splat_scalar(region, ImmScalar::new(1.0), x_ty);
                 Ok(self.build_chain_rule_for(&region, node.output(0), one, x_src))
             }
         }

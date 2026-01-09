@@ -16,13 +16,16 @@
 //! To arrive at this state there are three required lowering passes:
 //!
 //! 1. [Specialize](crate::Optimizer::specialize_all_exports)
-//! 2. [AutoDiff](crate::Optimizer::dispatch_autodiff)
+//! 2. [AutoDiff](autodiff_dispatch::AutoDiffPass)
 //! 3. [IntervalExtension](crate::Optimizer::interval_extension)/[IntervalLowering](crate::Optimizer::interval_to_tuple)
 //!
 //! Those take care of lowering any high-level operation to lowerlevel representations.
 
 pub mod activity;
 mod autodiff_dispatch;
+pub use crate::autodiff::ad_forward::ForwardAd;
+pub use autodiff_dispatch::AutoDiffPass;
+
 mod cleanup;
 pub use cleanup::Cleanup;
 mod constant_folding;
@@ -40,4 +43,3 @@ mod recursion_detection;
 mod specializer;
 mod type_edges;
 pub use type_edges::TypeEdges;
-//mod type_derive;

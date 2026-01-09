@@ -31,15 +31,16 @@ use crate::{
         relational::BinaryRel,
         trigonometric::{Trig, TrigOp},
     },
+    autodiff::ad_forward::ForwardAd,
     hook_barith, hook_buildin, hook_uarith,
     imm::ImmScalar,
     typelevel::{ConstantIndex, UniformConstruct},
-    OptEdge, OptNode, Optimizer,
+    OptEdge, OptNode,
 };
 
 use super::{activity::Activity, AdResponse, AutoDiffError};
 
-impl Optimizer {
+impl<'opt> ForwardAd<'opt> {
     ///General dispatcher that can handle all _alge_ nodes differentiation.
     ///
     ///When called, produces the the derivative of this node (first outport), and return a list of ports that need to be further
@@ -68,47 +69,47 @@ impl Optimizer {
         //       takes longer. But using a dynamic-dispatched function in the DialectNode
         //       ain't it either, since this only concerns the alge-dialect.
 
-        if self.is_node_type::<ConstantIndex>(node) {
+        if self.opt.is_node_type::<ConstantIndex>(node) {
             return self.build_diff_constant_index(region, node);
         }
 
-        if self.is_node_type::<UniformConstruct>(node) {
+        if self.opt.is_node_type::<UniformConstruct>(node) {
             return self.build_diff_constant_construct(region, node);
         }
 
-        if self.is_node_type::<BinaryArith>(node) {
+        if self.opt.is_node_type::<BinaryArith>(node) {
             return self.build_diff_binary_arith(region, node, activity);
         }
 
-        if self.is_node_type::<UnaryArith>(node) {
+        if self.opt.is_node_type::<UnaryArith>(node) {
             return self.build_diff_unary_arith(region, node);
         }
 
-        if self.is_node_type::<UnaryMatrix>(node) {
+        if self.opt.is_node_type::<UnaryMatrix>(node) {
             return self.build_diff_unary_matrix(region, node);
         }
 
-        if self.is_node_type::<Trig>(node) {
+        if self.opt.is_node_type::<Trig>(node) {
             return self.build_diff_trig(region, node, activity);
         }
-        if self.is_node_type::<Buildin>(node) {
+        if self.opt.is_node_type::<Buildin>(node) {
             return self.build_diff_buildin(region, node, activity);
         }
 
-        if self.is_node_type::<BinaryBool>(node) {
+        if self.opt.is_node_type::<BinaryBool>(node) {
             return self.build_diff_binary_logic(region, node);
         }
 
-        if self.is_node_type::<UnaryBool>(node) {
+        if self.opt.is_node_type::<UnaryBool>(node) {
             return self.build_diff_unary_logic(region, node);
         }
-        if self.is_node_type::<BinaryRel>(node) {
+        if self.opt.is_node_type::<BinaryRel>(node) {
             return self.build_diff_binary_rel(region, node);
         }
 
         Err(AutoDiffError::NoAdImpl(format!(
             "No AD implementation for {} | {node}",
-            self.graph[node].name()
+            self.opt.graph[node].name()
         )))
     }
 
@@ -120,16 +121,17 @@ impl Optimizer {
         //constant index is handled by just pushing the trace _over_ the node and reapplying the
         //index. Lets say we are indexing for x into a vector v = f(x), in that case we'd continue doing the the derivative with
         // respect to that vector, but once v' _arrives_ here, we'd still just consider the component, v`.x
-        let access_index = self.graph[node]
+        let access_index = self.opt.graph[node]
             .node_type
             .unwrap_simple_ref()
             .try_downcast_ref::<ConstantIndex>()
             .unwrap()
             .access;
-        let span = self.find_span(node).unwrap_or(Span::empty());
-        let sub_src = self.graph.inport_src(node.input(0)).unwrap();
+        let span = self.opt.find_span(node).unwrap_or(Span::empty());
+        let sub_src = self.opt.graph.inport_src(node.input(0)).unwrap();
         let mut subdiffs = SmallVec::new();
         let result = self
+            .opt
             .graph
             .on_region(&region, |g| {
                 let index_diff =
@@ -150,17 +152,16 @@ impl Optimizer {
         node: NodeRef,
     ) -> Result<AdResponse, AutoDiffError> {
         //Just build a vector of all derivatives
-        let span = self.find_span(node).unwrap_or(Span::empty());
+        let span = self.opt.find_span(node).unwrap_or(Span::empty());
 
-        let srcs = self.graph[node].input_srcs(&self.graph);
+        let srcs = self.opt.graph[node].input_srcs(&self.opt.graph);
         let const_width = srcs.len();
 
         let mut subdiffs = SmallVec::new();
         let result = self
+            .opt
             .graph
             .on_region(&region, |g| {
-                
-
                 g.insert_node(OptNode::new(
                     UniformConstruct::new().with_inputs(const_width),
                     span,
@@ -182,9 +183,9 @@ impl Optimizer {
         region: RegionLocation,
         node: NodeRef,
     ) -> Result<AdResponse, AutoDiffError> {
-        let span = self.find_span(node).unwrap_or(Span::empty());
-        let src = self.graph.inport_src(node.input(0)).unwrap();
-        match self.graph[node]
+        let span = self.opt.find_span(node).unwrap_or(Span::empty());
+        let src = self.opt.graph.inport_src(node.input(0)).unwrap();
+        match self.opt.graph[node]
             .node_type
             .unwrap_simple_ref()
             .try_downcast_ref::<UnaryArith>()
@@ -196,11 +197,14 @@ impl Optimizer {
                 // |f(x)|' = (f(x) / |f(x)|) * f'(x) exists.
                 //
                 // for x == 0 this will naturally be Nan, since |f(x)| == 0 -> f(x) / 0.0 == Nan.
-                if self.config.autodiff.abort_on_undiff {
-                    return Err(AutoDiffError::UndiffNode(self.graph[node].name().to_string()));
+                if self.opt.config.autodiff.abort_on_undiff {
+                    return Err(AutoDiffError::UndiffNode(
+                        self.opt.graph[node].name().to_string(),
+                    ));
                 }
 
                 let (subdiff_dst, output) = self
+                    .opt
                     .graph
                     .on_region(&region, |g| {
                         let abs_f = hook_uarith!(g, Abs, span.clone(), src);
@@ -222,10 +226,11 @@ impl Optimizer {
             UnaryArithOp::Neg => {
                 //special case of (cf)' => c f' for c=constant
                 //in this case c = -1.
-                let f_src = self.graph.inport_src(node.input(0)).unwrap();
-                let f_ty = self.get_out_type_mut(f_src).unwrap();
-                let negone = self.splat_scalar(region, ImmScalar::new(-1.0), f_ty);
+                let f_src = self.opt.graph.inport_src(node.input(0)).unwrap();
+                let f_ty = self.opt.get_out_type_mut(f_src).unwrap();
+                let negone = self.opt.splat_scalar(region, ImmScalar::new(-1.0), f_ty);
                 let (diff_dst, result) = self
+                    .opt
                     .graph
                     .on_region(&region, |g| {
                         let mul = hook_barith!(g, Mul, span.clone(), [negone]);
@@ -247,13 +252,15 @@ impl Optimizer {
                 //see: https://math.stackexchange.com/questions/305949/derivative-of-floor-function
                 //
                 //Abort if the exact thing is needed
-                if self.config.autodiff.abort_on_undiff {
-                    return Err(AutoDiffError::UndiffNode(self.graph[node].name().to_string()));
+                if self.opt.config.autodiff.abort_on_undiff {
+                    return Err(AutoDiffError::UndiffNode(
+                        self.opt.graph[node].name().to_string(),
+                    ));
                 }
 
-                let x_src = self.graph.inport_src(node.input(0)).unwrap();
-                let x_ty = self.get_out_type_mut(x_src).unwrap();
-                let zero = self.splat_scalar(region, ImmScalar::new(0.0), x_ty);
+                let x_src = self.opt.graph.inport_src(node.input(0)).unwrap();
+                let x_ty = self.opt.get_out_type_mut(x_src).unwrap();
+                let zero = self.opt.splat_scalar(region, ImmScalar::new(0.0), x_ty);
 
                 Ok(AdResponse::new(node.output(0), zero))
             }
@@ -266,7 +273,7 @@ impl Optimizer {
         node: NodeRef,
     ) -> Result<AdResponse, AutoDiffError> {
         Ok(AdResponse::new(node.output(0), node.output(0)))
-        //Err(AutoDiffError::NoAdImpl(self.graph[node].name().to_string()))
+        //Err(AutoDiffError::NoAdImpl(self.opt.graph[node].name().to_string()))
     }
 
     fn build_diff_unary_logic(
@@ -275,7 +282,7 @@ impl Optimizer {
         node: NodeRef,
     ) -> Result<AdResponse, AutoDiffError> {
         Ok(AdResponse::new(node.output(0), node.output(0)))
-        //Err(AutoDiffError::NoAdImpl(self.graph[node].name().to_string()))
+        //Err(AutoDiffError::NoAdImpl(self.opt.graph[node].name().to_string()))
     }
 
     fn build_diff_binary_rel(
@@ -287,7 +294,7 @@ impl Optimizer {
         log::warn!("TODO: implement boolean differential calculus");
 
         Ok(AdResponse::new(node.output(0), node.output(0)))
-        //Err(AutoDiffError::NoAdImpl(self.graph[node].name().to_string()))
+        //Err(AutoDiffError::NoAdImpl(self.opt.graph[node].name().to_string()))
     }
 
     fn build_diff_unary_matrix(
@@ -295,7 +302,9 @@ impl Optimizer {
         _region: RegionLocation,
         node: NodeRef,
     ) -> Result<AdResponse, AutoDiffError> {
-        Err(AutoDiffError::NoAdImpl(self.graph[node].name().to_string()))
+        Err(AutoDiffError::NoAdImpl(
+            self.opt.graph[node].name().to_string(),
+        ))
     }
 
     fn build_diff_trig(
@@ -304,9 +313,9 @@ impl Optimizer {
         node: NodeRef,
         activity: &mut Activity,
     ) -> Result<AdResponse, AutoDiffError> {
-        let span = self.find_span(node).unwrap_or(Span::empty());
-        let src = self.graph.inport_src(node.input(0)).unwrap();
-        let trigop = self.graph[node]
+        let span = self.opt.find_span(node).unwrap_or(Span::empty());
+        let src = self.opt.graph.inport_src(node.input(0)).unwrap();
+        let trigop = self.opt.graph[node]
             .node_type
             .unwrap_simple_ref()
             .try_downcast_ref::<Trig>()
@@ -316,6 +325,7 @@ impl Optimizer {
             TrigOp::Sin => {
                 //sin' = cos
                 let cos_output = self
+                    .opt
                     .graph
                     .on_region(&region, |g| {
                         let (f_diff, _) = g
@@ -330,6 +340,7 @@ impl Optimizer {
             TrigOp::Cos => {
                 //cos' = -sin
                 let diffout = self
+                    .opt
                     .graph
                     .on_region(&region, |g| {
                         let (sinout, _) = g
@@ -353,6 +364,7 @@ impl Optimizer {
             TrigOp::ASin => {
                 //asin(x)' = 1 / sqrt(1.0 - x^2)
                 let diffout = self
+                    .opt
                     .graph
                     .on_region(&region, |g| {
                         let one = g.insert_node(OptNode::new(ImmScalar::new(1.0), span.clone()));
@@ -374,6 +386,7 @@ impl Optimizer {
             TrigOp::ACos => {
                 //acos(x)' = -(1/sqrt(1.0 - x^2))
                 let diffout = self
+                    .opt
                     .graph
                     .on_region(&region, |g| {
                         let one = g.insert_node(OptNode::new(ImmScalar::new(1.0), span.clone()));
@@ -395,6 +408,7 @@ impl Optimizer {
             TrigOp::ATan => {
                 //atan(x)' = 1/(x^2 + 1)
                 let diffout = self
+                    .opt
                     .graph
                     .on_region(&region, |g| {
                         let one = g.insert_node(OptNode::new(ImmScalar::new(1.0), span.clone()));
@@ -417,13 +431,13 @@ impl Optimizer {
                 // Depending on the activeness, user either dx, dy version, or the total differential.
 
                 //Left (x)
-                let left_src = self.graph.inport_src(node.input(0)).unwrap();
-                let right_src = self.graph.inport_src(node.input(1)).unwrap();
+                let left_src = self.opt.graph.inport_src(node.input(0)).unwrap();
+                let right_src = self.opt.graph.inport_src(node.input(1)).unwrap();
                 //Right (y)
-                let left_active = activity.is_active_port(self, left_src);
-                let right_active = activity.is_active_port(self, right_src);
+                let left_active = activity.is_active_port(self.opt, left_src);
+                let right_active = activity.is_active_port(self.opt, right_src);
 
-                let original_span = self.find_span(node).unwrap_or(Span::empty());
+                let original_span = self.opt.find_span(node).unwrap_or(Span::empty());
                 //Builds d-left i.e. dx into the region, returns the result port
                 // (-y) / (x*x + y*y)
                 let build_d_left = |region_builder: &mut RegionBuilder<OptNode, OptEdge>| {
@@ -504,12 +518,12 @@ impl Optimizer {
                 match (left_active, right_active) {
                     (false, false) => unreachable!(),
                     (true, false) => {
-                        let dx = self.graph.on_region(&region, build_d_left).unwrap();
+                        let dx = self.opt.graph.on_region(&region, build_d_left).unwrap();
 
                         Ok(self.build_chain_rule_for(&region, node.output(0), dx, left_src))
                     }
                     (false, true) => {
-                        let dy = self.graph.on_region(&region, build_d_right).unwrap();
+                        let dy = self.opt.graph.on_region(&region, build_d_right).unwrap();
 
                         Ok(self.build_chain_rule_for(&region, node.output(0), dy, right_src))
                     }
@@ -536,6 +550,7 @@ impl Optimizer {
     ) -> AdResponse {
         let mut subdiff = SmallColl::new();
         let mul_out = self
+            .opt
             .graph
             .on_region(region, |g| {
                 let (mul, _edg) = g

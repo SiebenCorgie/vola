@@ -29,7 +29,7 @@ mod error;
 pub use error::PipelineError;
 use vola_common::{reset_file_cache, VolaError};
 use vola_opt::{
-    passes::{Cleanup, InlineExports, LowerAst, TypeEdges},
+    passes::{AutoDiffPass, Cleanup, InlineExports, LowerAst, TypeEdges},
     Optimizer,
 };
 
@@ -277,7 +277,9 @@ impl Pipeline {
         //dispatch autodiff nodes if any where seen. Note that this works only
         // for scalar/vector/matrix ops, which is why we have to expand the interval-ops beforehand.
         if opt.config.seen_pass_nodes.autodiff {
-            opt.dispatch_autodiff().map_err(|e| vec![e.to_error()])?;
+            AutoDiffPass::setup(&mut opt)
+                .autodiff_all()
+                .map_err(|e| vec![e.to_error()])?;
         }
 
         //Call _before-finalize-hook_.
