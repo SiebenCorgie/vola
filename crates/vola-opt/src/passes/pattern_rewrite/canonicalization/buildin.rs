@@ -228,8 +228,10 @@ impl PatternRewrite<OptNode, OptEdge, Optimizer, CodeSize> for AproxMix {
         #[cfg(feature = "log")]
         log::info!("Lower Mix to aproximation for {node}");
 
-        let span = ctx.find_span(node).unwrap_or(Span::empty());
         let region = ctx.graph[node].parent.unwrap();
+        let span = ctx.find_span(node).unwrap_or(Span::empty());
+        let mut node_collector = Vec::with_capacity(4);
+
         let x_src = ctx.graph.inport_src(node.input(0)).unwrap();
         let y_src = ctx.graph.inport_src(node.input(1)).unwrap();
         let a_src = ctx.graph.inport_src(node.input(2)).unwrap();
@@ -239,36 +241,31 @@ impl PatternRewrite<OptNode, OptEdge, Optimizer, CodeSize> for AproxMix {
         let new_result = ctx
             .graph
             .on_region(&region, |g| {
-                let (one_minus, _) = g
-                    .connect_node(
-                        OptNode::new(BinaryArith::new(BinaryArithOp::Sub), span.clone()),
-                        [one, a_src],
-                    )
-                    .unwrap();
+                let one_minus = route_new!(g, BinaryArithOp::Sub, span.clone(), [one, a_src]);
+                node_collector.push(one_minus);
 
-                let (x_times, _) = g
-                    .connect_node(
-                        OptNode::new(BinaryArith::new(BinaryArithOp::Mul), span.clone()),
-                        [x_src, one_minus.output(0)],
-                    )
-                    .unwrap();
-                let (y_times, _) = g
-                    .connect_node(
-                        OptNode::new(BinaryArith::new(BinaryArithOp::Mul), span.clone()),
-                        [y_src, a_src],
-                    )
-                    .unwrap();
+                let x_times = route_new!(
+                    g,
+                    BinaryArithOp::Mul,
+                    span.clone(),
+                    [x_src, one_minus.output(0)]
+                );
+                node_collector.push(x_times);
 
-                let (result, _) = g
-                    .connect_node(
-                        OptNode::new(BinaryArith::new(BinaryArithOp::Add), span.clone()),
-                        [x_times.output(0), y_times.output(0)],
-                    )
-                    .unwrap();
+                let y_times = route_new!(g, BinaryArithOp::Mul, span.clone(), [y_src, a_src]);
+                node_collector.push(y_times);
+
+                let result = route_new!(
+                    g,
+                    BinaryArithOp::Add,
+                    span,
+                    [x_times.output(0), y_times.output(0)]
+                );
+                node_collector.push(result);
+
                 result
             })
             .unwrap();
-
         ctx.graph.replace_node_uses(node, new_result).unwrap();
     }
 }
