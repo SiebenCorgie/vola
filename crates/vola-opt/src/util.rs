@@ -15,9 +15,6 @@ use rvsdg::{
 use crate::{common::Ty, Optimizer};
 
 pub mod macros_graph;
-pub mod simplify;
-
-pub use simplify::Simplify;
 
 impl Optimizer {
     pub fn get_type_for_inport(&self, port: InportLocation) -> Option<Ty> {

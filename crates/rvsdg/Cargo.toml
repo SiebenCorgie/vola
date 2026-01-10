@@ -28,9 +28,9 @@ smallvec.workspace = true
 rvsdg-derive-lang = { workspace = true, optional = true }
 log = { workspace = true, optional = true }
 serde = { workspace = true, optional = true, features = ["derive"] }
-small-map = { workspace = true, features = ["hashes"] }
 egg = { workspace = true, optional = true }
 chumsky = { workspace = true, optional = true }
+vec-collections.workspace = true
 
 [dev-dependencies]
 rvsdg-viewer.workspace = true

@@ -1,4 +1,4 @@
-use rvsdg::{NodeRef, edge::LangEdge, nodes::LangNode};
+use rvsdg::{NodeRef, SmallColl, SmallSet, edge::LangEdge, nodes::LangNode};
 
 use crate::{Benefit, PatternRewrite, driver::RewriteableGraph};
 
@@ -50,20 +50,34 @@ where
 
     ///Runs the first (i.e. best) matching rewrite on `node`.
     ///
-    /// Returns true if any pattern matched, and its rewrite was applied. Otherwise false
-    pub fn apply_on(&mut self, ctx: &mut Ctx, node: NodeRef) -> bool {
+    /// Returns Ok if any pattern matched, carrying the replaced root node(s) (i.e. the nodes that replaced `node`).
+    /// This might be many, if a node that produced multiple values was replaced with multiple
+    /// nodes that produce a single value for instance.
+    /// Otherwise returns Err.
+    pub fn apply_on(&mut self, ctx: &mut Ctx, node: NodeRef) -> Result<SmallColl<NodeRef>, ()> {
         if self.rules_changed {
             self.prepare_rules();
         }
 
         for pattern in &self.rewriter {
             if pattern.matches(ctx, node) {
+                //save the first user
+                let unique_users = ctx.graph().unique_dst_ports(node);
                 log::info!("Applying direct pattern {}", pattern.name());
                 pattern.apply(ctx, node);
-                return true;
+
+                //fold the producers of the unique users into a single array of producers
+                let producer = unique_users
+                    .into_iter()
+                    .map(|user| ctx.graph().inport_src(user))
+                    .flatten()
+                    .map(|user| user.node)
+                    .collect::<SmallSet<NodeRef>>();
+
+                return Ok(producer.into());
             }
         }
 
-        false
+        Err(())
     }
 }

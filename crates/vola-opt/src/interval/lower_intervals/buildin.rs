@@ -11,14 +11,12 @@ use std::f64;
 use rvsdg::{edge::OutportLocation, region::RegionLocation, NodeRef};
 use vola_common::{Span, VolaError};
 
+use crate::imm;
 use crate::{
     alge::buildin::{Buildin, BuildinOp},
-    imm,
     imm::ImmScalar,
-    interval::lower_intervals::LowerIntervals,
-    route_new,
-    util::Simplify,
-    OptError,
+    interval::{lower_intervals::LowerIntervals, IntervalError},
+    route_new, OptError,
 };
 
 impl<'opt> LowerIntervals<'opt> {
@@ -64,24 +62,6 @@ impl<'opt> LowerIntervals<'opt> {
                         (start.output(0), end.output(0))
                     })
                     .unwrap()
-            }
-            BuildinOp::Cross => {
-                //simplify the cross product and prepend the created nodes
-                let new_expr = Simplify::new(self.optimizer, node, true)
-                    .lower_cross()
-                    .unwrap();
-                //Now prepend the newly created nodes
-                self.node_queue.prepend(new_expr);
-                return Ok(());
-            }
-            BuildinOp::Dot => {
-                //simplify the dot product and prepend the created nodes
-                let new_expr = Simplify::new(self.optimizer, node, true)
-                    .lower_dot()
-                    .unwrap();
-                //Now prepend the newly created nodes
-                self.node_queue.prepend(new_expr);
-                return Ok(());
             }
             BuildinOp::Exp => {
                 //as simple as [exp(start), exp(end)]
@@ -227,6 +207,13 @@ impl<'opt> LowerIntervals<'opt> {
                         (istart.output(0), iend.output(0))
                     })
                     .unwrap()
+            }
+            other => {
+                return Err(VolaError::error_here(
+                    OptError::Interval(IntervalError::UnsupportedOp(format!("{other:?}"))),
+                    span,
+                    "Encountered unsupported Op.",
+                ))
             }
         };
 
