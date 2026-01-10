@@ -649,9 +649,7 @@ impl<'opt> Simplify<'opt> {
                     shape: Shape::Matrix { .. },
                     ty: DataType::Real,
                 },
-            ) => {
-                self.unroll_matrix_matrix(left_type, right_type, left_src, right_src)
-            }
+            ) => self.unroll_matrix_matrix(left_type, right_type, left_src, right_src),
             //All other multiplications can't be unrolled
             _ => None,
         }

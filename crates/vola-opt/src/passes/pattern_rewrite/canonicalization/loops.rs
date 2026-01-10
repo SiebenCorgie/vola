@@ -17,7 +17,8 @@ impl PatternRewrite<OptNode, OptEdge, Optimizer, CodeSize> for UnrollOrPanic {
         ctx.graph()[node].node_type.is_theta()
     }
     fn benefit(&self) -> &CodeSize {
-        &CodeSize(1)
+        //Doesn't gain anything
+        &CodeSize(0)
     }
     fn name(&self) -> &str {
         "UnrollOrPanic"

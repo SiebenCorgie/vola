@@ -34,7 +34,8 @@ impl PatternRewrite<OptNode, OptEdge, Optimizer, CodeSize> for AproxAbs {
         "AproxAbs"
     }
     fn benefit(&self) -> &CodeSize {
-        &CodeSize(1)
+        //Doesn't gain anything
+        &CodeSize(0)
     }
     fn apply(&self, ctx: &mut Optimizer, node: NodeRef) {
         #[cfg(feature = "log")]

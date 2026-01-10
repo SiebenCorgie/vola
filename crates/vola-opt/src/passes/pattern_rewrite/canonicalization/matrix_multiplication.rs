@@ -114,7 +114,8 @@ impl PatternRewrite<OptNode, OptEdge, Optimizer, CodeSize> for UnrollMul {
     }
 
     fn benefit(&self) -> &CodeSize {
-        &CodeSize(1)
+        //Doesn't gain anything
+        &CodeSize(0)
     }
     fn name(&self) -> &str {
         "UnrollMul"

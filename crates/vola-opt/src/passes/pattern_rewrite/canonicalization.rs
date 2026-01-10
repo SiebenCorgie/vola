@@ -19,4 +19,4 @@ pub use loops::UnrollOrPanic;
 mod unary;
 pub use unary::AproxAbs;
 mod buildin;
-pub use buildin::{AproxClamp, AproxMinMax, AproxMix, LowerLength};
+pub use buildin::{AproxClamp, AproxMinMax, AproxMix, LowerLength, UnrollCross, UnrollDot};
