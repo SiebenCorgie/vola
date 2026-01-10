@@ -12,7 +12,7 @@ use vola_common::Span;
 
 use crate::{
     alge::{
-        arithmetic::{BinaryArith, BinaryArithOp, UnaryArith, UnaryArithOp},
+        arithmetic::{BinaryArith, BinaryArithOp},
         buildin::{Buildin, BuildinOp},
     },
     common::Ty,
@@ -146,11 +146,9 @@ impl PatternRewrite<OptNode, OptEdge, Optimizer, CodeSize> for AproxMinMax {
         #[cfg(feature = "log")]
         log::info!("Lower Min/Max to aproximation for {node}");
 
-        let buildin_node_op = ctx.try_unwrap_node::<Buildin>(node).map(|n| n.op).unwrap();
-        let span = ctx.find_span(node).unwrap_or(Span::empty());
-        let region = ctx.graph[node].parent.unwrap();
+        let is_min = ctx.try_unwrap_node::<Buildin>(node).unwrap().op == BuildinOp::Min;
 
-        let inner_op = if buildin_node_op == BuildinOp::Min {
+        let inner_op = if is_min {
             BinaryArithOp::Sub
         } else {
             BinaryArithOp::Add
@@ -159,6 +157,8 @@ impl PatternRewrite<OptNode, OptEdge, Optimizer, CodeSize> for AproxMinMax {
         let ty = ctx
             .get_out_type_mut(node.output(0))
             .expect("Expected type to be set!");
+        let region = ctx.graph[node].parent.unwrap();
+        let span = ctx.find_span(node).unwrap_or(Span::empty());
         let imm_two = ctx.splat_scalar(region, ImmScalar::new(2.0), ty.clone());
 
         let x_src = ctx.graph.inport_src(node.input(0)).unwrap();
@@ -166,58 +166,44 @@ impl PatternRewrite<OptNode, OptEdge, Optimizer, CodeSize> for AproxMinMax {
         let x_ty = ctx.get_out_type_mut(x_src).unwrap();
         let y_ty = ctx.get_out_type_mut(y_src).unwrap();
         assert!(x_ty == y_ty);
+        let mut node_collector = Vec::with_capacity(4);
 
         let output = ctx
             .graph
             .on_region(&region, |g| {
-                let (x_min_y, _) = g
-                    .connect_node(
-                        OptNode::new(BinaryArith::new(BinaryArithOp::Sub), span.clone()),
-                        [x_src, y_src],
-                    )
-                    .unwrap();
+                let x_min_y = route_new!(g, BinaryArithOp::Sub, span.clone(), [x_src, y_src]);
+                node_collector.push(x_min_y);
 
-                let (abs, to_abs_edge) = g
-                    .connect_node(
-                        OptNode::new(UnaryArith::new(UnaryArithOp::Abs), span.clone()),
-                        [x_min_y.output(0)],
-                    )
-                    .unwrap();
-                //pre_set the abs-type, otherwise the shortcut to canonicalize abs won't work later on.
-                assert!(to_abs_edge.len() == 1);
-                g.ctx_mut().edge_mut(to_abs_edge[0]).ty.set_type(x_ty);
+                let abs = route_new!(g, UnaryArithOp::Abs, span.clone(), x_min_y.output(0));
+                node_collector.push(abs);
 
                 //add or subtract
-                let (min_max_add_sub, _) = g
-                    .connect_node(
-                        OptNode::new(BinaryArith::new(inner_op), span.clone()),
-                        [y_src, abs.output(0)],
-                    )
-                    .unwrap();
+                let min_max_add_sub = route_new!(
+                    g,
+                    BinaryArith::new(inner_op),
+                    span.clone(),
+                    [y_src, abs.output(0)]
+                );
+                node_collector.push(min_max_add_sub);
 
                 //add
-                let (add, _) = g
-                    .connect_node(
-                        OptNode::new(BinaryArith::new(BinaryArithOp::Add), span.clone()),
-                        [x_src, min_max_add_sub.output(0)],
-                    )
-                    .unwrap();
-                //div with two
-                let (div, _) = g
-                    .connect_node(
-                        OptNode::new(BinaryArith::new(BinaryArithOp::Div), span.clone()),
-                        [add.output(0), imm_two],
-                    )
-                    .unwrap();
+                let add = route_new!(
+                    g,
+                    BinaryArithOp::Add,
+                    span.clone(),
+                    [x_src, min_max_add_sub.output(0)]
+                );
+                node_collector.push(add);
 
+                //div with two
+                let div = route_new!(g, BinaryArithOp::Div, span, [add.output(0), imm_two]);
+                node_collector.push(div);
                 div
             })
             .unwrap();
 
         //now replace callers of that min/max call with the new output
-        ctx.graph
-            .replace_node_uses(node, output)
-            .expect("Failed to replace min/max");
+        ctx.graph.replace_node_uses(node, output).unwrap();
     }
 }
 
