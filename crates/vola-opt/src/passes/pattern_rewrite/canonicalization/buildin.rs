@@ -295,31 +295,26 @@ impl PatternRewrite<OptNode, OptEdge, Optimizer, CodeSize> for AproxClamp {
         log::info!("Lower Clamp to aproximation for {node}");
 
         let x_src = ctx.graph.inport_src(node.input(0)).unwrap();
-        let expr_ty = ctx.get_out_type_mut(x_src).unwrap();
         let min_src = ctx.graph.inport_src(node.input(1)).unwrap();
         let max_src = ctx.graph.inport_src(node.input(2)).unwrap();
+
         let region = ctx.graph[node].parent.unwrap();
         let span = ctx.find_span(node).unwrap_or(Span::empty());
+        let mut node_collector = Vec::with_capacity(2);
 
         let result = ctx
             .graph
             .on_region(&region, |g| {
-                let (inner_max, max_edg) = g
-                    .connect_node(
-                        OptNode::new(Buildin::new(BuildinOp::Max), span.clone()),
-                        [x_src, min_src],
-                    )
-                    .unwrap();
-                let (inner_min, min_edg) = g
-                    .connect_node(
-                        OptNode::new(Buildin::new(BuildinOp::Min), span.clone()),
-                        [inner_max.output(0), max_src],
-                    )
-                    .unwrap();
+                let inner_max = route_new!(g, BuildinOp::Max, span.clone(), [x_src, min_src]);
+                node_collector.push(inner_max);
 
-                for edg in max_edg.into_iter().chain(min_edg.into_iter()) {
-                    g.ctx_mut().edge_mut(edg).ty.set_type(expr_ty.clone());
-                }
+                let inner_min = route_new!(
+                    g,
+                    BuildinOp::Min,
+                    span.clone(),
+                    [inner_max.output(0), max_src]
+                );
+                node_collector.push(inner_min);
 
                 inner_min
             })
