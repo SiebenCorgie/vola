@@ -19,6 +19,9 @@ impl PatternRewrite<OptNode, OptEdge, Optimizer, CodeSize> for UnrollOrPanic {
     fn benefit(&self) -> &CodeSize {
         &CodeSize(1)
     }
+    fn name(&self) -> &str {
+        "UnrollOrPanic"
+    }
     fn apply(&self, ctx: &mut Optimizer, node: rvsdg::NodeRef) {
         let unroll_count = ctx
             .loop_count(node)

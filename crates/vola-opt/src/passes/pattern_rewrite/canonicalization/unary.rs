@@ -30,6 +30,9 @@ impl PatternRewrite<OptNode, OptEdge, Optimizer, CodeSize> for AproxAbs {
             false
         }
     }
+    fn name(&self) -> &str {
+        "AproxAbs"
+    }
     fn benefit(&self) -> &CodeSize {
         &CodeSize(1)
     }

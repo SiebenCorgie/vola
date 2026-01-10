@@ -3,6 +3,8 @@ use rvsdg::{Rvsdg, edge::LangEdge, nodes::LangNode};
 pub use topo_greedy::TopoGreedyRewriter;
 mod canonicalizer;
 pub use canonicalizer::Canonicalizer;
+mod apply;
+pub use apply::Apply;
 
 ///Describes how recursion into sub-regions of a node should be handeled.
 #[derive(Debug, PartialEq)]

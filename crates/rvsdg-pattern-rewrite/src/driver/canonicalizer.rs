@@ -189,7 +189,7 @@ impl<
                 //find the first matching rule and apply it.
                 for rule in self.rewriter {
                     if rule.matches(graph, next.node) {
-                        log::info!("Apply rewrite to {} via {next}", next.node);
+                        log::info!("Apply rewrite {} to {}", rule.name(), next.node);
 
                         //Safe who uses the value and re-insert it after applying the rule. This
                         // basically allows the canonicalizer to

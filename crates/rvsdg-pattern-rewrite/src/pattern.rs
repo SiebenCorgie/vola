@@ -15,6 +15,11 @@ pub trait PatternRewrite<
 
     fn benefit(&self) -> &B;
 
+    //A _human-readable_ name for this pattern
+    fn name(&self) -> &str {
+        "Unnamed"
+    }
+
     ///Can assume that `node` fulfills the [matches](Self::matches) criterion. `ctx` is shared to this application of a rewrite _exclusively_.
     /// Generally, if `matches` returns true, this is expected to succeed. Otherwise its free to panic, which indicates a pattern bug.
     ///

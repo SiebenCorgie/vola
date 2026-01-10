@@ -31,6 +31,9 @@ impl PatternRewrite<OptNode, OptEdge, Optimizer, CodeSize> for LowerLength {
             false
         }
     }
+    fn name(&self) -> &str {
+        "LowerLength"
+    }
     fn benefit(&self) -> &CodeSize {
         &CodeSize(0)
     }
@@ -140,6 +143,9 @@ impl PatternRewrite<OptNode, OptEdge, Optimizer, CodeSize> for AproxMinMax {
             false
         }
     }
+    fn name(&self) -> &str {
+        "AproxMinMax"
+    }
     fn benefit(&self) -> &CodeSize {
         &CodeSize(0)
     }
@@ -235,6 +241,9 @@ impl PatternRewrite<OptNode, OptEdge, Optimizer, CodeSize> for AproxMix {
     fn benefit(&self) -> &CodeSize {
         &CodeSize(0)
     }
+    fn name(&self) -> &str {
+        "AproxMix"
+    }
     fn apply(&self, ctx: &mut Optimizer, node: NodeRef) {
         #[cfg(feature = "log")]
         log::info!("Lower Mix to aproximation for {node}");
@@ -293,6 +302,9 @@ impl PatternRewrite<OptNode, OptEdge, Optimizer, CodeSize> for AproxClamp {
         } else {
             false
         }
+    }
+    fn name(&self) -> &str {
+        "AproxClamp"
     }
     fn benefit(&self) -> &CodeSize {
         &CodeSize(0)

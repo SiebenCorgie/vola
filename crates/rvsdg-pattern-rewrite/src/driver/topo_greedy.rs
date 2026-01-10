@@ -126,6 +126,7 @@ where
                 for pattern in &self.rewriter {
                     //Apply..
                     if pattern.matches(&ctx, *node) {
+                        log::info!("Run {} on {}", pattern.name(), node);
                         changed_any = true;
                         pattern.apply(ctx, *node);
                         //..and continue with next node
