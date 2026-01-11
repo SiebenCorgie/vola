@@ -28,7 +28,10 @@ use vola_ast::VolaAst;
 mod error;
 pub use error::PipelineError;
 use vola_common::{reset_file_cache, VolaError};
-use vola_opt::{passes::TypeEdges, Optimizer};
+use vola_opt::{
+    passes::{AutoDiffPass, Cleanup, InlineExports, LowerAst, TypeEdges},
+    Optimizer,
+};
 
 pub mod backends;
 
@@ -194,17 +197,20 @@ impl Pipeline {
 
         //TODO: add all the _standard_library_stuff_. Would be nice if we'd had them
         //      serialized somewhere.
-        opt.add_ast(ast).map_err(|errors| {
-            if self.write_state_on_error {
-                opt.push_debug_state("intern-ast");
-                opt.dump_debug_state("intern-ast.bin");
-            }
+        LowerAst::setup(&mut opt)
+            .add_ast(ast)
+            .finish()
+            .map_err(|errors| {
+                if self.write_state_on_error {
+                    opt.push_debug_state("intern-ast");
+                    opt.dump_debug_state("intern-ast.bin");
+                }
 
-            errors
-                .into_iter()
-                .map(|e| e.to_error::<PipelineError>())
-                .collect::<Vec<_>>()
-        })?;
+                errors
+                    .into_iter()
+                    .map(|e| e.to_error::<PipelineError>())
+                    .collect::<Vec<_>>()
+            })?;
 
         opt.pattern_rewrite_all();
 
@@ -246,14 +252,18 @@ impl Pipeline {
             })?;
         }
         //NOTE: Inliner can be buggy on undefined edges, clean those up.
-        opt.remove_unused_edges()
+        //
+        Cleanup::setup(&mut opt)
+            .remove_unused_edges()
             .map_err(|e| vec![VolaError::new(PipelineError::from(e))])?;
-        opt.inline_field_exports()
-            .map_err(|e| vec![VolaError::new(PipelineError::from(e))])?;
+        InlineExports::setup(&mut opt)
+            .execute()
+            .map_err(|e| vec![VolaError::new(PipelineError::from(*e.error))])?;
 
         //do some _post_everyting_ cleanup
         if self.late_cne {
-            opt.cne_exports()
+            Cleanup::setup(&mut opt)
+                .cne_exports()
                 .map_err(|e| vec![VolaError::new(PipelineError::CneError(e))])?;
         }
 
@@ -267,13 +277,15 @@ impl Pipeline {
         //dispatch autodiff nodes if any where seen. Note that this works only
         // for scalar/vector/matrix ops, which is why we have to expand the interval-ops beforehand.
         if opt.config.seen_pass_nodes.autodiff {
-            opt.dispatch_autodiff().map_err(|e| vec![e.to_error()])?;
+            AutoDiffPass::setup(&mut opt)
+                .autodiff_all()
+                .map_err(|e| vec![e.to_error()])?;
         }
 
         //Call _before-finalize-hook_.
         self.backend.opt_pre_finalize(&mut opt)?;
 
-        opt.cleanup_export_lmd();
+        Cleanup::setup(&mut opt).cleanup_export_lmd();
 
         //now type-derive all live results in order for the backends to have all
         // type information available

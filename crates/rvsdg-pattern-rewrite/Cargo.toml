@@ -6,3 +6,4 @@ edition = "2024"
 [dependencies]
 rvsdg.workspace = true
 log.workspace = true
+ahash.workspace = true

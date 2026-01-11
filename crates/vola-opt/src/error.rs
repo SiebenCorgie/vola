@@ -55,8 +55,8 @@ pub enum OptError {
     #[error("Type resolution error, derived once to {a}, now is {b}")]
     TypeResolutionErrorDerive { a: Ty, b: Ty },
 
-    #[error("Failed to inline call: {error}")]
-    InlineFailed { error: InlineError },
+    #[error("Failed to inline call: {0}")]
+    InlineFailed(#[from] InlineError),
 
     #[error("Dead node elimination failed: {0}")]
     DneFailed(#[from] DneError),

@@ -54,7 +54,10 @@
 //! graph.
 
 use super::{activity::Activity, AdResponse, AutoDiffError};
-use crate::{autodiff::AutoDiff, OptEdge, OptError, Optimizer};
+use crate::{
+    autodiff::{canonicalize::AdCanonicalizer, AutoDiff},
+    OptEdge, OptError, Optimizer,
+};
 use ahash::AHashMap;
 use rvsdg::{
     edge::{InportLocation, OutportLocation, OutputType},
@@ -73,49 +76,75 @@ struct ForwardADCtx {
     activity: Activity,
 }
 
-impl Optimizer {
-    ///Executes forward-ad pass on `entrypoint`. Assumes that it is a `AutoDiff` node. If that is the case, the node will be replaced
-    /// with the differentiated value(s) after this pass (successfuly) ends.
-    pub fn forward_ad(&mut self, entrypoint: NodeRef) -> Result<(), VolaError<OptError>> {
-        if !self.is_node_type::<AutoDiff>(entrypoint) {
-            return Err(VolaError::new(OptError::Internal("AD Entrypoint was not of type AutoDiff".to_string())));
+///Forward differentiation pass. Prefer [AutoDiffPass](crate::passes::AutoDiffPass) if possible.
+/// Only use this pass if you are sure tha the forward version is the correct choice.
+pub struct ForwardAd<'opt> {
+    pub opt: &'opt mut Optimizer,
+}
+
+impl<'opt> ForwardAd<'opt> {
+    pub fn setup(opt: &'opt mut Optimizer) -> Self {
+        ForwardAd { opt }
+    }
+
+    ///Executes differentiation on this entrypoint. Handles
+    ///
+    /// - linearization
+    /// - canonicalization
+    /// - AutoDiff
+    ///
+    /// Does nothing if `entrypoint` is not of type [AutoDiff].
+    pub fn autodiff_entry(&mut self, entrypoint: NodeRef) -> Result<(), VolaError<OptError>> {
+        if !self.opt.is_node_type::<AutoDiff>(entrypoint) {
+            return Err(VolaError::new(OptError::Internal(
+                "AD Entrypoint was not of type AutoDiff".to_string(),
+            )));
         }
+
+        #[cfg(feature = "log")]
+        log::info!("Start forward AD for {entrypoint}");
 
         //If the wrt-arg is a constructor, linearize the ad-entrypoint into
         // multiple AD-Nodes with a single (scalar) WRT-Arg.
-        let entrypoints = self
-            .linearize_ad(entrypoint)
-            .map_err(VolaError::new)?;
+        let entrypoints = self.linearize_ad(entrypoint).map_err(VolaError::new)?;
 
-        let region = self.graph[entrypoint].parent.unwrap();
+        let region = self.opt.graph[entrypoint].parent.unwrap();
         //TODO: Can speed up thing, or make them slower, do heuristically
         //self.graph.dne_region(region)?;
 
-        if let Some(parent_lmd) = self.graph.find_parent_lambda_or_phi(entrypoint) {
-            self.graph.disconnect_unused_context_variables(parent_lmd);
+        if let Some(parent_lmd) = self.opt.graph.find_parent_lambda_or_phi(entrypoint) {
+            self.opt
+                .graph
+                .disconnect_unused_context_variables(parent_lmd);
         }
 
         if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("DUMP_FWAD_LINEARIZED").is_ok() {
-            self.push_debug_state(&format!("fw-autodiff-{entrypoint}-linearized"));
+            self.opt
+                .push_debug_state(&format!("fw-autodiff-{entrypoint}-linearized"));
         }
 
+        let mut canonicalizer = AdCanonicalizer::setup(self.opt);
+
         for entrypoint in &entrypoints {
-            self.canonicalize_for_ad(*entrypoint)
+            canonicalizer = canonicalizer
+                .canonicalize(*entrypoint)
                 .map_err(VolaError::new)?;
         }
 
         if std::env::var("VOLA_DUMP_ALL").is_ok()
             || std::env::var("DUMP_FWAD_CANONICALIZED").is_ok()
         {
-            self.push_debug_state(&format!("fw-autodiff-{entrypoint}-canonicalized"));
+            self.opt
+                .push_debug_state(&format!("fw-autodiff-{entrypoint}-canonicalized"));
         }
 
         //do dead-node elemination in order to have
         // a) clean DAG (faster / easier transformation)
-        self.graph
+        self.opt
+            .graph
             .dne_region(region)
             .map_err(|e| VolaError::new(e.into()))?;
-        let span = self.find_span(region).unwrap_or(Span::empty());
+        let span = self.opt.find_span(region).unwrap_or(Span::empty());
 
         //All entrypoints are with respect to a single scalar at this point,
         //and hooked up to the vector-value_creator already (if-needed).
@@ -144,6 +173,7 @@ impl Optimizer {
         //build dependency node list for diff node's expression
 
         let mut dependencies: Vec<_> = self
+            .opt
             .graph
             .walk_predecessor_nodes_region(value.node, region)
             .collect();
@@ -152,6 +182,7 @@ impl Optimizer {
 
         //order the dependencies
         let ordered_dependencies = self
+            .opt
             .graph
             .topological_order_nodes(dependencies.iter().cloned());
         ordered_dependencies
@@ -162,9 +193,10 @@ impl Optimizer {
     ///
     /// Replaces the AutoDiff node with the differential value.
     fn forward_diff(&mut self, diffnode: NodeRef) -> Result<(), OptError> {
-        let region = self.graph.node(diffnode).parent.unwrap();
+        let region = self.opt.graph.node(diffnode).parent.unwrap();
 
         let expr_src = self
+            .opt
             .graph
             .inport_src(InportLocation {
                 node: diffnode,
@@ -174,12 +206,13 @@ impl Optimizer {
 
         //find all active nodes of this expression, then start doing the forward iteration,
         //guided by the activity analysis.
-        let activity = self.activity_explorer(diffnode)?;
+        let activity = self.opt.activity_explorer(diffnode)?;
 
         if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("DUMP_AD_ACTIVITY").is_ok() {
-            self.push_debug_state_with(&format!("fw-autodiff-{diffnode}-activity"), |builder| {
-                builder.with_flags("activity", &activity.active)
-            });
+            self.opt
+                .push_debug_state_with(&format!("fw-autodiff-{diffnode}-activity"), |builder| {
+                    builder.with_flags("activity", &activity.active)
+                });
         }
 
         let mut ctx = ForwardADCtx {
@@ -188,7 +221,8 @@ impl Optimizer {
         };
         let derivative_src = self.forward_diff_in_region(region, &mut ctx, expr_src)?;
         //replace the differential_value and the autodiff node
-        self.graph
+        self.opt
+            .graph
             .replace_outport_uses(diffnode.output(0), derivative_src)?;
 
         Ok(())
@@ -211,7 +245,7 @@ impl Optimizer {
         // Therfore we only need to build this node's derivative, and possibly hook-up chain rule sub expressions
         for node in ordered_dependencies {
             self.build_derivative(region, node, ctx).inspect_err(|e| {
-                if let Some(span) = self.find_span(node) {
+                if let Some(span) = self.opt.find_span(node) {
                     VolaError::error_here(
                         e.clone(),
                         span,
@@ -230,7 +264,7 @@ impl Optimizer {
         //      graph, which is a big waste.
         //for inactive nodes, try to get the value producer output, and let our port handler generate an inactive
         //seed (usually zero or something)
-        if !ctx.activity.is_active_port(self, expr_src) {
+        if !ctx.activity.is_active_port(self.opt, expr_src) {
             let inactive_port = self.fwad_handle_port(region, expr_src, ctx)?;
             ctx.expr_cache.insert(expr_src, inactive_port);
         }
@@ -252,7 +286,7 @@ impl Optimizer {
         ctx: &mut ForwardADCtx,
     ) -> Result<(), OptError> {
         //Bail none active nodes
-        if !ctx.activity.is_node_active(self, node) {
+        if !ctx.activity.is_node_active(self.opt, node) {
             return Ok(());
         }
 
@@ -275,7 +309,8 @@ impl Optimizer {
                 // does not connect values to ports, that are later
                 // part of a chain rule. I.e. if you add an input
                 // to an AdResponse, it should not be connected yet.
-                self.graph
+                self.opt
+                    .graph
                     .connect(diff_expr_src, t, OptEdge::value_edge_unset())?;
             }
         }
@@ -293,16 +328,16 @@ impl Optimizer {
     ) -> Result<AdResponse, OptError> {
         //we should end up here only for active nodes, otherwise the value would be zero already
         // (by the port handler)
-        assert!(ctx.activity.is_node_active(self, node));
+        assert!(ctx.activity.is_node_active(self.opt, node));
 
-        match self.graph[node].into_abstract() {
+        match self.opt.graph[node].into_abstract() {
             AbstractNodeType::Simple => {
                 //active simple nodes are our _main_ working point.
                 // We can skip all non-alge-dialect, nodes by simply recursing.
                 // The alge dialect nodes are then handled in a seperate dispatch
                 // handler.
 
-                match self.graph[node]
+                match self.opt.graph[node]
                     .node_type
                     .unwrap_simple_ref()
                     .node
@@ -311,15 +346,13 @@ impl Optimizer {
                     "typelevel" | "alge" => self
                         .fwd_handle_alge_node(region, node, ctx)
                         .map_err(|e| e.into()),
-                    "autodiff" => {
-                        Err(AutoDiffError::UnexpectedAutoDiffNode.into())
-                    }
+                    "autodiff" => Err(AutoDiffError::UnexpectedAutoDiffNode.into()),
                     "imm" => {
                         //an active immediate value will be splat to zero, since this will always
                         //be equivalent to a constant.
                         Ok(AdResponse::new(
                             node.output(0),
-                            self.emit_zero_for_port(region, node.output(0)),
+                            self.opt.emit_zero_for_port(region, node.output(0)),
                         ))
                     }
                     other => {
@@ -340,26 +373,28 @@ impl Optimizer {
 
                 let original_value_port = node.output(0);
                 let callsrc = self
+                    .opt
                     .graph
-                    .find_callabel_def(self.graph.inport_src(node.input(0)).unwrap())
+                    .find_callabel_def(self.opt.graph.inport_src(node.input(0)).unwrap())
                     .unwrap();
-                let call_region = self.graph[callsrc.node].parent.unwrap();
+                let call_region = self.opt.graph[callsrc.node].parent.unwrap();
                 //note we copy the λ into its parent region
-                let lmd_cpy = self.graph.deep_copy_node(callsrc.node, call_region);
-                self.copy_input_connections(callsrc.node, lmd_cpy);
-                self.copy_node_attributes(callsrc.node, lmd_cpy);
-                for attrib in self.graph.iter_node_attribs(callsrc.node) {
+                let lmd_cpy = self.opt.graph.deep_copy_node(callsrc.node, call_region);
+                self.opt.copy_input_connections(callsrc.node, lmd_cpy);
+                self.opt.copy_node_attributes(callsrc.node, lmd_cpy);
+                for attrib in self.opt.graph.iter_node_attribs(callsrc.node) {
                     let dst_attrib_loc = attrib.change_node(lmd_cpy);
                     let _ = ctx.activity.active.copy(&attrib, dst_attrib_loc);
                 }
 
                 //build a new call node that is connected to the lmd copy
-                let in_region_cpy_src = self.import_context(
+                let in_region_cpy_src = self.opt.import_context(
                     lmd_cpy.as_outport_location(OutputType::LambdaDeclaration),
                     region,
                 )?;
 
                 let apply_copy = self
+                    .opt
                     .graph
                     .on_region(&region, |b| {
                         let (node, _) = b.call(in_region_cpy_src, &[]).unwrap();
@@ -367,40 +402,43 @@ impl Optimizer {
                     })
                     .unwrap();
 
-                for inty in self.graph[node].inport_types().into_iter().skip(1) {
-                    if let Some(src_edg) = self.graph[node.as_inport_location(inty)].edge {
-                        let src = *self.graph[src_edg].src();
-                        let ty = self.graph[src_edg].ty.clone();
-                        self.graph
+                for inty in self.opt.graph[node].inport_types().into_iter().skip(1) {
+                    if let Some(src_edg) = self.opt.graph[node.as_inport_location(inty)].edge {
+                        let src = *self.opt.graph[src_edg].src();
+                        let ty = self.opt.graph[src_edg].ty.clone();
+                        self.opt
+                            .graph
                             .connect(src, apply_copy.as_inport_location(inty), ty)
                             .unwrap();
                     }
                 }
 
-                self.copy_node_attributes(node, apply_copy);
+                self.opt.copy_node_attributes(node, apply_copy);
                 //Pre trace new λ node, by tracing the apply node
-                ctx.activity.trace_node_activity(self, apply_copy);
+                ctx.activity.trace_node_activity(self.opt, apply_copy);
                 let lmd_region = RegionLocation {
                     node: lmd_cpy,
                     region_index: 0,
                 };
-                for resultty in self.graph[lmd_cpy].result_types(0) {
+                for resultty in self.opt.graph[lmd_cpy].result_types(0) {
                     let result_port = InportLocation {
                         node: lmd_cpy,
                         input: resultty,
                     };
-                    if let Some(value_edge) = self.graph[result_port].edge {
-                        let src = *self.graph[value_edge].src();
+                    if let Some(value_edge) = self.opt.graph[result_port].edge {
+                        let src = *self.opt.graph[value_edge].src();
                         let output = self.forward_diff_in_region(lmd_region, ctx, src)?;
                         //disconnect old edge, connect new edge
-                        let _old_value = self.graph.disconnect(value_edge).unwrap();
+                        let _old_value = self.opt.graph.disconnect(value_edge).unwrap();
                         //Don't know the type yet though
-                        self.graph
+                        self.opt
+                            .graph
                             .connect(output, result_port, OptEdge::value_edge_unset())?;
                     }
                 }
 
-                self.names
+                self.opt
+                    .names
                     .set(lmd_cpy.into(), format!("λ derivative of {}", callsrc.node));
 
                 let result_port = apply_copy.output(0);
@@ -414,11 +452,11 @@ impl Optimizer {
                 //We handle active gamma nodes by deep-copying them, and then recursing the forward-algorithm
                 //within that region. Once that region returns,
                 //we return the gamma-node's result
-                let gamma_cpy = self.graph.deep_copy_node(node, region);
+                let gamma_cpy = self.opt.graph.deep_copy_node(node, region);
                 //Copy over connections
-                self.copy_input_connections(node, gamma_cpy);
+                self.opt.copy_input_connections(node, gamma_cpy);
                 //copy over activity attributes
-                for attrib in self.graph.iter_node_attribs(node) {
+                for attrib in self.opt.graph.iter_node_attribs(node) {
                     let dst_attrib_loc = attrib.change_node(gamma_cpy);
                     let _ = ctx.activity.active.copy(&attrib, dst_attrib_loc);
                 }
@@ -426,13 +464,13 @@ impl Optimizer {
                 //NOTE: This also pushes forward the producer states into the newly created
                 //      Region. Note that otherwise, when calling the activity-state first time from _within_
                 //      the node, this would get resolved _the wrong way_.
-                ctx.activity.trace_node_activity(self, gamma_cpy);
+                ctx.activity.trace_node_activity(self.opt, gamma_cpy);
                 //Now with the activity and producer-state set,
                 //let the recursion handle all region's outputs.
 
-                let regcount = self.graph[gamma_cpy].regions().len();
+                let regcount = self.opt.graph[gamma_cpy].regions().len();
                 let mut diff_pairs = SmallColl::new();
-                for ex in self.graph[gamma_cpy].outport_types() {
+                for ex in self.opt.graph[gamma_cpy].outport_types() {
                     let original_value_output = node.as_outport_location(ex);
                     let ex_diff_output = ex.to_location(gamma_cpy);
 
@@ -440,7 +478,7 @@ impl Optimizer {
                     //derivative mapping to context
 
                     //NOTE: for sanity we check that all are connected, if any is connected
-                    match self.all_connected(gamma_cpy, ex) {
+                    match self.opt.all_connected(gamma_cpy, ex) {
                         Ok(any_connected) => {
                             //Bail if none are connected
                             if !any_connected {
@@ -465,7 +503,7 @@ impl Optimizer {
                             .map_to_in_region(branch)
                             .unwrap()
                             .to_location(gamma_cpy);
-                        let src = if let Some(ex_source) = self.graph.inport_src(exresult) {
+                        let src = if let Some(ex_source) = self.opt.graph.inport_src(exresult) {
                             ex_source
                         } else {
                             //had no source, but that should have been caught before.
@@ -482,29 +520,35 @@ impl Optimizer {
                                 .map_out_of_region()
                                 .unwrap()
                                 .to_location(gamma_cpy);
-                            let actual_source = self.graph.inport_src(ev_input).unwrap();
-                            let parent_region = self.graph[gamma_cpy].parent.unwrap();
+                            let actual_source = self.opt.graph.inport_src(ev_input).unwrap();
+                            let parent_region = self.opt.graph[gamma_cpy].parent.unwrap();
 
                             //fetch the old value edge
-                            let old_value_edge = self.graph[ev_input].edge.unwrap();
+                            let old_value_edge = self.opt.graph[ev_input].edge.unwrap();
                             let output =
                                 self.forward_diff_in_region(parent_region, ctx, actual_source)?;
                             //rewire ev-input to diffed-source
-                            let _old_value = self.graph.disconnect(old_value_edge).unwrap();
-                            self.graph
-                                .connect(output, ev_input, OptEdge::value_edge_unset())?;
+                            let _old_value = self.opt.graph.disconnect(old_value_edge).unwrap();
+                            self.opt.graph.connect(
+                                output,
+                                ev_input,
+                                OptEdge::value_edge_unset(),
+                            )?;
                         } else {
                             //This is the standard case, where we can just fice the fw_diff for the branch region, and rewire
                             //the result to be the differential.
 
                             //fetch the old value edge
-                            let old_value_edge = self.graph[exresult].edge.unwrap();
+                            let old_value_edge = self.opt.graph[exresult].edge.unwrap();
                             let output = self.forward_diff_in_region(subregion, ctx, src)?;
                             //disconnect old edge, connect new edge
-                            let _old_value = self.graph.disconnect(old_value_edge).unwrap();
+                            let _old_value = self.opt.graph.disconnect(old_value_edge).unwrap();
                             //Don't know the type yet though
-                            self.graph
-                                .connect(output, exresult, OptEdge::value_edge_unset())?;
+                            self.opt.graph.connect(
+                                output,
+                                exresult,
+                                OptEdge::value_edge_unset(),
+                            )?;
                         }
                     }
 
@@ -514,7 +558,8 @@ impl Optimizer {
                     ctx.expr_cache.insert(original_value_output, ex_diff_output);
                 }
 
-                self.names
+                self.opt
+                    .names
                     .set(gamma_cpy.into(), format!("Derivative of {node}"));
 
                 //Return the
@@ -542,7 +587,7 @@ impl Optimizer {
         let response = match self.build_diff_value(region, node, &mut ctx.activity) {
             Ok(t) => t,
             Err(e) => {
-                if let Some(span) = self.find_span(node) {
+                if let Some(span) = self.opt.find_span(node) {
                     //TODO: at some point, propagate this upwards
                     {
                         let verror = VolaError::error_here(e.clone(), span, "On this operation");
@@ -583,23 +628,23 @@ impl Optimizer {
             //      We have that information from the activity trace, which if why we'll use that.
             Ok(ctx
                 .activity
-                .build_diff_init_value_for_wrt(self, region, port))
+                .build_diff_init_value_for_wrt(self.opt, region, port))
         } else if port.output.is_argument() {
             //If the outport is active and an argument, but not a wrt-producer, this means that
             //we get _supplied_ the diffed_value here, so just use that
             //
             //if however the port is not active, replace it with an apropriate zero
-            if ctx.activity.is_active_port(self, port) {
+            if ctx.activity.is_active_port(self.opt, port) {
                 Ok(port)
             } else {
-                Ok(self.emit_zero_for_port(region, port))
+                Ok(self.opt.emit_zero_for_port(region, port))
             }
         } else {
             //if is no argument, and no wrt producer, check if the port is active, if not
             //it can be considered a _constant_
             //therfore the derivative is always zero.
-            if !ctx.activity.is_active_port(self, port) {
-                let zero_node = self.emit_zero_for_port(region, port);
+            if !ctx.activity.is_active_port(self.opt, port) {
+                let zero_node = self.opt.emit_zero_for_port(region, port);
                 Ok(zero_node)
             } else {
                 //The last case is active, non-wrt port that is no argument. In that case there should already be the value in our cache

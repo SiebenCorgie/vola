@@ -131,7 +131,7 @@ impl<N: LangNode + StructuralClone + 'static> CnfCtx<N> {
                         //Now add the just created node to the topological-sort, since we have to visit that one immeditatly
 
                         topord.push_front(replace_id);
-                    } 
+                    }
                 }
                 AbstractNodeType::Gamma => {
                     //Check if we can specialize the gamma-node for a constant predicate, if not just cnf all sub-regions

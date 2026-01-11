@@ -32,8 +32,7 @@ impl<'opt> InitialTypeCheck<'opt> {
         if std::env::var("VOLA_DUMP_ALL").is_ok()
             || std::env::var("DUMP_INITIAL_TYPE_CHECK").is_ok()
         {
-            self.optimizer
-                .push_debug_state("initial-type-check");
+            self.optimizer.push_debug_state("initial-type-check");
         }
 
         // This is solely on the graph level, it'll check that

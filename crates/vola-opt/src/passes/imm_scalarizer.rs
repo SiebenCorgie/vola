@@ -19,8 +19,17 @@ use crate::{
     OptError, OptNode, Optimizer,
 };
 
-impl Optimizer {
-    pub fn imm_scalarize(&mut self) -> Result<(), OptError> {
+///Transforms any [ImmVector],[ImmMatrix], etc. into a chain of [ImmScalar]s + [UniformConstruct].
+pub struct ImmScalarize<'opt> {
+    opt: &'opt mut Optimizer,
+}
+
+impl<'opt> ImmScalarize<'opt> {
+    pub fn setup(opt: &'opt mut Optimizer) -> Self {
+        Self { opt }
+    }
+
+    pub fn scalarize_all(mut self) -> Result<(), OptError> {
         //The idea is, that we traverse the graph in reverse-topological order whenever we encounter a
         //ImmVector or ImmMatrix, we call the scalarizer on that subtree. They'll take care of replacing the nodes.
 
@@ -29,15 +38,16 @@ impl Optimizer {
 
         if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("DUMP_BEFORE_SCALARIZE").is_ok()
         {
-            self.push_debug_state("pre imm scalarize");
+            self.opt.push_debug_state("pre imm scalarize");
         }
 
         //First identify any reachable node that needs to be transformed
         let to_be_transformed_nodes = self
+            .opt
             .graph
             .walk_reachable()
             .filter_map(|node| {
-                if let NodeType::Simple(s) = &self.graph.node(node).node_type {
+                if let NodeType::Simple(s) = &self.opt.graph.node(node).node_type {
                     if s.try_downcast_ref::<ImmMatrix>().is_some()
                         || s.try_downcast_ref::<ImmVector>().is_some()
                     {
@@ -57,7 +67,7 @@ impl Optimizer {
         }
 
         if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("DUMP_AFTER_SCALARIZE").is_ok() {
-            self.push_debug_state("pre post scalarize");
+            self.opt.push_debug_state("pre post scalarize");
         }
 
         Ok(())
@@ -69,7 +79,7 @@ impl Optimizer {
             Matrix(SmallColl<SmallColl<f64>>),
         }
 
-        let immval = if let NodeType::Simple(s) = &self.graph.node(node).node_type {
+        let immval = if let NodeType::Simple(s) = &self.opt.graph.node(node).node_type {
             if let Some(imm) = s.try_downcast_ref::<ImmVector>() {
                 ImmTy::Vec(imm.lit.clone())
             } else if let Some(imm) = s.try_downcast_ref::<ImmMatrix>() {
@@ -86,11 +96,9 @@ impl Optimizer {
         };
 
         //now build the subgraph
-        let region = self
-            .graph
-            .node(node)
-            .parent
-            .ok_or(OptError::Internal("Node was in parenless region!".to_string()))?;
+        let region = self.opt.graph.node(node).parent.ok_or(OptError::Internal(
+            "Node was in parenless region!".to_string(),
+        ))?;
 
         //NOTE: we don't need to type the edges, since replace_node_uses takes care of copying over the actual type.
         let replacement_node = match immval {
@@ -99,7 +107,7 @@ impl Optimizer {
         };
 
         //finally replace the node and return
-        self.graph.replace_node_uses(node, replacement_node)?;
+        self.opt.graph.replace_node_uses(node, replacement_node)?;
 
         Ok(())
     }
@@ -109,7 +117,8 @@ impl Optimizer {
         region: RegionLocation,
         immvalues: SmallColl<f64>,
     ) -> NodeRef {
-        self.graph
+        self.opt
+            .graph
             .on_region(&region, |reg| {
                 let mut const_srcs = SmallColl::with_capacity(immvalues.len());
                 let input_count = immvalues.len();
@@ -157,6 +166,7 @@ impl Optimizer {
         }
 
         let (mat_construct_node, edges) = self
+            .opt
             .graph
             .on_region(&region, |reg| {
                 reg.connect_node(
@@ -171,7 +181,8 @@ impl Optimizer {
             .unwrap();
 
         for edge in edges {
-            self.graph
+            self.opt
+                .graph
                 .edge_mut(edge)
                 .ty
                 .set_type(Ty::vector_type(DataType::Real, vec_width))

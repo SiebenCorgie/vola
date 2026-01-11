@@ -20,18 +20,19 @@ use vola_common::{Span, VolaError};
 use crate::{
     common::Ty,
     graph::auxiliary::{Function, Impl, ImplKey},
-    OptEdge, OptError, Optimizer,
+    passes::lower_ast::LowerAst,
+    OptEdge, OptError,
 };
 
 use super::block_build::BlockCtx;
 
-impl Optimizer {
+impl<'opt> LowerAst<'opt> {
     ///Builds the block context for the omega node. This basically appends all named
     ///static data, as well as callable (i.e. non-impl) functions.
     fn omega_context(&self) -> Result<BlockCtx, VolaError<OptError>> {
         //NOTE: we currently have no static data, but there will be ~data~ at some point.
-        let mut ctx = BlockCtx::empty(self.graph.toplevel_region());
-        for func in self.functions.values() {
+        let mut ctx = BlockCtx::empty(self.opt.graph.toplevel_region());
+        for func in self.opt.functions.values() {
             //define the function as plain old value
             ctx.define_var(
                 func.name.clone(),
@@ -50,7 +51,7 @@ impl Optimizer {
         _ct_args: Vec<CTArg>,
         concept: CsgConcept,
     ) -> Result<(), VolaError<OptError>> {
-        if let Some(existing_concept) = self.concepts.get(&concept.name.0) {
+        if let Some(existing_concept) = self.opt.concepts.get(&concept.name.0) {
             let err = OptError::Any {
                 text: format!("Concept {} was already defined", existing_concept.name.0),
             };
@@ -60,7 +61,7 @@ impl Optimizer {
             )
         } else {
             //No yet in collection, therefore push
-            self.concepts.insert(concept.name.0.clone(), concept);
+            self.opt.concepts.insert(concept.name.0.clone(), concept);
             Ok(())
         }
     }
@@ -72,7 +73,7 @@ impl Optimizer {
         csgdef: CsgDef,
     ) -> Result<(), VolaError<OptError>> {
         //similar to the concept case, test if there is already one, if not, push
-        if let Some(existing_csg) = self.csg_node_defs.get(&csgdef.name.0) {
+        if let Some(existing_csg) = self.opt.csg_node_defs.get(&csgdef.name.0) {
             let err = OptError::Any {
                 text: format!("Operation or Entity {} was already defined. \nNote that operations and entities share one name space.", existing_csg.name.0),
             };
@@ -82,7 +83,7 @@ impl Optimizer {
             )
         } else {
             //No yet in collection, therefore push
-            self.csg_node_defs.insert(csgdef.name.0.clone(), csgdef);
+            self.opt.csg_node_defs.insert(csgdef.name.0.clone(), csgdef);
             Ok(())
         }
     }
@@ -91,11 +92,11 @@ impl Optimizer {
     pub(crate) fn define_func(
         &mut self,
         func: &Func,
-        ct_args: Vec<CTArg>,
+        ct_args: &[CTArg],
     ) -> Result<(), VolaError<OptError>> {
         //Parse the function signature, and build the entry in the lookup table
         let name = func.name.0.clone();
-        if let Some(existing) = self.functions.get(&name) {
+        if let Some(existing) = self.opt.functions.get(&name) {
             let err = OptError::Any {
                 text: format!("function \"{name}\" already exists!"),
             };
@@ -106,7 +107,7 @@ impl Optimizer {
         }
 
         //Also make sure that no concept or csg-def with that name exists
-        if self.concepts.contains_key(&name) || self.csg_node_defs.contains_key(&name) {
+        if self.opt.concepts.contains_key(&name) || self.opt.csg_node_defs.contains_key(&name) {
             let err = OptError::Any {
                 text: format!("function \"{name}\" can not be named after a concept, or CSG-Operation/Entitiy!"),
             };
@@ -121,23 +122,32 @@ impl Optimizer {
         let region_span = func.span.clone();
         let def_span = func.head_span();
         let return_type: Ty = func.return_type.clone().into();
+        //Use the return-expression span for the result, if there is one.
+        let return_span = func
+            .block
+            .retexpr
+            .as_ref()
+            .map(|retexpr| retexpr.span.clone())
+            .unwrap_or(region_span.clone());
 
         //setup the lambda node accordingly, as well as the block context, then launch the block builder.
-        let lambda = self.graph.on_omega_node(|omg| {
+        let lambda = self.opt.graph.on_omega_node(|omg| {
             let (lmd, _) = omg.new_function(func.is_export, |lmd| {
                 //setup the args and results
                 for arg in &args {
                     let port = lmd.add_argument();
-                    self.span_tags.set(port.into(), arg.2.clone());
+                    self.opt.span_tags.set(port.into(), arg.2.clone());
                     //Also tag with the correct type already
-                    self.typemap.set(port.into(), arg.1.clone());
+                    self.opt.typemap.set(port.into(), arg.1.clone());
                 }
                 //setup result
                 let result_port = lmd.add_result();
-                self.typemap.set(result_port.into(), return_type.clone());
-                self.span_tags.set(result_port.into(), region_span.clone());
+                self.opt
+                    .typemap
+                    .set(result_port.into(), return_type.clone());
+                self.opt.span_tags.set(result_port.into(), return_span);
             });
-            self.typemap.set(
+            self.opt.typemap.set(
                 OutputType::LambdaDeclaration.to_location(lmd).into(),
                 Ty::Callable,
             );
@@ -145,8 +155,8 @@ impl Optimizer {
         });
 
         //At this point everything should be hooked-up and typed. therfore we can return
-        self.names.set(lambda.into(), func.name.0.clone());
-        self.span_tags.set(lambda.into(), func.head_span());
+        self.opt.names.set(lambda.into(), func.name.0.clone());
+        self.opt.span_tags.set(lambda.into(), func.head_span());
         let no_inline = ct_args
             .iter()
             .any(|arg| arg.ident.0.as_str() == "no_inline");
@@ -159,7 +169,7 @@ impl Optimizer {
             return_type,
             no_inline,
         };
-        self.functions.insert(name, interned);
+        self.opt.functions.insert(name, interned);
 
         Ok(())
     }
@@ -185,6 +195,7 @@ impl Optimizer {
         //Find the λ-node, the open the context and define all args in terms of the λ's body-scope
         let lambda = {
             let existing = self
+                .opt
                 .functions
                 .get(&name)
                 .expect("Function should have been defined already!");
@@ -196,6 +207,7 @@ impl Optimizer {
                     .lambda
                     .as_outport_location(OutputType::Argument(argidx));
                 let found_type = self
+                    .opt
                     .typemap
                     .get(&port.into())
                     .expect("Expected port's type to be set already!");
@@ -206,7 +218,7 @@ impl Optimizer {
                 })?;
             }
             //set the active's scope writeout port
-            assert!(self.graph[existing.lambda].result_types(0).len() == 1);
+            assert!(self.opt.graph[existing.lambda].result_types(0).len() == 1);
             //also setup the span we are working in
             ctx.block_span = existing.region_span.clone();
             existing.lambda
@@ -227,7 +239,8 @@ impl Optimizer {
         let function_body_scope = ctx.close_scope();
         //post_serialize, make sure there is a result, and hook it up
         if let Some(result_src) = function_body_scope.result {
-            self.graph
+            self.opt
+                .graph
                 .connect(
                     result_src,
                     lambda.as_inport_location(InputType::Result(0)),
@@ -280,7 +293,7 @@ impl Optimizer {
             csgdef: csg,
         };
 
-        if let Some(existing) = self.concept_impl.get(&implkey) {
+        if let Some(existing) = self.opt.concept_impl.get(&implkey) {
             let err = OptError::Any {
                 text: format!(
                     "implementation for {}::{} already exists!",
@@ -294,7 +307,7 @@ impl Optimizer {
         }
 
         //try to get the concept, so we can inver the arg-type and the return type
-        let (arg_ty, return_ty) = if let Some(concept) = self.concepts.get(&implkey.concept) {
+        let (arg_ty, return_ty) = if let Some(concept) = self.opt.concepts.get(&implkey.concept) {
             (concept.src_ty.clone(), concept.dst_ty.clone())
         } else {
             let err = OptError::Any {
@@ -303,7 +316,7 @@ impl Optimizer {
             return Err(VolaError::error_here(err, span, "For this implementation"));
         };
 
-        let csgdef = if let Some(csgdef) = self.csg_node_defs.get(&implblock.dst.0) {
+        let csgdef = if let Some(csgdef) = self.opt.csg_node_defs.get(&implblock.dst.0) {
             csgdef
         } else {
             let err = OptError::Any {
@@ -315,11 +328,10 @@ impl Optimizer {
         //setup the omega context, then directly open the scope for our function
         let mut initial_context = self.omega_context()?;
         //NOTE: Use the toplevel region, but overwrite, once λ-creation is done
-        initial_context.open_new_scope(self.graph.toplevel_region(), false);
+        initial_context.open_new_scope(self.opt.graph.toplevel_region(), false);
         let mut args = SmallColl::new();
         //setup the lambda node accordingly, as well as the block context, then launch the block builder.
-        let (lambda, result_port) = self.graph.on_omega_node(|omg| {
-            
+        let (lambda, result_port) = self.opt.graph.on_omega_node(|omg| {
             omg.new_function(false, |lmd| {
                 //setup all operands as CV-Vars, and the arg as ... arg
                 for operand in &implblock.operands {
@@ -329,10 +341,10 @@ impl Optimizer {
                         return Err(VolaError::error_here(e, span, "here"));
                     }
                     //Directly set to CSG type
-                    self.typemap.set(within.into(), Ty::CSG);
-                    self.typemap.set(outside.into(), Ty::CSG);
+                    self.opt.typemap.set(within.into(), Ty::CSG);
+                    self.opt.typemap.set(outside.into(), Ty::CSG);
                     //and the report span
-                    self.span_tags.set(within.into(), operand.1.clone());
+                    self.opt.span_tags.set(within.into(), operand.1.clone());
                 }
 
                 //setup all implicit variables
@@ -343,9 +355,9 @@ impl Optimizer {
                         return Err(VolaError::error_here(e, span, "here"));
                     }
                     //setup type
-                    self.typemap.set(port.into(), arg.ty.clone().into());
+                    self.opt.typemap.set(port.into(), arg.ty.clone().into());
                     //and span
-                    self.span_tags.set(port.into(), arg.span.clone());
+                    self.opt.span_tags.set(port.into(), arg.span.clone());
                     //and push into args collection
                     args.push((arg.ident.0.clone(), arg.ty.clone().into()));
                 }
@@ -356,18 +368,22 @@ impl Optimizer {
                     .unwrap();
 
                 //Also tag with the correct type already
-                self.typemap.set(port.into(), arg_ty.clone().into());
+                self.opt.typemap.set(port.into(), arg_ty.clone().into());
                 //and span
-                self.span_tags
+                self.opt
+                    .span_tags
                     .set(port.into(), implblock.concept_arg_span.clone());
                 //Push the concept's arg as the last in the row
                 args.push((implblock.concept_arg_name.0.clone(), arg_ty.into()));
 
                 //setup result
                 let result_port = lmd.add_result();
-                self.typemap
+                self.opt
+                    .typemap
                     .set(result_port.into(), return_ty.clone().into());
-                self.span_tags.set(result_port.into(), return_span.clone());
+                self.opt
+                    .span_tags
+                    .set(result_port.into(), return_span.clone());
                 Ok(result_port)
             })
         });
@@ -380,10 +396,10 @@ impl Optimizer {
         };
 
         let def_span = implblock.head_span();
-        self.span_tags.set(lambda.into(), def_span.clone());
+        self.opt.span_tags.set(lambda.into(), def_span.clone());
 
         //Tag as callable
-        self.typemap.set(
+        self.opt.typemap.set(
             OutputType::LambdaDeclaration.to_location(lambda).into(),
             Ty::Callable,
         );
@@ -400,7 +416,8 @@ impl Optimizer {
         let function_body_scope = initial_context.close_scope();
         //post_serialize, make sure there is a result, and hook it up
         if let Some(result_src) = function_body_scope.result {
-            self.graph
+            self.opt
+                .graph
                 .connect(result_src, result_port, OptEdge::value_edge_unset())
                 .map_err(|e| {
                     VolaError::error_here(
@@ -421,7 +438,7 @@ impl Optimizer {
 
         //At this point everything should be hooked-up and typed. therfore we can return
 
-        self.names.set(
+        self.opt.names.set(
             lambda.into(),
             format!("impl {} for {}", implkey.csgdef, implkey.concept),
         );
@@ -435,7 +452,7 @@ impl Optimizer {
             args,
             return_type: return_ty.into(),
         };
-        self.concept_impl.insert(implkey, interned);
+        self.opt.concept_impl.insert(implkey, interned);
 
         Ok(())
     }

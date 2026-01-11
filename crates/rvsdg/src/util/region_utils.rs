@@ -7,8 +7,9 @@
  */
 use core::panic;
 
-use ahash::{AHashMap, AHashSet};
+use ahash::AHashSet;
 use smallvec::SmallVec;
+use vec_collections::AbstractVecMap;
 
 use crate::{
     attrib::AttribLocation,
@@ -17,7 +18,7 @@ use crate::{
     nodes::{LangNode, NodeType, StructuralNode},
     region::RegionLocation,
     util::abstract_node_type::AbstractNodeType,
-    NodeRef, Rvsdg, SmallColl,
+    NodeRef, Rvsdg, SmallColl, SmallMap,
 };
 
 impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
@@ -91,14 +92,13 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
     ///
     /// So for instance a gamma node with an entry variable `e`, where none of the branches uses `e`.
     ///
-    /// # Note
-    /// `disconnected` can be used to store all disconnected edge-values. If `None` is supplied, disconected
-    /// edges are just dropped.
+    /// # Performance
+    ///
+    /// This operates on all nodes (including unreachable nodes) in `region` and any sub-region.
     pub fn remove_unused_edges_in_region(
         &mut self,
         region: RegionLocation,
         recursive: bool,
-        //mut disconnected: Option<&mut Vec<E>>,
     ) -> Result<(), GraphError> {
         for node in self[region].nodes.clone() {
             //note: only work on node with sub regions
@@ -174,7 +174,7 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
         //      so we go the _ez_ road now.
 
         //Remaps an _old_ cv-index to a new cv-index
-        let mut remapping_table: AHashMap<usize, usize> = AHashMap::default();
+        let mut remapping_table: SmallMap<usize, usize> = SmallMap::default();
         let mut next_unused_cv_idx = 0;
         //for each cv, check if it is connected internally, if not,
         //call the remover 🧹, otherwise, add to the mapping
@@ -219,7 +219,7 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
         //cv port.
         let mut remap_targets: SmallVec<[(InportLocation, OutportLocation, E); 3]> =
             SmallVec::new();
-        for src_cv_idx in remapping_table.keys() {
+        for src_cv_idx in remapping_table.iter().map(|(k, _v)| k) {
             if let Some(edgref) = self
                 .node(node)
                 .inport(&InputType::ContextVariableInput(*src_cv_idx))

@@ -13,6 +13,7 @@ use rvsdg::{
     edge::OutportLocation, region::RegionLocation, util::abstract_node_type::AbstractNodeType,
     NodeRef,
 };
+use rvsdg_pattern_rewrite::{driver::Canonicalizer, CodeSize};
 use rvsdg_viewer::View;
 use vola_common::{Span, VolaError};
 
@@ -30,8 +31,9 @@ use crate::{
         trigonometric::Trig,
     },
     interval::IntervalError,
+    passes::pattern_rewrite::canonicalization::{UnrollCross, UnrollDot},
     typelevel::{ConstantIndex, IntervalConstruct, UniformConstruct},
-    OptError, Optimizer,
+    OptEdge, OptError, OptNode, Optimizer,
 };
 
 /// Pass that replace any interval-operation with _normal_ operations over tuple elements.
@@ -50,7 +52,8 @@ use crate::{
 /// This translates well to any indexing operation, since they stay essentially the same.
 pub struct LowerIntervals<'opt> {
     pub(crate) optimizer: &'opt mut Optimizer,
-
+    ///Applies one of the simplify patterns, whenever we discover the use of such a node.
+    pub(crate) canonicalize: Canonicalizer<OptNode, OptEdge, Optimizer, CodeSize>,
     ///Maps a interval port to the already resolved lower and upper bound of some _primitive_ type
     pub(crate) mapping: AHashMap<OutportLocation, (OutportLocation, OutportLocation)>,
     pub(crate) region_queue: VecDeque<RegionLocation>,
@@ -62,8 +65,16 @@ impl<'opt> LowerIntervals<'opt> {
     pub fn setup(optimizer: &'opt mut Optimizer) -> Self {
         let mut region_queue = VecDeque::new();
         region_queue.push_front(optimizer.graph.toplevel_region());
+
+        //For cross and dot we just lower the expresssion
+        // and enque the created nodes
+        let mut canonicalize = Canonicalizer::default();
+        canonicalize.register(UnrollCross);
+        canonicalize.register(UnrollDot);
+
         LowerIntervals {
             optimizer,
+            canonicalize: canonicalize,
             mapping: AHashMap::default(),
             node_queue: VecDeque::with_capacity(0),
             region_queue,
@@ -81,8 +92,7 @@ impl<'opt> LowerIntervals<'opt> {
         if std::env::var("VOLA_DUMP_ALL").is_ok()
             || std::env::var("DUMP_PRE_INTERVAL_LOWER").is_ok()
         {
-            self.optimizer
-                .push_debug_state("pre-interval-lower");
+            self.optimizer.push_debug_state("pre-interval-lower");
         }
 
         //Execution of this lowering simply iterates the live-code
@@ -113,7 +123,15 @@ impl<'opt> LowerIntervals<'opt> {
             //Now, pre-handle any none_simple node, i.e. Control-flow and inter-procedural stuff
             // We must do that, because this changes the live-nodes in this region.
             let mut changed_any = false;
+            let mut encountered_interval = false;
             for node in self.node_queue.clone() {
+                //check if there is any interval in the in/out signature. If so,
+                // tag.
+                if self.has_interval_in_or_out(node) {
+                    encountered_interval = true;
+                }
+                //NOTE: we can't just bail on those, even is there is no interval, because there might be one
+                // _inside_ the λ etc.
                 let pre_transform_changed_any = match self.optimizer.graph[node].into_abstract() {
                     AbstractNodeType::Lambda => self.lower_lambda(node)?,
                     AbstractNodeType::Theta => self.lower_theta(node)?,
@@ -123,6 +141,14 @@ impl<'opt> LowerIntervals<'opt> {
                 if pre_transform_changed_any {
                     changed_any = true;
                 }
+            }
+
+            //if we encountered any interval in the region, run the canonicalizer on it
+            if encountered_interval {
+                self.canonicalize
+                    .canonicalize_region(self.optimizer, next_region);
+                //TODO: find out whether any was actualy changed...
+                changed_any = true;
             }
 
             //now, if any of the live-nodes changed, re-do the topo-ord since some of the old indexing operations
@@ -175,13 +201,12 @@ impl<'opt> LowerIntervals<'opt> {
         }
 
         //TODO: don't do that once a fix for #41 lands.
-        self.optimizer.inline_all().map_err(VolaError::new)?;
+        //self.optimizer.inline_all().map_err(VolaError::new)?;
 
         if std::env::var("VOLA_DUMP_ALL").is_ok()
             || std::env::var("DUMP_POST_INTERVAL_LOWER").is_ok()
         {
-            self.optimizer
-                .push_debug_state("post-interval-lower");
+            self.optimizer.push_debug_state("post-interval-lower");
         }
 
         Ok(())

@@ -14,5 +14,5 @@ pub mod benefit;
 pub mod driver;
 pub mod pattern;
 pub use benefit::{Benefit, CodeSize, Speed};
-pub use driver::{DriverRecursion, TopoGreedyRewriter};
+pub use driver::{Apply, DriverRecursion, TopoGreedyRewriter};
 pub use pattern::PatternRewrite;

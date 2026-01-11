@@ -29,19 +29,21 @@ impl<'opt> TypeEdges<'opt> {
             .optimizer
             .graph
             .liveness_region(self.optimizer.graph.toplevel_region());
-        for (loc, liveness) in liveness.flags.into_iter() {
+        for (loc, liveness) in &liveness.flags {
             if !liveness {
                 continue;
             }
             if let AttribLocation::InPort(inport) = loc {
-                self.optimizer
-                    .get_in_type_mut(inport)
+                let _ = self
+                    .optimizer
+                    .get_in_type_mut(*inport)
                     .map_err(|e| e.to_error())?;
             }
         }
 
         if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("DUMP_TYPE_EDGES").is_ok() {
-            self.optimizer.push_debug_state("type-edges");
+            self.optimizer
+                .push_debug_state_with("type-edges", |d| d.with_flags("Liveness", &liveness));
         }
 
         Ok(())

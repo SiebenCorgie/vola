@@ -50,8 +50,10 @@ pub mod verify;
 
 ///SmallVec based collection for dynamically sized, but usually small collections through out the RVSDG.
 pub type SmallColl<T> = SmallVec<[T; 8]>;
-///Smallmap based map using ahash for up to 32 elements on the stack.
-pub type SmallMap<K, V> = small_map::ASmallMap<32, K, V>;
+///[vec_collections] based map for up to 8 elements on the stack.
+pub type SmallMap<K, V> = vec_collections::VecMap<[(K, V); 8]>;
+///[vec_collections] based set for up to 8 elements on the stack.
+pub type SmallSet<V> = vec_collections::VecSet<[V; 8]>;
 
 new_key_type! {pub struct NodeRef;}
 impl Display for NodeRef {
@@ -331,10 +333,7 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
                 err = Some(GraphError::InvalidNode(dst.node));
             }
 
-            let parent_region = match (
-                self.node(src.node).parent,
-                self.node(dst.node).parent,
-            ) {
+            let parent_region = match (self.node(src.node).parent, self.node(dst.node).parent) {
                 (Some(reg_src), Some(reg_dst)) => {
                     //Check that, either one is the parent of the other node,
                     match (src.output.is_argument(), dst.input.is_result()) {
@@ -504,11 +503,7 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
         }
 
         //are in same region, so we can safely connect
-        let edge = self.new_edge(Edge {
-            src,
-            dst,
-            ty,
-        });
+        let edge = self.new_edge(Edge { src, dst, ty });
 
         //notify both ports
         self.node_mut(src.node)

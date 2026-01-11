@@ -13,6 +13,7 @@
 use core::panic;
 
 use crate::{
+    attrib::AttribLocation,
     edge::{InportLocation, InputType, LangEdge, OutportLocation, OutputType},
     err::GraphError,
     nodes::{LangNode, NodeType, StructuralNode},
@@ -48,11 +49,17 @@ impl<
     ///inlines the given apply-node. Returns an error if `apply_node` is not in fact an apply node, or
     /// if the apply-node's calldef couldn't be found.
     ///
+    /// If `copy_map` is set, append a mapping from the original values, to the copied values. I.e. a mapping from the original [NodeRef] to the
+    /// [NodeRef] in the `node`'s region.
     ///
     /// NOTE: the inliner currently does not handle Phi nodes.
     ///
     /// Returns any created path of edges. This mostly happens if the inlined calldef uses context.
-    pub fn inline_apply_node(&mut self, node: NodeRef) -> Result<SmallColl<Path>, InlineError> {
+    pub fn inline_apply_node(
+        &mut self,
+        node: NodeRef,
+        copy_map: Option<&mut AHashMap<AttribLocation, AttribLocation>>,
+    ) -> Result<SmallColl<Path>, InlineError> {
         let dst_region = self
             .node(node)
             .parent
@@ -223,11 +230,7 @@ impl<
             // we use the remapped regions.
             let (mut src, mut dst, ty) = {
                 let edg = self.edge(srcedg);
-                (
-                    *edg.src(),
-                    *edg.dst(),
-                    edg.ty.structural_copy(),
-                )
+                (*edg.src(), *edg.dst(), edg.ty.structural_copy())
             };
 
             //remap src.
@@ -302,6 +305,16 @@ impl<
                 //and immediatly connect
                 self.connect(src, dst, ty).unwrap();
             }
+        }
+
+        //If the copy-map is set, append the just-created node mapping to the copy map
+        if let Some(copymap) = copy_map {
+            copymap.extend(node_mapping.into_iter().map(|lookup| {
+                (
+                    AttribLocation::from(lookup.0),
+                    AttribLocation::from(lookup.1),
+                )
+            }));
         }
 
         Ok(paths)
