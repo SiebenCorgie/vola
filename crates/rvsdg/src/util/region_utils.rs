@@ -7,8 +7,9 @@
  */
 use core::panic;
 
-use ahash::{AHashMap, AHashSet};
+use ahash::AHashSet;
 use smallvec::SmallVec;
+use vec_collections::AbstractVecMap;
 
 use crate::{
     attrib::AttribLocation,
@@ -17,7 +18,7 @@ use crate::{
     nodes::{LangNode, NodeType, StructuralNode},
     region::RegionLocation,
     util::abstract_node_type::AbstractNodeType,
-    NodeRef, Rvsdg, SmallColl,
+    NodeRef, Rvsdg, SmallColl, SmallMap,
 };
 
 impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
@@ -173,7 +174,7 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
         //      so we go the _ez_ road now.
 
         //Remaps an _old_ cv-index to a new cv-index
-        let mut remapping_table: AHashMap<usize, usize> = AHashMap::default();
+        let mut remapping_table: SmallMap<usize, usize> = SmallMap::default();
         let mut next_unused_cv_idx = 0;
         //for each cv, check if it is connected internally, if not,
         //call the remover 🧹, otherwise, add to the mapping
@@ -218,7 +219,7 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
         //cv port.
         let mut remap_targets: SmallVec<[(InportLocation, OutportLocation, E); 3]> =
             SmallVec::new();
-        for src_cv_idx in remapping_table.keys() {
+        for src_cv_idx in remapping_table.iter().map(|(k, _v)| k) {
             if let Some(edgref) = self
                 .node(node)
                 .inport(&InputType::ContextVariableInput(*src_cv_idx))

@@ -19,15 +19,16 @@ mod topo_ord;
 
 mod predecessor;
 pub use predecessor::{PredWalker, PredWalkerNodes, PredWalkerNodesRegion, PredWalkerRegion};
+use vec_collections::AbstractVecSet;
 
 use crate::{
     edge::{InportLocation, InputType, LangEdge, OutportLocation, OutputType},
     nodes::LangNode,
     region::RegionLocation,
     util::{abstract_node_type::AbstractNodeType, Path},
-    NodeRef, Rvsdg, SmallColl,
+    NodeRef, Rvsdg, SmallColl, SmallSet,
 };
-use ahash::{AHashMap, AHashSet};
+use ahash::AHashSet;
 use std::collections::VecDeque;
 
 ///An iterator that emits all reachable nodes for the entrypoint of a graph. The iterator is breadth-first and top down style.
@@ -290,7 +291,7 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
     pub fn find_consumer_out(&self, src: OutportLocation) -> SmallColl<InportLocation> {
         //NOTE find the first set of connected inport, and union all consumers
         //FIXME: The union_set is kinda dirty atm.
-        let mut union_set = AHashSet::new();
+        let mut union_set = SmallSet::empty();
         for connected in &self.node(src.node).outport(&src.output).unwrap().edges {
             let dst = *self.edge(*connected).dst();
             let consumers = self.find_consumer_in(dst);
@@ -306,7 +307,7 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
     // node boundaries. So _into_ gamma/theta regions as well as into lambda/phi regions if connected
     // to a context variable.
     pub fn find_consumer_in(&self, src: InportLocation) -> SmallColl<InportLocation> {
-        let mut seen = AHashSet::new();
+        let mut seen = SmallSet::empty();
         let mut collected = SmallColl::new();
 
         let mut waiting = vec![src];
@@ -410,8 +411,7 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
             output: OutputType::LambdaDeclaration,
         });
 
-        while !stack.is_empty() {
-            let next = stack.pop_front().unwrap();
+        while let Some(next) = stack.pop_front() {
             //checkout all connections. For each connection, go from the source (next) to the
             // dst, and check if we found an apply node.
             // If so, add the apply node to the result list
@@ -620,27 +620,6 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
         false
     }
 
-    ///Builds the dependecy graph for this region's nodes. Only includes region-local nodes.
-    /// the `region.node` is a dependecy, if a nodes depends on any _outside-region_ value.
-    pub fn region_node_dependecy_graph(&self, region: RegionLocation) -> DependencyGraph {
-        let mut graph = AHashMap::default();
-
-        for node in &self.region(&region).unwrap().nodes {
-            let mut dependencies = AHashSet::new();
-            let inputcount = self.node(*node).inputs().len();
-            for input in 0..inputcount {
-                if let Some(src) = self.node(*node).input_src(self, input) {
-                    assert!(dependencies.insert(src.node));
-                }
-            }
-
-            let old = graph.insert(*node, dependencies);
-            assert!(old.is_none());
-        }
-
-        DependencyGraph { graph }
-    }
-
     ///Traces the path backwards from _end_ to its start.
     ///
     /// Traverses node boundaries like CVs or loop-variables.
@@ -727,9 +706,4 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
 
         false
     }
-}
-
-pub struct DependencyGraph {
-    ///Maps a node to all nodes it depends on
-    pub graph: AHashMap<NodeRef, AHashSet<NodeRef>>,
 }
