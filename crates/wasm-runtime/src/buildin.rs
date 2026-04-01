@@ -9,7 +9,7 @@
 use glam::{FloatExt, Vec2, Vec3, Vec4};
 
 //NOTE can't use our macros, but only in that case, so its fine I guess.
-#[no_mangle]
+#[unsafe(no_mangle)]
 extern "C" fn cross_vec3(a: &Vec3, b: &Vec3, res: &mut Vec3) {
     *res = glam::Vec3::cross(*a, *b);
 }
@@ -72,42 +72,42 @@ crate::impl_macros::impl_op!(Vec2, fract, 2, fract_vec2);
 crate::impl_macros::impl_op!(Vec3, fract, 3, fract_vec3);
 crate::impl_macros::impl_op!(Vec4, fract, 4, fract_vec4);
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 extern "C" fn mix_scalar(a: &f32, b: &f32, c: &f32, res: &mut f32) {
     *res = a.lerp(*b, *c);
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 extern "C" fn mix_vec2(a: &Vec2, b: &Vec2, c: &f32, res: &mut Vec2) {
     *res = glam::Vec2::lerp(*a, *b, *c);
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 extern "C" fn mix_vec3(a: &Vec3, b: &Vec3, c: &f32, res: &mut Vec3) {
     *res = glam::Vec3::lerp(*a, *b, *c);
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 extern "C" fn mix_vec4(a: &Vec4, b: &Vec4, c: &f32, res: &mut Vec4) {
     *res = glam::Vec4::lerp(*a, *b, *c);
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 extern "C" fn clamp_scalar(a: &f32, b: &f32, c: &f32, res: &mut f32) {
     *res = f32::clamp(*a, *b, *c)
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 extern "C" fn clamp_vec2(a: &Vec2, b: &Vec2, c: &Vec2, res: &mut Vec2) {
     *res = glam::Vec2::clamp(*a, *b, *c);
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 extern "C" fn clamp_vec3(a: &Vec3, b: &Vec3, c: &Vec3, res: &mut Vec3) {
     *res = glam::Vec3::clamp(*a, *b, *c);
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 extern "C" fn clamp_vec4(a: &Vec4, b: &Vec4, c: &Vec4, res: &mut Vec4) {
     *res = glam::Vec4::clamp(*a, *b, *c);
 }

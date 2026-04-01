@@ -13,11 +13,11 @@
 use std::collections::VecDeque;
 
 use crate::{
+    EdgeRef, NodeRef, Rvsdg, SmallColl,
     edge::{InportLocation, InputType, LangEdge, OutportLocation, OutputType},
     err::GraphError,
     nodes::{LangNode, NodeType},
     region::RegionLocation,
-    EdgeRef, NodeRef, Rvsdg, SmallColl,
 };
 
 pub mod abstract_node_type;
@@ -255,7 +255,9 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
                             reg.node.as_outport_location(OutputType::Argument(lv_idx)),
                         )
                     }
-                    any => panic!("Unexpected node type {any} in argument-path! Note that argument paths cannot import over λ & ϕ boundarie. So only θ & γ nodes can be bridged"),
+                    any => panic!(
+                        "Unexpected node type {any} in argument-path! Note that argument paths cannot import over λ & ϕ boundarie. So only θ & γ nodes can be bridged"
+                    ),
                 };
 
                 //connect ports from next_out to new_port
@@ -426,7 +428,7 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
 
     ///Iterates all sub-[RegionLocation]s of `node`. If `node` has no sub-regions, this
     /// won't iterate at all.
-    pub fn iter_regions(&self, node: NodeRef) -> impl Iterator<Item = RegionLocation> {
+    pub fn iter_regions(&self, node: NodeRef) -> impl Iterator<Item = RegionLocation> + use<N, E> {
         (0..self[node].regions().len())
             .map(move |region_index| RegionLocation { node, region_index })
     }
