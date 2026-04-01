@@ -18,7 +18,7 @@ members = [
     "crates/vola-fmt",
     "crates/vola-tree-sitter-openscad",
     "crates/vola-convert",
-    "crates/rvsdg-pattern-rewrite",
+    "crates/rvsdg-pattern-rewrite", "crates/vola-bridge",
 ]
 
 resolver = "2"

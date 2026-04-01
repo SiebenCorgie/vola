@@ -1,7 +1,7 @@
 [package]
 name = "vola-ast"
 version = "0.3.0"
-edition = "2021"
+edition = "2024"
 license = "MPL-2.0"
 authors = ["Tendsin Mende"]
 readme = "crates/vola-ast/README.md"
