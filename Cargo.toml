@@ -18,7 +18,7 @@ members = [
     "crates/vola-fmt",
     "crates/vola-tree-sitter-openscad",
     "crates/vola-convert",
-    "crates/rvsdg-pattern-rewrite", "crates/vola-bridge",
+    "crates/rvsdg-pattern-rewrite", "crates/vola-bridge", "crates/vola-lib",
 ]
 
 resolver = "2"
@@ -38,6 +38,7 @@ vola-opt = { path = "crates/vola-opt" }
 vola-tree-sitter-parser = { path = "crates/vola-tree-sitter-parser" }
 vola-tree-sitter-openscad = { path = "crates/vola-tree-sitter-openscad" }
 volac = { path = "crates/volac" }
+vola-lib = {path = "crates/vola-lib"}
 vola-fmt = { path = "crates/vola-fmt" }
 wasm-runtime = { path = "crates/wasm-runtime" }
 

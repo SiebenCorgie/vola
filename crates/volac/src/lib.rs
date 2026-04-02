@@ -27,10 +27,10 @@ use vola_ast::VolaAst;
 
 mod error;
 pub use error::PipelineError;
-use vola_common::{reset_file_cache, VolaError};
+use vola_common::{VolaError, reset_file_cache};
 use vola_opt::{
+    OptError, Optimizer,
     passes::{AutoDiffPass, Cleanup, InlineExports, LowerAst, TypeEdges},
-    Optimizer,
 };
 
 pub mod backends;
@@ -221,7 +221,11 @@ impl Pipeline {
                     opt.dump_debug_state("early-cnf.bin");
                 }
 
-                vec![VolaError::new(PipelineError::CnfError(e))]
+                vec![
+                    VolaError::new(e)
+                        .to_error::<OptError>()
+                        .to_error::<PipelineError>(),
+                ]
             })?;
         }
         opt.specialize_all_exports().map_err(|e| {
@@ -248,7 +252,11 @@ impl Pipeline {
                     opt.push_debug_state("late-cnf");
                     opt.dump_debug_state("late-cnf.bin");
                 }
-                vec![VolaError::new(PipelineError::from(e))]
+                vec![
+                    VolaError::new(e)
+                        .to_error::<OptError>()
+                        .to_error::<PipelineError>(),
+                ]
             })?;
         }
         //NOTE: Inliner can be buggy on undefined edges, clean those up.
@@ -258,13 +266,17 @@ impl Pipeline {
             .map_err(|e| vec![VolaError::new(PipelineError::from(e))])?;
         InlineExports::setup(&mut opt)
             .execute()
-            .map_err(|e| vec![VolaError::new(PipelineError::from(*e.error))])?;
+            .map_err(|e| vec![e.to_error::<OptError>().to_error::<PipelineError>()])?;
 
         //do some _post_everyting_ cleanup
         if self.late_cne {
-            Cleanup::setup(&mut opt)
-                .cne_exports()
-                .map_err(|e| vec![VolaError::new(PipelineError::CneError(e))])?;
+            Cleanup::setup(&mut opt).cne_exports().map_err(|e| {
+                vec![
+                    VolaError::new(e)
+                        .to_error::<OptError>()
+                        .to_error::<PipelineError>(),
+                ]
+            })?;
         }
 
         //dispatch interval-extension if any where seen.

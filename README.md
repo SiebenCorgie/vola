@@ -74,10 +74,12 @@ by using this as a library. Servers as interface between the Vola frontend, and 
 - `wasm-runtime`: Companion crate to the WASM backend. Depends on cargo and the `wasm32-unknown-unknown` toolchain.
 - `volac`: The compiler library. Mostly takes care of executing passes of the various parts _in order_.
 - `vola-cli`: Thin CLI interface around `volac`
-- `rvsdg`: A generic [RVSDG](https://dl.acm.org/doi/abs/10.1145/3391902) implementation.
+- `vola-lib`: The library interface to Vola's optimizer (mostly). Compared to `volac` it does not _just_ execute a predefined pipeline, but lets you _work_ with the compiler.
+- `vola-bridge`: Friendly user interface to compile and execute Vola code on the CPU.
 - `vola-common`: Factors out common components for Vola's compiler stages. These are mostly debugging / error-reporting related.
 - `vola-fmt`: Auto-formater on the Vola AST.
 - `vola-convert`: Foreign syntax -> vola converter. Currently supports converting a `mymodel.scad` OpenScad file to `mymodel.vola`.
+- `rvsdg`: A generic [RVSDG](https://dl.acm.org/doi/abs/10.1145/3391902) implementation.
 
 ## Status
 
@@ -141,8 +143,9 @@ If you are interested in the runtime SPIR-V patching, have a look at [spv-patche
 ## Roadmap
 
 - ✨More [stdlib](https://gitlab.com/tendsinmende/vola-sdf-stdlib) features ✨
-- Refactor optimization passes based on [egg](https://github.com/egraphs-good/egg)
-- Interval arithmetic, similar to auto differentiation by _reinterpreting_ given code.
+- Benchmarking + better optimization
+- SIMD on the WASM backend
+- Support for [external data](https://gitlab.com/tendsinmende/vola/-/work_items/47), i.e. opaque _foreign_ parameters.
 
 ## License
 

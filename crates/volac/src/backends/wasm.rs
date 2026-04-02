@@ -9,7 +9,10 @@
 use std::{io::Write, process::Stdio};
 
 use vola_common::VolaError;
-use vola_opt::passes::{Cleanup, ImmScalarize, InlineAll};
+use vola_opt::{
+    OptError,
+    passes::{Cleanup, ImmScalarize, InlineAll},
+};
 
 use crate::{PipelineError, Target};
 
@@ -33,7 +36,7 @@ impl PipelineBackend for Wasm {
         //NOTE: Our WASM backend currently does not support calls, so we gotta inline all :/
         InlineAll::setup(opt)
             .execute()
-            .map_err(|e| vec![VolaError::new(PipelineError::from(*e.error))])?;
+            .map_err(|e| vec![e.to_error::<OptError>().to_error::<PipelineError>()])?;
         ImmScalarize::setup(opt)
             .scalarize_all()
             .map_err(|e| vec![VolaError::new(e.into())])?;

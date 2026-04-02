@@ -1,7 +1,4 @@
-use rvsdg::{
-    err::GraphError,
-    util::{cne::CneError, cnf::CnfError, inline::InlineError},
-};
+use rvsdg::err::GraphError;
 use thiserror::Error;
 use vola_opt::OptError;
 
