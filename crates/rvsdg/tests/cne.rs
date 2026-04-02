@@ -1,7 +1,7 @@
 use rvsdg::{
+    Rvsdg,
     common::VSEdge,
     edge::{InportLocation, InputType, OutportLocation, OutputType},
-    Rvsdg,
 };
 use test_rvsdg::LNode;
 
@@ -47,17 +47,17 @@ fn simple_cne() {
         });
     });
 
-    let removed = rvsdg.common_node_elemination().unwrap();
+    let removed = rvsdg.common_node_elimination().unwrap();
     assert!(
         removed.len() == 1,
-        "expected 1 removed nodes from dead_node elemination after CNE, got {}",
+        "expected 1 removed nodes from dead_node elimination after CNE, got {}",
         removed.len()
     );
 }
 
 #[test]
 fn medium_complex_cne() {
-    //Medium complex CNE test based on figure 6 _Dead and CommonNodeElemination_.
+    //Medium complex CNE test based on figure 6 _Dead and CommonNodeElimination_.
 
     let mut rvsdg: Rvsdg<LNode, VSEdge> = Rvsdg::new();
     rvsdg.on_omega_node(|omg| {
@@ -252,13 +252,13 @@ fn medium_complex_cne() {
     });
 
     //dump_graph_to_svg(&rvsdg, "BeforCne.svg");
-    let removed = rvsdg.common_node_elemination().unwrap();
+    let removed = rvsdg.common_node_elimination().unwrap();
     //dump_graph_to_svg(&rvsdg, "AfterCne.svg");
     //NOTE that the CNE only renders 2 nodes _dead_. The two multiplies
     //NOTE: Note as well, that we ignore the else branch, since it doesn't do anything in this case
     assert!(
         removed.len() == 2,
-        "expected to removed nodes from dead_node elemination after CNE, got {}",
+        "expected to removed nodes from dead_node elimination after CNE, got {}",
         removed.len()
     );
 

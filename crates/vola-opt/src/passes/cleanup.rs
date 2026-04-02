@@ -1,4 +1,4 @@
-use rvsdg::{region::RegionLocation, util::cne::CneError};
+use rvsdg::region::RegionLocation;
 
 use crate::{OptError, Optimizer};
 
@@ -71,7 +71,7 @@ impl<'opt> Cleanup<'opt> {
         self = self.remove_unused_toplevel_cvs();
 
         if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("DUMP_PRE_DNE").is_ok() {
-            self.opt.push_debug_state("pre dead node elemination");
+            self.opt.push_debug_state("pre dead node elimination");
         }
 
         let dnecount = self.opt.graph.dead_node_elimination().unwrap().len();
@@ -79,7 +79,7 @@ impl<'opt> Cleanup<'opt> {
         log::info!("Deleted {dnecount} nodes in DNE ");
 
         if std::env::var("VOLA_DUMP_ALL").is_ok() || std::env::var("DUMP_DNE").is_ok() {
-            self.opt.push_debug_state("post dead node elemination");
+            self.opt.push_debug_state("post dead node elimination");
         }
 
         self = self.remove_unused_toplevel_cvs();
@@ -93,7 +93,7 @@ impl<'opt> Cleanup<'opt> {
     }
 
     ///Executes CNE on all exported λs
-    pub fn cne_exports(self) -> Result<Self, CneError> {
+    pub fn cne_exports(self) -> Result<Self, OptError> {
         #[cfg(feature = "log")]
         log::info!("CNE Exports");
 

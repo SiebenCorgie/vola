@@ -15,12 +15,12 @@
 
 use std::collections::VecDeque;
 
-use rvsdg::{region::RegionLocation, NodeRef};
+use rvsdg::{NodeRef, region::RegionLocation};
 use vola_common::{Span, VolaError};
 
 use crate::{
-    autodiff::{ad_forward::ForwardAd, AutoDiff},
     OptError, Optimizer,
+    autodiff::{AutoDiff, ad_forward::ForwardAd},
 };
 
 ///AutoDiff pass handles the canonicalization and differentiation of
@@ -42,7 +42,7 @@ impl<'opt> AutoDiffPass<'opt> {
     ///Runs auto-differentiation on live auto-diff nodes in the graph
     pub fn autodiff_all(&mut self) -> Result<(), VolaError<OptError>> {
         self.waiting_entry_nodes.clear();
-        //Regardless, always dead-node elemination before that pass, since most of the algorithms assume that anything that is connected is
+        //Regardless, always dead-node elimination before that pass, since most of the algorithms assume that anything that is connected is
         //also alive.
         self.opt
             .graph

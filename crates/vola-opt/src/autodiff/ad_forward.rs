@@ -53,17 +53,17 @@
 //! part being, that for any constant we can reuse parts of the original
 //! graph.
 
-use super::{activity::Activity, AdResponse, AutoDiffError};
+use super::{AdResponse, AutoDiffError, activity::Activity};
 use crate::{
-    autodiff::{canonicalize::AdCanonicalizer, AutoDiff},
     OptEdge, OptError, Optimizer,
+    autodiff::{AutoDiff, canonicalize::AdCanonicalizer},
 };
 use ahash::AHashMap;
 use rvsdg::{
+    NodeRef, SmallColl,
     edge::{InportLocation, OutportLocation, OutputType},
     region::RegionLocation,
     util::abstract_node_type::AbstractNodeType,
-    NodeRef, SmallColl,
 };
 use vola_common::{Span, VolaError};
 
@@ -138,7 +138,7 @@ impl<'opt> ForwardAd<'opt> {
                 .push_debug_state(&format!("fw-autodiff-{entrypoint}-canonicalized"));
         }
 
-        //do dead-node elemination in order to have
+        //do dead-node elimination in order to have
         // a) clean DAG (faster / easier transformation)
         self.opt
             .graph

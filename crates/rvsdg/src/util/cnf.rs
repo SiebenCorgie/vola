@@ -20,11 +20,11 @@ use std::collections::VecDeque;
 use thiserror::Error;
 
 use crate::{
+    Rvsdg, SmallColl,
     edge::{InportLocation, InputType, LangEdge},
     err::GraphError,
     nodes::{LangNode, Node, NodeType},
     region::RegionLocation,
-    Rvsdg, SmallColl,
 };
 
 use super::{abstract_node_type::AbstractNodeType, copy::StructuralClone};
@@ -70,7 +70,7 @@ impl<N: LangNode + StructuralClone + 'static> CnfCtx<N> {
     where
         N: ConstantFoldable<N, E> + 'static,
     {
-        //NOTE: The idea is similar to how the common-node-elemination works. We traverse the region in topological order.
+        //NOTE: The idea is similar to how the common-node-elimination works. We traverse the region in topological order.
         //      For any node that _could_ be folded, we call the `try_constant_fold` implementation with all dependencies.
 
         let mut topord: VecDeque<_> = graph.topological_order_region(region).into();

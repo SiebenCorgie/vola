@@ -6,11 +6,11 @@
  * 2024 Tendsin Mende
  */
 
-//! Implements _Common-Node-Elemination_. The pass effectively fuses nodes that are known to describe the same operation.
+//! Implements _Common-Node-Elimination. The pass effectively fuses nodes that are known to describe the same operation.
 //!
 //! See
 //!
-//! - [common_node_elemination](crate::Rvsdg::common_node_elemination)
+//! - [common_node_elimination](crate::Rvsdg::common_node_elimination)
 //! - [cne_region](crate::Rvsdg::cne_region)
 //!
 //! For the implemetation to become available, the node type `N` of `Rvsdg<N, E>` has to implement [NodeTypeEq]. This allows the pass
@@ -20,12 +20,12 @@ use std::fmt::Debug;
 use thiserror::Error;
 
 use crate::{
+    NodeRef, Rvsdg,
     edge::{InportLocation, InputType, LangEdge, OutportLocation, OutputType},
     err::GraphError,
     nodes::{LangNode, Node, NodeType, StructuralNode},
     region::RegionLocation,
     util::{abstract_node_type::AbstractNodeType, node_equality::RegionEqNodeTracker},
-    NodeRef, Rvsdg,
 };
 
 use super::node_equality::NodeTypeEq;
@@ -37,14 +37,14 @@ pub enum CneError {
 }
 
 impl<N: LangNode + NodeTypeEq + Debug + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
-    ///Performs common-node-elemination on the whole graph. If successful, returns all eleminated nodes.
-    pub fn common_node_elemination(&mut self) -> Result<Vec<Node<N>>, CneError> {
+    ///Performs common-node-elimination on the whole graph. If successful, returns all elimination nodes.
+    pub fn common_node_elimination(&mut self) -> Result<Vec<Node<N>>, CneError> {
         let mut nodes = Vec::new();
         self.cne_region(self.toplevel_region(), &mut nodes)?;
         Ok(nodes)
     }
 
-    ///Applies CNE to the region (and all its sub regions). Collects all eleminated nodes in `deleted_node`.
+    ///Applies CNE to the region (and all its sub regions). Collects all eliminated nodes in `deleted_node`.
     pub fn cne_region(
         &mut self,
         region: RegionLocation,

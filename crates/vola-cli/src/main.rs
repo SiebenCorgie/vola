@@ -14,8 +14,8 @@
 use clap::{Parser, ValueEnum};
 use std::path::PathBuf;
 use volac::{
-    backends::{BoxedBackend, Native, Spirv, StubBackend, Wasm},
     Target,
+    backends::{BoxedBackend, Native, Spirv, StubBackend, Wasm},
 };
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug)]
@@ -46,7 +46,7 @@ struct Args {
     #[arg(long, default_value_t = false)]
     no_cnf: bool,
 
-    ///Disables only the common-node-elemination passes
+    ///Disables only the common-node-elimination passes
     #[arg(long, default_value_t = false)]
     no_cne: bool,
 
