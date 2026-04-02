@@ -1,9 +1,9 @@
 use std::{error::Error, fmt::Debug};
 
-use crate::{report, reporter::report_with_fallback_to_string, Span};
+use crate::{Span, report, reporter::report_with_fallback_to_string};
 use ariadne::{Label, Report, ReportBuilder};
 use backtrace::Backtrace;
-use smallvec::{smallvec, SmallVec};
+use smallvec::{SmallVec, smallvec};
 
 pub fn error_reporter<'a>(err: impl ToString, span: Span) -> ReportBuilder<'a, Span> {
     let builder = Report::build(
@@ -35,6 +35,22 @@ pub fn warning_reporter<'a>(err: impl ToString, span: Span) -> ReportBuilder<'a,
 ///
 /// It also allows you to covert any `VolaError<A>` to `VolaError<B>`, if `A` implements `Into<B>`.
 /// You are encouraged to use [thiserror] to derive your `E` type, and use [VolaError] only to embedded your error.
+///
+///
+/// # Example
+///
+/// To convert from a _lower_ error to a _higher_ error, use [to_error](VolaError::to_error):
+///
+/// ```rust, ignore
+///
+/// let graph_error = GraphError::InvalidNode(my_node);
+/// //Converts from a _lowe-level_ graph error, in a CNE context, to a _high-level_ pipeline error
+/// //without loosing the original context.
+/// let pipeline_error = graph_error
+///     .to_error::<CneError>()
+///     .to_error::<OptError>()
+///     .to_error::<PipelineError>();
+/// ```
 pub struct VolaError<E: Error> {
     pub error: Box<E>,
     pub source_span: Option<Span>,
