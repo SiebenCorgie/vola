@@ -24,6 +24,8 @@ pub enum BackendSpirvError {
     SpvLegalizationMalformed { inst: String, text: String },
     #[error("SPIR-V backend error: {0}")]
     SPVError(String),
+    #[error("Validation failed: {0}")]
+    ValidationFailed(String),
 }
 
 impl BackendSpirvError {
