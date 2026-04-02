@@ -27,12 +27,6 @@ pub enum PipelineError {
 
     #[error(transparent)]
     AstError(#[from] vola_ast::AstError),
-    #[error(transparent)]
-    CnfError(#[from] CnfError),
-    #[error(transparent)]
-    CneError(#[from] CneError),
-    #[error(transparent)]
-    Inline(#[from] InlineError),
     #[error("Failed to validate: {0}")]
     ValidationFailed(String),
     #[error("No backend configured!")]
