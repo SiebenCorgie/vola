@@ -1,7 +1,7 @@
-use std::fmt::Debug;
+use std::{fmt::Debug, path::Path};
 
-use vola_ast::VolaAst;
-use vola_common::VolaError;
+use vola_ast::{AstError, VolaAst};
+use vola_common::{VolaError, reset_file_cache};
 use vola_opt::{OptError, Optimizer};
 
 pub trait Pass {
@@ -46,8 +46,44 @@ impl From<VolaError<OptError>> for PassError {
     }
 }
 
+impl Into<Vec<VolaError<OptError>>> for PassError {
+    fn into(self) -> Vec<VolaError<OptError>> {
+        self.errors
+    }
+}
+
 ///Lowerst the AST into the optimizer
-pub struct LowerAst(VolaAst);
+pub struct LowerAst(pub VolaAst);
+
+impl LowerAst {
+    pub fn from_file(file: &dyn AsRef<Path>) -> Result<Self, Vec<VolaError<AstError>>> {
+        //NOTE: Always reset file cache, since the files we are reporting on might have changed.
+        reset_file_cache();
+        let parser = vola_tree_sitter_parser::VolaTreeSitterParser;
+        let ast = VolaAst::new_from_file(file, &parser)?;
+        Ok(Self(ast))
+    }
+
+    pub fn from_str(
+        str: &str,
+        workspace: impl AsRef<Path>,
+    ) -> Result<Self, Vec<VolaError<AstError>>> {
+        Self::from_bytes(str.as_bytes(), workspace)
+    }
+
+    pub fn from_bytes(
+        bytes: &[u8],
+        workspace: impl AsRef<Path>,
+    ) -> Result<Self, Vec<VolaError<AstError>>> {
+        //NOTE: Always reset file cache, since the files we are reporting on might have changed.
+        reset_file_cache();
+        let parser = vola_tree_sitter_parser::VolaTreeSitterParser;
+        let ast = VolaAst::new_from_bytes(bytes, &parser, workspace)?;
+
+        Ok(Self(ast))
+    }
+}
+
 impl Pass for LowerAst {
     fn execute(self, opt: &mut Optimizer) -> Result<(), PassError> {
         vola_opt::passes::LowerAst::setup(opt)
@@ -91,6 +127,16 @@ impl Pass for Cnf {
             .map_err(|e| VolaError::new(e.into()).into())
     }
 }
+///runst common-node-elimination on the whole graph
+pub struct Cne;
+impl Pass for Cne {
+    fn execute(self, opt: &mut Optimizer) -> Result<(), PassError> {
+        let _ = vola_opt::passes::Cleanup::setup(opt)
+            .cne_exports()
+            .map_err(|e| VolaError::new(e))?;
+        Ok(())
+    }
+}
 
 pub struct LowerIntervals;
 impl Pass for LowerIntervals {
@@ -131,6 +177,19 @@ impl Pass for Cleanup {
         //and type them :)
         vola_opt::passes::TypeEdges::setup(opt).execute()?;
 
+        Ok(())
+    }
+}
+
+///Fully Inlines all exported function. This effectively makes any live function also an exported function.
+pub struct InlineExports;
+impl Pass for InlineExports {
+    fn execute(self, opt: &mut Optimizer) -> Result<(), PassError> {
+        //NOTE: we have to cleanup unused edges, otherwise the inliner might confuse stuff
+        let _ = vola_opt::passes::Cleanup::setup(opt).remove_unused_edges();
+        vola_opt::passes::InlineExports::setup(opt)
+            .execute()
+            .map_err(|e| e.to_error::<OptError>())?;
         Ok(())
     }
 }
