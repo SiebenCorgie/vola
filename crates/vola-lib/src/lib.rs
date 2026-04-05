@@ -41,16 +41,15 @@
 use vola_common::{Span, VolaError};
 use vola_opt::{OptError, Optimizer};
 
-use crate::{
-    interface::{FunctionSignature, NamedValue},
-    passes::{
-        Cleanup, Cnf, Dne, InlineExports, LowerAutodiff, LowerIntervals, Pass, PassError,
-        PatterRewriteAll, SpecializeAll,
-    },
+use crate::passes::{
+    Cleanup, Cnf, Dne, InlineExports, LowerAutodiff, LowerIntervals, Pass, PassError,
+    PatterRewriteAll, SpecializeAll,
 };
 
+pub use vola_opt;
+
 mod interface;
-pub use interface::InterfaceDescriptor;
+pub use interface::{FunctionSignature, InterfaceDescriptor, NamedValue};
 ///Collection of known passes
 pub mod passes;
 #[cfg(feature = "spirv")]
@@ -118,6 +117,7 @@ impl OptModule {
             })?;
 
             //associate the name of each arg with its type
+
             let args = args
                 .into_iter()
                 .enumerate()
