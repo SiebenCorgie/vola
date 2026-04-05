@@ -54,10 +54,10 @@ use ahash::AHashMap;
 use common::Ty;
 use config::Config;
 use graph::{
-    auxiliary::{Function, Impl, ImplKey},
     CsgConcept, CsgDef,
+    auxiliary::{Function, Impl, ImplKey},
 };
-use rvsdg::{attrib::FlagStore, Rvsdg};
+use rvsdg::{Rvsdg, attrib::FlagStore};
 
 use rvsdg_viewer::layout::LayoutConfig;
 use vola_common::Span;

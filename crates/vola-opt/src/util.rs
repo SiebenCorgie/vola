@@ -6,81 +6,35 @@
  * 2025 Tendsin Mende
  */
 
-use rvsdg::{
-    NodeRef,
-    edge::{InportLocation, OutportLocation, OutputType},
-    smallvec::SmallVec,
-};
+use rvsdg::{NodeRef, SmallColl};
+use vola_common::VolaError;
 
-use crate::{Optimizer, common::Ty};
+use crate::{OptError, Optimizer, common::Ty};
 
 pub mod macros_graph;
 
 impl Optimizer {
-    pub fn get_type_for_inport(&self, port: InportLocation) -> Option<Ty> {
-        if let Some(port) = self.graph.node(port.node).inport(&port.input) {
-            if let Some(edgref) = port.edge {
-                if let Some(ty) = self.graph.edge(edgref).ty.get_type() {
-                    //Actually found a type on the edge, so return that
-                    return Some(ty.clone());
-                }
-            }
+    ///Returns the type signature of each argument, as well as the return type of each result
+    pub fn lambda_signature(
+        &self,
+        lambda: NodeRef,
+    ) -> Result<(SmallColl<Ty>, SmallColl<Ty>), VolaError<OptError>> {
+        let mut args = SmallColl::default();
+        for arg in self.graph.argument_ports(lambda.as_region(0)) {
+            let ty = self
+                .get_out_type(arg)
+                .map_err(|e| e.to_error::<OptError>())?;
+            args.push(ty);
         }
 
-        //edge seems to have no type, so try to use the port tag
-        self.typemap.get(&port.into()).cloned()
-    }
-    /*
-    ///Builds the type signature for a lambda node, based on either the port's type tag, or the type of an connected edge.
-    ///
-    /// Panics if `node` is not in fact a lambda node.
-    pub fn get_lambda_arg_signature(&self, node: NodeRef) -> SmallVec<[Option<Ty>; 3]> {
-        let lmd = self.graph.node(node).node_type.unwrap_lambda_ref();
-        let mut argidx = 0;
-        let mut signature = SmallVec::default();
-        while let Some(argport) = lmd.argument(argidx) {
-            let mut found_ty = None;
-            //First try to get a type for an connected edge, if possible. If not, we try to find a type_tag
-            for edge in argport.edges.iter() {
-                //try to get a type for that edge, if possible we push that and continue;
-                if let Some(ty) = self.graph.edge(*edge).ty.get_type() {
-                    if let Some(already_known_type) = found_ty {
-                        assert!(
-                            ty == &already_known_type,
-                            "expected all outgoing edges of a lambda node to be of same type"
-                        );
-                    }
-                    found_ty = Some(ty.clone());
-                }
-            }
-
-            if let Some(ty) = found_ty {
-                signature.push(Some(ty));
-                argidx += 1;
-                continue;
-            }
-
-            //if we didn't find a type yet, try typemap
-            match self.typemap.get(
-                &OutportLocation {
-                    node,
-                    output: OutputType::Argument(argidx),
-                }
-                .into(),
-            ) {
-                Some(ty) => {
-                    //Use that type then
-                    signature.push(Some(ty.clone()));
-                }
-                None => {
-                    //Found none no where
-                    signature.push(None);
-                }
-            }
-            argidx += 1;
+        let mut results = SmallColl::default();
+        for res in self.graph.result_ports(lambda.as_region(0)) {
+            let ty = self
+                .get_in_type(res)
+                .map_err(|e| e.to_error::<OptError>())?;
+            results.push(ty);
         }
 
-        signature
+        Ok((args, results))
     }
-    */
 }
