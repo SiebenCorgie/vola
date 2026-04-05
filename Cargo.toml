@@ -38,7 +38,8 @@ vola-opt = { path = "crates/vola-opt" }
 vola-tree-sitter-parser = { path = "crates/vola-tree-sitter-parser" }
 vola-tree-sitter-openscad = { path = "crates/vola-tree-sitter-openscad" }
 volac = { path = "crates/volac" }
-vola-lib = {path = "crates/vola-lib"}
+vola-lib = {path = "crates/vola-lib", default-features = false}
+vola-bridge = {path = "crates/vola-bridge"}
 vola-fmt = { path = "crates/vola-fmt" }
 wasm-runtime = { path = "crates/wasm-runtime" }
 

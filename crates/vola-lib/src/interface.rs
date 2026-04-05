@@ -1,11 +1,13 @@
 use rvsdg::NodeRef;
 use vola_opt::common::Ty;
 
+#[derive(Debug, Clone)]
 pub struct NamedValue {
     pub name: String,
     pub ty: Ty,
 }
 
+#[derive(Debug, Clone)]
 pub struct FunctionSignature {
     ///The function's ffi-name, i.e. the name
     /// that is used at link-time
@@ -17,6 +19,7 @@ pub struct FunctionSignature {
     pub results: Vec<Ty>,
 }
 
+#[derive(Debug, Clone)]
 pub struct InterfaceDescriptor {
     pub functions: Vec<FunctionSignature>,
     //TODO: collect foreighn-data signature.

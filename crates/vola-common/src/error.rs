@@ -135,13 +135,20 @@ impl<E: Error> VolaError<E> {
     ///Reports the full error to stdout.
     pub fn report(&self) {
         let mut reporter = if let Some(source_span) = &self.source_span {
-            Report::build(
-                ariadne::ReportKind::Error,
-                std::path::Path::new(source_span.file.as_str()),
-                source_span.byte_start,
-            )
-            .with_config(ariadne::Config::default().with_index_type(ariadne::IndexType::Byte))
-            .with_message(self.error.to_string())
+            if source_span.file.as_str().ends_with(Span::FALLBACK_FILE) {
+                //If this is in the fallback file, just print the error, with no further span-based
+                // sugar.
+                println!("{:?}", self);
+                return;
+            } else {
+                Report::build(
+                    ariadne::ReportKind::Error,
+                    std::path::Path::new(source_span.file.as_str()),
+                    source_span.byte_start,
+                )
+                .with_config(ariadne::Config::default().with_index_type(ariadne::IndexType::Byte))
+                .with_message(self.error.to_string())
+            }
         } else {
             Report::build(
                 ariadne::ReportKind::Error,
@@ -164,6 +171,10 @@ impl<E: Error> VolaError<E> {
     ///Prints the error to string. Uses `source` as the source-code string that is being reported on.
     pub fn report_to_string(&self, source: &str) -> String {
         let mut reporter = if let Some(source_span) = &self.source_span {
+            if source_span.file.as_str().ends_with(Span::FALLBACK_FILE) {
+                return format!("{self:?}");
+            }
+
             Report::build(
                 ariadne::ReportKind::Error,
                 std::path::Path::new(source_span.file.as_str()),
@@ -193,7 +204,7 @@ impl<E: Error> Debug for VolaError<E> {
             if let Some(file) = src_span.get_file() {
                 write!(
                     f,
-                    "{} [{}:{}..{}:{}]: {}",
+                    "{} [{}:{}..{}:{}]:\n\t{}",
                     file,
                     src_span.from.0,
                     src_span.from.1,

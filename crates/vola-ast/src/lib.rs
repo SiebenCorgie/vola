@@ -149,7 +149,7 @@ impl VolaAst {
     ) -> Result<Self, Vec<VolaError<AstError>>> {
         //build a pseudo file we use for error reporting
         let mut pseudo_file = workspace.as_ref().to_path_buf();
-        pseudo_file.push("pseudo_source.vola");
+        pseudo_file.push(Span::FALLBACK_FILE);
         let root_file: FileString = pseudo_file.as_path().to_str().unwrap().into();
 
         let mut root_ast = parser
@@ -165,7 +165,7 @@ impl VolaAst {
 
     ///Parses `bytes` into [VolaAst], but does not resolve [AstEntry::Module]. Use either [VolaAst::new_from_bytes] to do that automatically, or [VolaAst::resolve_modules] to do that manually.
     ///
-    /// On a side node, the file name "pseudo_source.vola" will be used, whenever a source file-name is needed.
+    /// On a side node, the file name "no-span-source.vola" will be used, whenever a source file-name is needed.
     pub fn new_from_bytes_no_import<E: Error>(
         bytes: &[u8],
         parser: &dyn VolaParser<Error = E>,

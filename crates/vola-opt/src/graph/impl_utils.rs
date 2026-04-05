@@ -355,7 +355,8 @@ impl Optimizer {
     ///Looks up, or generates a ffi-name for the given `lambda`.
     /// Returns None if `lambda` is not an exported (i.e. internal) function.
     pub fn ffi_name(&self, lambda: NodeRef) -> Option<String> {
-        if self.graph[lambda].node_type.is_lambda() {
+        if !self.graph[lambda].node_type.is_lambda() {
+
             return None;
         }
 
