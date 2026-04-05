@@ -432,4 +432,15 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
         (0..self[node].regions().len())
             .map(move |region_index| RegionLocation { node, region_index })
     }
+
+    ///Returns true, if any of the connections of `outport` are export-ports (i.e. results of the omega-node).
+    pub fn is_export(&self, outport: OutportLocation) -> bool {
+        for dst in self.outport_dsts(outport) {
+            if dst.input.is_result() && dst.node == self.omega {
+                return true;
+            }
+        }
+
+        false
+    }
 }
