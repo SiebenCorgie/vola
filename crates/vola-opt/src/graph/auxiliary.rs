@@ -5,7 +5,7 @@
  * 2024 Tendsin Mende
  */
 
-use rvsdg::{region::RegionLocation, NodeRef, SmallColl};
+use rvsdg::{NodeRef, SmallColl, region::RegionLocation};
 use vola_common::Span;
 
 use crate::common::Ty;
@@ -20,6 +20,7 @@ pub struct ImplKey {
 }
 
 ///Reference to some implementation
+#[derive(Clone)]
 pub struct Impl {
     #[allow(unused)]
     pub region_span: Span,
@@ -45,6 +46,7 @@ impl Impl {
 }
 
 ///An implemented function
+#[derive(Clone)]
 pub struct Function {
     pub name: String,
     pub region_span: Span,

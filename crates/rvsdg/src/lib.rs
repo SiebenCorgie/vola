@@ -157,6 +157,7 @@ impl EdgeRef {
 ///
 /// To access nodes, edges, regions, or ports of nodes, use either [node](Rvsdg::node), [edge](Rvsdg::edge), etc, or the index implementation for the
 /// respective handle.
+#[derive(Clone)]
 pub struct Rvsdg<N: LangNode + 'static, E: LangEdge + 'static> {
     pub(crate) nodes: SlotMap<NodeRef, Node<N>>,
     pub(crate) edges: SlotMap<EdgeRef, Edge<E>>,

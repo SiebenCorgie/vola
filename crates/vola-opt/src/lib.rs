@@ -83,6 +83,7 @@ pub type OptGraph = Rvsdg<OptNode, OptEdge>;
 
 ///The _whole_ optimizer. Mostly ties together the RVSDG and some auxiliary structures that
 /// make wiring the the correct nodes together possible.
+#[derive(Clone)]
 pub struct Optimizer {
     pub graph: OptGraph,
 

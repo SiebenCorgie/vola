@@ -63,6 +63,16 @@ pub struct OptModule {
 }
 
 impl OptModule {
+    ///Duplicates the module. This possibly a _heavy_ operation, because its copying the
+    /// compleat internal optimizer state.
+    pub fn duplicate(&self) -> Self {
+        Self {
+            opt: self.opt.clone(),
+        }
+    }
+}
+
+impl OptModule {
     pub fn new() -> Self {
         Self {
             opt: Optimizer::new(),
