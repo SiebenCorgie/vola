@@ -7,12 +7,12 @@
  */
 
 use rvsdg::{
+    NodeRef,
     edge::{InportLocation, OutportLocation, OutputType},
     smallvec::SmallVec,
-    NodeRef,
 };
 
-use crate::{common::Ty, Optimizer};
+use crate::{Optimizer, common::Ty};
 
 pub mod macros_graph;
 
@@ -30,7 +30,7 @@ impl Optimizer {
         //edge seems to have no type, so try to use the port tag
         self.typemap.get(&port.into()).cloned()
     }
-
+    /*
     ///Builds the type signature for a lambda node, based on either the port's type tag, or the type of an connected edge.
     ///
     /// Panics if `node` is not in fact a lambda node.
@@ -82,4 +82,5 @@ impl Optimizer {
 
         signature
     }
+    */
 }

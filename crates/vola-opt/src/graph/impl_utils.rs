@@ -7,23 +7,23 @@
  */
 
 use rvsdg::{
+    NodeRef, SmallColl,
     edge::{InportLocation, InputType, LangEdge, OutportLocation, OutputType},
     region::RegionLocation,
     util::unroll::UnrollError,
-    NodeRef, SmallColl,
 };
 use vola_ast::csg::{CsgDef, CsgTy};
 use vola_common::Span;
 
 use crate::{
+    OptEdge, OptError, OptNode, Optimizer,
     alge::{
-        arithmetic::{UnaryArith, UnaryArithOp},
         EvalNode,
+        arithmetic::{UnaryArith, UnaryArithOp},
     },
     common::Ty,
     graph::auxiliary::Impl,
     imm::ImmNat,
-    OptEdge, OptError, OptNode, Optimizer,
 };
 
 use super::auxiliary::ImplKey;
@@ -53,7 +53,7 @@ impl Optimizer {
                 return Err(OptError::AIIFailed(format!(
                     "{} is defined as an entity, not an operation!",
                     name.0
-                )))
+                )));
             }
             Some(CsgDef {
                 span: _,
@@ -65,7 +65,7 @@ impl Optimizer {
                 return Err(OptError::AIIFailed(format!(
                     "Could not find operation definition named \"{}\", consider adding it first!",
                     key.csgdef
-                )))
+                )));
             }
         }
 
@@ -336,7 +336,7 @@ impl Optimizer {
     }
 
     ///Returns a list of all currently exported λ-bodies
-    pub(crate) fn exported_functions(&self) -> SmallColl<RegionLocation> {
+    pub fn exported_functions(&self) -> SmallColl<RegionLocation> {
         let mut export_lambdas = SmallColl::default();
         for result in self.graph.result_ports(self.graph.toplevel_region()) {
             if let Some(src) = self.graph.inport_src(result) {
@@ -350,5 +350,27 @@ impl Optimizer {
         }
 
         export_lambdas
+    }
+
+    ///Looks up, or generates a ffi-name for the given `lambda`.
+    /// Returns None if `lambda` is not an exported (i.e. internal) function.
+    pub fn ffi_name(&self, lambda: NodeRef) -> Option<String> {
+        if self.graph[lambda].node_type.is_lambda() {
+            return None;
+        }
+
+        if !self
+            .graph
+            .is_exported(lambda.as_outport_location(OutputType::LambdaDeclaration))
+        {
+            return None;
+        }
+
+        //Check if there is a name, otherwise generate one.
+        if let Some(name) = self.names.get(&lambda.into()) {
+            Some(name.clone())
+        } else {
+            Some(format!("unamed_function_{}", lambda.as_ffi()))
+        }
     }
 }
