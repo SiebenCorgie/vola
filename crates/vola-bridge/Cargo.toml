@@ -1,0 +1,20 @@
+[package]
+name = "vola-bridge"
+version = "0.1.0"
+edition = "2024"
+license = "MPL-2.0"
+description = "Bridges the Vola-As-A-Library use-case. Provides a thin interface to recompile and call Vola functions from Rust."
+
+[dependencies]
+vola-lib = {workspace = true, default-features = false, features = ["wasm"]}
+wasmtime.workspace = true
+thiserror.workspace = true
+vola-common.workspace = true
+smallvec.workspace = true
+ahash.workspace = true
+
+
+[dev-dependencies]
+softbuffer = "0.4.8"
+winit = "0.30"
+hotwatch = "0.5.0"
