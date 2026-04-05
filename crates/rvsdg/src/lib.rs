@@ -29,7 +29,7 @@ use edge::{Edge, InportLocation, InputType, LangEdge, OutportLocation, OutputTyp
 use err::GraphError;
 use nodes::{LangNode, Node, NodeType, OmegaNode};
 use region::{Region, RegionLocation};
-use slotmap::{new_key_type, KeyData, SlotMap};
+use slotmap::{KeyData, SlotMap, new_key_type};
 pub use smallvec;
 use smallvec::SmallVec;
 
@@ -85,6 +85,23 @@ impl NodeRef {
     ///Short for `self.as_outport_location(OutputType::Outport(idx))`.
     pub fn output(self, idx: usize) -> OutportLocation {
         self.as_outport_location(OutputType::Output(idx))
+    }
+
+    ///Turns the _node_ into the `region_index` sub-region of this node.
+    ///
+    /// # Example
+    ///
+    /// ```rust, ignore
+    /// //accessing the body of a lambda
+    /// let body = my_lambda.as_region(0);
+    /// //accessing the second branch of a gamma node
+    /// let else_branch = my_gamma.as_region(1);
+    /// ```
+    pub fn as_region(self, region_index: usize) -> RegionLocation {
+        RegionLocation {
+            node: self,
+            region_index,
+        }
     }
 
     ///Serializes the reference into a ffi value obtained by [KeyData::as_ffi].
@@ -343,7 +360,10 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
                             //of the src/dst node.
                             //NOTE: This is somewhat hard, since we don't really know _which_
                             //      of the regions the edge is in. So we just search for it.
-                            assert!(src.node == dst.node, "If both src and dst are argument/result, both need to be part of the same node!");
+                            assert!(
+                                src.node == dst.node,
+                                "If both src and dst are argument/result, both need to be part of the same node!"
+                            );
                             let mut parent_reg_candidate = None;
                             for (regidx, reg) in self.node(src.node).regions().iter().enumerate() {
                                 if reg.edges.contains(&edge) {
@@ -513,12 +533,13 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
             .push(edge);
 
         self.node_mut(dst.node).inport_mut(&dst.input).unwrap().edge = Some(edge);
-        assert!(self
-            .node_mut(dst.node)
-            .inport_mut(&dst.input)
-            .unwrap()
-            .edge
-            .is_some());
+        assert!(
+            self.node_mut(dst.node)
+                .inport_mut(&dst.input)
+                .unwrap()
+                .edge
+                .is_some()
+        );
         //now notify the region of this new edge
         self.node_mut(src_parent_region.node)
             .regions_mut()
