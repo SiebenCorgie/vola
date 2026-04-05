@@ -1,5 +1,6 @@
 use std::{io::Write, process::Stdio};
 
+pub use vola_backend_wasm;
 use vola_backend_wasm::{WasmBackend, WasmError};
 use vola_common::VolaError;
 use vola_opt::{

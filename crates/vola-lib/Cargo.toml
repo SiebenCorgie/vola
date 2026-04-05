@@ -15,6 +15,7 @@ wasm = ["vola-backend-wasm"]
 vola-ast.workspace = true
 vola-tree-sitter-parser.workspace = true
 vola-opt.workspace = true
+rvsdg.workspace = true
 vola-backend-spirv = { workspace = true, optional = true }
 vola-backend-wasm = { workspace = true, optional = true }
 vola-common.workspace = true

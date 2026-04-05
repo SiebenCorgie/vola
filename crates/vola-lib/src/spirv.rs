@@ -1,5 +1,6 @@
 use std::{io::Write, process::Stdio};
 
+pub use vola_backend_spirv;
 use vola_backend_spirv::{BackendSpirvError, SpirvBackend, SpirvConfig, rspirv::binary::Assemble};
 use vola_common::VolaError;
 use vola_opt::passes::{Cleanup, ImmScalarize, TypeEdges};

@@ -38,11 +38,15 @@
 //! The `module` allows you to run use-case specific passes, and even allows you direct access to the underlying IR.
 //! You could also lower several ASTs into the same `module`, or run multiple backends on the same optimized IR.
 //!
-use vola_opt::Optimizer;
+use vola_common::{Span, VolaError};
+use vola_opt::{OptError, Optimizer};
 
-use crate::passes::{
-    Cleanup, Cnf, Dne, InlineExports, LowerAutodiff, LowerIntervals, Pass, PassError,
-    PatterRewriteAll, SpecializeAll,
+use crate::{
+    interface::{FunctionSignature, NamedValue},
+    passes::{
+        Cleanup, Cnf, Dne, InlineExports, LowerAutodiff, LowerIntervals, Pass, PassError,
+        PatterRewriteAll, SpecializeAll,
+    },
 };
 
 mod interface;
@@ -93,5 +97,54 @@ impl OptModule {
     }
 
     ///Generates the _current_ description of all exported interfaces.
-    pub fn build_interface_descriptor(&self) -> InterfaceDescriptor {}
+    pub fn build_interface_descriptor(&self) -> Result<InterfaceDescriptor, VolaError<OptError>> {
+        let mut interface_descriptor = InterfaceDescriptor {
+            functions: Vec::new(),
+        };
+
+        for lmd_region in self.opt.exported_functions() {
+            let lmd_span = self.opt.find_span(lmd_region.node).unwrap_or(Span::empty());
+            let symbol_name = self
+                .opt
+                .ffi_name(lmd_region.node)
+                .ok_or(VolaError::error_here(
+                    OptError::Internal("Function has no name".to_string()),
+                    lmd_span.clone(),
+                    "This function is exported, but has no name",
+                ))?;
+
+            let (args, results) = self.opt.lambda_signature(lmd_region.node).map_err(|e| {
+                e.with_label(lmd_span, "could not generate signature for this function")
+            })?;
+
+            //associate the name of each arg with its type
+            let args = args
+                .into_iter()
+                .enumerate()
+                .map(|(idx, ty)| {
+                    let name = self
+                        .opt
+                        .names
+                        .get(
+                            &lmd_region
+                                .node
+                                .as_outport_location(rvsdg::edge::OutputType::Argument(idx))
+                                .into(),
+                        )
+                        .expect("Argument must be named!")
+                        .clone();
+                    NamedValue { name, ty }
+                })
+                .collect();
+
+            interface_descriptor.functions.push(FunctionSignature {
+                symbol_name,
+                args,
+                results: results.to_vec(),
+                lambda: lmd_region.node,
+            });
+        }
+
+        Ok(interface_descriptor)
+    }
 }
