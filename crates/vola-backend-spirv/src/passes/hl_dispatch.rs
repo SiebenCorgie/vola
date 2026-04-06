@@ -6,7 +6,7 @@
  * 2024 Tendsin Mende
  */
 
-use rvsdg::{NodeRef, SmallColl, util::dead_node_elimination::DneError};
+use rvsdg::{NodeRef, SmallColl};
 use vola_common::{Span, error_reporter, report};
 
 use crate::{

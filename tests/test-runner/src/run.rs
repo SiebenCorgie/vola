@@ -17,46 +17,6 @@ pub enum ResultType {
     Error(Vec<String>),
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub enum Backend {
-    Spirv,
-    Wasm,
-    None,
-}
-
-#[derive(Debug, PartialEq)]
-pub enum TestState {
-    Success {
-        ast: Duration,
-        optimization: Duration,
-        spirv: Duration,
-        wasm: Duration,
-    },
-    Partial {
-        ast: Duration,
-        optimization: Duration,
-        spirv: Duration,
-        wasm: Duration,
-    },
-    Error(String),
-}
-
-impl TestState {
-    pub fn is_success(&self) -> bool {
-        if let Self::Success { .. } = self {
-            true
-        } else {
-            false
-        }
-    }
-}
-
-pub struct TestRun {
-    time: Duration,
-    state: TestState,
-    path: PathBuf,
-}
-
 pub enum PartialResult {
     Success(Duration),
     Error(Vec<String>),

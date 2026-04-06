@@ -185,7 +185,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                                 failed_count += 1
                             }
                         }
-                        Err(e) => {
+                        Err(_e) => {
                             failed_count += 1;
                         }
                     }

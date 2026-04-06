@@ -7,7 +7,6 @@ members = [
     "crates/vola-opt",
     "examples/rvsdg-simple",
     "crates/rvsdg-derive-lang",
-    "crates/volac",
     "crates/vola-cli",
     "crates/rvsdg-viewer-ui",
     "crates/vola-tree-sitter-parser",
@@ -18,7 +17,9 @@ members = [
     "crates/vola-fmt",
     "crates/vola-tree-sitter-openscad",
     "crates/vola-convert",
-    "crates/rvsdg-pattern-rewrite", "crates/vola-bridge", "crates/vola-lib",
+    "crates/rvsdg-pattern-rewrite",
+    "crates/vola-bridge",
+    "crates/vola-lib",
 ]
 
 resolver = "2"
@@ -37,7 +38,6 @@ vola-common = { path = "crates/vola-common" }
 vola-opt = { path = "crates/vola-opt" }
 vola-tree-sitter-parser = { path = "crates/vola-tree-sitter-parser" }
 vola-tree-sitter-openscad = { path = "crates/vola-tree-sitter-openscad" }
-volac = { path = "crates/volac" }
 vola-lib = {path = "crates/vola-lib", default-features = false}
 vola-bridge = {path = "crates/vola-bridge"}
 vola-fmt = { path = "crates/vola-fmt" }
