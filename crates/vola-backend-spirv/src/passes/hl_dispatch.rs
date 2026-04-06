@@ -6,17 +6,22 @@
  * 2024 Tendsin Mende
  */
 
-use rvsdg::{NodeRef, SmallColl};
-use vola_common::{error_reporter, report, Span};
+use rvsdg::{NodeRef, SmallColl, util::dead_node_elimination::DneError};
+use vola_common::{Span, error_reporter, report};
 
 use crate::{
+    BackendSpirvError, SpirvBackend,
     graph::BackendOp,
     hl::HlOp,
     spv::{ArithBaseTy, ArithTy, CoreOp, GlOp, SpvOp, SpvType},
-    BackendSpirvError, SpirvBackend,
 };
 
 impl SpirvBackend {
+    pub fn dne(&mut self) -> Result<(), BackendSpirvError> {
+        let _ = self.graph.dead_node_elimination()?;
+        Ok(())
+    }
+
     pub fn hl_to_spv_nodes(&mut self) -> Result<(), BackendSpirvError> {
         //collect all hl-nodes
         let hl_nodes = self
@@ -24,8 +29,7 @@ impl SpirvBackend {
             .nodes()
             .filter(|n| {
                 if self.graph.node(*n).node_type.is_simple() {
-                    self
-                        .graph
+                    self.graph
                         .node(*n)
                         .node_type
                         .unwrap_simple_ref()
@@ -111,21 +115,33 @@ impl BackendOp {
             (HlOp::Div, [ArithBaseTy::Float, ArithBaseTy::Float]) => SpvOp::CoreOp(CoreOp::FDiv),
             (
                 HlOp::Div,
-                [ArithBaseTy::Integer { signed: true }, ArithBaseTy::Integer { signed: true }],
+                [
+                    ArithBaseTy::Integer { signed: true },
+                    ArithBaseTy::Integer { signed: true },
+                ],
             ) => SpvOp::CoreOp(CoreOp::SDiv),
             (
                 HlOp::Div,
-                [ArithBaseTy::Integer { signed: false }, ArithBaseTy::Integer { signed: false }],
+                [
+                    ArithBaseTy::Integer { signed: false },
+                    ArithBaseTy::Integer { signed: false },
+                ],
             ) => SpvOp::CoreOp(CoreOp::UDiv),
 
             (HlOp::Mod, [ArithBaseTy::Float, ArithBaseTy::Float]) => SpvOp::CoreOp(CoreOp::FMod),
             (
                 HlOp::Mod,
-                [ArithBaseTy::Integer { signed: true }, ArithBaseTy::Integer { signed: true }],
+                [
+                    ArithBaseTy::Integer { signed: true },
+                    ArithBaseTy::Integer { signed: true },
+                ],
             ) => SpvOp::CoreOp(CoreOp::SMod),
             (
                 HlOp::Mod,
-                [ArithBaseTy::Integer { signed: false }, ArithBaseTy::Integer { signed: false }],
+                [
+                    ArithBaseTy::Integer { signed: false },
+                    ArithBaseTy::Integer { signed: false },
+                ],
             ) => SpvOp::CoreOp(CoreOp::UMod),
 
             //Comparators
@@ -134,11 +150,17 @@ impl BackendOp {
             }
             (
                 HlOp::Lt,
-                [ArithBaseTy::Integer { signed: true }, ArithBaseTy::Integer { signed: true }],
+                [
+                    ArithBaseTy::Integer { signed: true },
+                    ArithBaseTy::Integer { signed: true },
+                ],
             ) => SpvOp::CoreOp(CoreOp::SLessThan),
             (
                 HlOp::Lt,
-                [ArithBaseTy::Integer { signed: false }, ArithBaseTy::Integer { signed: false }],
+                [
+                    ArithBaseTy::Integer { signed: false },
+                    ArithBaseTy::Integer { signed: false },
+                ],
             ) => SpvOp::CoreOp(CoreOp::ULessThan),
 
             (HlOp::Gt, [ArithBaseTy::Float, ArithBaseTy::Float]) => {
@@ -146,11 +168,17 @@ impl BackendOp {
             }
             (
                 HlOp::Gt,
-                [ArithBaseTy::Integer { signed: true }, ArithBaseTy::Integer { signed: true }],
+                [
+                    ArithBaseTy::Integer { signed: true },
+                    ArithBaseTy::Integer { signed: true },
+                ],
             ) => SpvOp::CoreOp(CoreOp::SGreaterThan),
             (
                 HlOp::Gt,
-                [ArithBaseTy::Integer { signed: false }, ArithBaseTy::Integer { signed: false }],
+                [
+                    ArithBaseTy::Integer { signed: false },
+                    ArithBaseTy::Integer { signed: false },
+                ],
             ) => SpvOp::CoreOp(CoreOp::UGreaterThan),
 
             (HlOp::Lte, [ArithBaseTy::Float, ArithBaseTy::Float]) => {
@@ -158,11 +186,17 @@ impl BackendOp {
             }
             (
                 HlOp::Lte,
-                [ArithBaseTy::Integer { signed: true }, ArithBaseTy::Integer { signed: true }],
+                [
+                    ArithBaseTy::Integer { signed: true },
+                    ArithBaseTy::Integer { signed: true },
+                ],
             ) => SpvOp::CoreOp(CoreOp::SLessThanEqual),
             (
                 HlOp::Lte,
-                [ArithBaseTy::Integer { signed: false }, ArithBaseTy::Integer { signed: false }],
+                [
+                    ArithBaseTy::Integer { signed: false },
+                    ArithBaseTy::Integer { signed: false },
+                ],
             ) => SpvOp::CoreOp(CoreOp::ULessThanEqual),
 
             (HlOp::Gte, [ArithBaseTy::Float, ArithBaseTy::Float]) => {
@@ -170,11 +204,17 @@ impl BackendOp {
             }
             (
                 HlOp::Gte,
-                [ArithBaseTy::Integer { signed: true }, ArithBaseTy::Integer { signed: true }],
+                [
+                    ArithBaseTy::Integer { signed: true },
+                    ArithBaseTy::Integer { signed: true },
+                ],
             ) => SpvOp::CoreOp(CoreOp::SGreaterThanEqual),
             (
                 HlOp::Gte,
-                [ArithBaseTy::Integer { signed: false }, ArithBaseTy::Integer { signed: false }],
+                [
+                    ArithBaseTy::Integer { signed: false },
+                    ArithBaseTy::Integer { signed: false },
+                ],
             ) => SpvOp::CoreOp(CoreOp::UGreaterThanEqual),
 
             (HlOp::Eq, [ArithBaseTy::Float, ArithBaseTy::Float]) => {
@@ -189,28 +229,43 @@ impl BackendOp {
             }
             (
                 HlOp::Neq,
-                [ArithBaseTy::Integer { signed: true }, ArithBaseTy::Integer { signed: true }],
+                [
+                    ArithBaseTy::Integer { signed: true },
+                    ArithBaseTy::Integer { signed: true },
+                ],
             ) => SpvOp::CoreOp(CoreOp::INotEqual),
 
             //Glsl dialect operations
             (HlOp::Min, [ArithBaseTy::Float, ArithBaseTy::Float]) => SpvOp::GlslOp(GlOp::FMin),
             (
                 HlOp::Min,
-                [ArithBaseTy::Integer { signed: true }, ArithBaseTy::Integer { signed: true }],
+                [
+                    ArithBaseTy::Integer { signed: true },
+                    ArithBaseTy::Integer { signed: true },
+                ],
             ) => SpvOp::GlslOp(GlOp::SMin),
             (
                 HlOp::Min,
-                [ArithBaseTy::Integer { signed: false }, ArithBaseTy::Integer { signed: false }],
+                [
+                    ArithBaseTy::Integer { signed: false },
+                    ArithBaseTy::Integer { signed: false },
+                ],
             ) => SpvOp::GlslOp(GlOp::UMin),
 
             (HlOp::Max, [ArithBaseTy::Float, ArithBaseTy::Float]) => SpvOp::GlslOp(GlOp::FMax),
             (
                 HlOp::Max,
-                [ArithBaseTy::Integer { signed: true }, ArithBaseTy::Integer { signed: true }],
+                [
+                    ArithBaseTy::Integer { signed: true },
+                    ArithBaseTy::Integer { signed: true },
+                ],
             ) => SpvOp::GlslOp(GlOp::SMax),
             (
                 HlOp::Max,
-                [ArithBaseTy::Integer { signed: false }, ArithBaseTy::Integer { signed: false }],
+                [
+                    ArithBaseTy::Integer { signed: false },
+                    ArithBaseTy::Integer { signed: false },
+                ],
             ) => SpvOp::GlslOp(GlOp::UMax),
 
             (HlOp::Mix, [ArithBaseTy::Float, ArithBaseTy::Float, ArithBaseTy::Float]) => {
@@ -218,7 +273,11 @@ impl BackendOp {
             }
             (
                 HlOp::Mix,
-                [ArithBaseTy::Integer { .. }, ArithBaseTy::Integer { .. }, ArithBaseTy::Integer { .. }],
+                [
+                    ArithBaseTy::Integer { .. },
+                    ArithBaseTy::Integer { .. },
+                    ArithBaseTy::Integer { .. },
+                ],
             ) => SpvOp::GlslOp(GlOp::IMix),
 
             (HlOp::Clamp, [ArithBaseTy::Float, ArithBaseTy::Float, ArithBaseTy::Float]) => {
@@ -226,11 +285,19 @@ impl BackendOp {
             }
             (
                 HlOp::Clamp,
-                [ArithBaseTy::Integer { signed: true }, ArithBaseTy::Integer { signed: true }, ArithBaseTy::Integer { signed: true }],
+                [
+                    ArithBaseTy::Integer { signed: true },
+                    ArithBaseTy::Integer { signed: true },
+                    ArithBaseTy::Integer { signed: true },
+                ],
             ) => SpvOp::GlslOp(GlOp::SClamp),
             (
                 HlOp::Clamp,
-                [ArithBaseTy::Integer { signed: false }, ArithBaseTy::Integer { signed: false }, ArithBaseTy::Integer { signed: false }],
+                [
+                    ArithBaseTy::Integer { signed: false },
+                    ArithBaseTy::Integer { signed: false },
+                    ArithBaseTy::Integer { signed: false },
+                ],
             ) => SpvOp::GlslOp(GlOp::UClamp),
 
             (HlOp::Abs, [ArithBaseTy::Float]) => SpvOp::GlslOp(GlOp::FAbs),
@@ -253,7 +320,9 @@ impl BackendOp {
                     ) => {
                         if src_resolution != dst_resolution {
                             let err = BackendSpirvError::Any {
-                                text: format!("Can not cast types with different resolutions: {src_resolution} != {dst_resolution}"),
+                                text: format!(
+                                    "Can not cast types with different resolutions: {src_resolution} != {dst_resolution}"
+                                ),
                             };
 
                             report(
@@ -266,7 +335,9 @@ impl BackendOp {
 
                         if src_shape != dst_shape {
                             let err = BackendSpirvError::Any {
-                                text: format!("Can not cast types with different shapes: {src_shape} != {dst_shape}"),
+                                text: format!(
+                                    "Can not cast types with different shapes: {src_shape} != {dst_shape}"
+                                ),
                             };
 
                             report(

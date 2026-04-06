@@ -6,7 +6,7 @@
  * 2024 Tendsin Mende
  */
 
-use rvsdg::util::graph_type_transform::GraphTypeTransformerError;
+use rvsdg::{err::GraphError, util::graph_type_transform::GraphTypeTransformerError};
 use spirv_grammar_rules::Rule;
 use thiserror::Error;
 
@@ -26,6 +26,8 @@ pub enum BackendSpirvError {
     SPVError(String),
     #[error("Validation failed: {0}")]
     ValidationFailed(String),
+    #[error(transparent)]
+    Graph(#[from] GraphError),
 }
 
 impl BackendSpirvError {
