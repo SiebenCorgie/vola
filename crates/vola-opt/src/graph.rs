@@ -86,7 +86,19 @@ pub struct OptNode {
 
 impl Clone for OptNode {
     fn clone(&self) -> Self {
-        self.node.structural_copy(self.span.clone())
+        //first do a structural copy
+        let mut copy = self.node.structural_copy(self.span.clone());
+
+        assert_eq!(copy.node.inputs().len(), self.node.inputs().len());
+        assert_eq!(copy.node.outputs().len(), self.node.outputs().len());
+
+        //Copy over the connection patterns :)
+        copy.node.inputs_mut().clone_from_slice(self.node.inputs());
+        copy.node
+            .outputs_mut()
+            .clone_from_slice(self.node.outputs());
+
+        copy
     }
 }
 
