@@ -13,17 +13,12 @@
 
 use clap::{Parser, ValueEnum};
 use std::path::PathBuf;
-use volac::{
-    Target,
-    backends::{BoxedBackend, Native, Spirv, StubBackend, Wasm},
-};
+use vola_lib::spirv::vola_backend_spirv::SpirvConfig;
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug)]
 enum Format {
     ///Emits Vulkan specific SPIR-V
     Spirv,
-    ///The platform native format. For instance x86 for your Linux flavour.
-    Native,
     ///Emits a web-assembly module
     Wasm,
     ///Stops after optimizing the code, does-not emit anything
@@ -76,9 +71,9 @@ fn main() {
     let mut args = Args::parse();
 
     if args.format_file {
-        match volac::vola_ast::VolaAst::new_from_file_no_import(
+        match vola_ast::VolaAst::new_from_file_no_import(
             &args.src_file,
-            &volac::vola_tree_sitter_parser::VolaTreeSitterParser,
+            &vola_tree_sitter_parser::VolaTreeSitterParser,
         ) {
             Ok(ast) => {
                 let formated = vola_fmt::Formater::format_ast(&ast);
@@ -96,17 +91,10 @@ fn main() {
         }
     }
 
-    let (backend, extension): (BoxedBackend, _) = match args.format {
-        Format::Spirv => (
-            Box::new(Spirv::new(Target::file(&args.output_name))),
-            "spirv",
-        ),
-        Format::Native => (
-            Box::new(Native::new(Target::file(&args.output_name))),
-            "bin",
-        ),
-        Format::Wasm => (Box::new(Wasm::new(Target::file(&args.output_name))), "wasm"),
-        Format::Stub => (Box::new(StubBackend), "stub"),
+    let extension = match args.format {
+        Format::Spirv => "spirv",
+        Format::Wasm => "wasm",
+        Format::Stub => "stub",
     };
 
     if args.output_name.extension().is_none() {
@@ -114,23 +102,67 @@ fn main() {
         args.output_name.set_extension(extension);
     }
 
-    //configure volac based on the args and execute
-    let mut pipeline = volac::Pipeline {
-        backend,
-        late_cne: !args.no_opt && !args.no_cne,
-        late_cnf: !args.no_opt && !args.no_cnf,
-        early_cnf: !args.no_opt && !args.no_cnf,
-        validate_output: args.validate,
-        write_state_on_error: false,
-    };
-
-    if args.write_state_on_error {
-        pipeline = pipeline.write_on_error();
+    let mut module = vola_lib::OptModule::new();
+    if module
+        .apply_pass(vola_lib::passes::LowerAst::from_file(&args.src_file).unwrap())
+        .is_err()
+    {
+        return;
     }
 
-    if let Err(errors) = pipeline.execute_on_file(&args.src_file) {
-        for error in errors {
-            error.report();
+    //TODO use the arg flags to _safely_ disable some passes.
+
+    if module.standard_pipeline().is_err() {
+        return;
+    }
+
+    //Depending on the chosen backend, launch one of the given backends
+    match args.format {
+        Format::Spirv => {
+            let config = SpirvConfig::default();
+
+            let mut backend = vola_lib::spirv::SpirvModule::new(config);
+            if let Err(e) = backend.lower_opt(module) {
+                println!("Failed to lower Optimizer to SPIRV-Backend: {e}");
+                return;
+            }
+
+            match backend.build(args.validate) {
+                Ok(code) => match std::fs::write(&args.output_name, code) {
+                    Ok(_) => {
+                        println!("Wrote to {:?}", args.output_name);
+                    }
+
+                    Err(e) => {
+                        println!("Failed to write SPIR-V to file: {e}");
+                    }
+                },
+                Err(e) => {
+                    println!("Failed to emit SPIRV: {e}");
+                    return;
+                }
+            }
         }
+        Format::Wasm => {
+            let mut backend = vola_lib::wasm::WasmModule::new();
+            if let Err(e) = backend.lower_opt(module) {
+                println!("Failed to lower Optimizer to WASM-Backend: {e}");
+                return;
+            }
+
+            match backend.build(args.validate) {
+                Ok(code) => match std::fs::write(&args.output_name, code) {
+                    Ok(_) => println!("Wrote to {:?}", args.output_name),
+                    Err(e) => {
+                        println!("Failed to write WASM to file: {e}");
+                    }
+                },
+                Err(e) => {
+                    println!("Failed to emit WASM: {e}");
+                    return;
+                }
+            }
+        }
+        Format::Stub => {}
     }
 }

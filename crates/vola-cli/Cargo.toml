@@ -6,7 +6,9 @@ license = "MPL-2.0"
 
 [dependencies]
 clap = { workspace = true, features = ["derive"] }
-volac.workspace = true
 vola-common.workspace = true
+vola-lib = {workspace = true, features = ["spirv", "wasm"]}
+vola-ast.workspace = true
+vola-tree-sitter-parser.workspace = true
 vola-fmt.workspace = true
 pretty_env_logger.workspace = true
