@@ -15,10 +15,10 @@ use ahash::AHashMap;
 use smallvec::SmallVec;
 
 use crate::{
+    EdgeRef, NodeRef, Rvsdg,
     edge::{InportLocation, LangEdge, OutportLocation},
     nodes::LangNode,
     region::RegionLocation,
-    EdgeRef, NodeRef, Rvsdg,
 };
 
 #[derive(Debug, Hash, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]

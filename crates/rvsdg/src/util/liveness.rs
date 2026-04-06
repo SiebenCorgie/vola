@@ -22,11 +22,11 @@ use std::collections::VecDeque;
 use ahash::AHashSet;
 
 use crate::{
+    NodeRef, Rvsdg,
     attrib::{AttribLocation, FlagStore},
     edge::{InportLocation, InputType, LangEdge, OutputType},
     nodes::{LangNode, NodeType},
     region::RegionLocation,
-    NodeRef, Rvsdg,
 };
 
 impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
