@@ -1,25 +1,28 @@
 [workspace]
 members = [
-    "crates/vola-ast",
     "crates/rvsdg",
     "crates/rvsdg-viewer",
-    "crates/vola-common",
-    "crates/vola-opt",
-    "examples/rvsdg-simple",
     "crates/rvsdg-derive-lang",
-    "crates/vola-cli",
     "crates/rvsdg-viewer-ui",
+    "crates/rvsdg-pattern-rewrite",
+
+    "crates/vola-common",
     "crates/vola-tree-sitter-parser",
+    "crates/vola-ast",
+    "crates/vola-fmt",
+    "crates/vola-opt",
     "crates/vola-backend-spirv",
     "crates/vola-backend-wasm",
     "crates/wasm-runtime",
-    "tests/test-runner",
-    "crates/vola-fmt",
     "crates/vola-tree-sitter-openscad",
-    "crates/vola-convert",
-    "crates/rvsdg-pattern-rewrite",
     "crates/vola-bridge",
     "crates/vola-lib",
+    "crates/vola-cli",
+    "crates/vola-convert",
+    "tests/test-runner",
+
+    "examples/rvsdg-simple",
+    "examples/raytracing",
 ]
 
 resolver = "2"
