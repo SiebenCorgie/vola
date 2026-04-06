@@ -58,18 +58,9 @@ pub mod spirv;
 pub mod wasm;
 
 ///A _optimization compilation context_.
+#[derive(Clone)]
 pub struct OptModule {
     pub opt: Optimizer,
-}
-
-impl OptModule {
-    ///Duplicates the module. This possibly a _heavy_ operation, because its copying the
-    /// compleat internal optimizer state.
-    pub fn duplicate(&self) -> Self {
-        Self {
-            opt: self.opt.clone(),
-        }
-    }
 }
 
 impl OptModule {
@@ -102,6 +93,7 @@ impl OptModule {
         self.apply_pass(LowerIntervals)?;
         self.apply_pass(LowerAutodiff)?;
         self.apply_pass(Cleanup)?;
+        self.apply_pass(Dne)?;
         Ok(())
     }
 

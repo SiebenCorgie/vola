@@ -12,7 +12,6 @@ use crate::run::ResultType;
 /// ```text
 /// //BEGIN-CONFIG
 /// //ERROR: Some output string to set an expected error
-/// //STDOUT: Some exepected iout string
 /// //NO-VALIDATE
 /// //NO-WASM
 /// //NO-SPIRV
@@ -30,9 +29,6 @@ pub struct Config {
 
     //The expected correct behavior, including the error string, if an error is expected.
     pub expected_result: ResultType,
-    //If Stdout output is expected, the content of it.
-    //if set to None, stdout is not checked at all.
-    pub expected_io_output: Option<String>,
     pub execution_fn: Option<String>,
     pub execution_args: Option<SmallVec<[f32; 3]>>,
     pub execution_res: Option<SmallVec<[f32; 3]>>,
@@ -46,7 +42,6 @@ impl Default for Config {
             wasm: true,
             validate: true,
             expected_result: ResultType::Success,
-            expected_io_output: None,
             execution_fn: None,
             execution_res: None,
             execution_args: None,
@@ -110,21 +105,6 @@ impl Config {
                 } else {
                     return Err(format!(
                         "{} \"ERROR\" string for {:?}",
-                        "Malformed".bold(),
-                        path.as_ref()
-                    )
-                    .into());
-                }
-                continue;
-            }
-
-            if line.starts_with("//STDOUT:") {
-                //strip the error part and push the string
-                if let Some(suffix) = line.strip_prefix("//STDOUT:") {
-                    config.expected_io_output = Some(suffix.to_string());
-                } else {
-                    return Err(format!(
-                        "{} \"STDOUT\" string for {:?}",
                         "Malformed".bold(),
                         path.as_ref()
                     )

@@ -43,12 +43,7 @@ impl SpirvModule {
 
     pub fn lower_opt(&mut self, mut opt: OptModule) -> Result<(), BackendSpirvError> {
         opt.apply_pass(SpirvCleanupPass).unwrap();
-        self.backend.intern_module(&opt.opt)
-    }
-
-    pub fn legalize(&mut self) -> Result<(), BackendSpirvError> {
-        self.backend.hl_to_spv_nodes()?;
-        self.backend.legalize()?;
+        self.backend.intern_module(&opt.opt)?;
 
         Ok(())
     }
@@ -56,6 +51,10 @@ impl SpirvModule {
     ///Generates the SPIRV bytecode of the current module. If `try_verify` is set, tries to execute [spirv-val]
     /// on the command line, and emits an error, if validation failed (or the command was not found).
     pub fn build(&mut self, try_verify: bool) -> Result<Vec<u8>, BackendSpirvError> {
+        self.backend.hl_to_spv_nodes()?;
+        self.backend.legalize()?;
+        self.backend.dne()?;
+
         let spvmodule = self.backend.build()?;
 
         let words = spvmodule.assemble();

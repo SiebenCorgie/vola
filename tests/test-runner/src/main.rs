@@ -7,7 +7,7 @@ use std::{
 };
 
 use crawler::crawl_ui;
-use run::{run_file, TestResult};
+use run::{TestResult, run_file};
 use yansi::Paint;
 
 mod config;
@@ -16,6 +16,8 @@ mod run;
 mod wasm_executor;
 
 use clap::Parser;
+
+use crate::config::Config;
 
 #[derive(Parser)]
 #[command(name = "test-runner")]
@@ -36,17 +38,20 @@ enum LaunchState {
     Launched {
         path: PathBuf,
         start: Instant,
-        handle: Option<JoinHandle<TestResult>>,
+        handle: Option<JoinHandle<(TestResult, Config)>>,
     },
-    Ended(TestResult),
+    Ended(Result<TestResult, String>),
     TestThreadCrashed(PathBuf),
     TimedOut(PathBuf),
 }
 
 impl LaunchState {
     fn is_success(&self) -> bool {
-        if let LaunchState::Ended(e) = self {
-            e.only_successes()
+        if let LaunchState::Ended(r) = self {
+            match r {
+                Ok(_) => true,
+                Err(_) => false,
+            }
         } else {
             false
         }
@@ -57,15 +62,9 @@ impl Display for LaunchState {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Ended(result) => {
-                if result.only_successes() {
-                    writeln!(f, "{}", "All Passed".bold().green())?
-                } else if result.partial_success() {
-                    writeln!(f, "{}", "Partially passed".bold().yellow())?
-                } else {
-                    writeln!(f, "{}", "None passed".bold().red())?
-                }
-                for r in &result.runs {
-                    writeln!(f, "    {}", r)?;
+                match result {
+                    Ok(inner) => writeln!(f, "{}", inner)?,
+                    Err(e) => writeln!(f, "{}: {e}", "Unexpected Result".bold())?,
                 }
 
                 Ok(())
@@ -119,7 +118,13 @@ fn main() -> Result<(), Box<dyn Error>> {
                     //try to poll
                     if handle.as_ref().unwrap().is_finished() {
                         match handle.take().unwrap().join() {
-                            Ok(test_result) => *state = LaunchState::Ended(test_result),
+                            Ok((test_result, config)) => {
+                                //check whether the outcome matches the expectations of the config it was launched with
+                                match test_result.matches_expectation(&config) {
+                                    Ok(_) => *state = LaunchState::Ended(Ok(test_result)),
+                                    Err(e) => *state = LaunchState::Ended(Err(e)),
+                                }
+                            }
                             Err(_e) => *state = LaunchState::TestThreadCrashed(path.clone()),
                         }
                     } else {
@@ -155,7 +160,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     for result in &launch_states {
         if result.is_success() {
             success_count += 1;
-            println!("{}", result);
+            println!("{}: {}", "Passed".green().bold(), result);
         }
     }
 
@@ -166,21 +171,29 @@ fn main() -> Result<(), Box<dyn Error>> {
                 LaunchState::TestThreadCrashed(_) => crash_count += 1,
                 LaunchState::TimedOut(_) => timeout += 1,
                 LaunchState::Ended(e) => {
-                    if e.partial_success() {
-                        partial_count += 1;
-                    }
-                    if e.only_successes() {
-                        partial_count += 1;
-                    }
+                    match e {
+                        Ok(e) => {
+                            //matches the expectations, therefore we do
+                            if e.partial_success() {
+                                partial_count += 1;
+                            }
+                            if e.only_successes() {
+                                partial_count += 1;
+                            }
 
-                    if !e.partial_success() && !e.only_successes() {
-                        failed_count += 1
+                            if !e.partial_success() && !e.only_successes() {
+                                failed_count += 1
+                            }
+                        }
+                        Err(e) => {
+                            failed_count += 1;
+                        }
                     }
                 }
                 _ => {}
             }
 
-            println!("{}", result)
+            println!("{}: {}", "Failed".bold().red(), result)
         }
     }
 
