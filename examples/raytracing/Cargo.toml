@@ -7,3 +7,4 @@ edition = "2024"
 softbuffer = "0.4.8"
 winit = "0.30.13"
 vola-bridge.workspace = true
+hotwatch = "0.5.0"
