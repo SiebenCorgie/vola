@@ -28,6 +28,7 @@ use smallvec::smallvec;
 use std::{
     error::Error,
     path::{Path, PathBuf},
+    time::{Duration, Instant},
 };
 #[cfg(feature = "dot")]
 pub mod dot;
@@ -376,9 +377,30 @@ impl<'parser, E: Error> AstBuilder<'parser, E> {
         self
     }
 
+    ///Resolves a single iteration, i.e iterates the current top-level of the root-ast,
+    ///and calls the resolver for each module.
+    ///
+    /// Returns true, if any additional modules where encountered, that need to be resolved.
+    fn resolve_current(&mut self) -> Result<bool, Vec<VolaError<AstError>>> {
+        todo!()
+    }
+
     ///Resolves all `module` directives until no new imports are found.
     pub fn resolve_all(&mut self) -> Result<(), Vec<VolaError<AstError>>> {
-        todo!()
+        let start = Instant::now();
+
+        let mut last_had_open_modules = true;
+
+        //NOTE:
+        while last_had_open_modules {
+            if start.elapsed() > Duration::from_secs(10) {
+                return Err(vec![VolaError::new(AstError::ResolverTimeout)]);
+            }
+
+            last_had_open_modules = self.resolve_current()?;
+        }
+
+        Ok(())
     }
 
     ///Finishes the builder by resolving all imports and returning the full AST
