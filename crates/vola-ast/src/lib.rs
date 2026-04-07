@@ -18,14 +18,17 @@
 
 #![doc(html_logo_url = "https://gitlab.com/tendsinmende/vola/-/raw/main/resources/vola_icon.svg")]
 
-use ahash::AHashSet;
+use ahash::{AHashMap, AHashSet};
 use alge::Func;
 use common::{CTArg, Comment};
 use csg::{CsgConcept, CsgDef, ImplBlock};
 
 pub use error::AstError;
 use smallvec::smallvec;
-use std::{error::Error, path::Path};
+use std::{
+    error::Error,
+    path::{Path, PathBuf},
+};
 #[cfg(feature = "dot")]
 pub mod dot;
 pub use module::Module;
@@ -121,6 +124,9 @@ pub trait VolaParser {
 }
 
 impl VolaAst {
+    ///Parses `file` using `parser`, and resolves all modules relative to this file.
+    ///
+    /// Internally uses [AstBuilder] to resolve all modules relative to `file`.
     pub fn new_from_file<E: Error>(
         file: &dyn AsRef<Path>,
         parser: &dyn VolaParser<Error = E>,
@@ -128,7 +134,7 @@ impl VolaAst {
         let root_file = file.as_ref().to_str().unwrap().into();
         let bytes = std::fs::read(file.as_ref())
             .map_err(|e| vec![VolaError::new(AstError::IoError(e.to_string()))])?;
-        let mut root_ast = parser
+        let root_ast = parser
             .parse_from_byte(Some(root_file), &bytes)
             .map_err(|errs| {
                 errs.into_iter()
@@ -136,12 +142,16 @@ impl VolaAst {
                     .collect::<Vec<_>>()
             })?;
 
-        //now resolve relative to the ast all submodules
-        root_ast.resolve_modules(file, parser)?;
-
-        Ok(root_ast)
+        let workspace = file
+            .as_ref()
+            .parent()
+            .expect("Source file has no parent directory");
+        AstBuilder::enter(root_ast, workspace, parser)
+            .with_seen(file)
+            .finish()
     }
 
+    ///Parses `file` using `parser`, and resolves all modules relative to `workspace`.
     pub fn new_from_bytes<E: Error>(
         bytes: &[u8],
         parser: &dyn VolaParser<Error = E>,
@@ -152,48 +162,58 @@ impl VolaAst {
         pseudo_file.push(Span::FALLBACK_FILE);
         let root_file: FileString = pseudo_file.as_path().to_str().unwrap().into();
 
-        let mut root_ast = parser
+        let root_ast = parser
             .parse_from_byte(Some(root_file), bytes)
             .map_err(|errs| {
                 errs.into_iter()
                     .map(|e| AstError::from_parser_error(e))
                     .collect::<Vec<_>>()
             })?;
-        root_ast.resolve_modules(&pseudo_file, parser)?;
-        Ok(root_ast)
+
+        AstBuilder::enter(root_ast, workspace, parser).finish()
     }
 
-    ///Parses `bytes` into [VolaAst], but does not resolve [AstEntry::Module]. Use either [VolaAst::new_from_bytes] to do that automatically, or [VolaAst::resolve_modules] to do that manually.
+    ///Parses `bytes` into [VolaAst], but does not resolve [AstEntry::Module]. Use the resulting builder to point to additional resolvable directories, and resolving the modules at will.
+    ///
+    /// The default directory is `./`, i.e the execution directory. Consider using [set_workspace](AstBuilder::with_workspace) if thats not right.
     ///
     /// On a side node, the file name "no-span-source.vola" will be used, whenever a source file-name is needed.
-    pub fn new_from_bytes_no_import<E: Error>(
+    pub fn builder_from_bytes<'parser, E: Error>(
         bytes: &[u8],
-        parser: &dyn VolaParser<Error = E>,
-    ) -> Result<Self, Vec<VolaError<AstError>>> {
-        parser.parse_from_byte(None, bytes).map_err(|errs| {
+        parser: &'parser dyn VolaParser<Error = E>,
+    ) -> Result<AstBuilder<'parser, E>, Vec<VolaError<AstError>>> {
+        let root = parser.parse_from_byte(None, bytes).map_err(|errs| {
             errs.into_iter()
                 .map(|e| AstError::from_parser_error(e))
                 .collect::<Vec<_>>()
-        })
+        })?;
+
+        Ok(AstBuilder::enter(root, Path::new("./"), parser))
     }
 
-    ///Parses `file` into [VolaAst], but does not resolve [AstEntry::Module]. Use either [VolaAst::new_from_file] to do that automatically, or [VolaAst::resolve_modules] to do that manually.
-    pub fn new_from_file_no_import<E: Error>(
+    ///Parses `file` into [VolaAst], but does not resolve [AstEntry::Module]. Use the resulting builder to point to additional resolvable directories, and resolving the modules at will.
+    pub fn builder_from_file<'parser, E: Error>(
         file: &dyn AsRef<Path>,
-        parser: &dyn VolaParser<Error = E>,
-    ) -> Result<Self, Vec<VolaError<AstError>>> {
+        parser: &'parser dyn VolaParser<Error = E>,
+    ) -> Result<AstBuilder<'parser, E>, Vec<VolaError<AstError>>> {
         let root_file = file.as_ref().to_str().unwrap().into();
         let bytes = std::fs::read(file.as_ref()).map_err(|e| {
             let err = VolaError::new(AstError::IoError(e.to_string()));
             vec![err]
         })?;
-        parser
+        let parsed = parser
             .parse_from_byte(Some(root_file), &bytes)
             .map_err(|errs| {
                 errs.into_iter()
                     .map(|e| AstError::from_parser_error(e))
                     .collect::<Vec<_>>()
-            })
+            })?;
+        let workspace = file
+            .as_ref()
+            .parent()
+            .expect("File had no parent directory!")
+            .to_path_buf();
+        Ok(AstBuilder::enter(parsed, workspace, parser).with_seen(file))
     }
 
     pub fn empty() -> Self {
@@ -201,11 +221,12 @@ impl VolaAst {
             entries: Vec::with_capacity(0),
         }
     }
-
-    ///Resloves all imported modules in `Self` relative to the given path.
+    /*
+    ///Resloves all imported modules in `Self` using all context given to the AST.
+    ///
+    /// Consider using [with_context_dir](Self::with_context_dir) to add directories the resolver might use.
     pub fn resolve_modules<E: Error>(
         &mut self,
-        relative_to: &dyn AsRef<Path>,
         parser: &dyn VolaParser<Error = E>,
     ) -> Result<(), Vec<VolaError<AstError>>> {
         let mut seen_modules = AHashSet::default();
@@ -303,11 +324,66 @@ impl VolaAst {
             Ok(())
         }
     }
+    */
 }
 
 #[cfg(feature = "serde")]
 impl VolaAst {
     pub fn to_sexpr(&self) -> String {
         vola_common::serde_lexpr::to_string(self).unwrap_or("error".to_string())
+    }
+}
+
+///An possibly unfinished [VolaAst] builder. Handles module resolving etc.
+pub struct AstBuilder<'parser, E: Error> {
+    root: VolaAst,
+    ///The local workspace of this builder, i.e. the directory `self` of the root-ast resolves to.
+    workspace: PathBuf,
+    ///Look-aside for entries to external modules
+    external_directories: AHashMap<String, PathBuf>,
+    ///All _files_ where we _know_ that they are already integrated into `root`,
+    lowered_files: AHashSet<PathBuf>,
+
+    parser: &'parser dyn VolaParser<Error = E>,
+}
+
+impl<'parser, E: Error> AstBuilder<'parser, E> {
+    ///Starts parsing a `file`, using the given parser
+    fn enter(
+        root_ast: VolaAst,
+        workspace: impl AsRef<Path>,
+        parser: &'parser dyn VolaParser<Error = E>,
+    ) -> Self {
+        AstBuilder {
+            root: root_ast,
+            workspace: workspace.as_ref().to_path_buf(),
+            external_directories: AHashMap::with_capacity(0),
+            lowered_files: AHashSet::with_capacity(0),
+            parser,
+        }
+    }
+
+    ///Marks `file` as seen, i.e. if encountered, it won't be imported (again).
+    pub fn with_seen(mut self, file: impl AsRef<Path>) -> Self {
+        let _ = self.lowered_files.insert(file.as_ref().to_path_buf());
+        self
+    }
+
+    ///Sets the workspace directory of the builder, i.e. the directory the initial 'root_ast`'s `self` refers to.
+    pub fn with_workspace(mut self, workspace: impl AsRef<Path>) -> Self {
+        assert!(workspace.as_ref().is_dir());
+        self.workspace = self.workspace.to_path_buf();
+        self
+    }
+
+    ///Resolves all `module` directives until no new imports are found.
+    pub fn resolve_all(&mut self) -> Result<(), Vec<VolaError<AstError>>> {
+        todo!()
+    }
+
+    ///Finishes the builder by resolving all imports and returning the full AST
+    pub fn finish(mut self) -> Result<VolaAst, Vec<VolaError<AstError>>> {
+        self.resolve_all()?;
+        Ok(self.root)
     }
 }
