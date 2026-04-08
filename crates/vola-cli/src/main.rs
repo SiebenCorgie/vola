@@ -64,6 +64,13 @@ struct Args {
     ///Name of the output file. Extension will be added based on the format, if none is present.
     #[arg(default_value = "out")]
     output_name: PathBuf,
+
+    ///Adds the given path as context to the compiler. Adding `some/path/to/stdlib` will
+    /// resolve any included module that starts with `stdlib` by searching that folder.
+    ///
+    /// If a file is given, the parent-directory is used.
+    #[arg(short = 'c', long = "context")]
+    context: Vec<PathBuf>,
 }
 
 fn main() {
@@ -104,7 +111,28 @@ fn main() {
     }
 
     let mut module = vola_lib::OptModule::new();
-    let ast = match vola_lib::passes::LowerAst::from_file(&args.src_file) {
+
+    let externals = args.context.into_iter().map(|dir| {
+        //make actual dir
+        let dir = if dir.is_file() {
+            dir.parent().unwrap().to_path_buf()
+        } else {
+            dir
+        };
+
+        let name = dir
+            .file_name()
+            .map(|osdir| {
+                osdir
+                    .to_str()
+                    .expect("Could not turn dir-name into context-entry name")
+                    .to_owned()
+            })
+            .expect("Could not turn directory into filename");
+        (name, dir)
+    });
+
+    let ast = match vola_lib::passes::LowerAst::from_file(&args.src_file, externals) {
         Ok(ast) => ast,
         Err(e) => {
             for e in e {

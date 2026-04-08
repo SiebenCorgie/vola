@@ -1,4 +1,7 @@
-use std::{fmt::Debug, path::Path};
+use std::{
+    fmt::Debug,
+    path::{Path, PathBuf},
+};
 
 use vola_ast::{AstError, VolaAst};
 use vola_common::{VolaError, reset_file_cache};
@@ -56,29 +59,42 @@ impl Into<Vec<VolaError<OptError>>> for PassError {
 pub struct LowerAst(pub VolaAst);
 
 impl LowerAst {
-    pub fn from_file(file: &dyn AsRef<Path>) -> Result<Self, Vec<VolaError<AstError>>> {
+    pub fn from_file(
+        file: &dyn AsRef<Path>,
+        externals: impl IntoIterator<Item = (String, PathBuf)>,
+    ) -> Result<Self, Vec<VolaError<AstError>>> {
         //NOTE: Always reset file cache, since the files we are reporting on might have changed.
         reset_file_cache();
         let parser = vola_tree_sitter_parser::VolaTreeSitterParser;
-        let ast = VolaAst::new_from_file(file, &parser)?;
+        let mut builder = VolaAst::builder_from_file(file, &parser)?;
+        for (entry, dir) in externals {
+            builder.set_external(entry, dir);
+        }
+        let ast = builder.finish()?;
         Ok(Self(ast))
     }
 
     pub fn from_str(
         str: &str,
         workspace: impl AsRef<Path>,
+        externals: impl IntoIterator<Item = (String, PathBuf)>,
     ) -> Result<Self, Vec<VolaError<AstError>>> {
-        Self::from_bytes(str.as_bytes(), workspace)
+        Self::from_bytes(str.as_bytes(), workspace, externals)
     }
 
     pub fn from_bytes(
         bytes: &[u8],
         workspace: impl AsRef<Path>,
+        externals: impl IntoIterator<Item = (String, PathBuf)>,
     ) -> Result<Self, Vec<VolaError<AstError>>> {
         //NOTE: Always reset file cache, since the files we are reporting on might have changed.
         reset_file_cache();
         let parser = vola_tree_sitter_parser::VolaTreeSitterParser;
-        let ast = VolaAst::new_from_bytes(bytes, &parser, workspace)?;
+        let mut builder = VolaAst::builder_from_bytes(bytes, &parser)?.with_workspace(workspace);
+        for (entry, dir) in externals {
+            builder.set_external(entry, dir);
+        }
+        let ast = builder.finish()?;
 
         Ok(Self(ast))
     }

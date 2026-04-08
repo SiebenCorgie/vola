@@ -243,6 +243,22 @@ pub struct AstBuilder<'parser, E: Error> {
 }
 
 impl<'parser, E: Error> AstBuilder<'parser, E> {
+    ///Adds a `directory` for `entry` that'll any occurence of `module entry::*` will be resolved to.
+    ///
+    /// If one is already given, overwrites it.
+    ///
+    /// If `directory` is a file, its parent directory will be used.
+    pub fn set_external(&mut self, entry: String, directory: PathBuf) {
+        let dir = if directory.is_file() {
+            directory.parent().unwrap().to_path_buf()
+        } else {
+            directory
+        };
+
+        let canonicalized = dir.canonicalize().expect("Could not canonicalize");
+        let _ = self.external_directories.insert(entry, canonicalized);
+    }
+
     ///Starts parsing a `file`, using the given parser
     fn enter(
         root_ast: VolaAst,
@@ -331,7 +347,7 @@ impl<'parser, E: Error> AstBuilder<'parser, E> {
                 entry: AstEntry::Module(module),
             } = module
             {
-                log::info!("Resolving module: {} @ {}", module, span);
+                log::trace!("Resolving module: {} @ {}", module, span);
 
                 if module.is_self() {
                     //We resolve those local to _workspace_
@@ -346,12 +362,12 @@ impl<'parser, E: Error> AstBuilder<'parser, E> {
 
                     //if we already have seen that file, don't include it again
                     if self.lowered_files.contains(&valid_path) {
-                        log::info!("Seen {:?} @ {:?} already...", module, valid_path);
+                        log::trace!("Seen {} @ {:?} already...", module, valid_path);
                         continue;
                     }
 
                     //Parse the file itself.
-                    let sub_root_ast = match VolaAst::new_from_file(&valid_path, self.parser) {
+                    let sub_root_ast = match VolaAst::builder_from_file(&valid_path, self.parser) {
                         Err(e) => {
                             log::error!(
                                 "Failed to parse sub-ast {}@{}: with {} errors",
@@ -365,6 +381,9 @@ impl<'parser, E: Error> AstBuilder<'parser, E> {
                         Ok(sub) => sub,
                     };
 
+                    //NOTE: we don't resolve (i.e finish), because thats-handled below
+                    let sub_root_ast = sub_root_ast.abort();
+
                     //now fix-up an modul's path to be not relative to `try-path` but `workspace`
                     // and push them into our AST
                     for mut tl in sub_root_ast.entries {
@@ -377,20 +396,21 @@ impl<'parser, E: Error> AstBuilder<'parser, E> {
                             //seen a new module directive, therfore we'll need a restart :)
                             newly_unresolved = true;
                             let new = inner_module.switch_root_module(&module);
-                            log::info!("Moved local {} to unit-local: {}", inner_module, new);
+                            log::trace!("Moved local {} to unit-local: {}", inner_module, new);
                             *inner_module = new;
                         }
 
                         newly_discovered.push(tl);
                     }
 
-                    //now we can append
+                    //finally tick this file as seen
+                    let _ = self.lowered_files.insert(valid_path);
                 } else {
                     //for those we check wether we know the origin, if not, we won't touch it.
                     // If we know the origin, we start a _sub-builder_ and fully resolve that in its own context.
                     // We then merge the builder into our own
 
-                    log::info!("Discovering external {}", module.origin());
+                    log::trace!("Discovering external {}", module.origin());
 
                     if let Some(path) = self.external_directories.get(module.origin()) {
                         let try_path = module.make_directory_local(path.clone());
@@ -404,30 +424,25 @@ impl<'parser, E: Error> AstBuilder<'parser, E> {
 
                         //if we already have seen that file, don't include it again
                         if self.lowered_files.contains(&valid_path) {
-                            log::info!("Seen {:?} @ {:?} already...", module, valid_path);
+                            log::trace!("Seen {} @ {:?} already...", module, valid_path);
                             continue;
                         }
 
                         //Alright, entry-file is valide, start a sub-builder and let it handle itself
-                        let sub_root_ast = match VolaAst::new_from_file(&valid_path, self.parser) {
-                            Err(e) => {
-                                log::error!(
-                                    "Failed to create sub-ast {}@{}: with {} errors",
-                                    module,
-                                    span,
-                                    e.len()
-                                );
-                                errors.extend(e.into_iter());
-                                continue;
-                            }
-                            Ok(sub) => sub,
-                        };
-
-                        let workspace = valid_path
-                            .parent()
-                            .expect("Could not turn file into worspace...");
                         let mut sub_builder =
-                            AstBuilder::enter(sub_root_ast, workspace, self.parser);
+                            match VolaAst::builder_from_file(&valid_path, self.parser) {
+                                Err(e) => {
+                                    log::error!(
+                                        "Failed to create sub-ast {}@{}: with {} errors",
+                                        module,
+                                        span,
+                                        e.len()
+                                    );
+                                    errors.extend(e.into_iter());
+                                    continue;
+                                }
+                                Ok(sub) => sub,
+                            };
 
                         //hook-up our knowledge of external libraries, but omit the current one
                         let mut cleaned_external = self.external_directories.clone();
@@ -439,7 +454,7 @@ impl<'parser, E: Error> AstBuilder<'parser, E> {
                         match sub_builder.resolve_all() {
                             Err(e) => {
                                 log::error!(
-                                    "Failed to resolve sub-ast {}@{}: with {} errors",
+                                    "Failed to resolve sub-ast {} @ {}: with {} errors",
                                     module,
                                     span,
                                     e.len()
@@ -459,8 +474,8 @@ impl<'parser, E: Error> AstBuilder<'parser, E> {
                             parser: _,
                         } = sub_builder;
 
-                        log::info!(
-                            "Extending root-ast {}@{} with {} enties",
+                        log::trace!(
+                            "Extending root-ast {} @ {} with {} enties",
                             module,
                             span,
                             root.entries.len()
@@ -478,6 +493,7 @@ impl<'parser, E: Error> AstBuilder<'parser, E> {
                         //finally add the file itself to seen-files
                         let _ = self.lowered_files.insert(valid_path);
                     } else {
+                        log::error!("Extenal {} has no set directory", module.origin());
                         //Don't know this crate, throw an error.
                         errors.push(VolaError::error_here(
                             AstError::UnknownOrigin(module.origin().to_string()),
@@ -521,6 +537,16 @@ impl<'parser, E: Error> AstBuilder<'parser, E> {
 
     ///Finishes the builder by resolving all imports and returning the full AST
     pub fn finish(mut self) -> Result<VolaAst, Vec<VolaError<AstError>>> {
+        if self.external_directories.len() > 0 {
+            log::info!(
+                "Resolving AST with {} externals: \n{:?}",
+                self.external_directories.len(),
+                self.external_directories
+            );
+        } else {
+            log::info!("Resolving AST with no externals");
+        }
+
         self.resolve_all()?;
         Ok(self.root)
     }
