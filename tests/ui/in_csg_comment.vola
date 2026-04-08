@@ -1,5 +1,5 @@
 //Based on this report: https://gitlab.com/tendsinmende/vola/-/issues/14
-module std;
+module self::std;
 
 fn test(at: vec3, offset: vec3) -> csg{
      // this comment is fine

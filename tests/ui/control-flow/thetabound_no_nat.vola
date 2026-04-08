@@ -3,7 +3,7 @@
 //END-CONFIG
 
 
-module super::std;
+module self::super::std;
 
 
 operation SubTest();

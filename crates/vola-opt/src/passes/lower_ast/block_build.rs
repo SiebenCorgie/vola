@@ -6,6 +6,7 @@
  * 2024 Tendsin Mende
  */
 use crate::{
+    OptEdge, OptError, OptNode, Optimizer,
     alge::{
         arithmetic::{BinaryArith, BinaryArithOp},
         relational::{BinaryRel, BinaryRelOp},
@@ -13,22 +14,21 @@ use crate::{
     common::Ty,
     imm::ImmNat,
     passes::{lazy_type::TypeError, lower_ast::LowerAst},
-    OptEdge, OptError, OptNode, Optimizer,
 };
 use ahash::AHashMap;
 use rvsdg::{
+    SmallColl,
     edge::{InportLocation, InputType, OutportLocation, OutputType},
     region::RegionLocation,
     smallvec::SmallVec,
     util::abstract_node_type::AbstractNodeType,
-    SmallColl,
 };
 use rvsdg_viewer::View;
 use vola_ast::{
     alge::Expr,
     common::{Block, Branch, Loop, Stmt},
 };
-use vola_common::{ariadne::Label, report, warning_reporter, Span, VolaError};
+use vola_common::{Span, VolaError, ariadne::Label, report, warning_reporter};
 
 #[derive(Debug, Clone)]
 pub enum VarDef {
@@ -340,7 +340,7 @@ impl<'opt> LowerAst<'opt> {
         if block.retexpr.is_none() {
             if let Some(Stmt::Branch(b)) = block.stmts.last().cloned() {
                 #[cfg(feature = "log")]
-                log::info!("Using branch-return hack for {}", b.span);
+                log::trace!("Using branch-return hack for {}", b.span);
                 //move the branch to the block's result, instead
                 block.retexpr = Some(Expr {
                     span: b.span.clone(),
@@ -406,7 +406,10 @@ impl<'opt> LowerAst<'opt> {
                                 != "csg"
                             {
                                 let err = OptError::Any {
-                                    text: format!("Expected a CSG node to be bound to a CSG variable, but \"{}\" is not a CSG operation", node_name),
+                                    text: format!(
+                                        "Expected a CSG node to be bound to a CSG variable, but \"{}\" is not a CSG operation",
+                                        node_name
+                                    ),
                                 };
                                 if let Some(span) = node_span {
                                     return Err(VolaError::error_here(
@@ -1016,7 +1019,11 @@ impl<'opt> LowerAst<'opt> {
                     //we also don't want to redefine the lower-bound in the loop
                     if idx < 2 {
                         if import_port != last_use {
-                            let err = OptError::Any { text: format!("Tried to redefine loop bound \"{var}\" in loop,  which is not allowed!") };
+                            let err = OptError::Any {
+                                text: format!(
+                                    "Tried to redefine loop bound \"{var}\" in loop,  which is not allowed!"
+                                ),
+                            };
                             return Err(VolaError::error_here(err, rangespan, "for this bound"));
                         }
                         continue;

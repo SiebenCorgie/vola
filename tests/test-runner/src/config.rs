@@ -1,5 +1,9 @@
 use core::f32;
-use std::{error::Error, io::BufRead, path::Path};
+use std::{
+    error::Error,
+    io::BufRead,
+    path::{Path, PathBuf},
+};
 
 use smallvec::SmallVec;
 use yansi::Paint;
@@ -33,6 +37,7 @@ pub struct Config {
     pub execution_args: Option<SmallVec<[f32; 3]>>,
     pub execution_res: Option<SmallVec<[f32; 3]>>,
     pub exec_eps: f32,
+    pub externals: Vec<(String, PathBuf)>,
 }
 
 impl Default for Config {
@@ -46,6 +51,7 @@ impl Default for Config {
             execution_res: None,
             execution_args: None,
             exec_eps: f32::EPSILON,
+            externals: Vec::with_capacity(0),
         }
     }
 }
@@ -213,6 +219,28 @@ impl Config {
                     )
                     .into());
                 }
+                continue;
+            }
+
+            //push all externals
+            if line.starts_with("//EXTERNAL:") {
+                let s = line.strip_prefix("//EXTERNAL:").unwrap().to_owned();
+
+                for external in s.split("::") {
+                    let Some((name, path)) = external.split_once("@") else {
+                        println!("External pattern does not match!: {external}");
+                        continue;
+                    };
+
+                    let path = PathBuf::from(path);
+                    let Ok(canon) = path.canonicalize() else {
+                        println!("Could not canonicalize extern={name} path: {path:?}");
+                        continue;
+                    };
+
+                    config.externals.push((name.to_string(), canon));
+                }
+
                 continue;
             }
 

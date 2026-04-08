@@ -22,6 +22,10 @@ pub enum AstError {
     NoModuleFile { path: PathBuf },
     #[error("IO Error: {0}")]
     IoError(String),
+    #[error("Resolver got stuck and encounterd timeout")]
+    ResolverTimeout,
+    #[error("External module \"{0}\" unknown")]
+    UnknownOrigin(String),
 }
 
 impl AstError {

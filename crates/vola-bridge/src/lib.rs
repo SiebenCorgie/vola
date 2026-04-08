@@ -12,7 +12,7 @@
 //!
 //! ```rust,ignore
 //! //Load the file + function. Also saves the _ffi_ information.
-//! let module = bridge::load("myfile.vola")?;
+//! let module = bridge::load("myfile.vola", [])?;
 //! let result = module
 //!     .call("my_function")?
 //!     //Checks that "arg" is indeed a vec3
@@ -22,7 +22,7 @@
 //!    .eval()?;
 //! ```
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use ahash::AHashMap;
 use thiserror::Error;
@@ -69,16 +69,22 @@ impl From<WasmError> for BridgeError {
     }
 }
 
-pub fn load_file(file: &dyn AsRef<Path>) -> Result<Module, BridgeError> {
-    Module::from_file(file)
+pub fn load_file(
+    file: &dyn AsRef<Path>,
+    external: impl IntoIterator<Item = (String, PathBuf)>,
+) -> Result<Module, BridgeError> {
+    Module::from_file(file, external)
 }
 
 ///Loads the `code`, assuming that the workspace this code comes from is the current execution
 /// directiory.
 ///
 /// Consider using [Module::from_code] if you need finer control.
-pub fn load_code(code: &str) -> Result<Module, BridgeError> {
-    Module::from_code(code.as_bytes(), Path::new("./"))
+pub fn load_code(
+    code: &str,
+    external: impl IntoIterator<Item = (String, PathBuf)>,
+) -> Result<Module, BridgeError> {
+    Module::from_code(code.as_bytes(), Path::new("./"), external)
 }
 
 pub struct Module {
@@ -101,15 +107,22 @@ impl Module {
         Self::from_module(module)
     }
 
-    ///Loads the module from a byte string that is interpreted as an UTF8 string
-    pub fn from_code(code: &[u8], workspace: impl AsRef<Path>) -> Result<Self, BridgeError> {
-        let ast = vola_lib::passes::LowerAst::from_bytes(code, workspace).map_err(|e| {
-            let count = e.len();
-            for e in e {
-                e.report();
-            }
-            BridgeError::CompileError(count)
-        })?;
+    ///Loads the module from a byte string that is interpreted as an UTF8 string.
+    ///
+    /// Uses `external` to resolve external dependencies to the given path.
+    pub fn from_code(
+        code: &[u8],
+        workspace: impl AsRef<Path>,
+        external: impl IntoIterator<Item = (String, PathBuf)>,
+    ) -> Result<Self, BridgeError> {
+        let ast =
+            vola_lib::passes::LowerAst::from_bytes(code, workspace, external).map_err(|e| {
+                let count = e.len();
+                for e in e {
+                    e.report();
+                }
+                BridgeError::CompileError(count)
+            })?;
 
         //Lower the ast into the optimizer
         let mut module = vola_lib::OptModule::new();
@@ -117,8 +130,11 @@ impl Module {
         Self::from_module(module)
     }
 
-    pub fn from_file(file: &dyn AsRef<Path>) -> Result<Self, BridgeError> {
-        let ast = vola_lib::passes::LowerAst::from_file(file).map_err(|e| {
+    pub fn from_file(
+        file: &dyn AsRef<Path>,
+        external: impl IntoIterator<Item = (String, PathBuf)>,
+    ) -> Result<Self, BridgeError> {
+        let ast = vola_lib::passes::LowerAst::from_file(file, external).map_err(|e| {
             let count = e.len();
             for e in e {
                 e.report();

@@ -1,4 +1,4 @@
-module std;
+module self::std;
 
 fn common(at: vec3, offset: vec3) -> csg{
 	SmoothUnion(1.0){

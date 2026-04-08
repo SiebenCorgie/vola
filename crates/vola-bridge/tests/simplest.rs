@@ -6,6 +6,7 @@ fn teddy() {
            a + 2.0
        }
     ",
+        [],
     )
     .unwrap();
 
@@ -25,15 +26,22 @@ fn teddy() {
 #[test]
 fn with_std() {
     let code = "
-module prelude;
+module stdlib::prelude;
 export fn mytest(at: vec3) -> real{
     csg c = Sphere(1.0);
     eval c.Sdf3d(at)
 }
     ";
-    let mut module =
-        vola_bridge::Module::from_code(code.as_bytes(), "../../vola-stdlib/vola-sdf-stdlib")
-            .unwrap();
+    let mut module = vola_bridge::Module::from_code(
+        code.as_bytes(),
+        "./",
+        [(
+            "stdlib".to_string(),
+            "../../vola-stdlib/vola-sdf-stdlib/".into(),
+        )]
+        .into_iter(),
+    )
+    .unwrap();
 
     //NOTE: the sd at this point should be 1.0, because the sphere is 1.0 in radius around ZERO.
     let result = module
