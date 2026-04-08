@@ -40,7 +40,7 @@ enum LaunchState {
         start: Instant,
         handle: Option<JoinHandle<(TestResult, Config)>>,
     },
-    Ended(Result<TestResult, String>),
+    Ended(Result<TestResult, (String, PathBuf)>),
     TestThreadCrashed(PathBuf),
     TimedOut(PathBuf),
 }
@@ -64,7 +64,9 @@ impl Display for LaunchState {
             Self::Ended(result) => {
                 match result {
                     Ok(inner) => writeln!(f, "{}", inner)?,
-                    Err(e) => writeln!(f, "{}: {e}", "Unexpected Result".bold())?,
+                    Err((err, path)) => {
+                        writeln!(f, "{}: {:?}\n{err}", "Unexpected Result".bold(), path)?
+                    }
                 }
 
                 Ok(())
@@ -122,7 +124,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                                 //check whether the outcome matches the expectations of the config it was launched with
                                 match test_result.matches_expectation(&config) {
                                     Ok(_) => *state = LaunchState::Ended(Ok(test_result)),
-                                    Err(e) => *state = LaunchState::Ended(Err(e)),
+                                    Err(e) => *state = LaunchState::Ended(Err((e, path.clone()))),
                                 }
                             }
                             Err(_e) => *state = LaunchState::TestThreadCrashed(path.clone()),
