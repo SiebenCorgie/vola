@@ -42,7 +42,7 @@ In the earlier example, `stdlib::sphere` refers to a module located in a directo
 Search paths can be configured programmatically (e.g., via an `AstBuilder`) or through the CLI. When using `vola-cli`, a search path can be added with:
 
 ```
--c <name> <path/to/name>
+-c <path/to/name>
 ```
 
 
