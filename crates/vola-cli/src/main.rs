@@ -71,11 +71,12 @@ fn main() {
     let mut args = Args::parse();
 
     if args.format_file {
-        match vola_ast::VolaAst::new_from_file_no_import(
+        match vola_ast::VolaAst::builder_from_file(
             &args.src_file,
             &vola_tree_sitter_parser::VolaTreeSitterParser,
         ) {
-            Ok(ast) => {
+            Ok(ast_builder) => {
+                let ast = ast_builder.abort();
                 let formated = vola_fmt::Formater::format_ast(&ast);
                 std::fs::write(&args.src_file, formated.to_string()).unwrap();
                 return;
@@ -103,16 +104,28 @@ fn main() {
     }
 
     let mut module = vola_lib::OptModule::new();
-    if module
-        .apply_pass(vola_lib::passes::LowerAst::from_file(&args.src_file).unwrap())
-        .is_err()
-    {
+    let ast = match vola_lib::passes::LowerAst::from_file(&args.src_file) {
+        Ok(ast) => ast,
+        Err(e) => {
+            for e in e {
+                e.report();
+            }
+            return;
+        }
+    };
+    if let Err(e) = module.apply_pass(ast) {
+        for e in e.errors {
+            e.report();
+        }
         return;
     }
 
     //TODO use the arg flags to _safely_ disable some passes.
 
-    if module.standard_pipeline().is_err() {
+    if let Err(e) = module.standard_pipeline() {
+        for e in e.errors {
+            e.report();
+        }
         return;
     }
 
