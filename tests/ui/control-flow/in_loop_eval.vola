@@ -1,4 +1,4 @@
-module super::std;
+module self::super::std;
 
 
 

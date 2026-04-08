@@ -2,7 +2,7 @@
 //ERROR:Could not find "sub" in any parent scope!
 //END-CONFIG
 
-module std;
+module self::std;
 
 entity Test();
 

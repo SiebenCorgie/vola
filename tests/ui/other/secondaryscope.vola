@@ -3,7 +3,7 @@
 //END-CONFIG
 
 //NOTE: triggers a strange bug in the scoping mechanism of the interner. TODO: create better Error
-module super::std;
+module self::super::std;
 fn t() -> csg{
     let extent = [1.0; 3];
     let ww = 1.0;

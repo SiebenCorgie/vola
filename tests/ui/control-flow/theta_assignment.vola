@@ -1,4 +1,4 @@
-module super::std;
+module self::super::std;
 
 //Copy from gaziya5 aka gaz in https://jbaker.graphics/writings/DEC.html
 

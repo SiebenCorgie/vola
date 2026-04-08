@@ -2,7 +2,7 @@
 //ERROR:Cannot use "test", as this would create a recursivecall
 //END-CONFIG
 
-module std;
+module self::std;
 
 
 fn test(a: real) -> real{

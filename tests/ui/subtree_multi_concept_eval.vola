@@ -1,6 +1,4 @@
-module std;
-
-
+module self::std;
 
 operation nRepeat(n: int);
 impl nRepeat<sub> for SDF3D(at){
