@@ -24,6 +24,8 @@ pub enum AstError {
     IoError(String),
     #[error("Resolver got stuck and encounterd timeout")]
     ResolverTimeout,
+    #[error("External module \"{0}\" unknown")]
+    UnknownOrigin(String),
 }
 
 impl AstError {
