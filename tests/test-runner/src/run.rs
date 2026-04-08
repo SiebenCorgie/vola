@@ -193,18 +193,19 @@ pub fn run_file(path: PathBuf) -> Result<JoinHandle<(TestResult, Config)>, Box<d
 
             let mut module = vola_lib::OptModule::new();
             let parse_start = Instant::now();
-            let ast_lowering = match vola_lib::passes::LowerAst::from_file(&path) {
-                Ok(ast) => ast,
-                Err(e) => {
-                    for e in e {
-                        result
-                            .parsing
-                            .push_error(format!("{}", e.error.to_string()));
-                    }
+            let ast_lowering =
+                match vola_lib::passes::LowerAst::from_file(&path, config.externals.clone()) {
+                    Ok(ast) => ast,
+                    Err(e) => {
+                        for e in e {
+                            result
+                                .parsing
+                                .push_error(format!("{}", e.error.to_string()));
+                        }
 
-                    return (result, config);
-                }
-            };
+                        return (result, config);
+                    }
+                };
             match module.apply_pass(ast_lowering) {
                 Ok(_) => {}
                 Err(e) => {
