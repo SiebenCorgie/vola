@@ -7,7 +7,7 @@
  */
 //! # Vola-cli
 //!
-//! CLI interface to `volac`
+//! CLI interface to `vola-lib`
 
 #![doc(html_logo_url = "https://gitlab.com/tendsinmende/vola/-/raw/main/resources/vola_icon.svg")]
 

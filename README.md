@@ -64,26 +64,43 @@ Note: The techstack is not set in stone. We might switch to a hand written parse
 
 ## Packages
 
+### RVSDG
+
+- `rvsdg`: A generic [RVSDG](https://dl.acm.org/doi/abs/10.1145/3391902) implementation.
+- `rvsdg-derive-lang`: ProcMacro to derive the `LangNode` trait on structs.
+- `rvsdg-pattern-rewrite`: Utilities to define pattern rewrites as well as applying them on a graph through `driver`s.
+- `rvsdg-viewer`: Core layouting to display RVSDGs through the `View` trait.
+- `rvsdg-viewer-ui`: Iced based viewer of multiple reltade RVSDGs layouted by `rvsdg-viewer`
+
+### Core Vola crates
+
+#### Frontend
+
 - `vola-tree-sitter-parser`: [tree-sitter-vola](https://gitlab.com/tendsinmende/tree-sitter-vola) based parser. Also contains the language grammar.
 - `vola-tree-sitter-openscad`: open-scad parser that converts CSG-expressions to vola. Does not support the full OpenScad featureset (yet).
-- `vola-ast`: The Abstract-Syntax-Tree representation of any Vola program. Can either be build from a file (using `tree-sitter-vola`) or
-by using this as a library. Servers as interface between the Vola frontend, and any middle- / backend.
+- `vola-ast`: The Abstract-Syntax-Tree representation of any Vola program. Can either be build from a file (using `tree-sitter-vola`) or by using this as a library. Servers as interface between the Vola frontend, and any middle- / backend.
+
+#### Optimizer
 - `vola-opt`: The RVSDG based optimizer
+
+#### Backend
+
 - `vola-backend-spirv`: SPIR-V backend
 - `vola-backend-wasm`: WASM backend based on [Walrus](https://github.com/rustwasm/walrus).
 - `wasm-runtime`: Companion crate to the WASM backend. Depends on cargo and the `wasm32-unknown-unknown` toolchain.
-- `volac`: The compiler library. Mostly takes care of executing passes of the various parts _in order_.
-- `vola-cli`: Thin CLI interface around `volac`
-- `vola-lib`: The library interface to Vola's optimizer (mostly). Compared to `volac` it does not _just_ execute a predefined pipeline, but lets you _work_ with the compiler.
+
+### Utilities
+
+- `vola-cli`: Thin CLI interface for `vola-lib`
+- `vola-lib`: The library interface to Vola's optimizer (mostly).
 - `vola-bridge`: Friendly user interface to compile and execute Vola code on the CPU.
 - `vola-common`: Factors out common components for Vola's compiler stages. These are mostly debugging / error-reporting related.
 - `vola-fmt`: Auto-formater on the Vola AST.
-- `vola-convert`: Foreign syntax -> vola converter. Currently supports converting a `mymodel.scad` OpenScad file to `mymodel.vola`.
-- `rvsdg`: A generic [RVSDG](https://dl.acm.org/doi/abs/10.1145/3391902) implementation.
+- `vola-convert`: Foreign syntax -> Vola converter. Currently supports converting a `mymodel.scad` OpenScad file to `mymodel.vola`.
 
 ## Status
 
-🎛️ _Stability and user-friendliness_ 🎛️
+🎛️ _Working on stability and user-friendliness_ 🎛️
 
 ## Building & Running
 

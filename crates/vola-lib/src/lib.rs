@@ -23,7 +23,7 @@
 //! let ast = passes::LowerAst::from_file(my_file).unwrap();
 //! let mut module = OptModule::new();
 //! module.apply_pass(ast).unwrap();
-//! //This runst a standard pipeline (similar to volac) that arrives at
+//! //This runst a standard pipeline that arrives at
 //! //a full lowering of the code.
 //! module.standard_pipeline().unwrap();
 //!
@@ -85,7 +85,7 @@ impl OptModule {
         Ok(())
     }
 
-    ///Applies the volac-based standard pipeline that lowers _everything_
+    ///Applies the standard pipeline that lowers _everything_
     /// to the alge-dialect.
     pub fn standard_pipeline(&mut self) -> Result<(), PassError> {
         self.specialize_csg()?;

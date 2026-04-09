@@ -7,7 +7,9 @@ For all Vola and RVSDG related crates.
 ### Added
 
 - An element called `super` in a module import path is now consider the `parent` folder, which allows including modules from a parent directory.
-- Volac's library interface now returns all errors, not just the first
+- Any path starting with `self` is considered relative to the file its in.
+- Any path starting with something else (no `self`) will be resolved relative to the entry point of an external librar with that name. Example: `module mylib::a::b` tries to find `a/b.vola` in a external `mylib` library.
+- Removed Volac in favor of a more general `vola-lib`
 
 ### Changed
 
