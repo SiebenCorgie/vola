@@ -7,6 +7,7 @@ use rspirv::{
     spirv::{FunctionControl, LoopControl, SelectionControl, Word},
 };
 use rvsdg::{
+    NodeRef, SmallColl,
     edge::{InportLocation, InputType, OutportLocation, OutputType},
     nodes::{NodeType, StructuralNode},
     region::RegionLocation,
@@ -15,13 +16,13 @@ use rvsdg::{
         abstract_node_type::AbstractNodeType,
         cfg::{Cfg, CfgNode, CfgRef},
     },
-    NodeRef, SmallColl,
 };
+use rvsdg_viewer::View;
 
 use crate::{
+    BackendSpirvError, SpirvBackend, SpirvModule,
     graph::BackendOp,
     spv::{ArithBaseTy, SpvType, TyShape},
-    BackendSpirvError, SpirvBackend, SpirvModule,
 };
 
 pub struct EmitCtx {
@@ -129,7 +130,7 @@ impl SpirvBackend {
                 _ => {
                     return Err(BackendSpirvError::Any {
                         text: "Unexpected none-λ node in toplevel of SPIR-V graph.".to_string(),
-                    })
+                    });
                 }
             }
             //in this case we always work on lambda declerations.
@@ -225,7 +226,11 @@ impl SpirvBackend {
         let retty = match rettys.len() {
             0 => builder.type_void(),
             1 => register_or_get_type(builder, ctx, &rettys[0]),
-            x => return Err(BackendSpirvError::SPVError(format!("SPIR-V backend can only emit functions with a single function return type, got {x}"))),
+            x => {
+                return Err(BackendSpirvError::SPVError(format!(
+                    "SPIR-V backend can only emit functions with a single function return type, got {x}"
+                )));
+            }
         };
 
         //now collect the argument types and do the same
@@ -537,7 +542,7 @@ impl SpirvBackend {
                     other => {
                         return Err(BackendSpirvError::Any {
                             text: format!("Unexpected node type in function: {:?}", other),
-                        })
+                        });
                     }
                 }
             }
@@ -610,6 +615,11 @@ impl SpirvBackend {
                         .into_iter()
                         .map(|src| src.expect("Expected all srcs of the node to be connected!"))
                         .collect::<SmallColl<_>>();
+
+                    if self.get_single_node_result_type(*node).is_none() {
+                        println!("Failed for {}", self.graph[*node].name());
+                    }
+
                     let result_type = self
                         .get_single_node_result_type(*node)
                         .expect("Expected simple node to have retun type!");
@@ -674,7 +684,8 @@ impl SpirvBackend {
                         .find_consumer_in(InportLocation {
                             node: *src_node,
                             input: InputType::Input(i),
-                        }).is_empty()
+                        })
+                        .is_empty()
                     {
                         continue;
                     }
@@ -733,7 +744,8 @@ impl SpirvBackend {
                         .find_consumer_in(InportLocation {
                             node: *src_node,
                             input: InputType::Input(i),
-                        }).is_empty()
+                        })
+                        .is_empty()
                     {
                         continue;
                     }
@@ -1006,7 +1018,8 @@ impl SpirvBackend {
                         .node(ex_location.node)
                         .outport(&ex_location.output)
                         .unwrap()
-                        .edges.is_empty()
+                        .edges
+                        .is_empty()
                     {
                         continue;
                     }
@@ -1109,8 +1122,7 @@ impl SpirvBackend {
 
                 let result_id = ctx.get_port_id(&node.output(0)).unwrap();
                 let result_type_id = register_or_get_type(builder, ctx, result_type);
-                let instruction =
-                    spvop.build_instruction(ctx, &src_ids, result_type_id, result_id);
+                let instruction = spvop.build_instruction(ctx, &src_ids, result_type_id, result_id);
 
                 //TODO: kinda hack atm.
                 if spvop.instruction_is_type_or_constant() {
@@ -1221,7 +1233,9 @@ impl SpirvBackend {
         let caller = self.graph.find_caller(lmd)?;
         if caller.is_empty() {
             #[cfg(feature = "log")]
-            log::info!("Cannot produce signature from caller, since λ {lmd} is never called. Substituting unknown args with Void.");
+            log::info!(
+                "Cannot produce signature from caller, since λ {lmd} is never called. Substituting unknown args with Void."
+            );
 
             return Some(
                 internal_sig

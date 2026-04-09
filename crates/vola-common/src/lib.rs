@@ -21,7 +21,7 @@ pub use thiserror;
 pub mod dot;
 
 mod error;
-pub use error::{error_reporter, warning_reporter, VolaError};
+pub use error::{VolaError, error_reporter, warning_reporter};
 mod reporter;
 pub use reporter::{cache_file, report, report_with_fallback, reset_file_cache, set_fallback_file};
 
@@ -43,7 +43,7 @@ pub struct Span {
 
 impl Span {
     ///The filename used in a reported span, if no file is set
-    pub const FALLBACK_FILE: &'static str = "no-span-source";
+    pub const FALLBACK_FILE: &'static str = "no-span-source.vola";
     pub fn empty() -> Self {
         Span {
             file: FileString::default(),

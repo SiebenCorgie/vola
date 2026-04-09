@@ -6,7 +6,7 @@
 //END-CONFIG
 
 
-module super::std;
+module self::super::std;
 
 operation MySwitch(t: real);
 impl MySwitch<l, r> for SDF3D(at){

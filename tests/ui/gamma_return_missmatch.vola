@@ -2,7 +2,7 @@
 //ERROR:Returns vec2<Real> in first branch, but vec3<Real> in 2-th
 //END-CONFIG
 
-module std;
+module self::std;
 operation SubTest();
 
 impl SubTest<a, b> for SDF3D(at){

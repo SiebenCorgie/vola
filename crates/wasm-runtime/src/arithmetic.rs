@@ -36,90 +36,90 @@ crate::impl_macros::impl_op2!(Vec2, rem, 2, mod_vec2);
 crate::impl_macros::impl_op2!(Vec3, rem, 3, mod_vec3);
 crate::impl_macros::impl_op2!(Vec4, rem, 4, mod_vec4);
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 extern "C" fn inverse_mat2(a: &Mat2, res: &mut Mat2) {
     *res = a.inverse();
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 extern "C" fn inverse_mat3(a: &Mat3, res: &mut Mat3) {
     *res = a.inverse();
 }
-#[no_mangle]
+#[unsafe(no_mangle)]
 extern "C" fn inverse_mat4(a: &Mat4, res: &mut Mat4) {
     *res = a.inverse();
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 extern "C" fn mul_vec2_scalar(a: &Vec2, b: &f32, res: &mut Vec2) {
     *res = a * b;
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 extern "C" fn mul_vec3_scalar(a: &Vec3, b: &f32, res: &mut Vec3) {
     *res = a * b;
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 extern "C" fn mul_vec4_scalar(a: &Vec4, b: &f32, res: &mut Vec4) {
     *res = a * b;
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 extern "C" fn mul_mat2_scalar(a: &Mat2, b: &f32, res: &mut Mat2) {
     *res = *a * *b;
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 extern "C" fn mul_mat3_scalar(a: &Mat3, b: &f32, res: &mut Mat3) {
     *res = *a * *b;
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 extern "C" fn mul_mat4_scalar(a: &Mat4, b: &f32, res: &mut Mat4) {
     *res = *a * *b;
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 extern "C" fn mul_mat2_vec2(a: &Mat2, b: &Vec2, res: &mut Vec2) {
     *res = *a * *b;
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 extern "C" fn mul_mat3_vec3(a: &Mat3, b: &Vec3, res: &mut Vec3) {
     *res = *a * *b;
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 extern "C" fn mul_mat4_vec4(a: &Mat4, b: &Vec4, res: &mut Vec4) {
     *res = *a * *b;
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 extern "C" fn mul_vec2_mat2(a: &Vec2, b: &Mat2, res: &mut Vec2) {
     *res = b.transpose() * *a;
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 extern "C" fn mul_vec3_mat3(a: &Vec3, b: &Mat3, res: &mut Vec3) {
     *res = b.transpose() * *a
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 extern "C" fn mul_vec4_mat4(a: &Vec4, b: &Mat4, res: &mut Vec4) {
     *res = b.transpose() * *a;
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 extern "C" fn mul_mat2_mat2(a: &Mat2, b: &Mat2, res: &mut Mat2) {
     *res = *a * *b
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 extern "C" fn mul_mat3_mat3(a: &Mat3, b: &Mat3, res: &mut Mat3) {
     *res = *a * *b
 }
-#[no_mangle]
+#[unsafe(no_mangle)]
 extern "C" fn mul_mat4_mat4(a: &Mat4, b: &Mat4, res: &mut Mat4) {
     *res = *a * *b
 }

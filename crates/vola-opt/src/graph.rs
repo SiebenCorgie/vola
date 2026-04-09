@@ -13,16 +13,16 @@ use std::{any::Any, fmt::Debug};
 use crate::error::OptError;
 use crate::imm::ImmBool;
 use crate::passes::lazy_type::TypeError;
-use crate::{common::Ty, Optimizer};
+use crate::{Optimizer, common::Ty};
 use ahash::AHashMap;
+use rvsdg::NodeRef;
 use rvsdg::attrib::AttribLocation;
 use rvsdg::edge::{InportLocation, OutportLocation};
 use rvsdg::nodes::NodeType;
 use rvsdg::region::RegionLocation;
+use rvsdg::util::Path;
 use rvsdg::util::cnf::ConstantFoldable;
 use rvsdg::util::node_equality::NodeTypeEq;
-use rvsdg::util::Path;
-use rvsdg::NodeRef;
 use rvsdg::{
     edge::LangEdge, nodes::LangNode, rvsdg_derive_lang::LangNode, util::copy::StructuralClone,
 };
@@ -82,6 +82,24 @@ pub struct OptNode {
     ///The inner node that is being represented
     #[expose]
     pub node: Box<dyn DialectNode + Send + Sync + 'static>,
+}
+
+impl Clone for OptNode {
+    fn clone(&self) -> Self {
+        //first do a structural copy
+        let mut copy = self.node.structural_copy(self.span.clone());
+
+        assert_eq!(copy.node.inputs().len(), self.node.inputs().len());
+        assert_eq!(copy.node.outputs().len(), self.node.outputs().len());
+
+        //Copy over the connection patterns :)
+        copy.node.inputs_mut().clone_from_slice(self.node.inputs());
+        copy.node
+            .outputs_mut()
+            .clone_from_slice(self.node.outputs());
+
+        copy
+    }
 }
 
 impl OptNode {
@@ -286,11 +304,7 @@ impl LangEdge for OptEdge {
         }
     }
     fn is_state_edge(&self) -> bool {
-        if let Self::State = self {
-            true
-        } else {
-            false
-        }
+        if let Self::State = self { true } else { false }
     }
 
     fn is_value_edge(&self) -> bool {
@@ -417,7 +431,9 @@ impl Optimizer {
                     if let Some(new_ty) = self.graph.edge(*edg).ty.get_type() {
                         if let Some(set_ty) = &unified_type {
                             if new_ty != set_ty {
-                                panic!("Found edge inconsistensy on edge {edg}. There are two edge types on the same port: {new_ty:?} & {set_ty:?}" )
+                                panic!(
+                                    "Found edge inconsistensy on edge {edg}. There are two edge types on the same port: {new_ty:?} & {set_ty:?}"
+                                )
                             }
                         } else {
                             unified_type = Some(new_ty.clone());

@@ -6,9 +6,9 @@
  * 2024 Tendsin Mende
  */
 use rvsdg::{
+    SmallColl,
     edge::{InputType, OutputType},
     region::RegionLocation,
-    SmallColl,
 };
 use vola_ast::{
     alge::Func,
@@ -18,10 +18,10 @@ use vola_ast::{
 use vola_common::{Span, VolaError};
 
 use crate::{
+    OptEdge, OptError,
     common::Ty,
     graph::auxiliary::{Function, Impl, ImplKey},
     passes::lower_ast::LowerAst,
-    OptEdge, OptError,
 };
 
 use super::block_build::BlockCtx;
@@ -75,7 +75,10 @@ impl<'opt> LowerAst<'opt> {
         //similar to the concept case, test if there is already one, if not, push
         if let Some(existing_csg) = self.opt.csg_node_defs.get(&csgdef.name.0) {
             let err = OptError::Any {
-                text: format!("Operation or Entity {} was already defined. \nNote that operations and entities share one name space.", existing_csg.name.0),
+                text: format!(
+                    "Operation or Entity {} was already defined. \nNote that operations and entities share one name space.",
+                    existing_csg.name.0
+                ),
             };
             Err(
                 VolaError::error_here(err, csgdef.span.clone(), "redefined here")
@@ -109,7 +112,9 @@ impl<'opt> LowerAst<'opt> {
         //Also make sure that no concept or csg-def with that name exists
         if self.opt.concepts.contains_key(&name) || self.opt.csg_node_defs.contains_key(&name) {
             let err = OptError::Any {
-                text: format!("function \"{name}\" can not be named after a concept, or CSG-Operation/Entitiy!"),
+                text: format!(
+                    "function \"{name}\" can not be named after a concept, or CSG-Operation/Entitiy!"
+                ),
             };
             return Err(VolaError::error_here(err, func.span.clone(), "here"));
         }
@@ -139,6 +144,7 @@ impl<'opt> LowerAst<'opt> {
                     self.opt.span_tags.set(port.into(), arg.2.clone());
                     //Also tag with the correct type already
                     self.opt.typemap.set(port.into(), arg.1.clone());
+                    self.opt.names.set(port.into(), arg.0.clone());
                 }
                 //setup result
                 let result_port = lmd.add_result();
@@ -336,7 +342,7 @@ impl<'opt> LowerAst<'opt> {
                 //setup all operands as CV-Vars, and the arg as ... arg
                 for operand in &implblock.operands {
                     let (outside, within) = lmd.add_context_variable();
-                    if let Err(e) = initial_context.define_var(operand.0 .0.clone(), within) {
+                    if let Err(e) = initial_context.define_var(operand.0.0.clone(), within) {
                         let span = implblock.head_span();
                         return Err(VolaError::error_here(e, span, "here"));
                     }
@@ -448,7 +454,7 @@ impl<'opt> LowerAst<'opt> {
             def_span,
             concept: implblock.concept.0.clone(),
             lambda,
-            subtrees: implblock.operands.into_iter().map(|a| a.0 .0).collect(),
+            subtrees: implblock.operands.into_iter().map(|a| a.0.0).collect(),
             args,
             return_type: return_ty.into(),
         };

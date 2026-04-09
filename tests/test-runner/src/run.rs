@@ -6,9 +6,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use smallvec::{smallvec, SmallVec};
-use vola_common::VolaError;
-use volac::{backends::BoxedBackend, Pipeline, PipelineError, Target};
+use vola_lib::spirv::vola_backend_spirv::SpirvConfig;
 use yansi::Paint;
 
 use crate::config::Config;
@@ -19,251 +17,268 @@ pub enum ResultType {
     Error(Vec<String>),
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub enum Backend {
-    Spirv,
-    Wasm,
+pub enum PartialResult {
+    Success(Duration),
+    Error(Vec<String>),
     None,
 }
 
-#[derive(Debug, PartialEq)]
-pub enum TestState {
-    Success,
-    Error(String),
+impl PartialResult {
+    pub fn is_success(&self) -> bool {
+        matches!(self, PartialResult::Success(_))
+    }
+
+    pub fn error(error: impl Into<String>) -> Self {
+        PartialResult::Error(vec![error.into()])
+    }
+
+    pub fn push_error(&mut self, error: impl Into<String>) {
+        match self {
+            PartialResult::Success(_) | PartialResult::None => {
+                *self = PartialResult::Error(vec![error.into()]);
+            }
+            PartialResult::Error(errs) => errs.push(error.into()),
+        }
+    }
 }
 
-pub struct TestRun {
-    backend: Backend,
-    time: Duration,
-    state: TestState,
-    path: PathBuf,
+impl Display for PartialResult {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Error(e) => {
+                if e.len() > 1 {
+                    write!(f, "{}({}): ", "Errors".red().bold(), e.len())?;
+                    for e in e.iter() {
+                        write!(f, "'{}' ", e)?;
+                    }
+                    Ok(())
+                } else {
+                    write!(f, "{}: {}", "Error".red().bold(), e[0])
+                }
+            }
+            Self::Success(duration) => write!(f, "{}ms", (duration.as_secs_f32() * 1000.0).round()),
+            Self::None => write!(f, "none"),
+        }
+    }
 }
 
 pub struct TestResult {
-    pub runs: SmallVec<[TestRun; 3]>,
+    parsing: PartialResult,
+    optimizing: PartialResult,
+    wasm_code: PartialResult,
+    pub(crate) wasm_execute: PartialResult,
+    spirv_code: PartialResult,
+    path: PathBuf,
 }
 
 impl TestResult {
-    pub fn only_successes(&self) -> bool {
-        let mut is_success = true;
-        for r in &self.runs {
-            if r.state != TestState::Success {
-                is_success = false;
-            }
+    pub fn empty(path: PathBuf) -> Self {
+        TestResult {
+            parsing: PartialResult::None,
+            optimizing: PartialResult::None,
+            wasm_code: PartialResult::None,
+            wasm_execute: PartialResult::None,
+            spirv_code: PartialResult::None,
+            path,
         }
+    }
 
-        is_success
+    pub fn only_successes(&self) -> bool {
+        self.parsing.is_success()
+            && self.optimizing.is_success()
+            && self.wasm_code.is_success()
+            && self.wasm_execute.is_success()
+            && self.spirv_code.is_success()
     }
 
     pub fn partial_success(&self) -> bool {
-        let mut any_success = false;
-        for r in &self.runs {
-            if r.state == TestState::Success {
-                any_success = true
+        self.parsing.is_success()
+            || self.optimizing.is_success()
+            || self.wasm_code.is_success()
+            || self.wasm_execute.is_success()
+            || self.spirv_code.is_success()
+    }
+
+    fn all_errors(&self) -> Vec<String> {
+        let append_errors = |partial: &PartialResult, appenders: &mut Vec<String>| {
+            if let PartialResult::Error(errors) = partial {
+                for e in errors {
+                    appenders.push(e.clone())
+                }
+            }
+        };
+
+        let mut appender = Vec::new();
+        append_errors(&self.parsing, &mut appender);
+        append_errors(&self.optimizing, &mut appender);
+        append_errors(&self.wasm_code, &mut appender);
+        append_errors(&self.wasm_execute, &mut appender);
+        append_errors(&self.spirv_code, &mut appender);
+
+        appender
+    }
+
+    pub fn matches_expectation(&self, expectation: &Config) -> Result<(), String> {
+        match &expectation.expected_result {
+            ResultType::Success => {
+                //If we expect success, there should only be success... lol
+                if self.only_successes() {
+                    Ok(())
+                } else {
+                    let all_errors = self.all_errors();
+                    Err(format!(
+                        "Expected success, had {} errors: {all_errors:#?}",
+                        all_errors.len()
+                    ))
+                }
+            }
+            ResultType::Error(errors) => {
+                //If we expect errors, test each error against all errors we _possibly_ gathered.
+                //Early out, if there are none
+
+                if self.only_successes() {
+                    return Err(format!("Expected Errors, but had none"));
+                }
+
+                let all_errors = self.all_errors();
+
+                for expected_error in errors {
+                    if !all_errors.contains(expected_error) {
+                        return Err(format!(
+                            "Expected error '{expected_error}' in\n{all_errors:#?}"
+                        ));
+                    }
+                }
+
+                //Found all expected errors, i.e. _correct_
+                Ok(())
             }
         }
-
-        any_success
     }
 }
 
-impl Display for TestRun {
+impl Display for TestResult {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match &self.state {
-            TestState::Success => {
-                write!(
-                    f,
-                    "{}: [{} @ {}ms] {}",
-                    "Passed".bold().green(),
-                    format!("{:?}", self.backend).bold(),
-                    format!("{}", (self.time.as_secs_f32() * 1000.0).round()),
-                    self.path.to_str().unwrap_or("Could not parse path!"),
-                )
-            }
-            TestState::Error(error) => {
-                write!(
-                    f,
-                    "{}: [{}] {}: {}",
-                    "Failed".bold().red(),
-                    format!("{:?}", self.backend).bold(),
-                    self.path.to_str().unwrap_or("Colud not parse path!"),
-                    error.bold()
-                )
-            }
+        fn format_ident(ident: &str, result: &PartialResult) -> String {
+            format!("{}: {}", ident.bold(), result)
         }
+        write!(
+            f,
+            "[{}, {}, {}, {}, {}]: {:?}",
+            format_ident("AST", &self.parsing),
+            format_ident("Opt", &self.optimizing),
+            format_ident("SPIR-V", &self.spirv_code),
+            format_ident("WASM", &self.wasm_code),
+            format_ident("Execusion", &self.wasm_execute),
+            self.path
+        )
     }
 }
 
-fn pipeline_res_to_testrun(
-    res: Result<Target, Vec<VolaError<PipelineError>>>,
-    config: &Config,
-    backend: Backend,
-    time: Duration,
-    path: PathBuf,
-) -> TestRun {
-    //check _if the right thing_ happened and push that result into the runs-result list
-    match res {
-        Ok(t) => {
-            if config.expected_result == ResultType::Success {
-                //If the result was actually expected to be successful, check if we have exec-test-data for that run.
-                //if so, try it out.
-
-                let test_run_result = match backend {
-                    Backend::Wasm => {
-                        
-                        //blindly overwrite the test result
-                        crate::wasm_executor::try_execute(t, config)
-                    }
-                    //for all others, don't run and keep it at
-                    //success
-                    _ => TestState::Success,
-                };
-
-                //is alright
-                TestRun {
-                    backend,
-                    time,
-                    state: test_run_result,
-                    path: path.clone(),
-                }
-            } else {
-                //expected error, but had none
-                TestRun {
-                    backend,
-                    time,
-                    state: TestState::Error("Expected Error, but was success".to_string()),
-                    path: path.clone(),
-                }
-            }
-        }
-        Err(e) => {
-            match &config.expected_result {
-                ResultType::Error(expected_error) => {
-                    if expected_error.len() != e.len() {
-                        return TestRun {
-                            backend,
-                            time,
-                            state: TestState::Error(format!(
-                                "Expected {} errors, but had {}",
-                                expected_error.len(),
-                                e.len()
-                            )),
-                            path: path.clone(),
-                        };
-                    }
-
-                    for pipeline_error in e.iter().map(|e| e.error.to_string()) {
-                        if !expected_error.contains(&pipeline_error) {
-                            return TestRun {
-                                backend,
-                                time,
-                                state: TestState::Error(format!(
-                                    "Had error '{}', but expected one of:\n\t{:?}",
-                                    pipeline_error, expected_error
-                                )),
-                                path: path.clone(),
-                            };
-                        }
-                    }
-
-                    //all errors match
-                    TestRun {
-                        backend,
-                        time,
-                        state: TestState::Success,
-                        path: path.clone(),
-                    }
-                }
-                ResultType::Success => {
-                    //expected success, but was error
-                    TestRun {
-                        backend,
-                        time,
-                        state: TestState::Error("Expected success, but was error".to_string()),
-                        path: path.clone(),
-                    }
-                }
-            }
-        }
-    }
-}
-
-pub fn run_file(path: PathBuf) -> Result<JoinHandle<TestResult>, Box<dyn Error>> {
+pub fn run_file(path: PathBuf) -> Result<JoinHandle<(TestResult, Config)>, Box<dyn Error>> {
     let hdl = std::thread::Builder::new()
         .name(format!("TestRun: {:?}", path.as_path()))
         .spawn(move || {
+            let mut result = TestResult::empty(path.clone());
+
             let config = match Config::parse_file(&path) {
                 Ok(conf) => conf,
                 Err(e) => {
-                    //just emit that as error,
-                    let dummyrun = TestRun {
-                        backend: Backend::None,
-                        time: Duration::ZERO,
-                        state: TestState::Error(e.to_string()),
-                        path,
-                    };
-
-                    return TestResult {
-                        runs: smallvec![dummyrun],
-                    };
+                    result
+                        .parsing
+                        .push_error(format!("Could not parse test-run config: {}", e));
+                    return (result, Config::default());
                 }
             };
 
-            //Depending on the config, launch volac
-            //and checkout the results each time. Then push the run
-            let mut results = TestResult {
-                runs: SmallVec::new(),
-            };
+            let mut module = vola_lib::OptModule::new();
+            let parse_start = Instant::now();
+            let ast_lowering =
+                match vola_lib::passes::LowerAst::from_file(&path, config.externals.clone()) {
+                    Ok(ast) => ast,
+                    Err(e) => {
+                        for e in e {
+                            result
+                                .parsing
+                                .push_error(format!("{}", e.error.to_string()));
+                        }
 
-            let mut backend_runs: SmallVec<[Backend; 2]> = SmallVec::new();
-            if config.spirv {
-                backend_runs.push(Backend::Spirv);
-            }
-            if config.wasm {
-                backend_runs.push(Backend::Wasm);
-            }
-
-            for backend in backend_runs {
-                //Run that thing and check if the output matches
-                let start = Instant::now();
-                let execfile = path.clone();
-                let pipeline_result = std::panic::catch_unwind(|| {
-                    let pipeline_backend: BoxedBackend = match backend {
-                        Backend::None => panic!("No pipeline"),
-                        Backend::Wasm => Box::new(volac::backends::Wasm::new(Target::buffer())),
-                        Backend::Spirv => Box::new(volac::backends::Spirv::new(Target::buffer())),
-                    };
-                    let mut pipeline = Pipeline::new().with_backend(pipeline_backend);
-                    /* NOTE: uncomment any of these if tests are failing.
-                        pipeline.early_cnf = false;
-                        pipeline.late_cne = false;
-                        pipeline.late_cnf = false;
-                    */
-                    if config.validate {
-                        pipeline = pipeline.with_validation();
+                        return (result, config);
                     }
+                };
+            match module.apply_pass(ast_lowering) {
+                Ok(_) => {}
+                Err(e) => {
+                    for e in e.errors {
+                        result
+                            .parsing
+                            .push_error(format!("{}", e.error.to_string()));
+                    }
+                    return (result, config);
+                }
+            }
 
-                    pipeline.execute_on_file(&execfile)
-                });
-                let time = start.elapsed();
+            let ast_timing = parse_start.elapsed();
+            result.parsing = PartialResult::Success(ast_timing);
 
-                let pipeline_run = match pipeline_result {
-                    Err(_e) => {
-                        //if this happened, then the run crashed.
-                        TestRun {
-                            backend,
-                            time,
-                            state: TestState::Error("Paniced".to_string()),
-                            path: path.clone(),
+            //Run the standard pipeline
+            let opt_start = Instant::now();
+            if let Err(e) = module.standard_pipeline() {
+                for e in e.errors {
+                    result
+                        .optimizing
+                        .push_error(format!("{}", e.error.to_string()));
+                }
+                return (result, config);
+            }
+            let opt_timing = opt_start.elapsed();
+            result.optimizing = PartialResult::Success(opt_timing);
+
+            let copy = module.clone();
+
+            if config.wasm {
+                let start = Instant::now();
+                let mut backend = vola_lib::wasm::WasmModule::new();
+                if let Err(e) = backend.lower_opt(copy) {
+                    result
+                        .wasm_code
+                        .push_error(format!("Lowering to WASM backend failed: {e:?}"));
+                } else {
+                    //successful lowerd opt into backend
+                    match backend.build(config.validate) {
+                        Ok(wasm_code) => {
+                            result.wasm_code = PartialResult::Success(start.elapsed());
+                            crate::wasm_executor::try_execute(wasm_code, &config, &mut result);
+                        }
+                        Err(e) => {
+                            result
+                                .wasm_code
+                                .push_error(format!("WASM code generation failed: {e:?}"));
                         }
                     }
-                    Ok(res) => pipeline_res_to_testrun(res, &config, backend, time, path.clone()),
-                };
-
-                results.runs.push(pipeline_run);
+                }
             }
 
-            results
+            if config.spirv {
+                let start = Instant::now();
+                let mut backend = vola_lib::spirv::SpirvModule::new(SpirvConfig::default());
+                if let Err(e) = backend.lower_opt(module) {
+                    result
+                        .spirv_code
+                        .push_error(format!("Lowering to SPIRV backend failed: {e:?}"));
+                } else {
+                    match backend.build(config.validate) {
+                        Ok(_) => result.spirv_code = PartialResult::Success(start.elapsed()),
+                        Err(e) => {
+                            result
+                                .wasm_code
+                                .push_error(format!("SPIRV code generation failed: {e:?}"));
+                        }
+                    }
+                }
+            }
+
+            (result, config)
         })?;
 
     Ok(hdl)

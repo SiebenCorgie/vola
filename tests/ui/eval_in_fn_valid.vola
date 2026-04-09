@@ -5,7 +5,7 @@
 //EXEC-RES:0.732
 //END-CONFIG
 
-module std;
+module self::std;
 
 export fn eval_in_alge(someattr: real) -> real{
     csg sub = Sphere(someattr);

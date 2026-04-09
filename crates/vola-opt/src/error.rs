@@ -14,7 +14,10 @@ use crate::{
 };
 use rvsdg::{
     err::GraphError,
-    util::{dead_node_elimination::DneError, inline::InlineError, unroll::UnrollError},
+    util::{
+        cne::CneError, cnf::CnfError, dead_node_elimination::DneError, inline::InlineError,
+        unroll::UnrollError,
+    },
 };
 use thiserror::Error;
 
@@ -60,6 +63,11 @@ pub enum OptError {
 
     #[error("Dead node elimination failed: {0}")]
     DneFailed(#[from] DneError),
+
+    #[error("Common node elimination failed: {0}")]
+    CneError(#[from] CneError),
+    #[error("Common node folding failed: {0}")]
+    CnfError(#[from] CnfError),
 
     #[error("Internal RVSDG graph error: {0}")]
     InternalGraphError(#[from] GraphError),

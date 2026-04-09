@@ -5,7 +5,7 @@
 //EXEC-RES:3
 //END-CONFIG
 
-module std;
+module self::std;
 
 //NOTE: In this case we know, that the cylinder lies on the z axis, and is 3 _away_ form z=4.
 export fn myfield(at: vec3) -> real{

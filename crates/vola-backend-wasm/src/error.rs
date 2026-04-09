@@ -9,9 +9,9 @@
 use std::error::Error;
 
 use rvsdg::{
+    NodeRef, SmallColl,
     edge::InportLocation,
     util::{cfg::scfr::ScfrError, graph_type_transform::GraphTypeTransformerError},
-    NodeRef, SmallColl,
 };
 use thiserror::Error;
 use vola_opt::common::Ty;
@@ -60,4 +60,6 @@ pub enum WasmError {
     ExternOpUnimplemented(ExternOp),
     #[error("Exported value was a non-function symbol")]
     NonLambdaExport,
+    #[error("Validation failed: {0}")]
+    ValidationError(String),
 }

@@ -1,9 +1,9 @@
 use std::{error::Error, fmt::Debug};
 
-use crate::{report, reporter::report_with_fallback_to_string, Span};
+use crate::{Span, report, reporter::report_with_fallback_to_string};
 use ariadne::{Label, Report, ReportBuilder};
 use backtrace::Backtrace;
-use smallvec::{smallvec, SmallVec};
+use smallvec::{SmallVec, smallvec};
 
 pub fn error_reporter<'a>(err: impl ToString, span: Span) -> ReportBuilder<'a, Span> {
     let builder = Report::build(
@@ -35,6 +35,22 @@ pub fn warning_reporter<'a>(err: impl ToString, span: Span) -> ReportBuilder<'a,
 ///
 /// It also allows you to covert any `VolaError<A>` to `VolaError<B>`, if `A` implements `Into<B>`.
 /// You are encouraged to use [thiserror] to derive your `E` type, and use [VolaError] only to embedded your error.
+///
+///
+/// # Example
+///
+/// To convert from a _lower_ error to a _higher_ error, use [to_error](VolaError::to_error):
+///
+/// ```rust, ignore
+///
+/// let graph_error = GraphError::InvalidNode(my_node);
+/// //Converts from a _lowe-level_ graph error, in a CNE context, to a _high-level_ pipeline error
+/// //without loosing the original context.
+/// let pipeline_error = graph_error
+///     .to_error::<CneError>()
+///     .to_error::<OptError>()
+///     .to_error::<PipelineError>();
+/// ```
 pub struct VolaError<E: Error> {
     pub error: Box<E>,
     pub source_span: Option<Span>,
@@ -119,13 +135,20 @@ impl<E: Error> VolaError<E> {
     ///Reports the full error to stdout.
     pub fn report(&self) {
         let mut reporter = if let Some(source_span) = &self.source_span {
-            Report::build(
-                ariadne::ReportKind::Error,
-                std::path::Path::new(source_span.file.as_str()),
-                source_span.byte_start,
-            )
-            .with_config(ariadne::Config::default().with_index_type(ariadne::IndexType::Byte))
-            .with_message(self.error.to_string())
+            if source_span.file.as_str().ends_with(Span::FALLBACK_FILE) {
+                //If this is in the fallback file, just print the error, with no further span-based
+                // sugar.
+                println!("{:?}", self);
+                return;
+            } else {
+                Report::build(
+                    ariadne::ReportKind::Error,
+                    std::path::Path::new(source_span.file.as_str()),
+                    source_span.byte_start,
+                )
+                .with_config(ariadne::Config::default().with_index_type(ariadne::IndexType::Byte))
+                .with_message(self.error.to_string())
+            }
         } else {
             Report::build(
                 ariadne::ReportKind::Error,
@@ -148,6 +171,10 @@ impl<E: Error> VolaError<E> {
     ///Prints the error to string. Uses `source` as the source-code string that is being reported on.
     pub fn report_to_string(&self, source: &str) -> String {
         let mut reporter = if let Some(source_span) = &self.source_span {
+            if source_span.file.as_str().ends_with(Span::FALLBACK_FILE) {
+                return format!("{self:?}");
+            }
+
             Report::build(
                 ariadne::ReportKind::Error,
                 std::path::Path::new(source_span.file.as_str()),
@@ -177,7 +204,7 @@ impl<E: Error> Debug for VolaError<E> {
             if let Some(file) = src_span.get_file() {
                 write!(
                     f,
-                    "{} [{}:{}..{}:{}]: {}",
+                    "{} [{}:{}..{}:{}]:\n\t{}",
                     file,
                     src_span.from.0,
                     src_span.from.1,

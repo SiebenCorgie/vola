@@ -1,24 +1,27 @@
 [workspace]
 members = [
-    "crates/vola-ast",
     "crates/rvsdg",
     "crates/rvsdg-viewer",
-    "crates/vola-common",
-    "crates/vola-opt",
-    "examples/rvsdg-simple",
     "crates/rvsdg-derive-lang",
-    "crates/volac",
-    "crates/vola-cli",
     "crates/rvsdg-viewer-ui",
+    "crates/rvsdg-pattern-rewrite",
+
+    "crates/vola-common",
     "crates/vola-tree-sitter-parser",
+    "crates/vola-ast",
+    "crates/vola-fmt",
+    "crates/vola-opt",
     "crates/vola-backend-spirv",
     "crates/vola-backend-wasm",
     "crates/wasm-runtime",
-    "tests/test-runner",
-    "crates/vola-fmt",
     "crates/vola-tree-sitter-openscad",
+    "crates/vola-bridge",
+    "crates/vola-lib",
+    "crates/vola-cli",
     "crates/vola-convert",
-    "crates/rvsdg-pattern-rewrite",
+    "tests/test-runner",
+
+    "examples/rvsdg-simple",
 ]
 
 resolver = "2"
@@ -37,7 +40,8 @@ vola-common = { path = "crates/vola-common" }
 vola-opt = { path = "crates/vola-opt" }
 vola-tree-sitter-parser = { path = "crates/vola-tree-sitter-parser" }
 vola-tree-sitter-openscad = { path = "crates/vola-tree-sitter-openscad" }
-volac = { path = "crates/volac" }
+vola-lib = {path = "crates/vola-lib", default-features = false}
+vola-bridge = {path = "crates/vola-bridge"}
 vola-fmt = { path = "crates/vola-fmt" }
 wasm-runtime = { path = "crates/wasm-runtime" }
 

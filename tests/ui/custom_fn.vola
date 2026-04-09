@@ -1,4 +1,4 @@
-module std;
+module self::std;
 
 export fn myFn(at: vec3) -> real{
 	let offsetx = noise(at.x);

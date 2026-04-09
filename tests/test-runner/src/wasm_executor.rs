@@ -1,16 +1,22 @@
-use smallvec::{smallvec, SmallVec};
-use volac::Target;
+use std::time::{Duration, Instant};
+
+use smallvec::{SmallVec, smallvec};
 use wasmtime::{Module, Store, Trap};
 use yansi::Paint;
 
-use crate::{config::Config, run::TestState};
+use crate::{
+    config::Config,
+    run::{PartialResult, TestResult},
+};
 
-pub fn try_execute(target: Target, config: &Config) -> TestState {
+pub fn try_execute(code: Vec<u8>, config: &Config, test_results: &mut TestResult) {
     //if no function is set, just return success,
     let target_fn = if let Some(f) = &config.execution_fn {
         f.clone()
     } else {
-        return TestState::Success;
+        //Early return as no run
+        test_results.wasm_execute = PartialResult::Success(Duration::ZERO);
+        return;
     };
 
     let args = config
@@ -24,29 +30,27 @@ pub fn try_execute(target: Target, config: &Config) -> TestState {
         .unwrap_or(&SmallVec::new())
         .clone();
 
-    let target_bytes = match target {
-        Target::Buffer(b) => b,
-        Target::File(f) => match std::fs::read(&f) {
-            Ok(b) => b,
-            Err(e) => return TestState::Error(format!("Failed to read file {f:?}: {e:?}")),
-        },
-    };
-
     let mut wasm_config = wasmtime::Config::new();
     wasm_config.wasm_backtrace(true);
     wasm_config.wasm_backtrace_details(wasmtime::WasmBacktraceDetails::Enable);
 
-    let engine = match wasmtime::Engine::new(&wasm_config)
-        .map_err(|e| TestState::Error(format!("Failed to start wasmtime Engine: {e:?}")))
-    {
+    let engine = match wasmtime::Engine::new(&wasm_config) {
         Ok(c) => c,
-        Err(e) => return e,
+        Err(e) => {
+            test_results
+                .wasm_execute
+                .push_error(format!("Could not init WASM engine: {e:?}"));
+            return;
+        }
     };
 
-    let module = match Module::new(&engine, target_bytes) {
+    let module = match Module::new(&engine, code) {
         Ok(module) => module,
         Err(e) => {
-            return TestState::Error(format!("Failed to load buffer as WASM module: {e:?}"));
+            test_results
+                .wasm_execute
+                .push_error(format!("Could not init module engine: {e:?}"));
+            return;
         }
     };
 
@@ -58,12 +62,16 @@ pub fn try_execute(target: Target, config: &Config) -> TestState {
             //check if we can unwrap a trap:
 
             if let Some(trap) = e.downcast_ref::<Trap>() {
-                return TestState::Error(format!(
+                test_results.wasm_execute = PartialResult::error(format!(
                     "Failed to instatiate WASM-Time: {trap:?}\n\nBacktrace:\n{}",
                     e.backtrace()
                 ));
+                return;
             } else {
-                return TestState::Error(format!("Failed to instatiate WASM-Time: {e:?}"));
+                test_results
+                    .wasm_execute
+                    .push_error(format!("Failed to instatiate WASM-Time: {e:?}"));
+                return;
             }
         }
     };
@@ -71,10 +79,11 @@ pub fn try_execute(target: Target, config: &Config) -> TestState {
     let entrypoint = match instance.get_func(&mut store, &target_fn) {
         Some(f) => f,
         None => {
-            return TestState::Error(format!(
+            test_results.wasm_execute.push_error(format!(
                 "Could not find function {} in WasmTime",
                 target_fn.bold()
-            ))
+            ));
+            return;
         }
     };
 
@@ -85,15 +94,18 @@ pub fn try_execute(target: Target, config: &Config) -> TestState {
         .map(|param| wasmtime::Val::F32(param.to_bits()))
         .collect();
 
+    let start = Instant::now();
     match entrypoint.call(&mut store, &param_store, &mut result_store) {
         Ok(_) => {}
         Err(e) => {
-            return TestState::Error(format!(
+            test_results.wasm_execute.push_error(format!(
                 "Failed to call {}: {e:?}\nDid you set the right amount of arguments and results?",
                 target_fn.bold()
-            ))
+            ));
+            return;
         }
     }
+    let elapsed = start.elapsed();
 
     //returned successfully, check that the result is indeed correct
     let mut any_wrong = false;
@@ -118,11 +130,11 @@ pub fn try_execute(target: Target, config: &Config) -> TestState {
     }
 
     if any_wrong {
-        TestState::Error(format!(
+        test_results.wasm_execute.push_error(format!(
             "Unexpected result {:?} != {:?}: (Diff: {:?})",
             results, wasm_f32_results, diffs
-        ))
+        ));
     } else {
-        TestState::Success
+        test_results.wasm_execute = PartialResult::Success(elapsed);
     }
 }

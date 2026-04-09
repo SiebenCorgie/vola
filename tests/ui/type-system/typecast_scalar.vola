@@ -5,7 +5,7 @@
 //EXEC-RES:3.0
 //END-CONFIG
 
-module super::std;
+module self::super::std;
 
 export fn myField(at: vec3) -> real{
     (at.x)::<int>::<real>

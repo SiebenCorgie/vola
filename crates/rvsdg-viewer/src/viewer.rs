@@ -8,18 +8,18 @@
 
 use std::path::Path;
 
-use crate::{into_primitive_tree, layout::LayoutConfig, primitives::PrimTree, View};
+use crate::{View, into_primitive_tree, layout::LayoutConfig, primitives::PrimTree};
 use ahash::AHashMap;
 use rvsdg::{
+    Rvsdg,
     attrib::{AttribLocation, AttribStore, FlagStore},
     edge::LangEdge,
     nodes::LangNode,
-    Rvsdg,
 };
 use serde::{Deserialize, Serialize};
-use smallvec::{smallvec, SmallVec};
+use smallvec::{SmallVec, smallvec};
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct GraphState {
     pub display: PrimTree,
     pub name: String,
@@ -77,7 +77,7 @@ impl<'a> GraphStateBuilder<'a> {
 
 ///Helper that safes multiple runtime states of the graph and its auxilary data and is
 ///able to be serialized and deserialized.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ViewerState {
     pub states: Vec<GraphState>,
 }

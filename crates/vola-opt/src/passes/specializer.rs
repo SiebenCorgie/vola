@@ -7,18 +7,18 @@
  */
 
 use rvsdg::{
+    NodeRef, SmallColl,
     edge::{InportLocation, InputType, LangEdge, OutportLocation, OutputType},
     nodes::StructuralNode,
     region::RegionLocation,
     smallvec::smallvec,
     util::copy::StructuralClone,
-    NodeRef, SmallColl,
 };
-use vola_common::{ariadne::Label, report, warning_reporter, Span, VolaError};
+use vola_common::{Span, VolaError, ariadne::Label, report, warning_reporter};
 
 use crate::{
-    alge::EvalNode, common::Ty, csg::CsgOp, graph::auxiliary::ImplKey, passes::Inliner,
-    DialectNode, OptEdge, OptError, Optimizer,
+    DialectNode, OptEdge, OptError, Optimizer, alge::EvalNode, common::Ty, csg::CsgOp,
+    graph::auxiliary::ImplKey, passes::Inliner,
 };
 
 struct SpecCtx {
@@ -645,13 +645,14 @@ impl Optimizer {
         tree_access_span: Span,
         eval: NodeRef,
     ) -> Result<SmallColl<SpecCtx>, VolaError<OptError>> {
-        assert!(self
-            .graph
-            .node(eval)
-            .node_type
-            .unwrap_simple_ref()
-            .try_downcast_ref::<EvalNode>()
-            .is_some());
+        assert!(
+            self.graph
+                .node(eval)
+                .node_type
+                .unwrap_simple_ref()
+                .try_downcast_ref::<EvalNode>()
+                .is_some()
+        );
         let src_span = self
             .graph
             .node(eval)
@@ -865,9 +866,15 @@ impl Optimizer {
                         .unwrap();
 
                     if !self.is_node_type::<CsgOp>(prod.node) {
-                        let e = OptError::CsgStructureIssue(format!("Could not specialize branch [{branch}]: The branch uses a CSG-value, that itself comes from a branch. Which is an edge-case we currently don't support. Please file an issue!"));
+                        let e = OptError::CsgStructureIssue(format!(
+                            "Could not specialize branch [{branch}]: The branch uses a CSG-value, that itself comes from a branch. Which is an edge-case we currently don't support. Please file an issue!"
+                        ));
                         let err = if let Some(span) = self.find_span(prod.node) {
-                            VolaError::error_here(e, span, "The CSG-value comes from here. Consider moving that out of a branch for now!")
+                            VolaError::error_here(
+                                e,
+                                span,
+                                "The CSG-value comes from here. Consider moving that out of a branch for now!",
+                            )
                         } else {
                             VolaError::new(e)
                         };

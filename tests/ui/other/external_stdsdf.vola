@@ -1,0 +1,6 @@
+//BEGIN-CONFIG
+//EXTERNAL:std@vola-stdlib/vola-sdf-stdlib
+//END-CONFIG
+
+//Just checks that our sdf stdlib compiles
+module std::prelude;

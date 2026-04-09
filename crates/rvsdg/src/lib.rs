@@ -29,7 +29,7 @@ use edge::{Edge, InportLocation, InputType, LangEdge, OutportLocation, OutputTyp
 use err::GraphError;
 use nodes::{LangNode, Node, NodeType, OmegaNode};
 use region::{Region, RegionLocation};
-use slotmap::{new_key_type, KeyData, SlotMap};
+use slotmap::{KeyData, SlotMap, new_key_type};
 pub use smallvec;
 use smallvec::SmallVec;
 
@@ -87,6 +87,23 @@ impl NodeRef {
         self.as_outport_location(OutputType::Output(idx))
     }
 
+    ///Turns the _node_ into the `region_index` sub-region of this node.
+    ///
+    /// # Example
+    ///
+    /// ```rust, ignore
+    /// //accessing the body of a lambda
+    /// let body = my_lambda.as_region(0);
+    /// //accessing the second branch of a gamma node
+    /// let else_branch = my_gamma.as_region(1);
+    /// ```
+    pub fn as_region(self, region_index: usize) -> RegionLocation {
+        RegionLocation {
+            node: self,
+            region_index,
+        }
+    }
+
     ///Serializes the reference into a ffi value obtained by [KeyData::as_ffi].
     ///
     /// Have a look at [KeyData::as_ffi] and [KeyData::from_ffi] for more infomation.
@@ -140,6 +157,7 @@ impl EdgeRef {
 ///
 /// To access nodes, edges, regions, or ports of nodes, use either [node](Rvsdg::node), [edge](Rvsdg::edge), etc, or the index implementation for the
 /// respective handle.
+#[derive(Clone, Debug)]
 pub struct Rvsdg<N: LangNode + 'static, E: LangEdge + 'static> {
     pub(crate) nodes: SlotMap<NodeRef, Node<N>>,
     pub(crate) edges: SlotMap<EdgeRef, Edge<E>>,
@@ -343,7 +361,10 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
                             //of the src/dst node.
                             //NOTE: This is somewhat hard, since we don't really know _which_
                             //      of the regions the edge is in. So we just search for it.
-                            assert!(src.node == dst.node, "If both src and dst are argument/result, both need to be part of the same node!");
+                            assert!(
+                                src.node == dst.node,
+                                "If both src and dst are argument/result, both need to be part of the same node!"
+                            );
                             let mut parent_reg_candidate = None;
                             for (regidx, reg) in self.node(src.node).regions().iter().enumerate() {
                                 if reg.edges.contains(&edge) {
@@ -396,7 +417,8 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
         }
     }
 
-    ///Removes `node` from the graph, and disconnects all edges leading from/to this node.
+    ///Removes `node` from the graph, and disconnects all edges leading from/to this node. This will also delete any sub-regions.
+    /// For instance the whole body of a loop, whenever a theta node is deleted.
     ///
     /// Afterwards the `NodeRef` of `node`, and all removed `EdgeRef`s will be invalid.
     ///
@@ -405,6 +427,22 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
     /// disconnect the remaining edges.
     /// If any error occurs, Err is returned, carrying the last occurred error;
     pub fn remove_node(&mut self, node: NodeRef) -> Result<Node<N>, GraphError> {
+        let mut any_error = None;
+        //if this node has sub-regions, recursively delete all nodes in those regions before deleting this one
+        if !self[node].regions().is_empty() {
+            for region in self.iter_regions(node) {
+                let Some(subnodes) = self.region(&region).map(|r| r.nodes.clone()) else {
+                    continue;
+                };
+
+                for node in subnodes {
+                    if let Err(e) = self.remove_node(node) {
+                        any_error = Some(e);
+                    }
+                }
+            }
+        }
+
         let input_edges: SmallColl<EdgeRef> = self
             .node(node)
             .inputs()
@@ -418,7 +456,6 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
             .flat_map(|out| out.edges.iter().copied())
             .collect();
 
-        let mut any_error = None;
         for edge in input_edges.into_iter().chain(output_edges.into_iter()) {
             if let Err(e) = self.disconnect(edge) {
                 any_error = Some(e);
@@ -513,12 +550,13 @@ impl<N: LangNode + 'static, E: LangEdge + 'static> Rvsdg<N, E> {
             .push(edge);
 
         self.node_mut(dst.node).inport_mut(&dst.input).unwrap().edge = Some(edge);
-        assert!(self
-            .node_mut(dst.node)
-            .inport_mut(&dst.input)
-            .unwrap()
-            .edge
-            .is_some());
+        assert!(
+            self.node_mut(dst.node)
+                .inport_mut(&dst.input)
+                .unwrap()
+                .edge
+                .is_some()
+        );
         //now notify the region of this new edge
         self.node_mut(src_parent_region.node)
             .regions_mut()

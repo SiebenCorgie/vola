@@ -173,7 +173,7 @@ pub enum Prim {
 /// All coordinates are relative to their parent.
 ///
 /// Top left is (0,0), bottom right is (inf, inf)
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct PrimTree {
     pub id: AttribLocation,
     pub prim: Prim,

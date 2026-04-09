@@ -8,6 +8,7 @@
 - [Reserved](reserved.md)
 - [Automatic Differentiation](automatic-differentiation.md)
 - [Interval Arithmetic](interval_arithmetic.md)
+- [Modules](modules.md)
 
 # Intro
 

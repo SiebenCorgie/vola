@@ -2,7 +2,7 @@
 //ERROR:detected recursive call of "test"<!!>detected recursive call of "test2"
 //END-CONFIG
 
-module std;
+module self::std;
 
 
 fn test2(a: real) -> real{
