@@ -20,6 +20,8 @@ pub enum AstError {
     NoRootFile,
     #[error("Module file {path:?} does not exist")]
     NoModuleFile { path: PathBuf },
+    #[error("Canonicalization of {0:?} failed")]
+    CanonicalizationFailed(PathBuf),
     #[error("IO Error: {0}")]
     IoError(String),
     #[error("Resolver got stuck and encounterd timeout")]

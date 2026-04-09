@@ -68,7 +68,9 @@ impl LowerAst {
         let parser = vola_tree_sitter_parser::VolaTreeSitterParser;
         let mut builder = VolaAst::builder_from_file(file, &parser)?;
         for (entry, dir) in externals {
-            builder.set_external(entry, dir);
+            builder
+                .set_external(entry, dir)
+                .map_err(|e| vec![VolaError::new(e)])?;
         }
         let ast = builder.finish()?;
         Ok(Self(ast))
@@ -92,7 +94,9 @@ impl LowerAst {
         let parser = vola_tree_sitter_parser::VolaTreeSitterParser;
         let mut builder = VolaAst::builder_from_bytes(bytes, &parser)?.with_workspace(workspace);
         for (entry, dir) in externals {
-            builder.set_external(entry, dir);
+            builder
+                .set_external(entry, dir)
+                .map_err(|e| vec![VolaError::new(e)])?;
         }
         let ast = builder.finish()?;
 

@@ -295,15 +295,14 @@ impl<'a> CallBuilder<'a> {
     ///
     /// If you want to call the same function repeatedly with different arguments, consider
     /// [call_then](Self::call_then).
-    pub fn call(self) -> Result<Vec<TypedValue>, BridgeError> {
-        let (result, _wrapper) = self.call_then().map_err(|(_, err)| err)?;
-        Ok(result)
+    pub fn call_once(mut self) -> Result<Vec<TypedValue>, BridgeError> {
+        self.call()
     }
 
-    ///Same as [call](Self::Call), but does not destroy the call-builder in the successful case.
+    ///Same as [call_once](Self::call_once), but does not destroy the call-builder in the successful case.
     ///
     /// Lets you call the same function multiple times with different arguments.
-    pub fn call_then(self) -> Result<(Vec<TypedValue>, Self), (Self, BridgeError)> {
+    pub fn call(&mut self) -> Result<Vec<TypedValue>, BridgeError> {
         //Prepare the results store by flattening structured data
         let mut results_flat = self
             .results
@@ -361,12 +360,9 @@ impl<'a> CallBuilder<'a> {
                 //Those must match, since we must build-back all of them.
                 assert_eq!(last_offset, results_flat.len());
 
-                Ok((structured_result, self))
+                Ok(structured_result)
             }
-            Err(e) => Err((
-                self,
-                BridgeError::Runtime(format!("Execution failed: {e:?}")),
-            )),
+            Err(e) => Err(BridgeError::Runtime(format!("Execution failed: {e:?}"))),
         }
     }
 }

@@ -15,7 +15,7 @@ fn teddy() {
         .unwrap()
         .with_arg("a", 2.0)
         .unwrap()
-        .call()
+        .call_once()
         .unwrap();
 
     assert!(result.len() == 1);
@@ -49,7 +49,7 @@ export fn mytest(at: vec3) -> real{
         .unwrap()
         .with_arg("at", [0.0, 2.0, 0.0])
         .unwrap()
-        .call()
+        .call_once()
         .unwrap();
 
     assert!(result.len() == 1);

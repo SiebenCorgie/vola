@@ -146,7 +146,9 @@ impl VolaAst {
             .parent()
             .expect("Source file has no parent directory");
         AstBuilder::enter(root_ast, workspace, parser)
+            .map_err(|e| vec![VolaError::new(e)])?
             .with_seen(file)
+            .map_err(|e| vec![VolaError::new(e)])?
             .finish()
     }
 
@@ -169,7 +171,9 @@ impl VolaAst {
                     .collect::<Vec<_>>()
             })?;
 
-        AstBuilder::enter(root_ast, workspace, parser).finish()
+        AstBuilder::enter(root_ast, workspace, parser)
+            .map_err(|e| vec![VolaError::new(e)])?
+            .finish()
     }
 
     ///Parses `bytes` into [VolaAst], but does not resolve [AstEntry::Module]. Use the resulting builder to point to additional resolvable directories, and resolving the modules at will.
@@ -187,7 +191,10 @@ impl VolaAst {
                 .collect::<Vec<_>>()
         })?;
 
-        Ok(AstBuilder::enter(root, Path::new("./"), parser))
+        Ok(
+            AstBuilder::enter(root, Path::new("./"), parser)
+                .map_err(|e| vec![VolaError::new(e)])?,
+        )
     }
 
     ///Parses `file` into [VolaAst], but does not resolve [AstEntry::Module]. Use the resulting builder to point to additional resolvable directories, and resolving the modules at will.
@@ -212,7 +219,21 @@ impl VolaAst {
             .parent()
             .expect("File had no parent directory!")
             .to_path_buf();
-        Ok(AstBuilder::enter(parsed, workspace, parser).with_seen(file))
+
+        let workspace = if workspace.as_path() == Path::new("") {
+            log::warn!(
+                "File {:?} has no real-parent directory, using \"./\"",
+                file.as_ref()
+            );
+            Path::new("./").to_path_buf()
+        } else {
+            workspace
+        };
+
+        Ok(AstBuilder::enter(parsed, workspace, parser)
+            .map_err(|e| vec![VolaError::new(e)])?
+            .with_seen(file)
+            .map_err(|e| vec![VolaError::new(e)])?)
     }
 
     pub fn empty() -> Self {
@@ -248,15 +269,18 @@ impl<'parser, E: Error> AstBuilder<'parser, E> {
     /// If one is already given, overwrites it.
     ///
     /// If `directory` is a file, its parent directory will be used.
-    pub fn set_external(&mut self, entry: String, directory: PathBuf) {
+    pub fn set_external(&mut self, entry: String, directory: PathBuf) -> Result<(), AstError> {
         let dir = if directory.is_file() {
             directory.parent().unwrap().to_path_buf()
         } else {
             directory
         };
 
-        let canonicalized = dir.canonicalize().expect("Could not canonicalize");
+        let canonicalized = dir
+            .canonicalize()
+            .map_err(move |_e| AstError::CanonicalizationFailed(dir))?;
         let _ = self.external_directories.insert(entry, canonicalized);
+        Ok(())
     }
 
     ///Starts parsing a `file`, using the given parser
@@ -264,29 +288,31 @@ impl<'parser, E: Error> AstBuilder<'parser, E> {
         root_ast: VolaAst,
         workspace: impl AsRef<Path>,
         parser: &'parser dyn VolaParser<Error = E>,
-    ) -> Self {
-        AstBuilder {
+    ) -> Result<Self, AstError> {
+        let workspace = workspace
+            .as_ref()
+            .canonicalize()
+            .map_err(|_e| AstError::CanonicalizationFailed(workspace.as_ref().to_path_buf()))?
+            .to_path_buf();
+
+        Ok(AstBuilder {
             root: root_ast,
-            workspace: workspace
-                .as_ref()
-                .canonicalize()
-                .expect("Could not canonicalize workspace")
-                .to_path_buf(),
+            workspace,
             external_directories: AHashMap::with_capacity(0),
             lowered_files: AHashSet::with_capacity(0),
             parser,
-        }
+        })
     }
 
     ///Marks `file` as seen, i.e. if encountered, it won't be imported (again).
-    pub fn with_seen(mut self, file: impl AsRef<Path>) -> Self {
+    pub fn with_seen(mut self, file: impl AsRef<Path>) -> Result<Self, AstError> {
         let _ = self.lowered_files.insert(
             file.as_ref()
                 .canonicalize()
-                .expect("Could not canonicalize seen file")
+                .map_err(|_e| AstError::CanonicalizationFailed(file.as_ref().to_path_buf()))?
                 .to_path_buf(),
         );
-        self
+        Ok(self)
     }
 
     ///Sets the workspace directory of the builder, i.e. the directory the initial 'root_ast`'s `self` refers to.
@@ -329,7 +355,7 @@ impl<'parser, E: Error> AstBuilder<'parser, E> {
                     }
                 }
                 Err(e) => Err(VolaError::error_here(
-                    AstError::NoModuleFile { path: try_path },
+                    AstError::CanonicalizationFailed(try_path),
                     span.clone(),
                     format!("Could not resolve this relative file: {e}"),
                 )),
