@@ -1,5 +1,0 @@
-
-
-export fn sdf(at: vec3) -> real{
-    length(at) - 1.0
-}

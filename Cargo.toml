@@ -22,7 +22,6 @@ members = [
     "tests/test-runner",
 
     "examples/rvsdg-simple",
-    "examples/raytracing",
 ]
 
 resolver = "2"
