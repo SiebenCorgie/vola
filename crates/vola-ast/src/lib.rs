@@ -421,9 +421,14 @@ impl<'parser, E: Error> AstBuilder<'parser, E> {
                         {
                             //seen a new module directive, therfore we'll need a restart :)
                             newly_unresolved = true;
-                            let new = inner_module.switch_root_module(&module);
-                            log::trace!("Moved local {} to unit-local: {}", inner_module, new);
-                            *inner_module = new;
+
+                            //If this is a project-local path, switch out the path to the new _local_
+                            // directory
+                            if module.path[0].0 == "self" {
+                                let new = inner_module.switch_root_module(&module);
+                                log::trace!("Moved local {} to unit-local: {}", inner_module, new);
+                                *inner_module = new;
+                            }
                         }
 
                         newly_discovered.push(tl);
