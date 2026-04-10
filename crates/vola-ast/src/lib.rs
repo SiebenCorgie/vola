@@ -424,7 +424,7 @@ impl<'parser, E: Error> AstBuilder<'parser, E> {
 
                             //If this is a project-local path, switch out the path to the new _local_
                             // directory
-                            if module.path[0].0 == "self" {
+                            if inner_module.path[0].0 == "self" {
                                 let new = inner_module.switch_root_module(&module);
                                 log::trace!("Moved local {} to unit-local: {}", inner_module, new);
                                 *inner_module = new;
